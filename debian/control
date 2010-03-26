@@ -2,10 +2,13 @@ Source: radare
 Section: devel
 Priority: extra
 Maintainer: Sebastian Reichel <elektranox@gmail.com>
+DM-Upload-Allowed: yes
 Build-Depends: cdbs,
                debhelper (>= 7)
 Standards-Version: 3.8.4
 Homepage: http://www.radare.org
+Vcs-Browser: http://git.debian.org/?p=collab-maint/radare.git
+Vcs-Git: git://git.debian.org/collab-maint/radare.git
 
 Package: radare2
 Architecture: any
