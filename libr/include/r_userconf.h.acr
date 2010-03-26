@@ -1,0 +1,13 @@
+#ifndef _INCLUDE_R_CONFIGURE_H_
+#define _INCLUDE_R_CONFIGURE_H_
+
+#define LIL_ENDIAN @LIL_ENDIAN@
+
+#ifdef PREFIX
+#undef PREFIX
+#endif
+#define PREFIX "@PREFIX@"
+
+#define CPU_ENDIAN @BIG_ENDIAN@
+
+#endif

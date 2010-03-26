@@ -1,0 +1,67 @@
+PKGNAME radare2
+VERSION 0.4
+CONTACT pancake ; pancake@nopcode.org
+
+LANG_C!
+
+ARG_WITHOUT DEBUGGER debugger disable native debugger features ;
+
+(( -ldl -dynamic ... ))
+USE_DL
+
+CHECK_ENDIAN
+CHKLIB ewf
+ARG_WITHOUT HAVE_EWF ewf disable EWF dependency ;
+IF HAVE_EWF { HAVE_LIB_EWF = 0 ; }
+
+CHKLIB lua5.1
+CHKLIB tcc
+
+(( rules for the compiler ))
+ARG_WITH USERCC=gcc compiler Define compiler to use (see mk/) ;
+ARG_WITH USEROSTYPE=auto ostype Choose OS type ( gnulinux windows darwin ) ;
+
+(( TODO: throw error if unknown ostype ))
+IFEQ USEROSTYPE auto ; {
+	IFEQ HOST_OS linux ; {
+		USEROSTYPE = gnulinux ;
+	}{
+		IFEQ HOST_OS darwin ; {
+			USEROSTYPE = darwin ;
+		}
+	}
+}
+
+ARG_WITHOUT WITHPIC pic do not build libr as a program independent location ;
+
+REPORT PREFIX HAVE_LIB_EWF HAVE_LIB_TCC DEBUGGER USERCC USEROSTYPE ;
+
+(( TODO: Add the rest of .pc files here.. add a rule for acr? ))
+SUBDIRS ./config-user.mk libr/include/r_userconf.h
+ pkgcfg/libr.pc
+ pkgcfg/r_io.pc
+ pkgcfg/r_asm.pc
+ pkgcfg/r_bin.pc
+ pkgcfg/r_anal.pc
+ pkgcfg/r_hash.pc
+ pkgcfg/r_cons.pc
+ pkgcfg/r_diff.pc
+ pkgcfg/r_core.pc
+ pkgcfg/r_lang.pc
+ pkgcfg/r_socket.pc
+ pkgcfg/r_debug.pc
+ pkgcfg/r_reg.pc
+ pkgcfg/r_cmd.pc
+ pkgcfg/r_config.pc
+ pkgcfg/r_flags.pc
+ pkgcfg/r_line.pc
+ pkgcfg/r_syscall.pc
+ pkgcfg/r_sign.pc
+ pkgcfg/r_util.pc
+ pkgcfg/r_search.pc
+ pkgcfg/r_vm.pc
+ pkgcfg/r_th.pc
+ pkgcfg/r_bp.pc
+ pkgcfg/r_db.pc
+ pkgcfg/r_lib.pc
+;

@@ -1,0 +1,4 @@
+* Pluggify!
+* Add w32 0x2e syscall support
+* import syscalls from file (ala r_reg)
+* Added documentation string per-syscall in r_syscall_list_t

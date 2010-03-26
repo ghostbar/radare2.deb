@@ -1,0 +1,44 @@
+.Dd Mar 11, 2010
+.Dt RASM2 1
+.Os
+.Sh NAME
+.Nm rasm2
+.Nd radare2 patch assembler and disassembler
+.Sh SYNOPSIS
+.Nm rasm2
+.Op -dfBCLeV
+.Op -o offset
+.Op -a arch
+.Op -b bits
+.Op -s syntax
+.Op ARG
+.Sh DESCRIPTION
+TODO: This manpage is incomplete.
+.Pp
+.Bl -tag -width Fl
+.It Fl d
+Disassemble hexpairs. rasm2 -d 9090
+.It Fl f
+Read data from file instead of ARG.
+.It Fl o Ar offset
+Offset of the opcode to assemble
+.It Fl e
+Use big endian
+.It Fl b Ar bits
+Specify bit size of registers: 8, 16, 32, 64
+.It Fl a Ar arch
+Set a different architecture (x86, ppc, arm, java)
+.It Fl h
+.El
+Show usage help message.
+.Sh SEE ALSO
+.Pp
+.Xr radare2(1) ,
+.Xr rahash2(1) ,
+.Xr rabin2(1) ,
+.Xr radiff2(1) ,
+.Xr rax2(1) ,
+.Sh AUTHORS
+.Pp
+pancake <@nopcode.org>
+.Pp

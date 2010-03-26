@@ -1,0 +1,39 @@
+.Dd Mar 12, 2010
+.Dt RADIFF2 1
+.Os
+.Sh NAME
+.Nm radiff2
+.Nd unified binary diffing utility
+.Sh SYNOPSIS
+.Nm radiff
+.Op -scrdV
+.Op file1
+.Op file2
+.Sh DESCRIPTION
+radiff implements some binary diffing algorithms.
+.Pp
+.Bl -tag -width Fl
+.It Fl s
+Calculate text distance from two files.
+.It Fl c
+Count number of differences.
+.It Fl r
+Output in radare commands as a binary patch.
+.It Fl d
+Use delta diffing (slower).
+.It Fl V
+Show version information.
+.It Fl h
+Show usage help message.
+.El
+.Sh SEE ALSO
+.Pp
+.Xr radare2(1) ,
+.Xr rahash2(1) ,
+.Xr rabin2(1) ,
+.Xr rasm2(1) ,
+.Xr rax2(1) ,
+.Sh AUTHORS
+.Pp
+pancake <@nopcode.org>
+.Pp

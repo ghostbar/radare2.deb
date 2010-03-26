@@ -1,0 +1,62 @@
+.Dd Mar 12, 2010
+.Dt RAX2 1
+.Os
+.Sh NAME
+.Nm rax2
+.Nd radare base converter
+.Sh SYNOPSIS
+.Nm rax2
+.Op Fl V
+.Op Fl h
+.Op [value] ...
+.Sh DESCRIPTION
+This command is part of the radare project.
+.Pp
+This command allows you to convert values between positive and negative integer, float octal, binary and hexadecimal values.
+.Sh OPTIONS
+.Bl -tag -width Fl
+.It Fl e
+Swap endian.
+.It Fl h
+Show usage help message.
+.El
+.Sh USAGE
+.Pp
+With no arguments, rax reads values from stdin. You can pass one or more values as arguments, and swap endiannes of the output with the '-e' flag.
+.Pp
+TODO: Using '-' as argument rax will read binary data from stdin and print out the hex pairs to stdout.
+.Pp
+  $ rax2 -33 -e -33
+  0xffffffdf
+  0xdfffffff
+.Pp
+TODO: The '-s' flag converts radare into a hexpair-to-binary converter, so you can do 'unpack' hexpair encoded strings easily.
+.Pp
+  $ rax2 -s 41 42 43
+  ABC
+.Pp
+It is very useful tool for scripting, so you can read floating point values, or get the integer offset of a jump or a stack delta when analyzing programs.
+.Pp
+Available variable types are:
+.Pp
+  integer          10
+  zeropadding     010
+  float           10f
+  hexadecimal    0x10
+  hex to float   Fx10
+  oct to hex      023 (or 23o)
+  hex to oct     Ox20 (note 'O' is not zero)
+  bin to hex    1101b
+  hex to bin     Bx63
+.Pp
+.Sh SEE ALSO
+.Pp
+.Xr radare2(1) ,
+.Xr rahash2(1) ,
+.Xr rabin2(1) ,
+.Xr radiff2(1) ,
+.Xr rasm2(1) ,
+.Sh AUTHORS
+.Pp
+pancake <pancake@nopcode.org>
+.Pp

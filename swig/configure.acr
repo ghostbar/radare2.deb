@@ -1,0 +1,12 @@
+PKGNAME radare2-swig
+VERSION 0.4
+CONTACT pancake ; pancake@nopcode.org
+
+LANG_C!
+LANG_CXX!
+CHKPRG! VALASWIG valaswig
+CHKPRG! SWIG swig
+
+SUBDIRS ./config.mk ;
+
+REPORT PREFIX HAVE_VALASWIG ;
