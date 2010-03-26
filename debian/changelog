@@ -1,0 +1,156 @@
+radare (2:0.4-1) unstable; urgency=low
+
+  * Switch to radare2
+   + build system patch to add version to the libs
+   + disable asm.m68k, BSD 4 clause is GPL incompatible
+
+ -- Sebastian Reichel <elektranox@gmail.com>  Fri, 26 Mar 2010 17:54:15 +0100
+
+radare (1:1.5+dfsg1-1) unstable; urgency=low
+
+  * New radare upstream release
+  * Bump Debian Standards Version to 3.8.3
+  * Allow DM-Upload
+  * Plugins should build on all arches now (Closes: #544829)
+  * Build Dependency on libreadline-dev instead of
+    libreadline5-dev (Closes: #553833)
+  * drop gtkdialog dependency (Closes: #560676)
+  * add package containing debug symbols
+
+ -- Sebastian Reichel <elektranox@gmail.com>  Sat, 16 Dec 2009 14:38:00 +0200
+
+radare (1:1.4.2-1) unstable; urgency=low
+
+  * New upstream release
+  * radare-gtk suggests graphviz, which is used by agdv command
+  * remove valac and libvala-dev build dependency; we don't need
+    a devel build.
+  * Bashisms have been fixed upstream (Closes: #535884)
+  * Fix segfault appearing when compiling with -O2 on i386 (Closes: #534700)
+  * Update Debian Standard Version to 3.8.2
+  * Split radare-common into the following packages:
+   - radare-common       scripts and tools of the radare toolchain
+   - radare-lua          lua bindings for radare
+   - radare-perl         perl bindings for radare
+   - radare-python       python bindings for radare
+  * Remove Readme.Debian, i386 segfault should be fixed
+
+ -- Sebastian Reichel <elektranox@gmail.com>  Wed, 27 Jun 2009 00:03:50 +0200
+
+radare (1:1.4.1-1) unstable; urgency=low
+
+  * New hg checkout (stable release 1.4.1)
+  * Add Readme.Debian to document segfault caused by analysis on i386
+
+ -- Sebastian Reichel <elektranox@gmail.com>  Fri, 12 Jun 2009 21:14:00 +0200
+
+radare (1:1.4-1) unstable; urgency=low
+ 
+  * New hg checkout (stable release 1.4)
+   - Fix mipsel arch translation for debugger objects
+   - Fix FreeBSD and NetBSD build
+   - alias mips->mips64
+   - Keep cons_buffer contents in radare_cmd_str
+   - Install ranal API
+   - Fix rsc monitor
+   - improved shellcode injection
+   - Fixed syscall related stuff for x86_64
+   - Added cmd '=' to send cmd to remote radares
+   - Install radapy API
+   - Implement rap:// URI handling in remote IO plugin
+   - Fixed Elf64_Xword/Elf32_word bug in dietelf
+   - Fix register handling for arm-darwin (debugger finally working!)
+   - Added 'armv5tejl' (armel) to the whitelist of supported debuggers
+  * Use python-config for detecting python cflags and libs
+   - This should fix Ubuntu build failure
+
+ -- Sebastian Reichel <elektranox@gmail.com>  Wed, 03 Jun 2009 17:38:00 +0200
+
+radare (20090525-1) unstable; urgency=low
+
+  * fixed cddl.txt encoding
+  * new hg checkout
+   - fixups in agd and analyzing
+   - python2.6 support
+   - 'q' command accepts a numeric argument (exit value)
+   - Fix a radare_cmd_str() problem related to cons_grep
+   - Initial import of the 'ranal' api
+   - pX is now a new print format (FMT_HEXPAIRS)
+   - new stuff for the analysis python api
+   - remove bashism (Closes: #530178)
+   - change ppc_disasm license (try to get it DSFSG compliant)
+   - Added graph.traces to colorize traced nodes in graphviz and grava
+   - Some more random words for the book
+   - Documentate the /P command in the book
+   - whitelist debugger support for armelv5tel-linux (armel)
+   - fix ignorance of --without-debugger flag
+   - fix mipsel arch translation for debugger objects
+   - fix FreeBSD build
+   - mips->mips64
+  * ppc disasm support stays disabled
+   - ppc_disasm license is still not DFSG compliant
+
+ -- Sebastian Reichel <elektranox@gmail.com>  Mon, 25 May 2009 01:05:00 +0200
+
+radare (20090522-1) unstable; urgency=low
+
+  * new hg checkout
+   - added 'cX' command to compare like 'cc' does but using
+     two side hexdiff dump format
+   - specify pointer & data size in pm with %<size>
+   - add graph.weight
+   - fix 'c' command (missing radare_read(0))
+   - added /P search command that searches for proximity in
+     bytelevel distance
+   - added more 'ag' and 'gu' commands to readline autocompletion.
+   - fix build of debugger for non-linux systems
+   - fixed code analysis at startup
+   - more work in graphs (graph.split)
+   - fixups in x86 code analysis
+
+ -- Sebastian Reichel <elektranox@gmail.com>  Fri, 22 May 2009 19:01:00 +0200
+
+radare (20090521-1) unstable; urgency=low
+
+  * new hg checkout with lots of fixups
+  * builds on architectures without debugger support (Closes: #529997)
+
+ -- Sebastian Reichel <elektranox@gmail.com>  Thu, 21 May 2009 16:26:00 +0200
+
+radare (20090519-1) unstable; urgency=low
+
+  * switch to hg snapshots
+  * uses changeset 1045 (ed3ba99d8537)
+  * remove ppc disasm source (for DFSG compability)
+  * configure for DFSG compatible version (--without-nonfree)
+  * fix multiple build
+
+ -- Sebastian Reichel <elektranox@gmail.com>  Wed, 20 May 2009 00:00:00 +0200
+
+radare (1.3-4) unstable; urgency=low
+
+  * added even more license stuff to debian/copyright
+  * cddl is now distributed with radare-doc because of solaris opcodes
+
+ -- Sebastian Reichel <elektranox@gmail.com>  Tue, 28 Apr 2009 00:23:23 +0200
+
+radare (1.3-3) unstable; urgency=low
+
+  * python.so gets installed now
+  * added more licenses to debian/copyright
+  * some cleanups in debian/rules
+
+ -- Sebastian Reichel <elektranox@gmail.com>  Mon, 27 Apr 2009 18:07:40 +0200
+
+radare (1.3-2) unstable; urgency=low
+
+  * fixed linitian reports
+  * initial release closes correct bug
+
+ -- Sebastian Reichel <elektranox@gmail.com>  Sat, 25 Apr 2009 23:12:04 +0200
+
+radare (1.3-1) unstable; urgency=low
+
+  * Initial release (Closes: #523338)
+
+ -- Sebastian Reichel <elektranox@gmail.com>  Wed, 08 Apr 2009 17:22:25 +0200

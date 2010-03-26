@@ -1,0 +1,101 @@
+Source: radare
+Section: devel
+Priority: extra
+Maintainer: Sebastian Reichel <elektranox@gmail.com>
+Build-Depends: cdbs,
+               debhelper (>= 7)
+Standards-Version: 3.8.4
+Homepage: http://www.radare.org
+
+Package: radare2
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: free and advanced command line hexadecimal editor
+ The project aims to create a complete, portable, multi-architecture,
+ unix-like toolchain for reverse engineering.
+ .
+ It is composed by an hexadecimal editor (radare) with a wrapped IO
+ layer supporting multiple backends for local/remote files, debugger
+ (osx,bsd,linux,w32), stream analyzer, assembler/disassembler (rasm)
+ for x86,arm,ppc,m68k,java,msil,sparc code analysis modules and
+ scripting facilities. A bindiffer named radiff, base converter (rax),
+ shellcode development helper (rasc), a binary information extracter
+ supporting (pe, mach0, elf, class, ...) named rabin, and a block-based
+ hash utility called rahash.
+
+Package: radare2-dbg
+Section: debug
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, radare2
+Description: free and advanced command line hexadecimal editor (debug)
+ The project aims to create a complete, portable, multi-architecture,
+ unix-like toolchain for reverse engineering.
+ .
+ It is composed by an hexadecimal editor (radare) with a wrapped IO
+ layer supporting multiple backends for local/remote files, debugger
+ (osx,bsd,linux,w32), stream analyzer, assembler/disassembler (rasm)
+ for x86,arm,ppc,m68k,java,msil,sparc code analysis modules and
+ scripting facilities. A bindiffer named radiff, base converter (rax),
+ shellcode development helper (rasc), a binary information extracter
+ supporting (pe, mach0, elf, class, ...) named rabin, and a block-based
+ hash utility called rahash.
+ .
+ This package provides the debug symbols for the applications from the
+ radare2 suite.
+
+Package: libradare2-0.4
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: libraries from the radare suite
+ The project aims to create a complete, portable, multi-architecture,
+ unix-like toolchain for reverse engineering.
+ .
+ It is composed by an hexadecimal editor (radare) with a wrapped IO
+ layer supporting multiple backends for local/remote files, debugger
+ (osx,bsd,linux,w32), stream analyzer, assembler/disassembler (rasm)
+ for x86,arm,ppc,m68k,java,msil,sparc code analysis modules and
+ scripting facilities. A bindiffer named radiff, base converter (rax),
+ shellcode development helper (rasc), a binary information extracter
+ supporting (pe, mach0, elf, class, ...) named rabin, and a block-based
+ hash utility called rahash.
+ .
+ This package provides the libraries from radare2.
+
+Package: libradare2-dev
+Section: libdevel
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: devel files from the radare suite
+ The project aims to create a complete, portable, multi-architecture,
+ unix-like toolchain for reverse engineering.
+ .
+ It is composed by an hexadecimal editor (radare) with a wrapped IO
+ layer supporting multiple backends for local/remote files, debugger
+ (osx,bsd,linux,w32), stream analyzer, assembler/disassembler (rasm)
+ for x86,arm,ppc,m68k,java,msil,sparc code analysis modules and
+ scripting facilities. A bindiffer named radiff, base converter (rax),
+ shellcode development helper (rasc), a binary information extracter
+ supporting (pe, mach0, elf, class, ...) named rabin, and a block-based
+ hash utility called rahash.
+ .
+ This package provides the devel files from radare2.
+
+Package: libradare2-0.4-dbg
+Section: debug
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libradare2-0.4
+Description: debug symbols for libraries from radare suite
+ The project aims to create a complete, portable, multi-architecture,
+ unix-like toolchain for reverse engineering.
+ .
+ It is composed by an hexadecimal editor (radare) with a wrapped IO
+ layer supporting multiple backends for local/remote files, debugger
+ (osx,bsd,linux,w32), stream analyzer, assembler/disassembler (rasm)
+ for x86,arm,ppc,m68k,java,msil,sparc code analysis modules and
+ scripting facilities. A bindiffer named radiff, base converter (rax),
+ shellcode development helper (rasc), a binary information extracter
+ supporting (pe, mach0, elf, class, ...) named rabin, and a block-based
+ hash utility called rahash.
+ .
+ This package provides the debug symbols for the libraries of radare2.
