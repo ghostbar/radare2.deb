@@ -1,2 +1,2 @@
 version=3
-http://radare.org/new/?down ../get/radare2-(.*)\.tar\.gz
+http://radare.org/get/radare2-([\d\.]+)\.tar\.gz

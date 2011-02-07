@@ -1,0 +1,2 @@
+# One package is enough for all those libs
+libradare2-0.6: package-name-doesnt-match-sonames

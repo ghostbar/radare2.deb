@@ -1,14 +1,18 @@
-Source: radare
+Source: radare2
 Section: devel
 Priority: extra
-Maintainer: Sebastian Reichel <elektranox@gmail.com>
-DM-Upload-Allowed: yes
+Maintainer: Sebastian Reichel <sre@debian.org>
 Build-Depends: cdbs,
-               debhelper (>= 7)
-Standards-Version: 3.8.4
+               debhelper (>= 7),
+               libewf-dev,
+               libgmp3-dev,
+               libssl-dev,
+               libtcc-dev,
+               lua5.1
+Standards-Version: 3.9.1
 Homepage: http://www.radare.org
-Vcs-Browser: http://git.debian.org/?p=collab-maint/radare.git
-Vcs-Git: git://git.debian.org/collab-maint/radare.git
+Vcs-Browser: http://git.debian.org/?p=collab-maint/radare2.git
+Vcs-Git: git://git.debian.org/collab-maint/radare2.git
 
 Package: radare2
 Architecture: any
@@ -29,7 +33,7 @@ Description: free and advanced command line hexadecimal editor
 Package: radare2-dbg
 Section: debug
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, radare2
+Depends: ${misc:Depends}, radare2 (= ${binary:Version})
 Description: free and advanced command line hexadecimal editor (debug)
  The project aims to create a complete, portable, multi-architecture,
  unix-like toolchain for reverse engineering.
@@ -46,11 +50,11 @@ Description: free and advanced command line hexadecimal editor (debug)
  This package provides the debug symbols for the applications from the
  radare2 suite.
 
-Package: libradare2-0.4
+Package: libradare2-0.6
 Section: libs
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: libraries from the radare suite
+Description: libraries from the radare2 suite
  The project aims to create a complete, portable, multi-architecture,
  unix-like toolchain for reverse engineering.
  .
@@ -68,8 +72,8 @@ Description: libraries from the radare suite
 Package: libradare2-dev
 Section: libdevel
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: devel files from the radare suite
+Depends: ${misc:Depends}, libradare2-0.6 (= ${binary:Version})
+Description: devel files from the radare2 suite
  The project aims to create a complete, portable, multi-architecture,
  unix-like toolchain for reverse engineering.
  .
@@ -84,10 +88,10 @@ Description: devel files from the radare suite
  .
  This package provides the devel files from radare2.
 
-Package: libradare2-0.4-dbg
+Package: libradare2-0.6-dbg
 Section: debug
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libradare2-0.4
+Depends: ${misc:Depends}, libradare2-0.6
 Description: debug symbols for libraries from radare suite
  The project aims to create a complete, portable, multi-architecture,
  unix-like toolchain for reverse engineering.
