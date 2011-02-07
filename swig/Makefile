@@ -1,9 +1,33 @@
 -include config.mk
+W32PY="${HOME}/.wine/drive_c/Python27/"
 
-all: supported.langs ruby perl python lua
+all: supported.langs ruby perl python lua go
+
+check:
+	rm -f supported.langs
+	${MAKE} supported.langs
 
 supported.langs:
-	sh check-langs.sh
+	CC=${CC} CXX=${CXX} sh check-langs.sh
+
+check-w32:
+	if [ ! -d "${W32PY}/libs" ]; then \
+		wget http://www.python.org/ftp/python/2.7/python-2.7.msi ; \
+		msiexec /i python-2.7.msi ; \
+	fi
+
+w32:
+	cd python && ${MAKE} w32
+
+DSTNAME=radare2-swig-w32-$(VERSION)
+DST=../$(DSTNAME)/Python27/Lib/r2
+
+w32dist:
+	mkdir -p ${DST}
+	cp -f python/*.dll ${DST}
+	cp -f python/r_*.py ${DST}
+	cp -f python/libr.py ${DST}
+	cd .. ; zip -r $(DSTNAME).zip $(DSTNAME)
 
 dist:
 	PKG=radare2-swig-${VERSION} ; \
@@ -26,7 +50,7 @@ vdoc_pkg:
 	valadoc -o vdoc vapi/*.vapi
 	# rsync -avz vdoc/* pancake@radare.org:/srv/http/radareorg/vdoc/
 
-# TODO: make it less spaguetti
+# TODO: unspaguetti this targets
 perl:
 	@-[ "`grep perl supported.langs`" ] && cd perl && make
 
@@ -39,21 +63,29 @@ ruby:
 lua:
 	@-[ "`grep lua supported.langs`" ] && cd lua && make
 
+go:
+	@-[ -x "${GOBIN}/5g" -o -x "${GOBIN}/6g" -o -x "${GOBIN}/8g" ] && \
+	[ "`grep go supported.langs`" ] && cd go && make
+
+java:
+	@-[ "`grep java supported.langs`" ] && cd java && make
+
 test:
 	cd perl && make test
 	cd python && make test
 	cd ruby && make test
 	cd lua && make test
+	cd go && make test
+	cd java && make test
 
 install-python:
+	@# py2.6 in debian uses dist-packages, but site-packages in arch..
 	@if [ "`grep python supported.langs`" ]; then \
-	for a in python2.5/site-packages python2.6/dist-packages ; do \
+	a=python`python --version 2>&1 | cut -d ' ' -f 2 | cut -d . -f 1,2`/site-packages ; \
 	echo "Installing $$a r2 modules in ${DESTDIR}${PREFIX}/lib/$$a/r2" ; \
 	mkdir -p ${DESTDIR}${PREFIX}/lib/$$a/r2 ; \
 	touch ${DESTDIR}${PREFIX}/lib/$$a/r2/__init__.py ; \
-	cp -rf python/* ${DESTDIR}${PREFIX}/lib/$$a/r2 ; \
-	cp -rf python/*libr* ${DESTDIR}${PREFIX}/lib/$$a ; \
-	done ; \
+	cp -rf python/*.${SOEXT} python/r_*.py python/libr.py ${DESTDIR}${PREFIX}/lib/$$a/r2 ; \
 	fi
 
 install-lua:
@@ -66,6 +98,17 @@ install-lua:
 	done ; \
 	fi
 
+install-go:
+	@if [ -n "${GOROOT}" -a -n "${GOOS}" -a -n "${GOARCH}" ]; then \
+	echo "Installing r2 modules in ${GOROOT}/pkg/${GOOS}_${GOARCH}" ; \
+	cp -f go/*.a go/*.so ${GOROOT}/pkg/${GOOS}_${GOARCH} ; \
+	else \
+	echo "You have to set the following vars: GOROOT, GOOS and GOARCH" ; \
+	fi
+
+install-java:
+	@echo "TODO: install-java"
+
 install-ruby:
 	@if [ "`grep ruby supported.langs`" ]; then \
 	for a in 1.8 1.9.1; do \
@@ -77,8 +120,13 @@ install-ruby:
 	fi
 
 install-perl:
-	@if [ "`grep perl supported.langs`" ]; then \
-	target=${DESTDIR}`perl -e 'for (@INC) { print "$$_\n" if /lib\/perl5/ && !/local/; }'` ; \
+	# hack for slpm
+	@-if [ "`grep perl supported.langs`" ]; then \
+	if [ -n "`echo ${PREFIX}${DESTDIR}|grep home`" ]; then \
+		target=${PREFIX}${DESTDIR}`perl -e 'for (@INC) { print "$$_\n" if /lib(64)?\/perl5/ && !/local/; }'|head -n 1` ; \
+	else \
+		target=${DESTDIR}`perl -e 'for (@INC) { print "$$_\n" if /lib(64)?\/perl5/ && !/local/; }'|head -n 1` ; \
+	fi ; \
 	mkdir -p $$target/r2 ; \
 	echo "Installing perl r2 modules..." ; \
 	cp -rf perl/*.so $$target/r2 ; \
@@ -90,7 +138,7 @@ install-vapi:
 	@${INSTALL_DIR} ${DESTDIR}${PREFIX}/share/vala/vapi
 	${INSTALL_DATA} vapi/*.vapi vapi/*.deps ${DESTDIR}${PREFIX}/share/vala/vapi
 
-install: install-python install-ruby install-perl install-lua install-vapi
+install: install-python install-ruby install-perl install-lua install-go install-java install-vapi
 
 deinstall: uninstall
 uninstall:
@@ -105,6 +153,8 @@ clean:
 	cd perl && make clean
 	cd ruby && make clean
 	cd lua && make clean
+	cd go && make clean
+	cd java && make clean
 	cd vapi/t && ${MAKE} clean
 
-.PHONY: ruby lua python perl clean oldtest test all vdoc
+.PHONY: ruby lua go java python perl clean oldtest test all vdoc w32 w32dist check-w32

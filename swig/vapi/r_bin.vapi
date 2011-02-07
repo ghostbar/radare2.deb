@@ -1,25 +1,32 @@
 /* radare - LGPL - Copyright 2009-2010 nibble<.ds@gmail.com> */
 
-[CCode (cheader_filename="r_bin.h,r_list.h,r_types_base.h", cprefix="r_bin_", lower_case_cprefix="r_bin_")]
 namespace Radare {
 	[Compact]
-	[CCode (cname="RBin", free_function="r_bin_free", cprefix="r_bin_")]
+	[CCode (cheader_filename="r_bin.h,r_list.h,r_types_base.h", cname="struct r_bin_t", free_function="r_bin_free", cprefix="r_bin_")]
 	public class RBin {
 		public const string file;
-		public int size;
+		public int narch;
+		public RBin.Arch curarch;
 
 		public RBin();
 
-		public int init();
-		public int load(string file, string? plugin_name = null);
+		public uint64 wr_scn_resize (string name, uint64 size);
+		public int wr_rpath_del ();
+		public int wr_output (string filename);
+
+		public int load(string file, bool dummy);
+		public int set_arch(string arch, int bits, string name);
+		public int set_archidx(int idx);
 		public int list();
 		public uint64 get_baddr();
-		public RList<RBin.Entry> get_entries();
+		public RBin.Addr get_main();
+		public RList<RBin.Addr> get_entries();
 		public RList<RBin.Field> get_fields();
 		public RList<RBin.Import> get_imports();
 		public RList<RBin.Section> get_sections();
 		public RList<RBin.String> get_strings();
 		public RList<RBin.Symbol> get_symbols();
+		public RList<RBin.Reloc> get_relocs();
 		public RBin.Info get_info();
 		public int is_big_endian();
 		public int is_stripped();
@@ -30,20 +37,27 @@ namespace Radare {
 		public int meta_get_line(uint64 addr, ref string file, int len, out int line);
 		public string meta_get_source_line(uint64 addr);
 	
-		[CCode (cname="RBinEntry", free_function="", ref_function="", unref_function="")]
-		public class Entry {
+		[CCode (cname="RBinArch", free_function="", ref_function="", unref_function="")]
+		public struct Arch {
+			public unowned string file;
+			public int size;
+			public RBuffer buf;
+		}
+
+		[CCode (cname="RBinAddr", free_function="", ref_function="", unref_function="")]
+		public class Addr {
 			public uint64 rva;
 			public uint64 offset;
 		}
 
 		[CCode (cname="RBinSection", free_function="", ref_function="", unref_function="")]
-		public class Section  {
+		public class Section {
 			public string name;
 			public int32 size;
 			public int32 vsize;
 			public int64 rva;
 			public int64 offset;
-			public int32 stringacteristics;
+			public int32 srwx;
 		}
 
 		[CCode (cname="RBinSymbol", free_function="", ref_function="", unref_function="")]
@@ -69,6 +83,15 @@ namespace Radare {
 			public uint32 hint;
 		}
 
+		[CCode (cname="RBinReloc", free_function="", ref_function="", unref_function="")]
+		public class Reloc {
+			public string name;
+			public uint64 rva;
+			public uint64 offset;
+			public uint32 sym;
+			public uint32 type;
+		}
+
 		[CCode (cname="RBinInfo", free_function="", ref_function="", unref_function="")]
 		public class Info {
 			public string type;
@@ -78,6 +101,7 @@ namespace Radare {
 			public string machine;
 			public string os;
 			public string subsystem;
+			public int bits;
 			public int big_endian;
 			public uint32 dbg_info;
 		}

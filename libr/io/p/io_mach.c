@@ -91,7 +91,7 @@ static int ptrace_write_at(int tid, const void *buff, int len, ut64 addr) {
         vm_protect (pid_to_task (tid), addr+(addr%4096), 4096, 0,
 		VM_PROT_READ | VM_PROT_EXECUTE);
         if (err != KERN_SUCCESS) {
-        	eprintf ("Oops (0x%llx) error (%s)\n", addr,
+        	eprintf ("Oops (0x%"PFMT64x") error (%s)\n", addr,
 			MACH_ERROR_STRING (err));
                 eprintf ("cant change page perms to rx\n");
 	}
@@ -102,7 +102,7 @@ static int __write(struct r_io_t *io, int pid, const ut8 *buf, int len) {
 	return ptrace_write_at (pid, buf, len, io->off);
 }
 
-static int __handle_open(struct r_io_t *io, const char *file) {
+static int __plugin_open(struct r_io_t *io, const char *file) {
 	if (!memcmp (file, "mach://", 7))
 		return R_TRUE;
 	return R_FALSE;
@@ -158,7 +158,7 @@ static int debug_attach(int pid) {
 
 static int __open(struct r_io_t *io, const char *file, int rw, int mode) {
 	int ret = -1;
-	if (__handle_open (io, file)) {
+	if (__plugin_open (io, file)) {
 		int pid = atoi(file+7);
 		if (pid>0) {
 			ret = debug_attach (pid);
@@ -207,14 +207,14 @@ static int __init(struct r_io_t *io) {
 }
 
 // TODO: rename ptrace to io_mach .. err io.ptrace ??
-struct r_io_handle_t r_io_plugin_mach = {
-        //void *handle;
+struct r_io_plugin_t r_io_plugin_mach = {
+        //void *plugin;
 	.name = "mach",
         .desc = "mach debug io",
         .open = __open,
         .close = __close,
 	.read = __read,
-        .handle_open = __handle_open,
+        .plugin_open = __plugin_open,
 	.lseek = __lseek,
 	.system = __system,
 	.init = __init,
@@ -224,7 +224,7 @@ struct r_io_handle_t r_io_plugin_mach = {
 
 #else
 
-struct r_io_handle_t r_io_plugin_mach = {
+struct r_io_plugin_t r_io_plugin_mach = {
 	.name = "io.ptrace",
         .desc = "ptrace io (NOT SUPPORTED FOR THIS PLATFORM)",
 };

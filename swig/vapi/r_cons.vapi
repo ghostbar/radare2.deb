@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2010 pancake<nopcode.org> */
 
 [CCode (cheader_filename="r_cons.h", cprefix="r_cons", lower_case_cprefix="r_cons_")]
 namespace Radare {
@@ -6,26 +6,33 @@ namespace Radare {
 	[CCode (cname="struct r_cons_t", free_function="r_cons_free", cprefix="r_cons_")]
 	public class RCons {
 		public RCons ();
+
 		[CCode (cname="Color_RED")]
 		public static const string RED;
-#if 0
-			BLACK,
-			BGRED,
-			WHITE,
-			RESET,
-			MAGENTA,
-			YELLOW,
-			TURQOISE,
-			BLUE,
-			GRAY,
-			/* TODO: bold colors */
-		}
-#endif
-		public static bool init (); /* you have to call this before using it */
+		[CCode (cname="Color_BLACK")]
+		public static const string BLACK;
+		[CCode (cname="Color_WHITE")]
+		public static const string WHITE;
+		[CCode (cname="Color_RESET")]
+		public static const string RESET;
+		[CCode (cname="Color_MAGENTA")]
+		public static const string MAGENTA;
+		[CCode (cname="Color_YELLOW")]
+		public static const string YELLOW;
+		[CCode (cname="Color_TURQOISE")]
+		public static const string TURQOISE;
+		[CCode (cname="Color_BLUE")]
+		public static const string BLUE;
+		[CCode (cname="Color_GRAY")]
+		public static const string GRAY;
+		/* TODO : add bold colors */
 
 		public static bool is_interactive;
 		public static bool is_html;
 		public static bool eof();
+
+		public static int pipe_open (string file, bool append);
+		public static void pipe_close (int fd);
 
 		/* size of terminal */
 		public static int rows;
@@ -43,6 +50,9 @@ namespace Radare {
 		public static void memcat(string str, int len);
 		public static void newline();
 		public static void flush();
+		public static void filter();
+		public static void visual_flush();
+		//public static void visual_write(weak string buf);
 
 		//public static int fgets(out string buf, int len, int argc, string argv[]);
 		/* input */
@@ -50,5 +60,13 @@ namespace Radare {
 		public static void any_key();
 		public static int get_size(out int rows);
 		public static bool yesno(bool def, string fmt, ...);
+
+		public static int html_print (string ptr);
+		public static int arrow_to_hjkl (int ch);
+		public static weak string get_buffer ();
+		public static void grep (string str);
+		//public static int grep_line (string str, int len);
+		//public static int grepbuf (string str, int len);
+		public static void invert (bool set, int color);
 	}
 }

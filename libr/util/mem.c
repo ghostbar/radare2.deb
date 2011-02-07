@@ -3,7 +3,7 @@
 #include <r_util.h>
 #include <stdlib.h>
 
-// TODO: find better name
+// TODO: find better name (r_mem_length()); is this used somewhere?
 R_API int r_mem_count(ut8 **addr) {
 	int i = 0;
 	while (*addr++)
@@ -11,27 +11,44 @@ R_API int r_mem_count(ut8 **addr) {
 	return i;
 }
 
+R_API int r_mem_eq(ut8 *a, ut8 *b, int len) {
+	register int i;
+	for (i=0; i<len; i++)
+		if (a[i] != b[i])
+			return R_FALSE;
+	return R_TRUE;
+}
+
 R_API void r_mem_copyloop(ut8 *dest, const ut8 *orig, int dsize, int osize) {
-        int i=0,j;
-        while (i<dsize)
-                for (j=0; j<osize && i<dsize;j++)
-                        dest[i++] = orig[j];
+	int i=0,j;
+	while (i<dsize)
+		for (j=0; j<osize && i<dsize;j++)
+			dest[i++] = orig[j];
 }
 
 R_API int r_mem_cmp_mask(const ut8 *dest, const ut8 *orig, const ut8 *mask, int len) {
-	int i, ret = 0;
-	for (i=0; i<len; i++)
-		ret += (orig[i]&mask[i])&dest[i];
+	int i, ret = -1;
+	ut8 *mdest, *morig;
+	mdest = malloc (len);
+	morig = malloc (len);
+	for (i=0; i<len; i++) {
+		mdest[i] = dest[i]&mask[i];
+		morig[i] = orig[i]&mask[i];
+	}
+	ret = memcmp (mdest, morig, len);
+	free (mdest);
+	free (morig);
 	return ret;
 }
 
 R_API void r_mem_copybits(ut8 *dst, const ut8 *src, int bits) {
+	ut8 srcmask, dstmask;
 	int bytes = (int)(bits/8);
 	bits = bits%8;
 	
 	memcpy (dst, src, bytes);
 	if (bits) {
-		ut8 srcmask, dstmask;
+		srcmask = dstmask = 0;
 		switch (bits) {
 		case 1: srcmask = 0x80; dstmask = 0x7f; break;
 		case 2: srcmask = 0xc0; dstmask = 0x3f; break;

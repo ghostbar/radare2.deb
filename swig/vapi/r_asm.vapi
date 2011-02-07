@@ -1,8 +1,9 @@
 /* radare - LGPL - Copyright 2009, 2010 nibble<.ds@gmail.com> */
 
+namespace Radare {
 [Compact]
 [CCode (cheader_filename="r_asm.h", cname="struct r_asm_t", free_function="r_asm_free", cprefix="r_asm_")]
-public class Radare.RAsm {
+public class RAsm {
 	[CCode (cprefix="R_ASM_ARCH_", cname="int")]
 	public enum Arch {
 		NONE,
@@ -26,8 +27,36 @@ public class Radare.RAsm {
 		ATT
 	}
 
+	[CCode (cprefix="R_ASM_MOD_", cname="int")]
+	public enum Mod {
+		RAWVALUE,
+		VALUE,
+		DSTREG,
+		SRCREG0,
+		SRCREG1,
+		SRCREG2
+	}
+
+/*
 	[Compact]
-	[CCode (cname="struct r_asm_aop_t", destroy_function="" )]
+	[CCode (cname="RAsmFastcall", destroy_function="", free_function="")]
+	public struct Fastcall {
+		string arg[16];
+	}
+*/
+
+	[Compact]
+	[CCode (cname="RAsmPlugin", destroy_function="", free_function="")]
+	public class Plugin {
+		public string name;
+		public string arch;
+		public string desc;
+		[CCode (array_length = false)]
+		public int[] bits;
+	}
+
+	[Compact]
+	[CCode (cname="RAsmAop", destroy_function="")]
 	public struct Aop {
 		public int inst_len;
 		public uint8 *buf;
@@ -36,12 +65,16 @@ public class Radare.RAsm {
 		public string buf_err;
 	}
 
-	[CCode (cname="struct r_asm_code_t", destroy_function="" )]
-	public struct Code {
+	[Compact]
+	[CCode (cname="RAsmCode", cprefix="r_asm_code_", free_function="r_asm_code_free")]
+	public class Code {
 		public int len;
 		public uint8* buf;
 		public string buf_hex;
 		public string buf_asm;
+		public int set_equ (string key, string val);
+		//public int equ_replace (string key);
+		//public void* free();
 	}
 
 	public int arch;
@@ -55,20 +88,22 @@ public class Radare.RAsm {
 	public string buf_err;
 	public void *aux;
 
+	public RList<RAsm.Plugin> plugins;
 	public RAsm();
-	public weak RAsm init();
-	public int list();
 	public bool use(string name);
 	public bool set_bits(int bits);
 	public bool set_syntax(Syntax syntax);
 	public bool set_pc(uint64 addr);
 	public bool set_big_endian(bool big);
+	// TODO: Use Code? instead of aop??
 	public int disassemble(out Aop aop, uint8 *buf, uint64 length);
 	public int assemble(out Aop aop, string buf);
 	public Code? mdisassemble(uint8 *buf, uint64 length);
+	public Code? mdisassemble_hexstr(string hexstr);
 	public Code? massemble(string buf);
-	public weak string fastcall(int idx, int num);
+	public unowned string fastcall(int idx, int num);
 
 	/* TODO: not directy defined here */
 	public void free();
+}
 }

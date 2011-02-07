@@ -3,13 +3,12 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
-
 #include <r_types.h>
 #include <r_util.h>
 #include <r_lib.h>
 #include <r_asm.h>
-
 #include "dis-asm.h"
+#include "../arch/arm/arm.h"
 
 static int arm_mode = 0;
 static unsigned long Offset = 0;
@@ -34,21 +33,24 @@ static void print_address(bfd_vma address, struct disassemble_info *info) {
 	char tmp[32];
 	if (buf_global == NULL)
 		return;
-	sprintf (tmp, "0x%08llx", (ut64)address);
+	sprintf (tmp, "0x%08"PFMT64x"", (ut64)address);
 	strcat (buf_global, tmp);
 }
 
 static int buf_fprintf(void *stream, const char *format, ...) {
 	va_list ap;
 	char *tmp;
-	if (buf_global == NULL)
-		return 0;
-	va_start(ap, format);
- 	tmp = alloca (strlen (format)+strlen (buf_global)+2);
+	if (buf_global == NULL || format == NULL)
+		return R_FALSE;
+	va_start (ap, format);
+ 	tmp = malloc (strlen (format)+strlen (buf_global)+2);
+	if (tmp == NULL)
+		return R_FALSE;
 	sprintf (tmp, "%s%s", buf_global, format);
 	vsprintf (buf_global, tmp, ap);
 	va_end (ap);
-	return 0;
+	free (tmp);
+	return R_TRUE;
 }
 
 static int disassemble(struct r_asm_t *a, struct r_asm_aop_t *aop, ut8 *buf, ut64 len) {
@@ -70,16 +72,27 @@ static int disassemble(struct r_asm_t *a, struct r_asm_aop_t *aop, ut8 *buf, ut6
 	disasm_obj.endian = !a->big_endian;
 	disasm_obj.fprintf_func = &buf_fprintf;
 	disasm_obj.stream = stdout;
+	disasm_obj.bytes_per_chunk =
+	disasm_obj.bytes_per_line = (a->bits/8);
 
 	aop->buf_asm[0]='\0';
 	aop->inst_len = print_insn_arm((bfd_vma)Offset, &disasm_obj);
 	if (aop->inst_len == -1)
 		strncpy(aop->buf_asm, " (data)", R_ASM_BUFSIZE);
-
-	return aop->inst_len;
+	return aop->inst_len; //(a->bits/8); //aop->inst_len;
 }
 
-struct r_asm_handle_t r_asm_plugin_arm = {
+static int assemble(RAsm *a, RAsmAop *aop, const char *buf) {
+	int op = armass_assemble(buf, a->pc, (a->bits==16)?1:0);
+	if (op==-1)
+		return -1;
+	if (a->bits==32)
+		r_mem_copyendian (aop->buf, (void *)&op, 4, a->big_endian);
+	else r_mem_copyendian (aop->buf, (void *)&op, 2, a->big_endian);
+	return (a->bits/8);
+}
+
+RAsmPlugin r_asm_plugin_arm = {
 	.name = "arm",
 	.arch = "arm",
 	.bits = (int[]){ 16, 32, 0 },
@@ -87,7 +100,7 @@ struct r_asm_handle_t r_asm_plugin_arm = {
 	.init = NULL,
 	.fini = NULL,
 	.disassemble = &disassemble,
-	.assemble = NULL
+	.assemble = &assemble 
 };
 
 #ifndef CORELIB

@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008 nibble<.ds@gmail.com> */
+/* radare - LGPL - Copyright 2008-2010 nibble<.ds@gmail.com>, pancake<nopcode.org> */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,8 +7,26 @@
 #include <r_util.h>
 #include "pe.h"
 
-static PE_DWord PE_(r_bin_pe_rva_to_offset)(struct PE_(r_bin_pe_obj_t)* bin, PE_DWord rva)
-{
+ut64 PE_(r_bin_pe_get_main_offset)(struct PE_(r_bin_pe_obj_t) *bin) {
+	struct r_bin_pe_addr_t *entry = PE_(r_bin_pe_get_entrypoint) (bin);
+	ut64 addr = 0LL;
+	ut8 buf[512];
+
+	// option2: /x 8bff558bec83ec20         
+	if (r_buf_read_at (bin->b, entry->offset, buf, sizeof (buf)) == -1) {
+		eprintf ("Error: read (entry)\n");
+	} else {
+		if (buf[367] == 0xe8) {
+			int delta = (buf[368] | buf[369]<<8 | buf[370]<<16 | buf[371]<<24);
+			addr = entry->rva + 367 + 5 + delta;
+		}
+	}
+	free (entry);
+
+	return addr;
+}
+
+static PE_DWord PE_(r_bin_pe_rva_to_offset)(struct PE_(r_bin_pe_obj_t)* bin, PE_DWord rva) {
 	PE_DWord section_base;
 	int i, section_size;
 
@@ -261,11 +279,11 @@ char* PE_(r_bin_pe_get_arch)(struct PE_(r_bin_pe_obj_t)* bin)
 	return arch;
 }
 
-struct r_bin_pe_entrypoint_t* PE_(r_bin_pe_get_entrypoint)(struct PE_(r_bin_pe_obj_t)* bin)
+struct r_bin_pe_addr_t* PE_(r_bin_pe_get_entrypoint)(struct PE_(r_bin_pe_obj_t)* bin)
 {
-	struct r_bin_pe_entrypoint_t *entry = NULL;
+	struct r_bin_pe_addr_t *entry = NULL;
 
-	if ((entry = malloc(sizeof(struct r_bin_pe_entrypoint_t))) == NULL) {
+	if ((entry = malloc(sizeof(struct r_bin_pe_addr_t))) == NULL) {
 		perror("malloc (entrypoint)");
 		return NULL;
 	}
@@ -399,22 +417,30 @@ struct r_bin_pe_lib_t* PE_(r_bin_pe_get_libs)(struct PE_(r_bin_pe_obj_t) *bin)
 	int delay_import_dirs_count = PE_(r_bin_pe_get_delay_import_dirs_count)(bin);
 	int i, j;
 	
-	if ((libs = malloc((import_dirs_count + delay_import_dirs_count + 1) * sizeof(struct r_bin_pe_string_t))) == NULL) {
+	if ((libs = malloc((import_dirs_count + delay_import_dirs_count + 2) * sizeof(struct r_bin_pe_string_t))) == NULL) {
 		perror("malloc (libs)");
 		return NULL;
 	}
-	for (i = j = 0; i < import_dirs_count; i++, j++)
+	for (i = j = 0; i < import_dirs_count; i++, j++) {
 		if (r_buf_read_at(bin->b, PE_(r_bin_pe_rva_to_offset)(bin, bin->import_directory[i].Name),
-					(ut8*)libs[j].name, PE_STRING_LENGTH) == -1) {
+				(ut8*)libs[j].name, PE_STRING_LENGTH) == -1) {
 			eprintf("Error: read (libs - import dirs)\n");
 			return NULL;
 		}
-	for (i = 0; i < delay_import_dirs_count; i++, j++)
+		if (PE_(r_bin_pe_rva_to_offset)(bin, bin->import_directory[i].Characteristics) == 0 &&
+			PE_(r_bin_pe_rva_to_offset)(bin, bin->import_directory[i].FirstThunk) == 0)
+			break;
+	}
+	for (i = 0; i < delay_import_dirs_count; i++, j++) {
 		if (r_buf_read_at(bin->b, PE_(r_bin_pe_rva_to_offset)(bin, bin->delay_import_directory[i].Name),
-					(ut8*)libs[j].name, PE_STRING_LENGTH) == -1) {
+				(ut8*)libs[j].name, PE_STRING_LENGTH) == -1) {
 			eprintf("Error: read (libs - delay import dirs)\n");
 			return NULL;
 		}
+		if (PE_(r_bin_pe_rva_to_offset)(bin, bin->delay_import_directory[i].DelayImportNameTable) == 0 &&
+			PE_(r_bin_pe_rva_to_offset)(bin, bin->delay_import_directory[i].DelayImportAddressTable) == 0)
+			break;
+	}
 	for (i = 0; i < j; i++) {
 		libs[i].name[PE_STRING_LENGTH-1] = '\0';
 		libs[i].last = 0;
@@ -612,7 +638,7 @@ struct r_bin_pe_section_t* PE_(r_bin_pe_get_sections)(struct PE_(r_bin_pe_obj_t)
 		sections[i].size = shdr[i].SizeOfRawData;
 		sections[i].vsize = shdr[i].Misc.VirtualSize;
 		sections[i].offset = shdr[i].PointerToRawData;
-		sections[i].characteristics = shdr[i].Characteristics;
+		sections[i].flags = shdr[i].Characteristics;
 		sections[i].last = 0;
 	}
 	sections[i].last = 1;
@@ -719,6 +745,7 @@ struct PE_(r_bin_pe_obj_t)* PE_(r_bin_pe_new)(const char* file)
 
 	if (!(bin = malloc(sizeof(struct PE_(r_bin_pe_obj_t)))))
 		return NULL;
+	memset (bin, 0, sizeof (struct PE_(r_bin_pe_obj_t)));
 	bin->file = file;
 	if (!(buf = (ut8*)r_file_slurp(file, &bin->size))) 
 		return PE_(r_bin_pe_free)(bin);
@@ -726,6 +753,20 @@ struct PE_(r_bin_pe_obj_t)* PE_(r_bin_pe_new)(const char* file)
 	if (!r_buf_set_bytes(bin->b, buf, bin->size))
 		return PE_(r_bin_pe_free)(bin);
 	free (buf);
+	if (!PE_(r_bin_pe_init)(bin))
+		return PE_(r_bin_pe_free)(bin);
+	return bin;
+}
+
+struct PE_(r_bin_pe_obj_t)* PE_(r_bin_pe_new_buf)(struct r_buf_t *buf)
+{
+	struct PE_(r_bin_pe_obj_t) *bin;
+
+	if (!(bin = malloc(sizeof(struct PE_(r_bin_pe_obj_t)))))
+		return NULL;
+	memset (bin, 0, sizeof (struct PE_(r_bin_pe_obj_t)));
+	bin->b = buf;
+	bin->size = buf->length;
 	if (!PE_(r_bin_pe_init)(bin))
 		return PE_(r_bin_pe_free)(bin);
 	return bin;

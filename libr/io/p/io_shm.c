@@ -53,7 +53,7 @@ static ut64 shm__lseek(struct r_io_t *io, int fildes, ut64 offset, int whence)
 	return io->off;
 }
 
-static int shm__handle_open(struct r_io_t *io, const char *pathname)
+static int shm__plugin_open(struct r_io_t *io, const char *pathname)
 {
 	return (!memcmp(pathname, "shm://", 6));
 }
@@ -70,9 +70,9 @@ static int shm__open(struct r_io_t *io, const char *pathname, int flags, int mod
 		// connect
 		shm_buf= shmat(atoi(ptr), 0, 0);
 
-		if (((int)(shm_buf)) != -1) {
+		if (((int)(size_t)(shm_buf)) != -1) {
 			printf("Connected to shared memory 0x%08x\n", atoi(ptr));
-			shm_fd = (int)&shm_buf;
+			shm_fd = (int)(size_t)&shm_buf;
 		} else	{
 			printf("Cannot connect to shared memory (%d)\n", atoi(ptr));
 			shm_buf = NULL;
@@ -87,14 +87,14 @@ static int shm__init(struct r_io_t *io)
 	return R_TRUE;
 }
 
-struct r_io_handle_t r_io_plugin_shm = {
-        //void *handle;
+struct r_io_plugin_t r_io_plugin_shm = {
+        //void *plugin;
 	.name = "shm",
         .desc = "shared memory resources (shm://key)",
         .open = shm__open,
         .close = shm__close,
 	.read = shm__read,
-        .handle_open = shm__handle_open,
+        .plugin_open = shm__plugin_open,
 	.lseek = shm__lseek,
 	.system = NULL, // shm__system,
 	.init = shm__init,

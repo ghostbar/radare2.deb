@@ -1,11 +1,10 @@
-/* radare - LGPL - Copyright 2009 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2010 pancake<nopcode.org> */
 
 #include <r_util.h>
 #include <r_debug.h>
 #include <r_io.h>
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
 	int ret, i;
 	int tid, pid;
 	struct r_io_t *io;
@@ -13,7 +12,7 @@ int main(int argc, char **argv)
 
 	io = r_io_new ();
 	printf ("Supported IO pluggins:\n");
-	r_io_handle_list (io);
+	r_io_plugin_list (io);
 
 	ret = r_io_open (io, "dbg:///bin/ls", 0, 0);
 //	r_io_set_fd(io, ret);
@@ -40,7 +39,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	dbg = r_debug_new ();
+	dbg = r_debug_new (R_TRUE);
 	printf("Supported debugger backends:\n");
 
 	ret = r_debug_use (dbg, "native");

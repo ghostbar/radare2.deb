@@ -14,12 +14,11 @@ static int disassemble(struct r_asm_t *a, struct r_asm_aop_t *aop, ut8 *buf, ut6
 #endif
 
 // XXX: TODO Implement
-static int assemble(struct r_asm_t *a, struct r_asm_aop_t *aop, const char *buf)
-{
+static int assemble(struct r_asm_t *a, struct r_asm_aop_t *aop, const char *buf) {
 	int len = 0;
 	char cmd[R_ASM_BUFSIZE];
 	ut8 *out;
-	sprintf(cmd, "gas /dev/stdin -o /dev/stdout <<__\nBITS %i\nORG 0x%llx\n%s\n__", a->bits, a->pc, buf);
+	sprintf(cmd, "gas /dev/stdin -o /dev/stdout <<__\nBITS %i\nORG 0x%"PFMT64x"\n%s\n__", a->bits, a->pc, buf);
 	out = (ut8 *)r_sys_cmd_str(cmd, "", &len);
 	if (out) {
 		memcpy(aop->buf, out, len<=R_ASM_BUFSIZE?len:R_ASM_BUFSIZE);
@@ -29,7 +28,7 @@ static int assemble(struct r_asm_t *a, struct r_asm_aop_t *aop, const char *buf)
 	return len;
 }
 
-struct r_asm_handle_t r_asm_plugin_x86_nasm = {
+RAsmPlugin r_asm_plugin_x86_nasm = {
 	.name = "gas",
 	.desc = "GNU Assembler plugin",
 	.arch = "x86", // XXX

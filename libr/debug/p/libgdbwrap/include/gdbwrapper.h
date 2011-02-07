@@ -1,3 +1,6 @@
+#ifndef _INCLUDE_GDBWRAPPER_H_
+#define _INCLUDE_GDBWRAPPER_H_
+
 /* File to include to use the wrapper. */
 
 #include "r_types.h"
@@ -11,6 +14,10 @@
 #endif
 #include <errno.h>
 #include "libaspect.h"
+
+#if __WINDOWS__
+typedef unsigned char uint8_t;
+#endif
 
 typedef struct  gdbwrap_gdbreg32
 {
@@ -97,3 +104,4 @@ char             *gdbwrap_remotecmd(gdbwrap_t *desc, char *cmd);
 u_char           gdbwrap_lasterror(gdbwrap_t *desc);
 gdbmemap_t       gdbwrap_memorymap_get();
 
+#endif

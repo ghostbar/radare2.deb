@@ -11,7 +11,7 @@
 #define R_BIN_PE_SCN_IS_READABLE(x)        x & PE_IMAGE_SCN_MEM_READ
 #define R_BIN_PE_SCN_IS_WRITABLE(x)        x & PE_IMAGE_SCN_MEM_WRITE
 
-struct r_bin_pe_entrypoint_t {
+struct r_bin_pe_addr_t {
 	ut64 rva;
 	ut64 offset;
 };
@@ -22,7 +22,7 @@ struct r_bin_pe_section_t {
 	ut64 vsize;
 	ut64 rva;
 	ut64 offset;
-	ut64 characteristics;
+	ut64 flags;
 	int last;
 };
 
@@ -74,7 +74,8 @@ struct PE_(r_bin_pe_obj_t) {
 };
 
 char* PE_(r_bin_pe_get_arch)(struct PE_(r_bin_pe_obj_t)* bin);
-struct r_bin_pe_entrypoint_t* PE_(r_bin_pe_get_entrypoint)(struct PE_(r_bin_pe_obj_t)* bin);
+struct r_bin_pe_addr_t* PE_(r_bin_pe_get_entrypoint)(struct PE_(r_bin_pe_obj_t)* bin);
+ut64 PE_(r_bin_pe_get_main_offset)(struct PE_(r_bin_pe_obj_t) *bin);
 struct r_bin_pe_export_t* PE_(r_bin_pe_get_exports)(struct PE_(r_bin_pe_obj_t)* bin); // TODO
 int PE_(r_bin_pe_get_file_alignment)(struct PE_(r_bin_pe_obj_t)* bin);
 ut64 PE_(r_bin_pe_get_image_base)(struct PE_(r_bin_pe_obj_t)* bin);
@@ -96,3 +97,4 @@ int PE_(r_bin_pe_is_stripped_local_syms)(struct PE_(r_bin_pe_obj_t)* bin);
 int PE_(r_bin_pe_is_stripped_debug)(struct PE_(r_bin_pe_obj_t)* bin);
 void* PE_(r_bin_pe_free)(struct PE_(r_bin_pe_obj_t)* bin);
 struct PE_(r_bin_pe_obj_t)* PE_(r_bin_pe_new)(const char* file);
+struct PE_(r_bin_pe_obj_t)* PE_(r_bin_pe_new_buf)(struct r_buf_t *buf);

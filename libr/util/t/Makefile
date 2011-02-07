@@ -3,7 +3,6 @@ include ../../config.mk
 ifeq ($(WITHPIC),1)
 # OSX
 FLAGS=-I../../include -L.. -lr_util -g -DVERSION=\"${VERSION}\"
-#FLAGS=-I../../include -Wl,-R.. -L.. -lr_util -g -DVERSION=\"${VERSION}\"
 EFLAGS=-L.. -lr_util
 else
 FLAGS=-I../../include -g -DVERSION=\"${VERSION}\"
@@ -11,6 +10,7 @@ EFLAGS=../libr_util.a
 endif
 
 BINS=test${EXT_EXE}
+BINS=set0${EXT_EXE}
 BINS+=rax2${EXT_EXE}
 BINS+=ralloc${EXT_EXE}
 BINS+=array${EXT_EXE}
@@ -28,6 +28,9 @@ ralloc${EXT_EXE}:
 
 test${EXT_EXE}:
 	${CC} ${FLAGS} test.c ${EFLAGS} -o test${EXT_EXE}
+
+set0${EXT_EXE}:
+	${CC} ${FLAGS} set0.c ${EFLAGS} -o set0${EXT_EXE}
 
 argv${EXT_EXE}:
 	${CC} ${FLAGS} argv.c ${EFLAGS} -o argv${EXT_EXE}

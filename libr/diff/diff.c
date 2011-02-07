@@ -2,17 +2,14 @@
 
 #include <r_diff.h>
 
-R_API int r_diff_init(RDiff *d, ut64 off_a, ut64 off_b) {
-	d->delta = 1;
-	d->user = NULL;
-	d->off_a = off_a;
-	d->off_b = off_b;
-	return 1;
-}
-
 R_API RDiff *r_diff_new(ut64 off_a, ut64 off_b) {
 	RDiff *d = R_NEW (RDiff);
-	r_diff_init (d, off_a, off_b);
+	if (d) {
+		d->delta = 1;
+		d->user = NULL;
+		d->off_a = off_a;
+		d->off_b = off_b;
+	}
 	return d;
 }
 
@@ -91,7 +88,7 @@ R_API int r_diff_buffers_radiff(RDiff *d, const ut8 *a, int la, const ut8 *b, in
 		char op; // operation
 
 		oa = ob = 0LL;
-		fgets (buf, 63, fd);
+		(void *)fgets (buf, 63, fd); // TODO: handle ret value
 		if (feof(fd))
 			break;
 		str = buf;
@@ -99,7 +96,7 @@ R_API int r_diff_buffers_radiff(RDiff *d, const ut8 *a, int la, const ut8 *b, in
 		ptr = strchr(buf, ' ');
 		if (!ptr) continue;
 		*ptr='\0';
-		sscanf (str, "0x%08llx", &oa);
+		sscanf (str, "0x%08"PFMT64x"", &oa);
 
 		str = r_str_ichr (ptr+1, ' ');
 		if (*str!='|'&&*str!='>'&&*str!='<') {
@@ -127,7 +124,7 @@ R_API int r_diff_buffers_radiff(RDiff *d, const ut8 *a, int la, const ut8 *b, in
 		ptr = strchr (str, '\n');
 		if (!ptr) continue;
 		*ptr='\0';
-		sscanf (str, "0x%08llx", &ob);
+		sscanf (str, "0x%08"PFMT64x"", &ob);
 
 		if (oop == op || oop==-1) {
 			if (hit == 0) {
@@ -196,10 +193,10 @@ R_API int r_diff_buffers_distance(RDiff *d, const ut8 *a, ut32 la, const ut8 *b,
 	if (la < 1 || lb < 1)
 		return R_FALSE;
 
-	if ((m = malloc (la * sizeof(int*))) == NULL)
+	if ((m = malloc ((la+1) * sizeof(int*))) == NULL)
 		return R_FALSE;
 	for(i = 0; i <= la; i++)
-		if ((m[i] = malloc (lb * sizeof(int))) == NULL)
+		if ((m[i] = malloc ((lb+1) * sizeof(int))) == NULL)
 			return R_FALSE;
 
 	for (i = 0; i <= la; i++)

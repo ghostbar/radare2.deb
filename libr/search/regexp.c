@@ -4,8 +4,9 @@
 #if __UNIX__
 #include <regex.h>
 
-R_API int r_search_regexp_update(RSearch *s, ut64 from, const ut8 *buf, int len) {
-	struct list_head *pos;
+R_API int r_search_regexp_update(void *_s, ut64 from, const ut8 *buf, int len) {
+	RSearch *s = (RSearch*)_s;
+	RListIter *iter;
 	char *buffer = malloc (len+1);
 	char *skipz, *end;
 	int count = 0;
@@ -13,8 +14,8 @@ R_API int r_search_regexp_update(RSearch *s, ut64 from, const ut8 *buf, int len)
 	memcpy (buffer, buf, len);
 	buffer[len]='\0';
 
-	list_for_each_prev (pos, &s->kws) {
-		RSearchKeyword *kw = list_entry (pos, RSearchKeyword, list);
+	RSearchKeyword *kw;
+	r_list_foreach (s->kws, iter, kw) {
 		int reflags = REG_EXTENDED;
 		int ret, delta = 0;
 		regmatch_t matches[10];
@@ -53,7 +54,7 @@ R_API int r_search_regexp_update(RSearch *s, ut64 from, const ut8 *buf, int len)
 }
 #else
 
-R_API int r_search_regexp_update(RSearch *s, ut64 from, const ut8 *buf, int len) {
+R_API int r_search_regexp_update(void *_s, ut64 from, const ut8 *buf, int len) {
 	eprintf ("r_search_regexp_update: unimplemented for this platform\n");
 	return -1;
 }

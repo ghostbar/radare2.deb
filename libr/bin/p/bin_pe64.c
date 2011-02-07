@@ -1,24 +1,21 @@
-/* radare - GPL3 - Copyright 2009 nibble<.ds@gmail.com> */
+/* radare - GPL3 - Copyright 2009-2010 nibble<.ds@gmail.com> */
 
 #define R_BIN_PE64 1
 #include "bin_pe.c"
 
-static int check(RBin *bin)
-{
-	ut8 *buf;
-	int ret = R_FALSE;
+static int check(RBinArch *arch) {
+	int idx, ret = R_FALSE;
 
-	if (!(buf = (ut8*)r_file_slurp_range (bin->file, 0, 1024)))
-		return R_FALSE;
-	if (!memcmp (buf, "\x4d\x5a", 2) &&
-		!memcmp (buf+(buf[0x3c]|(buf[0x3d]<<8)), "\x50\x45", 2) && 
-		!memcmp (buf+(buf[0x3c]|buf[0x3d]<<8)+0x18, "\x0b\x02", 2))
-		ret = R_TRUE;
-	free (buf);
+	idx = arch->buf->buf[0x3c]|(arch->buf->buf[0x3d]<<8);
+	if (arch->buf->length>=idx+0x20)
+		if (!memcmp (arch->buf->buf, "\x4d\x5a", 2) &&
+			!memcmp (arch->buf->buf+idx, "\x50\x45", 2) && 
+			!memcmp (arch->buf->buf+idx+0x18, "\x0b\x02", 2))
+			ret = R_TRUE;
 	return ret;
 }
 
-struct r_bin_handle_t r_bin_plugin_pe64 = {
+struct r_bin_plugin_t r_bin_plugin_pe64 = {
 	.name = "pe64",
 	.desc = "PE64 (PE32+) bin plugin",
 	.init = NULL,
@@ -27,6 +24,7 @@ struct r_bin_handle_t r_bin_plugin_pe64 = {
 	.destroy = &destroy,
 	.check = &check,
 	.baddr = &baddr,
+	.main = &binmain,
 	.entries = &entries,
 	.sections = &sections,
 	.symbols = &symbols,
@@ -35,7 +33,9 @@ struct r_bin_handle_t r_bin_plugin_pe64 = {
 	.info = &info,
 	.fields = NULL,
 	.libs = &libs,
+	.relocs = NULL,
 	.meta = NULL,
+	.write = NULL,
 };
 
 #ifndef CORELIB

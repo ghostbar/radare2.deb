@@ -20,6 +20,17 @@ static void break_signal(int sig) {
 		I.break_cb (I.break_user);
 }
 
+static inline void r_cons_write (char *buf, int len) {
+#if __WINDOWS__
+	r_cons_w32_print ((unsigned char *)buf);
+#else
+	if (write (I.fdout, buf, len) == -1) {
+		eprintf ("r_cons_write: write error\n");
+		exit (1);
+	}
+#endif
+}
+
 R_API RCons *r_cons_singleton () {
 	return &I;
 }
@@ -40,25 +51,18 @@ R_API void r_cons_break_end() {
 #endif
 }
 
-R_API RCons *r_cons_new () {
-	r_cons_init ();
-	return &I;
-}
-
-R_API RCons *r_cons_free (RCons *foo) {
-	/* do nothing */
-	return NULL;
-}
-
 #if __WINDOWS__
 static HANDLE h;
 static BOOL __w32_control(DWORD type) {
-	if (type == CTRL_C_EVENT)
+	if (type == CTRL_C_EVENT) {
 		break_signal (2); // SIGINT
+		return R_TRUE;
+	}
+	return R_FALSE;
 }
 #endif
 
-R_API int r_cons_init() {
+R_API RCons *r_cons_new () {
 	I.is_interactive = R_TRUE;
 	I.breaked = R_FALSE;
 	I.noflush = R_FALSE;
@@ -80,14 +84,19 @@ R_API int r_cons_init() {
 	I.term_raw.c_cc[VMIN] = 1; // Solaris stuff hehe
 #elif __WINDOWS__
 	h = GetStdHandle (STD_INPUT_HANDLE);
-	GetConsoleMode (h, &I.term_buf);
+	GetConsoleMode (h, (PDWORD) &I.term_buf);
 	I.term_raw = 0;
 	if (!SetConsoleCtrlHandler ((PHANDLER_ROUTINE)__w32_control, TRUE))
 		eprintf ("r_cons: Cannot set control console handler\n");
 #endif
 	//r_cons_palette_init(NULL);
 	r_cons_reset ();
-	return R_TRUE;
+	return &I;
+}
+
+R_API RCons *r_cons_free (RCons *foo) {
+	/* do nothing */
+	return NULL;
 }
 
 #define MOAR 4096*4
@@ -157,17 +166,27 @@ R_API void r_cons_reset() {
 	I.grep.nstrings = 0; // XXX
 	I.grep.line = -1;
 	I.grep.str = NULL;
-	I.grep.token = -1;
+	I.grep.tokenfrom = 0;
+	I.grep.tokento = ST32_MAX;
 }
 
 R_API const char *r_cons_get_buffer() {
 	return I.buffer;
 }
 
+R_API void r_cons_filter() {
+	/* grep*/
+	if (I.grep.nstrings>0||I.grep.tokenfrom!=0||I.grep.tokento!=ST32_MAX||I.grep.line!=-1)
+		r_cons_grepbuf (I.buffer, I.buffer_len);
+	/* html */
+	/* TODO */
+}
+
 R_API void r_cons_flush() {
 	const char *tee = I.teefile;
 	if (I.noflush)
 		return;
+	r_cons_filter ();
 	if (I.is_interactive) {
 		if (I.buffer_len > CONS_MAX_USER) {
 			if (!r_cons_yesno ('n',"Do you want to print %d bytes? (y/N)",
@@ -177,26 +196,19 @@ R_API void r_cons_flush() {
 			}
 		}
 	}
-
 	if (tee&&tee[0]) {
 		FILE *d = fopen (tee, "a+");
 		if (d != NULL) {
-			fwrite (I.buffer, I.buffer_len, 1, d);
+			if (I.buffer_len != fwrite (I.buffer, I.buffer_len, 1, d))
+				eprintf ("r_cons_flush: fwrite: error\n");
 			fclose (d);
 		}
 	} else {
 		// is_html must be a filter, not a write endpoint
-		if (I.is_html)
-			r_cons_html_print (I.buffer);
-		else
-#if __WINDOWS__
-		r_cons_w32_print (I.buffer);
-#else
-		write (1, I.buffer, I.buffer_len);
-#endif
+		if (I.is_html) r_cons_html_print (I.buffer);
+		else r_cons_write (I.buffer, I.buffer_len);
 	}
 	r_cons_reset ();
-	return;
 }
 
 R_API void r_cons_visual_flush() {
@@ -213,14 +225,10 @@ R_API void r_cons_visual_flush() {
 }
 
 R_API void r_cons_visual_write (char *buffer) {
-	int lines = 80;
-	char *nl;
-	char *ptr = buffer;
-
-	lines = I.rows-1;
-
+	int lines = I.rows-1;
+	char *nl, *ptr = buffer;
 	while (lines && (nl = strchr (ptr, '\n'))) {
-		write (I.fdout, ptr, nl-ptr+1);
+		r_cons_write (ptr, nl-ptr+1);
 		lines--;
 		ptr = nl+1;
 	}
@@ -242,9 +250,9 @@ R_API void r_cons_printf(const char *format, ...) {
 
 /* final entrypoint for adding stuff in the buffer screen */
 R_API void r_cons_memcat(const char *str, int len) {
-	palloc (len);
-	memcpy (I.buffer+I.buffer_len, str, len+1); // XXX +1??
-	I.buffer_len += r_cons_grepbuf (I.buffer+I.buffer_len, len);
+	palloc (len+1);
+	memcpy (I.buffer+I.buffer_len, str, len+1);
+	I.buffer_len += len;
 }
 
 R_API void r_cons_strcat(const char *str) {
@@ -254,8 +262,7 @@ R_API void r_cons_strcat(const char *str) {
 }
 
 R_API void r_cons_newline() {
-	if (I.is_html)
-		r_cons_strcat ("<br />\n");
+	if (I.is_html) r_cons_strcat ("<br />\n");
 	else r_cons_strcat ("\n");
 }
 
@@ -267,12 +274,10 @@ R_API int r_cons_get_size(int *rows) {
 #if __UNIX__
 	struct winsize win;
 	struct sigaction sa;
-
 	signal (SIGWINCH, sig_winch);
 	sigaction (SIGWINCH, (struct sigaction *)0, &sa);
 	sa.sa_flags &= ~ SA_RESTART;
 	sigaction (SIGWINCH, &sa, (struct sigaction *)0);
-	
 	I.columns = 80;
 	I.rows = 23;
 	if (ioctl (1, TIOCGWINSZ, &win) == 0) {
@@ -283,10 +288,8 @@ R_API int r_cons_get_size(int *rows) {
 	const char *str = r_sys_getenv ("COLUMNS");
 	I.columns = 80;
 	I.rows = 23;
-	if (str != NULL) {
+	if (str != NULL)
 		I.columns = atoi (str);
-		free (str);
-	}
 #endif
 	if (rows)
 		*rows = I.rows;
@@ -310,8 +313,8 @@ R_API void r_cons_set_raw(int is_raw) {
 	if (is_raw) tcsetattr (0, TCSANOW, &I.term_raw);
 	else tcsetattr (0, TCSANOW, &I.term_buf);
 #elif __WINDOWS__
-	if (is_raw) SetConsoleMode (h, I.term_raw);
-	else SetConsoleMode (h, I.term_buf);
+	if (is_raw) SetConsoleMode (h, (DWORD)I.term_raw);
+	else SetConsoleMode (h, (DWORD)I.term_buf);
 #else
 #warning No raw console supported for this platform
 #endif

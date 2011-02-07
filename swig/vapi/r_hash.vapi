@@ -24,6 +24,7 @@ public class Radare.RHash {
 		SHA384 = 64,
 		SHA512 = 64,
 	}
+	public RHash(bool rst, int bits);
 
 	/* checksum */
 	public static uint16 crc16(uint16 crc, uint8 *buf, uint64 len);
@@ -39,9 +40,7 @@ public class Radare.RHash {
 	public static int pcprint(uint8 *buf, uint64 len);
 
 	/* methods */
-	public RHash(bool rst);
-//	public void init(int rst, Algorithm bits);
-	public void init(bool rst, int bits);
+	//public RHash(bool rst);
 	public uint8 *do_md4(uint8 *input, uint32 len);
 	public uint8 *do_md5(uint8 *input, uint32 len);
 	public uint8 *do_sha1(uint8 *input, uint32 len);

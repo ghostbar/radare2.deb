@@ -1,5 +1,5 @@
 PKGNAME radare2
-VERSION 0.4
+VERSION 0.6
 CONTACT pancake ; pancake@nopcode.org
 
 LANG_C!
@@ -12,7 +12,15 @@ USE_DL
 CHECK_ENDIAN
 CHKLIB ewf
 ARG_WITHOUT HAVE_EWF ewf disable EWF dependency ;
-IF HAVE_EWF { HAVE_LIB_EWF = 0 ; }
+IFNOT HAVE_EWF { HAVE_LIB_EWF = 0 ; }
+
+CHKLIB gmp
+ARG_WITHOUT HAVE_GMP gmp disable GMP dependency ;
+IFNOT HAVE_GMP { HAVE_LIB_GMP = 0 ; }
+
+CHKLIB ssl
+ARG_WITHOUT HAVE_OPENSSL ssl disable openssl dependency ;
+IFNOT HAVE_OPENSSL { HAVE_LIB_SSL = 0 ; }
 
 CHKLIB lua5.1
 CHKLIB tcc
@@ -22,19 +30,29 @@ ARG_WITH USERCC=gcc compiler Define compiler to use (see mk/) ;
 ARG_WITH USEROSTYPE=auto ostype Choose OS type ( gnulinux windows darwin ) ;
 
 (( TODO: throw error if unknown ostype ))
+(( TODO: handle BSD os as different ostype? ))
 IFEQ USEROSTYPE auto ; {
 	IFEQ HOST_OS linux ; {
 		USEROSTYPE = gnulinux ;
 	}{
-		IFEQ HOST_OS darwin ; {
-			USEROSTYPE = darwin ;
-		}
-	}
+	IFEQ HOST_OS netbsd ; {
+		USEROSTYPE = gnulinux ;
+	}{
+	IFEQ HOST_OS freebsd ; {
+		USEROSTYPE = gnulinux ;
+	}{
+	IFEQ HOST_OS openbsd ; {
+		USEROSTYPE = gnulinux ;
+	}{
+	IFEQ HOST_OS darwin ; {
+		USEROSTYPE = darwin ;
+	} } } } }
 }
 
 ARG_WITHOUT WITHPIC pic do not build libr as a program independent location ;
+ARG_WITH WITHNONPIC nonpic build the library archives .a ;
 
-REPORT PREFIX HAVE_LIB_EWF HAVE_LIB_TCC DEBUGGER USERCC USEROSTYPE ;
+REPORT PREFIX HAVE_LIB_EWF HAVE_LIB_GMP HAVE_LIB_SSL HAVE_LIB_TCC DEBUGGER USERCC USEROSTYPE ;
 
 (( TODO: Add the rest of .pc files here.. add a rule for acr? ))
 SUBDIRS ./config-user.mk libr/include/r_userconf.h
@@ -64,4 +82,6 @@ SUBDIRS ./config-user.mk libr/include/r_userconf.h
  pkgcfg/r_bp.pc
  pkgcfg/r_db.pc
  pkgcfg/r_lib.pc
+ pkgcfg/r_parse.pc
+ pkgcfg/r_print.pc
 ;

@@ -1,5 +1,17 @@
 PREFIX=@PREFIX@
 VERSION=@VERSION@
+CC=@USERCC@
+CXX=@USERCXX@
+OSTYPE=@USEROSTYPE@
+
+ifeq ($(OSTYPE),windows)
+SOEXT=dll
+elif ($(OSTYPE),darwin)
+SOEXT=dylib
+else
+# linux, bsd, ...
+SOEXT=so
+endif
 
 INSTALL_DIR=@INSTALL_DIR@
 INSTALL_DATA=@INSTALL_DATA@

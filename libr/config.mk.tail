@@ -23,12 +23,6 @@ LDFLAGS+=$(subst r_,-lr_,$(DEPS))
 LDFLAGS+=$(subst r_,-L../,$(DEPS))
 LDFLAGS+=$(subst r_,-lr_,$(BINDEPS))
 LDFLAGS+=$(subst r_,-L../../,$(BINDEPS))
-ifeq ($(OSTYPE),darwin)
-BOO=-L../../
-else
-BOO=-Wl,-R../../
-endif
-LDFLAGS+=$(subst r_,${BOO},$(BINDEPS))
 CFLAGS+=${PIC_CFLAGS}
 LDFLAGS+=${PIC_CFLAGS}
 else
@@ -46,6 +40,12 @@ endif
 
 # Debug
 CFLAGS+=-g -Wall
+
+# libgmp
+ifeq (${HAVE_LIB_GMP},1)
+CFLAGS+=-DHAVE_LIB_GMP=1
+BN_LIBS=-lgmp
+endif
 
 # XXX do it in configure stage
 OSTYPE?=gnulinux
@@ -70,6 +70,11 @@ EXT_AR=a
 EXT_SO=dylib
 EXT_EXE=
 TH_LIBS=-lpthread
+endif
+
+ifeq (${EXT_SO},)
+all:
+	@echo Unidentified platform; exit 1
 endif
 
 LIB=lib${NAME}

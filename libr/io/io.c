@@ -7,22 +7,27 @@
 // TODO: R_API int r_io_fetch(struct r_io_t *io, ut8 *buf, int len)
 //  --- check for EXEC perms in section (use cached read to accelerate)
 
-R_API struct r_io_t *r_io_init(struct r_io_t *io) {
-	if (!io) return NULL;
-	io->write_mask_fd = -1;
-	io->redirect = NULL;
-	io->printf = (void*) printf;
-	r_io_cache_init(io);
-	r_io_map_init(io);
-	r_io_section_init(io);
-	r_io_handle_init(io);
-	r_io_desc_init(io);
-	r_io_undo_init(io);
+R_API struct r_io_t *r_io_new() {
+	RIO *io = R_NEW (struct r_io_t);
+	if (io) {
+		io->write_mask_fd = -1;
+		io->redirect = NULL;
+		io->printf = (void*) printf;
+		io->plugin = NULL;
+		r_io_cache_init (io);
+		r_io_map_init (io);
+		r_io_section_init (io);
+		r_io_plugin_init (io);
+		r_io_desc_init (io);
+		r_io_undo_init (io);
+	}
 	return io;
 }
 
-R_API struct r_io_t *r_io_new() {
-	return r_io_init (R_NEW (struct r_io_t));
+R_API int r_io_is_listener(RIO *io) {
+	if (io && io->plugin && io->plugin->listener)
+		return io->plugin->listener (io);
+	return R_FALSE;
 }
 
 R_API RBuffer *r_io_read_buf(struct r_io_t *io, ut64 addr, int len) {
@@ -70,10 +75,10 @@ R_API int r_io_open_as(struct r_io_t *io, const char *urihandler, const char *fi
 R_API int r_io_open(struct r_io_t *io, const char *file, int flags, int mode) {
 	int fd = -2;
 	char *uri = strdup (file);
-	struct r_io_handle_t *plugin;
+	struct r_io_plugin_t *plugin;
 	if (io != NULL) {
 		for (;;) {
-			plugin = r_io_handle_resolve (io, uri);
+			plugin = r_io_plugin_resolve (io, uri);
 			if (plugin) {
 				fd = plugin->open (io, uri, flags, mode);
 				if (io->redirect) {
@@ -83,7 +88,7 @@ R_API int r_io_open(struct r_io_t *io, const char *file, int flags, int mode) {
 					continue;
 				}
 				if (fd != -1)
-					r_io_handle_open (io, fd, plugin);
+					r_io_plugin_open (io, fd, plugin);
 				if (fd != io->fd)
 					io->plugin = plugin;
 			}
@@ -104,15 +109,14 @@ R_API int r_io_open(struct r_io_t *io, const char *file, int flags, int mode) {
 		r_io_desc_add (io, fd, file, flags, io->plugin);
 	} else fd = -1;
 
-	free((void *)uri);
+	free ((void *)uri);
 	return fd;
 }
 
 // TODO: Rename to use_fd ?
-R_API int r_io_set_fd(struct r_io_t *io, int fd)
-{
+R_API int r_io_set_fd(RIO *io, int fd) {
 	if (fd != -1 && fd != io->fd) {
-		io->plugin = r_io_handle_resolve_fd (io, fd);
+		io->plugin = r_io_plugin_resolve_fd (io, fd);
 		io->fd = fd;
 	}
 	return io->fd;
@@ -124,6 +128,7 @@ R_API int r_io_read(struct r_io_t *io, ut8 *buf, int len) {
 	if (io->enforce_rwx && !(r_io_section_get_rwx (io, io->off) & R_IO_READ))
 		return -1;
 
+#if 0
 	if (io->cached) {
 		ret = r_io_cache_read (io, io->off, buf, len);
 		if (ret == len)
@@ -136,6 +141,7 @@ R_API int r_io_read(struct r_io_t *io, ut8 *buf, int len) {
 		if (ret == len)
 			return len;
 	}
+#endif
 	ret = r_io_map_read_at (io, io->off, buf, len);
 
 	// partial reads
@@ -147,16 +153,12 @@ R_API int r_io_read(struct r_io_t *io, ut8 *buf, int len) {
 		if (io->plugin && io->plugin->read) {
 			if (io->plugin->read != NULL)
 				ret = io->plugin->read(io, io->fd, buf, len);
-			else eprintf ("IO handler for fd=%d has no read()\n", io->fd);
+			else eprintf ("IO plugin for fd=%d has no read()\n", io->fd);
 		} else ret = read (io->fd, buf, len);
-
-		if (ret > 0 && ret<len) //ret != len)
+		if (ret>0 && ret<len)
 			memset (buf+ret, 0xff, len-ret);
 	}
-
-	/* if read is cached. cache it :) */
-	if (ret != -1 && ret == len && io->cached_read)
-		r_io_cache_write (io, io->off, buf, len);
+	r_io_cache_read (io, io->off, buf, len);
 	return ret;
 }
 
@@ -174,7 +176,8 @@ R_API ut64 r_io_read_i(struct r_io_t *io, ut64 addr, int sz, int endian) {
 	if (sz < 0) sz = 1;
 	err = r_io_read_at (io, addr, buf, sz);
 	if (err == sz) r_mem_copyendian ((ut8*)&ret, buf, sz, endian);
-	else perror("Cannot read");
+	else return -1;
+	//else perror("Cannot read");
 	return ret;
 }
 
@@ -182,11 +185,11 @@ R_API int r_io_resize(struct r_io_t *io, const char *file, int flags, int mode) 
 	// XXX not implemented
 #if 0
 	/* TODO */
-	struct r_io_handle_t *plugin = r_io_handle_resolve(file);
+	struct r_io_plugin_t *plugin = r_io_plugin_resolve(file);
 	if (plugin && io->plugin->resize) {
 		int fd = plugin->resize(file, flags, mode);
 		if (fd != -1)
-			r_io_handle_open(fd, plugin);
+			r_io_plugin_open(fd, plugin);
 		return fd;
 	}
 #endif
@@ -207,6 +210,7 @@ R_API int r_io_set_write_mask(struct r_io_t *io, const ut8 *buf, int len) {
 
 R_API int r_io_write(struct r_io_t *io, const ut8 *buf, int len) {
 	int i, ret = -1;
+	ut8 *data = NULL;
 
 	/* check section permissions */
 	if (io->enforce_rwx && !(r_io_section_get_rwx (io, io->off) & R_IO_WRITE))
@@ -226,26 +230,27 @@ R_API int r_io_write(struct r_io_t *io, const ut8 *buf, int len) {
 
 	/* apply write binary mask */
 	if (io->write_mask_fd != -1) {
-		ut8 *data = alloca(len);
+		data = malloc (len);
 		r_io_seek (io, io->off, R_IO_SEEK_SET);
 		r_io_read (io, data, len);
 		r_io_seek (io, io->off, R_IO_SEEK_SET);
-		for (i=0;i<len;i++) {
+		for (i=0; i<len; i++)
 			data[i] = buf[i] & \
 				io->write_mask_buf[i%io->write_mask_len];
-		}
 		buf = data;
 	}
 
-	if (r_io_map_write_at (io, io->off, buf, len) != 0)
-		return len;
-	if (io->plugin) {
-		if (io->plugin->write) {
-			ret = io->plugin->write (io, io->fd, buf, len);
-		} else eprintf ("r_io_write: io handler with no write callback\n");
-	} else ret = write (io->fd, buf, len);
-	if (ret == -1)
-		eprintf ("r_io_write: cannot write on fd %d\n", io->fd);
+	if (!r_io_map_write_at (io, io->off, buf, len)) {
+		if (io->plugin) {
+			if (io->plugin->write)
+				ret = io->plugin->write (io, io->fd, buf, len);
+			else eprintf ("r_io_write: io handler with no write callback\n");
+		} else ret = write (io->fd, buf, len);
+		if (ret == -1)
+			eprintf ("r_io_write: cannot write on fd %d\n", io->fd);
+	} else ret = len;
+	if (data)
+		free (data);
 	return ret;
 }
 
@@ -257,6 +262,7 @@ R_API int r_io_write_at(struct r_io_t *io, ut64 addr, const ut8 *buf, int len) {
 
 R_API ut64 r_io_seek(struct r_io_t *io, ut64 offset, int whence) {
 	int posix_whence = SEEK_SET;
+	ut64 ret = -1;
 
 	switch(whence) {
 	case R_IO_SEEK_SET:
@@ -267,33 +273,38 @@ R_API ut64 r_io_seek(struct r_io_t *io, ut64 offset, int whence) {
 		posix_whence = SEEK_CUR;
 		break;
 	case R_IO_SEEK_END:
-		offset = UT64_MAX; // XXX: depending on io bits?
+		//offset = UT64_MAX; // XXX: depending on io bits?
 		posix_whence = SEEK_END;
 		break;
 	}
-	offset = io->va ? r_io_section_vaddr_to_offset (io, offset) : offset;
-
+	// XXX: list_empty trick must be done in r_io_set_va();
+	offset = (!io->debug && io->va && !list_empty (&io->sections))? 
+		r_io_section_vaddr_to_offset (io, offset) : offset;
 	// TODO: implement io->enforce_seek here!
 	if (io->plugin && io->plugin->lseek)
-		io->off = io->plugin->lseek (io, io->fd, offset, whence);
+		ret = io->plugin->lseek (io, io->fd, offset, whence);
 	// XXX can be problematic on w32..so no 64 bit offset?
-	else io->off = lseek (io->fd, offset, posix_whence);
-
-	r_io_sundo_push (io);
-
-	return io->va ? r_io_section_offset_to_vaddr (io, io->off) : io->off;
+	else ret = lseek (io->fd, offset, posix_whence);
+	if (ret != -1) {
+		io->off = ret;
+		// XXX this can be tricky.. better not to use this .. must be deprecated 
+		// r_io_sundo_push (io);
+		ret = (!io->debug && io->va && !list_empty (&io->sections))?
+			r_io_section_offset_to_vaddr (io, io->off) : io->off;
+	}
+	return ret;
 }
 
-R_API ut64 r_io_size(struct r_io_t *io, int fd) {
+R_API ut64 r_io_size(RIO *io, int fd) {
 	ut64 size, here;
-	fd = r_io_set_fd (io, fd);
+	r_io_set_fd (io, fd);
 	here = r_io_seek (io, 0, R_IO_SEEK_CUR);
 	size = r_io_seek (io, 0, R_IO_SEEK_END);
 	r_io_seek (io, here, R_IO_SEEK_SET);
 	return size;
 }
 
-R_API int r_io_system(struct r_io_t *io, const char *cmd) {
+R_API int r_io_system(RIO *io, const char *cmd) {
 	int ret = -1;
 	if (io->plugin && io->plugin->system)
 		ret = io->plugin->system (io, io->fd, cmd);
@@ -306,7 +317,7 @@ R_API int r_io_close(struct r_io_t *io, int fd) {
 	if (fd != -1 && io->plugin) {
 		r_io_desc_del (io, fd);
 		r_io_map_del (io, fd);
-		r_io_handle_close (io, fd, io->plugin);
+		r_io_plugin_close (io, fd, io->plugin);
 		if (io->plugin->close)
 			return io->plugin->close (io, fd);
 	}
@@ -314,7 +325,7 @@ R_API int r_io_close(struct r_io_t *io, int fd) {
 	return close (fd);
 }
 
-R_API int r_io_bind(struct r_io_t *io, struct r_io_bind_t *bnd) {
+R_API int r_io_bind(RIO *io, RIOBind *bnd) {
 	bnd->io = io;
 	bnd->init = R_TRUE;
 	bnd->read_at = r_io_read_at;

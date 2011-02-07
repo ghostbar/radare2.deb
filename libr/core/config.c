@@ -2,10 +2,24 @@
 
 #include <r_core.h>
 
+static int config_scrcols_callback(void *user, void *data) {
+	int c = R_MIN (128, R_MAX (((RConfigNode*)data)->i_value, 0));
+	((RCore *)user)->print->cols = c & ~1;
+	return R_TRUE;
+}
+
 static int config_scrhtml_callback(void *user, void *data) {
 	RConfigNode *node = (RConfigNode *) data;
 	r_cons_singleton()->is_html = node->i_value;
 // TODO: control error and restore old value (return false?) show errormsg?
+	return R_TRUE;
+}
+
+static int config_searchalign_callback(void *user, void *data) {
+	RCore *core = (RCore *)user;
+	RConfigNode *node = (RConfigNode *) data;
+	core->search->align = node->i_value;
+	core->print->addrmod = node->i_value;
 	return R_TRUE;
 }
 
@@ -17,53 +31,199 @@ static int config_ioffio_callback(void *user, void *data) {
 }
 
 static int config_bigendian_callback(void *user, void *data) {
-	/* TODO: change endian in r_asm and others */
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	core->assembler->big_endian = node->i_value;
 	return R_TRUE;
 }
 
 static int config_iova_callback(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	if (r_config_get_i (&core->config, "cfg.debug"))
-		core->io.va = 0;
-	else core->io.va = node->i_value;
+	core->io->va = node->i_value;
+	return R_TRUE;
+}
+
+static int config_iocache_callback(void *user, void *data) {
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	r_io_cache_enable (core->io, node->i_value, node->i_value);
+	return R_TRUE;
+}
+
+static int config_cfgdebug_callback(void *user, void *data) {
+	RCore *core = (RCore*) user;
+	RConfigNode *node = (RConfigNode*) data;
+	core->io->debug = node->i_value;
+	if (node->i_value) {
+		r_debug_use (core->dbg, r_config_get (core->config, "dbg.backend"));
+		if (core->file)
+			r_debug_select (core->dbg, core->file->fd, core->file->fd);
+	}
+	return R_TRUE;
+}
+
+static int config_cfgdatefmt_callback(void *user, void *data) {
+	RCore *core = (RCore*) user;
+	RConfigNode *node = (RConfigNode*) data;
+	strncpy (core->print->datefmt, node->value, 32);
+	return R_TRUE;
+}
+
+static int config_analplugin_callback(void *user, void *data) {
+	RCore *core = (RCore*) user;
+	RConfigNode *node = (RConfigNode*) data;
+	if (node->value[0] == '?') {
+		r_anal_list (core->anal);
+		return R_FALSE;
+	}
+	else if (!r_anal_use (core->anal, node->value)) {
+		eprintf ("Cannot use '%s' anal plugin.\n", node->value);
+		return R_FALSE;
+	}
 	return R_TRUE;
 }
 
 static int config_asmos_callback(void *user, void *data) {
 	RCore *core = (RCore*) user;
 	RConfigNode *node = (RConfigNode*) data;
-	if (!r_syscall_setup (&core->syscall, 
-			r_config_get (&core->config, "asm.arch"), node->value))
+	if (!r_syscall_setup (core->syscall, 
+			r_config_get (core->config, "asm.arch"), node->value))
 		eprintf ("asm.os: Cannot setup syscall os/arch for '%s'\n", node->value);
 	return R_TRUE;
+}
+
+static int config_asmsyntax_callback(void *user, void *data) {
+	RCore *core = (RCore*) user;
+	RConfigNode *node = (RConfigNode*) data;
+	if (!strcmp (node->value, "intel"))
+		r_asm_set_syntax (core->assembler, R_ASM_SYNTAX_INTEL);
+	else if (!strcmp (node->value, "att"))
+		r_asm_set_syntax (core->assembler, R_ASM_SYNTAX_ATT);
+	else return R_FALSE;
+	return R_TRUE;
+}
+
+static int asm_profile(RConfig *cfg, const char *profile) {
+	// TODO: Do a cleanup on those configurations
+	if (!strcmp(profile, "help")) {
+		eprintf("Available asm.profile:\n"
+			" default, gas, smart, graph, debug, full, simple\n");
+		return R_FALSE;
+	} else if (!strcmp (profile, "default")) {
+		r_config_set (cfg, "asm.bytes", "true");
+		r_config_set (cfg, "asm.lines", "true");
+		r_config_set (cfg, "asm.linesout", "false");
+		r_config_set (cfg, "asm.lineswide", "false");
+		r_config_set (cfg, "asm.offset", "true");
+		r_config_set (cfg, "asm.comments", "true");
+		r_config_set (cfg, "asm.flagsline", "false");
+		r_config_set (cfg, "asm.section", "false");
+		r_config_set (cfg, "asm.trace", "false");
+		r_config_set (cfg, "asm.split", "true");
+		r_config_set (cfg, "asm.flags", "true");
+		r_config_set (cfg, "asm.size", "false");
+		r_config_set (cfg, "asm.xrefs", "true");
+		r_config_set (cfg, "asm.functions", "true");
+		r_config_set (cfg, "scr.color", "true");
+	} else if (!strcmp(profile, "compact")) {
+		asm_profile (cfg, "simple");
+		r_config_set (cfg, "asm.lines", "true");
+		r_config_set (cfg, "asm.comments", "false");
+		r_config_set (cfg, "scr.color", "false");
+	} else if (!strcmp(profile, "gas")) {
+		asm_profile (cfg, "default");
+		r_config_set (cfg, "asm.lines", "false");
+		r_config_set (cfg, "asm.comments", "false");
+		r_config_set (cfg, "asm.section", "false");
+		r_config_set (cfg, "asm.trace", "false");
+		r_config_set (cfg, "asm.bytes", "false");
+		r_config_set (cfg, "asm.stackptr", "false");
+		r_config_set (cfg, "asm.offset", "false");
+		r_config_set (cfg, "asm.flags", "true");
+		r_config_set (cfg, "asm.flagsline", "true");
+		r_config_set (cfg, "asm.jmpflags", "true");
+		r_config_set (cfg, "scr.color", "false");
+	} else if (!strcmp(profile, "smart")) {
+		asm_profile (cfg, "default");
+		r_config_set (cfg, "asm.section", "false");
+		r_config_set (cfg, "asm.trace", "false");
+		r_config_set (cfg, "asm.bytes", "false");
+		r_config_set (cfg, "asm.stackptr", "false");
+	} else if (!strcmp(profile, "graph")) {
+		asm_profile (cfg, "default");
+		r_config_set (cfg, "asm.section", "false");
+		r_config_set (cfg, "asm.bytes", "false");
+		r_config_set (cfg, "asm.trace", "false");
+		r_config_set (cfg, "scr.color", "false");
+		r_config_set (cfg, "asm.lines", "false");
+		r_config_set (cfg, "asm.stackptr", "false");
+		if (r_config_get (cfg, "graph.offset"))
+			r_config_set (cfg, "asm.offset", "true");
+		else   r_config_set (cfg, "asm.offset", "false");
+	} else if (!strcmp(profile, "debug")) {
+		asm_profile (cfg, "default");
+		r_config_set (cfg, "asm.trace", "true");
+	} else if (!strcmp(profile, "full")) {
+		asm_profile (cfg, "default");
+		r_config_set (cfg, "asm.bytes", "true");
+		r_config_set (cfg, "asm.lines", "true");
+		r_config_set (cfg, "asm.linesout", "true");
+		r_config_set (cfg, "asm.lineswide", "true");
+		r_config_set (cfg, "asm.section", "true");
+		r_config_set (cfg, "asm.size", "true");
+	} else if (!strcmp(profile, "simple")) {
+		asm_profile (cfg, "default");
+		r_config_set (cfg, "asm.bytes", "false");
+		r_config_set (cfg, "asm.lines", "false");
+		r_config_set (cfg, "asm.comments", "true");
+		r_config_set (cfg, "asm.split", "false");
+		r_config_set (cfg, "asm.flags", "false");
+		r_config_set (cfg, "asm.flagsline", "true");
+		r_config_set (cfg, "asm.xrefs", "false");
+		r_config_set (cfg, "asm.stackptr", "false");
+		r_config_set (cfg, "asm.section", "false");
+	}
+	return R_TRUE;
+}
+
+static int config_asmprofile_callback(void *user, void *data) {
+	RCore *core = (RCore*) user;
+	RConfigNode *node = (RConfigNode*) data;
+	return asm_profile (core->config, node->value);
 }
 
 static int config_stopthreads_callback(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	core->dbg.stop_all_threads = node->i_value;
+	core->dbg->stop_all_threads = node->i_value;
 	return R_TRUE;
 }
 
 static int config_trace_callback(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	core->dbg.do_trace = node->i_value;
+	core->dbg->trace->enabled = node->i_value;
 	return R_TRUE;
 }
 
 static int config_tracetag_callback(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	core->dbg.trace_tag = node->i_value;
+	core->dbg->trace->tag = node->i_value;
+	return R_TRUE;
+}
+
+static int config_scrprompt_callback(void *user, void *data) {
+	RConfigNode *node = (RConfigNode *) data;
+	r_line_singleton()->echo = node->i_value;
 	return R_TRUE;
 }
 
 static int config_swstep_callback(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	core->dbg.swstep = node->i_value;
+	core->dbg->swstep = node->i_value;
 	return R_TRUE;
 }
 
@@ -71,41 +231,48 @@ static int config_asmarch_callback(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
 	// TODO: control error and restore old value (return false?) show errormsg?
-	if (!r_asm_use (&core->assembler, node->value))
+	if (!r_asm_use (core->assembler, node->value))
 		eprintf ("asm.arch: Cannot set this arch (%s)\n", node->value);
-	if (!r_anal_use (&core->anal, node->value))
-		eprintf ("asm.arch: Cannot setup analysis engine for '%s'\n", node->value);
-	if (!r_syscall_setup (&core->syscall, node->value,
-			r_config_get (&core->config, "asm.os")))
+	if (!r_syscall_setup (core->syscall, node->value,
+			r_config_get (core->config, "asm.os")))
 		eprintf ("asm.arch: Cannot setup syscall os/arch for '%s'\n", node->value);
 	return R_TRUE;
 }
 
-static int config_asm_parser_callback(void *user, void *data) {
+static int config_vmarch_callback(void *user, void *data) {
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	r_vm_set_arch (core->vm, node->value, core->assembler->bits);
+	return R_TRUE;
+}
+
+static int config_asmparser_callback(void *user, void *data) {
 	RCore *core = (RCore*) user;
 	RConfigNode *node = (RConfigNode*) data;
 	// XXX this is wrong? snprintf(buf, 127, "parse_%s", node->value),
-	r_parse_use (&core->parser, node->value);
+	r_parse_use (core->parser, node->value);
 	// TODO: control error and restore old value (return false?) show errormsg?
 	return R_TRUE;
 }
 
-static int config_asm_bits_callback(void *user, void *data) {
+static int config_asmbits_callback(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	int ret = r_asm_set_bits (&core->assembler, node->i_value);
+	int ret = r_asm_set_bits (core->assembler, node->i_value);
 	if (ret == R_FALSE) {
-		struct r_asm_handle_t *h = core->assembler.cur;
+		RAsmPlugin *h = core->assembler->cur;
 		if (h) {
-			eprintf ("Cannot set bits %lld to '%s'\n",
+			eprintf ("Cannot set bits %"PFMT64d" to '%s'\n",
 				node->i_value, h->name);
 		} else {
 			eprintf ("e asm.bits: Cannot set value, no plugins defined yet\n");
 			ret = R_TRUE;
 		}
 	}
-	if (!r_anal_set_bits (&core->anal, node->i_value))
+	if (!r_anal_set_bits (core->anal, node->i_value))
 		eprintf ("asm.arch: Cannot setup '%i' bits analysis engine\n", (int)node->i_value);
+	if (core->assembler->cur)
+	r_vm_set_arch (core->vm, core->assembler->cur->name, node->i_value);
 	// TODO: change debugger backend bit profile here
 	return ret;
 }
@@ -114,74 +281,97 @@ static int config_color_callback(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
 	if (node->i_value) {
-		core->print.flags |= R_PRINT_FLAGS_COLOR;
-	} else if (core->print.flags&R_PRINT_FLAGS_COLOR)
-		core->print.flags ^= R_PRINT_FLAGS_COLOR;
+		core->print->flags |= R_PRINT_FLAGS_COLOR;
+	} else if (core->print->flags&R_PRINT_FLAGS_COLOR)
+		core->print->flags ^= R_PRINT_FLAGS_COLOR;
 	return R_TRUE;
 }
 
 R_API int r_core_config_init(RCore *core) {
-	struct r_config_t *cfg = &core->config;
-	r_config_init (cfg, (void *)core);
+	RConfig *cfg = cfg = core->config = r_config_new (core);
 	cfg->printf = r_cons_printf;
 
 	r_config_set_cb (cfg, "asm.arch", R_SYS_ARCH, &config_asmarch_callback);
 	// XXX: not portable
-	r_parse_use (&core->parser, "x86.pseudo");
+	r_parse_use (core->parser, "x86.pseudo");
 	r_config_set_cb (cfg, "asm.parser", "x86.pseudo",
-		&config_asm_parser_callback);
+		&config_asmparser_callback);
 
-	r_config_set (cfg, "dir.plugins", LIBDIR"/radare2/");
+	r_config_set (cfg, "dir.plugins", LIBDIR"/radare2/"R2_VERSION"/");
 	/* anal */
 	r_config_set_i (cfg, "anal.depth", 10);
+	r_config_set_i (cfg, "anal.ptrdepth", 3);
+	r_config_set (cfg, "anal.split", "false");
+	r_config_set_cb (cfg, "anal.plugin", "x86", &config_analplugin_callback);
+	/* asm */
 	r_config_set_i_cb (cfg, "asm.bits", 32,
-		&config_asm_bits_callback);
+		&config_asmbits_callback);
 	r_config_set (cfg, "asm.bytes", "true"); 
 	r_config_set (cfg, "asm.middle", "false"); // jump in the middle because of antidisasm tricks
 	r_config_set (cfg, "asm.comments", "true");
+	r_config_set (cfg, "asm.stackptr", "true");
 	r_config_set (cfg, "asm.dwarf", "false");
 	r_config_set_i (cfg, "asm.nbytes", 8);
 	r_config_set (cfg, "asm.pseudo", "false");  // DEPRECATED ???
 	r_config_set (cfg, "asm.filter", "true");
+	r_config_set (cfg, "asm.trace", "true");
+	r_config_set (cfg, "asm.decode", "false"); 
 	r_config_set (cfg, "asm.bytes", "true"); 
 	r_config_set (cfg, "asm.offset", "true"); 
 	r_config_set (cfg, "asm.lines", "true");
 	r_config_set (cfg, "asm.linesout", "true");
 	r_config_set (cfg, "asm.linesstyle", "false");
 	r_config_set (cfg, "asm.lineswide", "false");
+	r_config_set (cfg, "asm.linescall", "false");
 	r_config_set (cfg, "asm.offset", "true"); 
 	r_config_set_cb (cfg, "asm.os", R_SYS_OS, &config_asmos_callback);
 	r_config_set (cfg, "asm.pseudo", "false");  // DEPRECATED ???
-	r_config_set (cfg, "asm.syntax", "intel");
+	r_config_set_cb (cfg, "asm.syntax", "intel", &config_asmsyntax_callback);
+	r_config_set_cb (cfg, "asm.profile", "default", &config_asmprofile_callback);
 #if LIL_ENDIAN
 	r_config_set_cb (cfg, "cfg.bigendian", "false", &config_bigendian_callback);
 #else
 	r_config_set_cb (cfg, "cfg.bigendian", "true", &config_bigendian_callback);
 #endif
-	r_config_set (cfg, "cfg.debug", "false");
+	r_config_set_cb (cfg, "cfg.debug", "false", &config_cfgdebug_callback);
+	r_config_set_cb (cfg, "cfg.datefmt", "%d:%m:%Y %H:%M:%S %z", &config_cfgdatefmt_callback);
 	r_config_set (cfg, "cfg.fortunes", "true");
+	r_config_set (cfg, "dbg.backend", "native");
+	r_config_set_cb (cfg, "dbg.stopthreads", "true", &config_stopthreads_callback);
+	r_config_set_cb (cfg, "dbg.swstep", "false", &config_swstep_callback);
+	r_config_set_cb (cfg, "dbg.trace", "true", &config_trace_callback);
+	r_config_set_cb (cfg, "dbg.trace.tag", "0xff", &config_tracetag_callback);
 	r_config_set (cfg, "cmd.hit", ""); 
 	r_config_set (cfg, "cmd.open", ""); 
 	r_config_set (cfg, "cmd.prompt", ""); 
 	r_config_set (cfg, "cmd.vprompt", "");
 	r_config_set (cfg, "cmd.bp", "");
-	r_config_set_cb (cfg, "dbg.stopthreads", "true", &config_stopthreads_callback);
-	r_config_set_cb (cfg, "dbg.swstep", "false", &config_swstep_callback);
-	r_config_set_cb (cfg, "dbg.trace", "false", &config_trace_callback);
-	r_config_set_cb (cfg, "dbg.trace.tag", "0xff", &config_tracetag_callback);
-	r_config_set (cfg, "scr.prompt", "true");
+	r_config_set_cb (cfg, "scr.prompt", "true", &config_scrprompt_callback);
 	r_config_set_cb (cfg, "scr.color",
-		(core->print.flags&R_PRINT_FLAGS_COLOR)?"true":"false",
+		(core->print->flags&R_PRINT_FLAGS_COLOR)?"true":"false",
 		&config_color_callback);
 	r_config_set (cfg, "scr.seek", "");
+	r_config_set_i_cb (cfg, "scr.cols", 16, &config_scrcols_callback);
+	r_config_set_i (cfg, "search.from", 0);
+	r_config_set_i (cfg, "search.to", 0);
+	r_config_set_i (cfg, "search.distance", 0); // TODO: use i_cb here and remove code in cmd.c
+	r_config_set_i_cb (cfg, "search.align", 0, &config_searchalign_callback);
+	r_config_set_i (cfg, "search.asmstr", 0);
 	r_config_set_cb (cfg, "scr.html", "false", &config_scrhtml_callback);
 	r_config_set_cb (cfg, "io.ffio", "false", &config_ioffio_callback);
-	r_config_set_cb (cfg, "io.va", "false", &config_iova_callback);
+	r_config_set_cb (cfg, "io.va", "true", &config_iova_callback);
+	r_config_set_cb (cfg, "io.cache", "false", &config_iocache_callback);
+	r_config_set (cfg, "file.path", "");
+	r_config_set (cfg, "file.desc", "");
+	r_config_set (cfg, "file.project", "");
+	r_config_set (cfg, "file.md5", "");
+	r_config_set (cfg, "file.sha1", "");
 	r_config_set (cfg, "file.type", "");
+	r_config_set (cfg, "rap.loop", "true");
+	/* vm */
+	r_config_set_cb (cfg, "vm.arch", "x86", &config_vmarch_callback);
 	/* TODO cmd */
 #if 0
-	node = config_set("asm.profile", "default");
-//	node->callback = &config_asm_profile;
 
 //	node->callback = &config_arch_callback;
 	config_set("asm.comments", "true"); // show comments in disassembly
@@ -220,10 +410,6 @@ R_API int r_core_config_init(RCore *core) {
 	config_set("cmd.visualbind", "");
 	config_set("cmd.touchtrace", "");
 
-
-	r_config_set_i("search.from", 0);
-	r_config_set_i("search.to", 0);
-	r_config_set_i("search.align", 0);
 	config_set("search.flag", "true");
 	config_set("search.verbose", "true");
 

@@ -2,8 +2,7 @@
 
 #include <r_util.h>
 
-ut64 num_callback(void *userptr, const char *str, int *ok)
-{
+ut64 num_callback(RNum *num, const char *str, int *ok) {
 	if (!strcmp(str, "foo")) {
 		*ok=1;
 		return 11;
@@ -12,20 +11,18 @@ ut64 num_callback(void *userptr, const char *str, int *ok)
 	return 0;
 }
 
-int test_num(struct r_num_t *num, const char *str, ut64 okvalue)
-{
+int test_num(RNum *num, const char *str, ut64 okvalue) {
 	ut64 ret;
-	printf("        %.2lld == ", okvalue);
+	printf("        %"PFMT64d" == ", okvalue);
  	ret = r_num_math(num, str);
-	printf("%.2lld  \t; %s", ret, str);
+	printf("%"PFMT64d"  \t; %s", ret, str);
 	if (ret == okvalue) printf("\r ok\n");
 	else printf("\rFAIL\n");
 }
 
-int main()
-{
+int main() {
 	struct r_num_t num;
-	num.callback = &num_callback;
+	num.callback = num_callback;
 	num.userptr = NULL;
 
 #if 1

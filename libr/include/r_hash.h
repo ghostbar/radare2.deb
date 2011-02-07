@@ -70,8 +70,7 @@ typedef struct r_hash_t {
 
 #ifdef R_API
 /* OO */
-R_API struct r_hash_t *r_hash_new(int _init);
-R_API void r_hash_init(struct r_hash_t *ptr, int rst, int flags);
+R_API struct r_hash_t *r_hash_new(int rst, int flags);
 R_API void r_hash_free(struct r_hash_t *ctx);
 
 /* methods */
@@ -89,6 +88,7 @@ R_API int r_hash_calculate(struct r_hash_t *ctx, int algobit, const ut8 *input, 
 /* checksums */
 /* XXX : crc16 should use 0 as arg0 by default */
 /* static methods */
+R_API ut8 r_hash_deviation(const ut8 *b, ut64 len);
 R_API ut16 r_hash_crc16(ut16 crc, const ut8 *buffer, ut64 len);
 R_API ut32 r_hash_crc32(const ut8 *buf, ut64 len);
 R_API ut8 r_hash_xor(const ut8 *b, ut64 len);
@@ -98,7 +98,7 @@ R_API ut8 r_hash_mod255(const ut8 *b, ut64 len);
 R_API const char *r_hash_name(int bit);
 
 /* analysis */
-R_API ut8  r_hash_hamdist(const ut8 *buf, ut64 len);
+R_API ut8  r_hash_hamdist(const ut8 *buf, int len);
 R_API double r_hash_entropy(const ut8 *data, ut64 len);
 R_API int r_hash_pcprint(const ut8 *buffer, ut64 len);
 #endif

@@ -29,7 +29,7 @@ typedef struct r_lib_plugin_t {
 	struct r_lib_handler_t *handler;
 	void *dl_handler; // DL HANDLER
 	struct list_head list;
-} RLibraryPlugin;
+} RLibPlugin;
 
 /* store list of initialized plugin handlers */
 typedef struct r_lib_handler_t {
@@ -39,14 +39,14 @@ typedef struct r_lib_handler_t {
 	int (*constructor)(struct r_lib_plugin_t *, void *user, void *data);
 	int (*destructor)(struct r_lib_plugin_t *, void *user, void *data);
 	struct list_head list;
-} RLibraryHandler;
+} RLibHandler;
 
 /* this structure should be pointed by the 'radare_plugin' symbol 
    found in the loaded .so */
 typedef struct r_lib_struct_t {
 	int type;
 	void *data; /* pointer to data handled by plugin handler */
-} RLibraryStruct;
+} RLibStruct;
 
 enum {
 	R_LIB_TYPE_IO,      /* io layer */
@@ -56,7 +56,7 @@ enum {
 	R_LIB_TYPE_ANAL,    /* analysis */
 	R_LIB_TYPE_PARSE,   /* parsers */
 	R_LIB_TYPE_BIN,     /* bins */
-	R_LIB_TYPE_BININFO, /* bin info */
+	R_LIB_TYPE_BIN_XTR, /* bin extractors */
 	R_LIB_TYPE_BP,      /* breakpoint */
 	R_LIB_TYPE_SYSCALL, /* syscall */
 	R_LIB_TYPE_FASTCALL,/* fastcall */
@@ -72,19 +72,18 @@ typedef struct r_lib_t {
 	char symname[32];
 	struct list_head plugins;
 	struct list_head handlers;
-} RLibrary;
+} RLib;
 
 #ifdef R_API
 
 /* low level api */
 R_API void *r_lib_dl_open(const char *libname);
-R_API void *r_lib_dl_sym(void *handle, const char *name);
-R_API int r_lib_dl_close(void *handle);
+R_API void *r_lib_dl_sym(void *handler, const char *name);
+R_API int r_lib_dl_close(void *handler);
 R_API int r_lib_dl_check_filename(const char *file);
 
 /* high level api */
 R_API struct r_lib_t *r_lib_new(const char *symname);
-R_API struct r_lib_t *r_lib_init(struct r_lib_t *lib, const char *symname);
 R_API struct r_lib_t *r_lib_free(struct r_lib_t *lib);
 R_API int r_lib_run_handler(struct r_lib_t *lib, struct r_lib_plugin_t *plugin, struct r_lib_struct_t *symbol);
 R_API struct r_lib_handler_t *r_lib_get_handler(struct r_lib_t *lib, int type);

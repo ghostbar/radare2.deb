@@ -2,28 +2,26 @@
 
 #include <r_search.h>
 
-R_API int r_search_init(RSearch *s, int mode) {
-	memset (s,'\0', sizeof (RSearch));
-	if (!r_search_set_mode (s, mode))
-		return R_FALSE;
-	s->mode = mode;
-	s->user = NULL;
-	s->callback = NULL;
-	s->pattern_size = 0;
-	s->string_max = 255;
-	s->string_min = 3;
-	s->hits = r_list_new ();
-	// TODO: review those mempool sizes. ensure never gets NULL
-	s->pool = r_mem_pool_new (sizeof (RSearchHit), 1024, 10);
-	INIT_LIST_HEAD (&(s->kws));
-	return R_TRUE;
-}
-
 R_API RSearch *r_search_new(int mode) {
 	RSearch *s = R_NEW (RSearch);
-	if (!r_search_init (s, mode)) {
-		r_search_free (s);
-		s = NULL;
+	if (s) {
+		memset (s,'\0', sizeof (RSearch));
+		if (!r_search_set_mode (s, mode)) {
+			eprintf ("Cannot init search for mode %d\n", mode);
+			return R_FALSE;
+		}
+		s->user = NULL;
+		s->callback = NULL;
+		s->align = 0;
+		s->distance = 0;
+		s->pattern_size = 0;
+		s->string_max = 255;
+		s->string_min = 3;
+		s->hits = r_list_new ();
+		// TODO: review those mempool sizes. ensure never gets NULL
+		s->pool = r_mem_pool_new (sizeof (RSearchHit), 1024, 10);
+		s->kws = r_list_new ();
+		s->kws->free = free;
 	}
 	return s;
 }
@@ -32,6 +30,7 @@ R_API RSearch *r_search_free(RSearch *s) {
 	// TODO: it leaks
 	r_mem_pool_free (s->pool);
 	r_list_destroy (s->hits);
+	r_list_destroy (s->kws);
 	free (s);
 	return NULL;
 }
@@ -45,27 +44,42 @@ R_API int r_search_set_string_limits(RSearch *s, ut32 min, ut32 max) {
 }
 
 R_API int r_search_set_mode(RSearch *s, int mode) {
-	int ret = R_FALSE;
+	int ret;
+	s->update = NULL;
 	switch (mode) {
 	case R_SEARCH_KEYWORD:
-	case R_SEARCH_REGEXP:
-	case R_SEARCH_PATTERN:
-	case R_SEARCH_STRING:
+		s->update = r_search_mybinparse_update;
+		break;
 	case R_SEARCH_XREFS:
+		s->update = r_search_xrefs_update;
+		break;
+	case R_SEARCH_REGEXP:
+		s->update = r_search_regexp_update;
+		break;
 	case R_SEARCH_AES:
+		s->update = r_search_aes_update;
+		break;
+	case R_SEARCH_STRING:
+		s->update = r_search_strings_update;
+		break;
+	case R_SEARCH_PATTERN:
+		//ret += r_search_pattern_update(buf, s->pattern_size
+		break;
+	}
+	if (s->update) {
 		s->mode = mode;
 		ret = R_TRUE;
-	}
+	} else ret = R_FALSE;
 	return ret;
 }
 
-/* control */
 R_API int r_search_begin(RSearch *s) {
-	struct list_head *pos;
-	list_for_each_prev (pos, &s->kws) {
-		RSearchKeyword *kw = list_entry (pos, RSearchKeyword, list);
+	RListIter *iter;
+	RSearchKeyword *kw;
+	r_list_foreach (s->kws, iter, kw) {
 		kw->count = 0;
-		kw->idx = 0;
+		kw->idx[0] = 0;
+		kw->distance = 0;//s->distance;
 	}
 #if 0
 	/* TODO: compile regexpes */
@@ -74,15 +88,18 @@ R_API int r_search_begin(RSearch *s) {
 		break;
 	}
 #endif
-	return 1;
+	return R_TRUE;
 }
 
 R_API int r_search_hit_new(RSearch *s, RSearchKeyword *kw, ut64 addr) {
 	RSearchHit* hit;
+	if (s->align && (addr%s->align)) {
+		eprintf ("0x%08"PFMT64x" unaligned\n", addr);
+		return R_FALSE;
+	}
 	if (s->callback)
 		return s->callback (kw, s->user, addr);
-	hit = r_mem_pool_alloc (s->pool);
-	if (!hit)
+	if (!(hit = r_mem_pool_alloc (s->pool)))
 		return R_FALSE;
 	hit->kw = kw;
 	hit->addr = addr;
@@ -91,38 +108,63 @@ R_API int r_search_hit_new(RSearch *s, RSearchKeyword *kw, ut64 addr) {
 }
 
 // TODO: move into a plugin */
-R_API int r_search_mybinparse_update(RSearch *s, ut64 from, const ut8 *buf, int len) {
-	struct list_head *pos;
-	int i, count = 0;
+// TODO: This algorithm can be simplified by just using a non-distance search
+// ... split this algorithm in two for performance
+R_API int r_search_mybinparse_update(void *_s, ut64 from, const ut8 *buf, int len) {
+	RListIter *iter;
+	int i, j, hit, count = 0;
+	RSearch *s = (RSearch*)_s;
 
 	for (i=0; i<len; i++) {
-		list_for_each_prev (pos, &s->kws) {
-			RSearchKeyword *kw = list_entry(pos, RSearchKeyword, list);
-			ut8 ch = kw->bin_keyword[kw->idx];
-			ut8 ch2 = buf[i];
-			if (kw->binmask_length != 0 && kw->idx < kw->binmask_length) {
-				ch &= kw->bin_binmask[kw->idx];
-				ch2 &= kw->bin_binmask[kw->idx];
-			}
-			if (ch == ch2) {
-				kw->idx++;
-				if (kw->idx == kw->keyword_length) {
-					r_search_hit_new (s, kw, (ut64)
-						from+i-kw->keyword_length+1);
-					kw->idx = 0;
-					kw->count++;
+		RSearchKeyword *kw;
+		r_list_foreach (s->kws, iter, kw) {
+			for (j=0;j<=kw->distance;j++) {
+				ut8 ch = kw->bin_keyword[kw->idx[j]];
+				ut8 ch2 = buf[i];
+				if (kw->binmask_length != 0 && kw->idx[j]<kw->binmask_length) {
+					ch &= kw->bin_binmask[kw->idx[j]];
+					ch2 &= kw->bin_binmask[kw->idx[j]];
 				}
-			} else kw->idx = 0;
-			count++;
+				if (ch != ch2) {
+					if (kw->distance<s->distance) {
+						kw->idx[kw->distance+1] = kw->idx[kw->distance];
+						kw->distance++;
+						hit = R_TRUE;
+					} else {
+						kw->idx[0] = 0;
+						kw->distance = 0;
+						hit = R_FALSE;
+					}
+				} else hit = R_TRUE;
+				if (hit) {
+					kw->idx[j]++;
+					if (kw->idx[j] == kw->keyword_length) {
+						r_search_hit_new (s, kw, (ut64)
+							from+i-kw->keyword_length+1);
+						kw->idx[j] = 0;
+						//kw->idx[0] = 0;
+						kw->distance = 0;
+						kw->count++;
+						count++;
+					}
+				}
+			}
 		}
 		count = 0;
 	}
 	return count;
 }
 
-R_API int r_search_set_pattern_size(RSearch *s, int size) {
+R_API void r_search_set_distance(RSearch *s, int dist) {
+	if (dist>=R_SEARCH_DISTANCE_MAX) {
+		eprintf ("Invalid distance\n");
+		s->distance = 0;
+	} else s->distance = (dist>0)?dist:0;
+}
+
+// deprecate? or standarize with ->align ??
+R_API void r_search_set_pattern_size(RSearch *s, int size) {
 	s->pattern_size = size;
-	return 0;
 }
 
 R_API void r_search_set_callback(RSearch *s, RSearchCallback(callback), void *user) {
@@ -130,30 +172,18 @@ R_API void r_search_set_callback(RSearch *s, RSearchCallback(callback), void *us
 	s->user = user;
 }
 
-/* TODO: initialize update callback in _init */
+/* TODO: initialize update callback in _init or begin... */
 R_API int r_search_update(RSearch *s, ut64 *from, const ut8 *buf, long len) {
-	int ret = 0;
-	switch (s->mode) {
-	case R_SEARCH_KEYWORD:
-		ret += r_search_mybinparse_update (s, *from, buf, len);
-		break;
-	case R_SEARCH_XREFS:
-		r_search_xrefs_update (s, *from, buf, len);
-		break;
-	case R_SEARCH_REGEXP:
-		ret += r_search_regexp_update (s, *from, buf, len);
-		break;
-	case R_SEARCH_AES:
-		ret += r_search_aes_update (s, *from, buf, len);
-		*from -= R_SEARCH_AES_BOX_SIZE;
-		break;
-	case R_SEARCH_STRING:
-		ret += r_search_strings_update (s, *from, (const char *)buf, len, 0);
-		break;
-	case R_SEARCH_PATTERN:
-		//ret += r_search_pattern_update(buf, s->pattern_size
-		break;
-	}
+	int ret = -1;
+	if (s->update != NULL) {
+		ret = s->update (s, *from, buf, len);
+		if (s->mode == R_SEARCH_AES) {
+			int l = R_SEARCH_AES_BOX_SIZE;
+			//*from -= R_SEARCH_AES_BOX_SIZE;
+			if (len<l) l = len;
+			return l;
+		}
+	} else eprintf ("r_search_update: No search method defined\n");
 	return ret;
 }
 
@@ -162,75 +192,26 @@ R_API int r_search_update_i(RSearch *s, ut64 from, const ut8 *buf, long len) {
 }
 
 /* --- keywords --- */
-/* string */
-R_API int r_search_kw_add(RSearch *s, const char *kw, const char *bm) {
-	RSearchKeyword *k = R_NEW (RSearchKeyword);
-	int kwlen = strlen (kw)+1;
-	if (k == NULL)
-		return R_FALSE;
-	if (bm == NULL) bm = "";
-	memcpy (k->keyword, kw, kwlen);
-	memcpy (k->bin_keyword, kw, kwlen);
-	k->keyword_length = strlen (kw);
-	if (k->binmask_length == -1)
-		k->binmask_length = strlen (bm);
-	if (bm) {
-		memcpy (k->binmask, bm, k->binmask_length);
-		k->binmask_length = r_hex_str2bin (bm, k->bin_binmask);
-	} else k->binmask[0] = k->binmask_length = 0;
-	list_add (&(k->list), &(s->kws));
-	k->kwidx = s->n_kws++;
-	return R_TRUE;
-}
-
-/* hexpair string */
-R_API int r_search_kw_add_hex(RSearch *s, const char *kw, const char *bm) {
-	RSearchKeyword *k = R_NEW (RSearchKeyword);
-	if (k == NULL) // is necessary to assert everywhere??
-		return R_FALSE;
-	strncpy (k->keyword, kw, sizeof (k->keyword));
-	k->keyword_length = r_hex_str2bin (kw, k->bin_keyword);
-	if (bm) {
-		strncpy(k->binmask, bm, sizeof (k->binmask));
-		k->binmask_length = r_hex_str2bin (bm, k->bin_binmask);
-	} else k->binmask[0] = k->binmask_length = 0;
-	list_add (&(k->list), &(s->kws));
-	k->kwidx = s->n_kws++;
-	return R_TRUE;
-}
-
-/* raw bin */
-R_API int r_search_kw_add_bin(RSearch *s, const ut8 *kw, int kw_len, const ut8 *bm, int bm_len) {
-	RSearchKeyword *k = R_NEW (RSearchKeyword);
-	if (kw == NULL)
-		return R_FALSE;
-	memcpy (k->bin_keyword, kw, kw_len);
-	k->keyword_length = kw_len;
-	r_hex_bin2str (kw, kw_len, k->keyword);
-	if (bm) memcpy (k->bin_binmask, bm, bm_len);
-	if (bm) r_hex_bin2str (bm, bm_len, k->binmask);
-	else k->binmask_length = 0;
-	list_add (&(k->list), &(s->kws));
-	k->kwidx = s->n_kws++;
-	return R_TRUE;
-}
-
-/* // MUST DEPRECATE // show keywords */
-R_API RSearchKeyword *r_search_kw_list(RSearch *s) {
-	struct list_head *pos;
-	list_for_each_prev (pos, &s->kws) {
-		RSearchKeyword *kw = list_entry (pos, RSearchKeyword, list);
-		printf ("%s %s\n", kw->keyword, kw->binmask);
+R_API int r_search_kw_add(RSearch *s, RSearchKeyword *kw) {
+	int ret = R_FALSE;
+	if (kw) {
+		r_list_append (s->kws, kw);
+		kw->kwidx = s->n_kws++;
+		ret = R_TRUE;
 	}
-	return NULL;
+	return ret;
 }
 
-R_API void r_search_reset(RSearch *s) {
+R_API void r_search_kw_reset(RSearch *s) {
+	r_list_free (s->kws);
+	s->kws = r_list_new ();
+}
+
+R_API void r_search_reset(RSearch *s, int mode) {
 	r_list_destroy (s->hits);
 	s->hits = r_list_new ();
 	s->hits->free = free;
 	r_search_kw_reset (s);
-}
-
-R_API void r_search_kw_reset(RSearch *s) {
+	if (!r_search_set_mode (s, mode))
+		eprintf ("Cannot init search for mode %d\n", mode);
 }
