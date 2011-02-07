@@ -3,12 +3,14 @@
 #include "r_crypto.h"
 #include "../config.h"
 
-static struct r_crypto_handle_t *crypto_static_plugins[] = 
+static struct r_crypto_plugin_t *crypto_static_plugins[] = 
 	{ R_CRYPTO_STATIC_PLUGINS };
 
 R_API struct r_crypto_t *r_crypto_init(struct r_crypto_t *cry, int hard)
 {
 	int i;
+	RCryptoPlugin *static_plugin;
+
 	if (cry) {
 		cry->key = NULL;
 		cry->iv = NULL;
@@ -17,22 +19,25 @@ R_API struct r_crypto_t *r_crypto_init(struct r_crypto_t *cry, int hard)
 		if (hard) {
 			// first call initializes the output_* variables
 			r_crypto_get_output(cry);
-			INIT_LIST_HEAD(&cry->handlers);
-			for(i=0;crypto_static_plugins[i];i++)
-				r_crypto_add(cry, crypto_static_plugins[i]);
+			INIT_LIST_HEAD(&cry->plugins);
+			for(i=0;crypto_static_plugins[i];i++) {
+				static_plugin = R_NEW (RCryptoPlugin);
+				memcpy (static_plugin, crypto_static_plugins[i], sizeof (RCryptoPlugin));
+				r_crypto_add(cry, static_plugin);
+			}
 		}
 	}
 	return cry;
 }
 
-R_API int r_crypto_add(struct r_crypto_t *cry, struct r_crypto_handle_t *h)
+R_API int r_crypto_add(struct r_crypto_t *cry, struct r_crypto_plugin_t *h)
 {
 	// add a check ?
-	list_add_tail(&(h->list), &(cry->handlers));
+	list_add_tail(&(h->list), &(cry->plugins));
 	return R_TRUE;
 }
 
-R_API int r_crypto_del(struct r_crypto_t *cry, struct r_crypto_handle_t *h)
+R_API int r_crypto_del(struct r_crypto_t *cry, struct r_crypto_plugin_t *h)
 {
 	list_del(&(h->list));
 	return R_TRUE;
@@ -49,7 +54,7 @@ R_API struct r_crypto_t *r_crypto_as_new(struct r_crypto_t *cry)
 	struct r_crypto_t *c = R_NEW(struct r_crypto_t);
 	if (c != NULL) {
 		r_crypto_init(c, R_FALSE); // soft init
-		memcpy(&c->handlers, &cry->handlers, sizeof(cry->handlers));
+		memcpy(&c->plugins, &cry->plugins, sizeof(cry->plugins));
 	}
 	return c;
 }
@@ -69,8 +74,8 @@ R_API int r_crypto_use(struct r_crypto_t *cry, const char *algo)
 {
 	int ret = R_FALSE;
 	struct list_head *pos;
-	list_for_each_prev(pos, &cry->handlers) {
-		struct r_crypto_handle_t *h = list_entry(pos, struct r_crypto_handle_t, list);
+	list_for_each_prev(pos, &cry->plugins) {
+		struct r_crypto_plugin_t *h = list_entry(pos, struct r_crypto_plugin_t, list);
 		if (h->use(algo)) {
 			cry->h = h;
 			cry->key_len = h->get_key_size(cry);

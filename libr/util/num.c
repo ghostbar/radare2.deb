@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2009 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2010 pancake<nopcode.org> */
 
 #include "r_util.h"
 
@@ -41,31 +41,28 @@ R_API void r_num_minmax_swap_i(int *a, int *b) {
 	}
 }
 
-R_API void r_num_init(struct r_num_t *num) {
-	num->callback = NULL;
-	num->userptr = NULL;
-	num->value = 0LL;
-}
-
 R_API RNum *r_num_new(RNumCallback cb, void *ptr) {
-	RNum *num = (RNum *) malloc (sizeof (RNum));
-	r_num_init (num);
-	num->callback = cb;
+	RNum *num = R_NEW (RNum);
+	if (num) {
+		num->value = 0LL;
+		num->callback = cb;
+		num->userptr = ptr;
+	}
 	return num;
 }
 
 /* old get_offset */
-R_API ut64 r_num_get(struct r_num_t *num, const char *str) {
+R_API ut64 r_num_get(RNum *num, const char *str) {
 	int i, j;
 	char lch;
 	ut64 ret = 0LL;
 
-	for(;str[0]==' ';) str = str+1;
+	for (;str[0]==' ';) str = str+1;
 
 	/* resolve string with an external callback */
 	if (num && num->callback) {
-		int ok;
-		ret = num->callback(num->userptr, str, &ok);
+		int ok = 0;
+		ret = num->callback (num->userptr, str, &ok);
 		if (ok) return ret;
 	}
 
@@ -73,15 +70,15 @@ R_API ut64 r_num_get(struct r_num_t *num, const char *str) {
 		return (ut64)str[1];
 
 	if (str[0]=='0' && str[1]=='x') {
-		sscanf(str, "0x%llx", &ret);
+		sscanf(str, "0x%"PFMT64x"", &ret);
 	} else {
 		lch = str[strlen(str)-1];
 		switch (lch) {
 		case 'h': // hexa
-			sscanf(str, "%llx", &ret);
+			sscanf(str, "%"PFMT64x"", &ret);
 			break;
 		case 'o': // octal
-			sscanf(str, "%llo", &ret);
+			sscanf (str, "%"PFMT64o"", &ret);
 			break;
 		case 'b': // binary
 			ret = 0;
@@ -91,18 +88,18 @@ R_API ut64 r_num_get(struct r_num_t *num, const char *str) {
 			}
 			break;
 		default:
-			sscanf(str, "%lld", &ret);
+			sscanf(str, "%"PFMT64d"", &ret);
 			break;
 		case 'K': case 'k':
-			sscanf(str, "%lld", &ret);
+			sscanf(str, "%"PFMT64d"", &ret);
 			ret *= 1024;
 			break;
 		case 'M': case 'm':
-			sscanf(str, "%lld", &ret);
+			sscanf(str, "%"PFMT64d"", &ret);
 			ret *= 1024*1024;
 			break;
 		case 'G': case 'g':
-			sscanf(str, "%lld", &ret);
+			sscanf(str, "%"PFMT64d"", &ret);
 			ret *= 1024*1024*1024;
 			break;
 		}
@@ -115,12 +112,11 @@ R_API ut64 r_num_get(struct r_num_t *num, const char *str) {
 }
 
 R_API ut64 r_num_op(char op, ut64 a, ut64 b) {
-	IFDBG printf("r_num_op: %lld %c %lld\n", a,op,b);
-	switch(op) {
+	switch (op) {
 	case '+': return a+b;
 	case '-': return a-b;
 	case '*': return a*b;
-	case '/': return a/b;
+	case '/': return b?a/b:0;
 	case '&': return a&b;
 	case '|': return a|b;
 	case '^': return a^b;
@@ -128,12 +124,10 @@ R_API ut64 r_num_op(char op, ut64 a, ut64 b) {
 	return b;
 }
 
-R_API static ut64 r_num_math_internal(struct r_num_t *num, char *s) {
+R_API static ut64 r_num_math_internal(RNum *num, char *s) {
 	ut64 ret = 0LL;
 	char *p = s;
 	int i, nop, op='\0';
-
-	IFDBG printf ("r_num_math_internal: %s\n", s);
 
 	for (i=0; s[i]; i++) {
 		switch (s[i]) {
@@ -154,27 +148,24 @@ R_API static ut64 r_num_math_internal(struct r_num_t *num, char *s) {
 	return r_num_op (op, ret, r_num_get (num, p));
 }
 
-R_API ut64 r_num_math(struct r_num_t *num, const char *str)
-{
+R_API ut64 r_num_math(RNum *num, const char *str) {
 	ut64 ret = 0LL;
 	char op = '+';
 	int len = strlen (str)+1;
 	char *p, *s = alloca (len);
 	char *group;
 
-	IFDBG printf ("r_num_math: %s\n", str);
-
 	memcpy (s, str, len);
 	for (; *s==' '; s++);
 	p = s;
-	
+
 	do {
 		group = strchr (p, '(');
 		if (group) {
 			group[0]='\0';
-			ret = r_num_op(op, ret, r_num_math_internal(num, p));
-			for(;p<group;p+=1) {
-				switch(*p) {
+			ret = r_num_op (op, ret, r_num_math_internal (num, p));
+			for (; p<group; p+=1) {
+				switch (*p) {
 				case '+':
 				case '-':
 				case '*':
@@ -188,21 +179,45 @@ R_API ut64 r_num_math(struct r_num_t *num, const char *str)
 			}
 			group[0]='(';
 			p = group+1;
-			if (r_str_delta(p, '(', ')')<0) {
-				char *p2 = strchr(p, '(');
+			if (r_str_delta (p, '(', ')')<0) {
+				char *p2 = strchr (p, '(');
 				if (p2 != NULL) {
 					p2[0]='\0';
-					ret = r_num_op(op, ret, r_num_math_internal(num, p));
-					ret = r_num_op(op, ret, r_num_math(num, p2+1));
+					ret = r_num_op (op, ret, r_num_math_internal (num, p));
+					ret = r_num_op (op, ret, r_num_math (num, p2+1));
 					p =p2+1; 
 					continue;
-				} else fprintf(stderr, "WTF!\n");
-			} else ret = r_num_op(op, ret, r_num_math_internal(num, p));
-		} else ret = r_num_op(op, ret, r_num_math_internal(num, p));
-	} while(0);
+				} else eprintf ("WTF!\n");
+			} else ret = r_num_op (op, ret, r_num_math_internal (num, p));
+		} else ret = r_num_op (op, ret, r_num_math_internal (num, p));
+	} while (0);
 
 	if (num != NULL)
 		num->value = ret;
 
 	return ret;
+}
+
+R_API int r_num_is_float(struct r_num_t *num, const char *str) {
+	// TODO: also support 'f' terminated strings
+	return (strchr (str, '.') != NULL)? R_TRUE:R_FALSE;
+}
+
+R_API double r_num_get_float(struct r_num_t *num, const char *str) {
+	double d = 0.0f;
+	sscanf (str, "%lf", &d);
+	return d;
+}
+
+R_API int r_num_to_bits (char *out, ut64 num) {
+	int size = 0, i;
+
+	if (num&0xff000000) size = 64;
+	else if (num&0xff0000) size = 32;
+	else if (num&0xff00) size = 16;
+	else if (num&0xff) size = 8;
+	for(i=0;i<size;i++)
+		out[size-1-i]=(num>>i&1)?'1':'0';
+	out[size]='\0'; //Maybe not nesesary?
+	return size;
 }

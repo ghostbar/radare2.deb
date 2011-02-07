@@ -1,6 +1,11 @@
+NOTE: Most of the information in this document is not matching with reality.
+      Take it as random ideas, proposals and so on
+
 Code analysis module
 ====================
-* Direction of the stack? increase? decrease?
+* Opcodes that will be executed depending on cond?
+  - for example: (x86, arm..) (0f94c2  setz dl)
+* Direction of the stack? (inc/dec) required?
 * Register value source type
   - This is static entropy level for a register at some point
   - Constant value
@@ -17,26 +22,7 @@ Code analysis module
   * At any point of the program we can determine if a register
     has a static fixed value or the level of possible polimorfism
 
-  -- allow to load register values from traces
-
-* TODO: Add static plugin support here
-
-var an = new rAnalysis ();
-io.bind (an);
-an.set ("x86");
-var ctx = new Analysis.Context(an);
-//ctx.set_bytes (0x8048000, buf, 1024); // this must be a callback
-ctx.analyze (0x8048300);
-var foo = an.get_function_preludes ();
-var calls = an.get_calls ();
-foreach var (calls) {
-  stdout.printf("0x%llx: call 0x%llx", var.from, var.to);
-  for(int i=0;i<var.args;i++) {
-    stdout.printf("arg%d: %s\n" i, var.arg[i]);
-  }
-}
-an.accept(ctx);
-
+  -- store register values in execution traces
 
 ////////////////////////////////////////
 
@@ -55,36 +41,11 @@ r_anal_get_bb(an, 0x804800);
 r_anal_op_t * op = r_anal_get_op(an, 0x804800);
 r_anal_get_fun(an, 0x804800);
 
-void analyze_graph(Analysis an, uint64 addr)
-{
-  var? op = an.get_op(addr);
-  while (op != null) {
-    if (op.type == Analysis.OpcodeType.BRANCH) {
-      foreach (var jmp in op.refs) {
-        if (jmp.type | Analysis.AccessType.EXEC)
-          print("0x%08llx : branch 0x%08llx\n", op.addr, jmp.addr);
-          analyze_graph(an, jmp.addr);
-      }
-    }
-    op = op.next();
-  }
-}
-
-void analyze_function(Analysis an, uint64 addr)
-{
-  Analysis.Function? fun = an.get_fun(addr);
-  if (fun == null)
-    Log.err("No function found at address 0x%08llx".printf());
-    return;
-  }
-}
-
 ----------------------------------------
 
 // Must use r_alloc_pool for every type of structure (per function level)
 // Must store all this info using r_db
 // Only index when requested (tempral analysis are temporal)
-// Do we have to enable jump/call toggles for breaking basicblocks?
 // Memory selectors are just modifiers .. how?
 // How to handle with self-modifying code?
   - if its a conditional branch, refs are true , false

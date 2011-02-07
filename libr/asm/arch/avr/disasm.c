@@ -1,5 +1,5 @@
-#include "format.c"
 #include "avr_disasm.c"
+#include "format.c"
 #include "avr_instructionset.c"
 #ifndef ut64
 #define ut64 unsigned long long
@@ -19,7 +19,7 @@ int avrdis (char *out, ut64 addr, cut8 *buf, int len) {
 		return -1;
 	}
 	printDisassembledInstruction (out, dins, opt);
-	//printf ("0x%08llx %s\n", addr, out);
+	//printf ("0x%08"PFMT64x" %s\n", addr, out);
 	return 2;
 }
 
@@ -36,7 +36,7 @@ int main() {
 		ret = avrdis (opcode, addr+delta, code+delta, len-delta);
 		if (ret == -1)
 			break;
-//		printf ("0x%08llx  %s\n", addr+delta, opcode);
+//		printf ("0x%08"PFMT64x"  %s\n", addr+delta, opcode);
 		delta += ret;
 	}
 	return 0;

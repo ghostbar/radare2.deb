@@ -8,10 +8,13 @@
 
 extern RSyscallItem syscalls_netbsd_x86[];
 extern RSyscallItem syscalls_linux_x86[];
+extern RSyscallItem syscalls_linux_mips[];
 extern RSyscallItem syscalls_linux_arm[];
 extern RSyscallItem syscalls_freebsd_x86[];
 extern RSyscallItem syscalls_darwin_x86[];
+extern RSyscallItem syscalls_darwin_arm[];
 extern RSyscallItem syscalls_win7_x86[];
+extern RSyscallPort sysport_x86[];
 
 R_API RSyscall* r_syscall_new() {
 	RSyscall *ctx;
@@ -20,12 +23,9 @@ R_API RSyscall* r_syscall_new() {
 		return NULL;
 	ctx->fd = NULL;
 	ctx->sysptr = syscalls_linux_x86;
+	ctx->sysport = sysport_x86;
+	ctx->printf = (PrintfCallback)printf;
 	return ctx;
-}
-
-R_API void r_syscall_init(RSyscall *ctx) {
-	ctx->fd = NULL;
-	ctx->sysptr = syscalls_linux_x86;
 }
 
 R_API void r_syscall_free(RSyscall *ctx) {
@@ -37,11 +37,23 @@ R_API int r_syscall_setup(RSyscall *ctx, const char *arch, const char *os) {
 		os = R_SYS_OS;
 	if (arch == NULL)
 		arch = R_SYS_ARCH;
+	/// XXX: spaghetti here
+	if (!strcmp (arch, "mips")) {
+		if (!strcmp (os, "linux"))
+			ctx->sysptr = syscalls_linux_mips;
+		else {
+			eprintf ("r_syscall_setup: Unknown arch '%s'\n", arch);
+			return R_FALSE;
+		}
+	} else
 	if (!strcmp (arch, "arm")) {
 		if (!strcmp (os, "linux"))
 			ctx->sysptr = syscalls_linux_arm;
+		else
+		if (!strcmp (os, "macos") || !strcmp (os, "darwin"))
+			ctx->sysptr = syscalls_darwin_arm;
 		else {
-			eprintf ("r_syscall_setup: Unknown arch '%s'\n", arch);
+			eprintf ("r_syscall_setup: Unknown OS '%s'\n", os);
 			return R_FALSE;
 		}
 	} else
@@ -54,16 +66,16 @@ R_API int r_syscall_setup(RSyscall *ctx, const char *arch, const char *os) {
 			ctx->sysptr = syscalls_freebsd_x86;
 		//else if (!strcmp (os, "openbsd"))
 		//	ctx->sysptr = syscalls_openbsd_x86;
-		else if (!strcmp (os, "darwin"))
+		else if ((!strcmp (os, "darwin")) || (!strcmp (os, "macos")))
 			ctx->sysptr = syscalls_darwin_x86;
-		else if (!strcmp (os, "win7"))
+		else if (!strcmp (os, "windows")) //win7
 			ctx->sysptr = syscalls_win7_x86;
 		else {
 			eprintf ("r_syscall_setup: Unknown os '%s'\n", os);
 			return R_FALSE;
 		}
 	} else {
-		eprintf ("r_syscall_setup: Unknown arch '%s'\n", arch);
+		eprintf ("r_syscall_setup: Unknown os/arch '%s'/'%s'\n", os, arch);
 		return R_FALSE;
 	}
 	if (ctx->fd)
@@ -84,7 +96,7 @@ R_API int r_syscall_setup_file(RSyscall *ctx, const char *path) {
 
 R_API RSyscallItem *r_syscall_get(RSyscall *ctx, int num, int swi) {
 	int i;
-	for (i=0; ctx->sysptr[i].num; i++) {
+	for (i=0; ctx->sysptr[i].name; i++) {
 		if (num == ctx->sysptr[i].num && \
 				(swi == -1 || swi == ctx->sysptr[i].swi))
 			return &ctx->sysptr[i];
@@ -100,6 +112,7 @@ R_API int r_syscall_get_num(RSyscall *ctx, const char *str) {
 	return 0;
 }
 
+// we can probably wrap all this with r_list getters
 /* XXX: ugly iterator implementation */
 R_API RSyscallItem *r_syscall_get_n(RSyscall *ctx, int n) {
 	int i;
@@ -118,10 +131,19 @@ R_API const char *r_syscall_get_i(RSyscall *ctx, int num, int swi) {
 	return NULL;
 }
 
+R_API const char *r_syscall_get_io(RSyscall *ctx, int ioport) {
+	int i;
+	for (i=0; ctx->sysport[i].name; i++) {
+		if (ioport == ctx->sysport[i].port)
+			return ctx->sysport[i].name;
+	}
+	return NULL;
+}
+
 R_API void r_syscall_list(RSyscall *ctx) {
 	int i;
 	for (i=0; ctx->sysptr[i].num; i++) {
-		printf ("%02x: %d = %s\n",
+		ctx->printf ("%02x: %d = %s\n",
 			ctx->sysptr[i].swi, ctx->sysptr[i].num, ctx->sysptr[i].name);
 	}
 }

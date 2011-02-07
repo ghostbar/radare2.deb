@@ -22,17 +22,20 @@ static int assemble(RAsm *a, RAsmAop *aop, const char *buf) {
 	}
 	snprintf (cmd, sizeof (cmd),
 		"nasm /dev/stdin -o /dev/stdout <<__\n"
-		"BITS %i\nORG 0x%llx\n%s\n__", a->bits, a->pc, buf);
+		"BITS %i\nORG 0x%"PFMT64x"\n%s\n__", a->bits, a->pc, buf);
 	out = (ut8 *)r_sys_cmd_str (cmd, "", &len);
-	if (out) {
+	if (out && memcmp (out, "/dev/stdin:", len>11?11:len)) {
 		memcpy (aop->buf, out, len<=R_ASM_BUFSIZE?len:R_ASM_BUFSIZE);
-		free (out);
+	} else {
+		eprintf ("Error running 'nasm'\n");
+		len = 0;
 	}
+	if (out) free (out);
 	aop->inst_len = len;
 	return len;
 }
 
-struct r_asm_handle_t r_asm_plugin_x86_nasm = {
+RAsmPlugin r_asm_plugin_x86_nasm = {
 	.name = "x86.nasm",
 	.desc = "X86 nasm assembler plugin",
 	.arch = "x86",

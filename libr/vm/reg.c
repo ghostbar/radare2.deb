@@ -1,7 +1,8 @@
-/* radare - LGPL - Copyright 2008-2009 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2008-2010 pancake<nopcode.org> */
 
 #include "r_vm.h"
 
+/* TODO: use r_reg here..instead of reimplement the fucking same all the time */
 static char *unkreg = "(unk)";
 
 /* static */
@@ -18,7 +19,7 @@ static struct r_vm_reg_type r_vm_reg_types[] = {
 
 R_API void r_vm_reg_type_list() {
 	struct r_vm_reg_type *p = r_vm_reg_types;
-	while (p) {
+	while (p && p->str) {
 		if (p->str==NULL)
 			break;
 		printf(" .%s\n", p->str);
@@ -28,7 +29,7 @@ R_API void r_vm_reg_type_list() {
 
 R_API const char *r_vm_reg_type(int type) {
 	struct r_vm_reg_type *p = r_vm_reg_types;
-	while (p) {
+	while (p && p->str) {
 		if (p->type == type)
 			return p->str;
 		p++;
@@ -38,7 +39,7 @@ R_API const char *r_vm_reg_type(int type) {
 
 R_API int r_vm_reg_type_i(const char *str) {
 	struct r_vm_reg_type *p = r_vm_reg_types;
-	while(p) {
+	while (p && p->str) {
 		if (!strcmp(str, p->str))
 			return p->type;
 		p++;
@@ -46,24 +47,22 @@ R_API int r_vm_reg_type_i(const char *str) {
 	return -1;
 }
 
-int r_vm_reg_del(struct r_vm_t *vm, const char *name)
-{
+R_API int r_vm_reg_del(RVm *vm, const char *name) {
 	struct list_head *pos;
 
 	list_for_each(pos, &vm->regs) {
 		struct r_vm_reg_t *r = list_entry(pos, struct r_vm_reg_t, list);
 		if (!strcmp(name, r->name)) {
 			list_del(&r->list);
-			return 0;
+			return R_FALSE;
 		}
 	}
-	return 1;
+	return R_TRUE;
 }
 
-int r_vm_reg_set(struct r_vm_t *vm, const char *name, ut64 value)
-{
+R_API int r_vm_reg_set(RVm *vm, const char *name, ut64 value) {
 	struct list_head *pos;
-
+	if (name)
 	list_for_each(pos, &vm->regs) {
 		struct r_vm_reg_t *r = list_entry(pos, struct r_vm_reg_t, list);
 		if (!strcmp(name, r->name)) {
@@ -73,21 +72,20 @@ int r_vm_reg_set(struct r_vm_t *vm, const char *name, ut64 value)
 				r_vm_eval(vm, r->set);
 				vm->rec = NULL;
 			}
-			return 1;
+			return R_TRUE;
 		}
 	}
-	return 0;
+	return R_FALSE;
 }
 
-int r_vm_reg_alias_list(struct r_vm_t *vm)
-{
+R_API int r_vm_reg_alias_list(RVm *vm) {
 	struct r_vm_reg_t *reg;
 	struct list_head *pos;
 	int len,space;
 
-	printf("Register alias:\n");
-	list_for_each(pos, &vm->regs) {
-		reg= list_entry(pos, struct r_vm_reg_t, list);
+	eprintf ("Register alias:\n");
+	list_for_each (pos, &vm->regs) {
+		reg= list_entry (pos, struct r_vm_reg_t, list);
 		if (reg->get == NULL && reg->set == NULL)
 			continue;
 		len = strlen(reg->name)+1;
@@ -96,14 +94,13 @@ int r_vm_reg_alias_list(struct r_vm_t *vm)
 			space = R_VM_ALEN;
 			printf("\n");
 		} else space = R_VM_ALEN-len;
-		printf("%*cget = %s\n%*cset = %s\n",
+		eprintf ("%*cget = %s\n%*cset = %s\n",
 			space, ' ', reg->get, R_VM_ALEN,' ', reg->set);
 	}
 	return 0;
 }
 
-int r_vm_reg_alias(struct r_vm_t *vm, const char *name, const char *get, const char *set)
-{
+R_API int r_vm_reg_alias(RVm *vm, const char *name, const char *get, const char *set) {
 	struct r_vm_reg_t *reg;
 	struct list_head *pos;
 
@@ -120,53 +117,86 @@ int r_vm_reg_alias(struct r_vm_t *vm, const char *name, const char *get, const c
 			return 1;
 		}
 	}
-	fprintf(stderr, "Register '%s' not defined.\n", name);
+	eprintf ("Register '%s' not defined.\n", name);
 	return 0;
 }
 
-int r_vm_cmd_reg(struct r_vm_t *vm, const char *_str)
-{
-	char *str, *ptr;
-	int len;
+R_API int r_vm_cmd_eval(RVm *vm, const char *cmd) {
+	char *next;
+	do {
+		next = strchr (cmd,'\n');
+		if (next) {
+			*next=0;
+			next++;
+		}
+		if (strlen (cmd)>2 && !memcmp (cmd, "av", 2))
+			r_vm_cmd_reg (vm, cmd+2);
+		cmd = next;
+	} while (next);
+	return R_TRUE;
+}
 
-	len = strlen(_str)+1;
-	str = alloca(len);
-	memcpy(str, _str, len);
+R_API int r_vm_cmd_reg(RVm *vm, const char *_str) {
+	char *str, ostr[128], *ptr;
+	str = ostr;
+	strncpy (str, _str, sizeof (ostr)-1);
 
-	if (str==NULL || str[0]=='\0') {
-		/* show all registers */
-		r_vm_print(vm, -1);
+	switch(*str) {
+	case '*':
+		r_vm_print (vm, -2);
+		return 0;
+	case '\0':
+		r_vm_print (vm, -1);
+		return 0;
+	case 'o':
+		r_vm_cmd_op (vm, str+2);
 		return 0;
 	}
-	switch(str[0]) {
+	str++;
+	switch (*str) {
+	case 'r':
+		r_vm_setup_ret (vm, str+2);
+		break;
+	case 'c':
+		{
+		char *sp, *bp, *pc = str+2;
+		sp = strchr(pc, ' ');
+		if (!sp) return 0;
+		*sp=0;sp++;
+		bp = strchr(sp, ' ');
+		if (!sp) return 0;
+		*bp=0;bp++;
+		r_vm_setup_cpu (vm, pc, sp, bp);
+		}
+		break;
 	case 'a':
 		if (str[1]==' ') {
 			char *get,*set;
-			get = strchr(str+2, ' ');
+			get = strchr (str+2, ' ');
 			if (get) {
 				get[0]='\0';
 				get = get+1;
-				set = strchr(get, ' ');
+				set = strchr (get, ' ');
 				if (set) {
-					set[0]='\0';
-					set = set +1;
-					r_vm_reg_alias(vm, str+2, get, set);
+					*set = '\0';
+					set++;
+					r_vm_reg_alias (vm, str+2, get, set);
 				}
 			}
-		} else r_vm_reg_alias_list(vm);
+		} else r_vm_reg_alias_list (vm);
 		break;
 	case 't':
-		r_vm_reg_type_list(vm);
+		r_vm_reg_type_list (vm);
 		break;
 	case '+':
 		// add register
 		// avr+ eax int32
-		for(str=str+1;str&&*str==' ';str=str+1);
+		for (str=str+1;str&&*str==' ';str=str+1);
 		ptr = strchr(str, ' ');
 		if (ptr) {
 			ptr[0]='\0';
-			r_vm_reg_add(vm, str, r_vm_reg_type_i(ptr+1), 0);
-		} else r_vm_reg_add(vm, str, R_VMREG_INT32, 0);
+			r_vm_reg_add (vm, str, r_vm_reg_type_i(ptr+1), 0);
+		} else r_vm_reg_add (vm, str, R_VMREG_INT32, 0);
 		break;
 	case '-':
 		// rm register
@@ -174,15 +204,18 @@ int r_vm_cmd_reg(struct r_vm_t *vm, const char *_str)
 		// avr-*
 		for(str=str+1;str&&*str==' ';str=str+1);
 		if (str[0]=='*')
-			INIT_LIST_HEAD(&vm->regs); // XXX Memory leak
-		else r_vm_reg_del(vm, str);
+			INIT_LIST_HEAD (&vm->regs); // XXX Memory leak
+		else r_vm_reg_del (vm, str);
+		break;
+	case 'f':
+		r_vm_setup_flags (vm, str+2);
 		break;
 	default:
-		for(;str&&*str==' ';str=str+1);
-		ptr = strchr(str, '=');
+		for (;str && *str==' '; str++);
+		ptr = strchr (str, '=');
 		if (ptr) {
 			//vm_eval(str);
-			r_vm_op_eval(vm, str);
+			r_vm_op_eval (vm, str);
 #if 0
 			/* set register value */
 			ptr[0]='\0';
@@ -190,13 +223,33 @@ int r_vm_cmd_reg(struct r_vm_t *vm, const char *_str)
 			ptr[0]='=';
 #endif
 		} else {
-			if (*str=='.') {
-				r_vm_print(vm, r_vm_reg_type_i(str+1));
-			} else {
-				/* show single registers */
-				printf("%s = 0x%08llx\n", str, r_vm_reg_get(vm, str));
-			}
+			if (*str=='.') r_vm_print (vm, r_vm_reg_type_i(str+1));
+			else eprintf ("%s = 0x%08"PFMT64x"\n", str, r_vm_reg_get(vm, str));
 		}
 	}
 	return 0;
+}
+
+R_API ut64 r_vm_reg_get(RVm *vm, const char *name) {
+	struct list_head *pos;
+	int len;
+	if (!name)
+		return 0LL;
+	len = strlen (name);
+	if (name[len-1]==']')
+		len--;
+
+	list_for_each (pos, &vm->regs) {
+		RVmReg *r = list_entry(pos, struct r_vm_reg_t, list);
+		if (!strncmp (name, r->name, len)) {
+			if (vm->rec==NULL && r->get != NULL) {
+				vm->rec = r;
+				r_vm_eval(vm, r->get);
+				//vm_op_eval(r->get);
+				vm->rec = NULL;
+			}
+			return r->value;
+		}
+	}
+	return -1LL;
 }

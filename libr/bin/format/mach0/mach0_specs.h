@@ -13,6 +13,8 @@
 #define	MH_MAGIC 0xfeedface
 #define MH_CIGAM 0xcefaedfe
 #endif
+#define FAT_MAGIC 0xcafebabe
+#define FAT_CIGAM 0xbebafeca
 
 #ifndef _INCLUDE_MACHO_SPECS_H_
 #define _INCLUDE_MACHO_SPECS_H_
@@ -21,6 +23,16 @@ typedef unsigned long long uint64_t;
 typedef unsigned int uint32_t;
 typedef unsigned short uint16_t;
 typedef unsigned char uint8_t; 
+
+#define R_BIN_MACH0_IMPORT_TYPE_OBJECT 0
+#define R_BIN_MACH0_IMPORT_TYPE_FUNC 1
+#define R_BIN_MACH0_SYMBOL_TYPE_EXT 0
+#define R_BIN_MACH0_SYMBOL_TYPE_LOCAL 1
+
+#if __WINDOWS__
+typedef int int32_t;
+typedef short int16_t;
+#endif
 
 typedef int	cpu_type_t;
 typedef int	cpu_subtype_t;
@@ -1487,13 +1499,13 @@ struct nlist {
  * This is the symbol table entry structure for 64-bit architectures.
  */
 struct nlist_64 {
-    union {
-        uint32_t  n_strx; /* index into the string table */
-    } n_un;
-    uint8_t n_type;        /* type flag, see below */
-    uint8_t n_sect;        /* section number or NO_SECT */
-    uint16_t n_desc;       /* see <mach-o/stab.h> */
-    uint64_t n_value;      /* value of this symbol (or stab offset) */
+	union {
+		uint32_t  n_strx; /* index into the string table */
+	} n_un;
+	uint8_t n_type;        /* type flag, see below */
+	uint8_t n_sect;        /* section number or NO_SECT */
+	uint16_t n_desc;       /* see <mach-o/stab.h> */
+	uint64_t n_value;      /* value of this symbol (or stab offset) */
 };
 
 /*
@@ -1721,5 +1733,48 @@ extern int nlist (const char *filename, struct nlist *list);
  * for the berkeley pascal compiler, pc(1):
  */
 #define	N_PC	0x30	/* global pascal symbol: name,,NO_SECT,subtype,line */
+
+struct fat_header {
+	uint32_t magic;
+	uint32_t nfat_arch;
+};
+
+struct fat_arch {
+	int cputype;
+	int cpusubtype;
+	uint32_t offset;
+	uint32_t size;
+	uint32_t align;
+};
+
+/* Cache header */
+
+struct cache_header {
+	char version[16];
+	uint32_t baseaddroff;
+	uint32_t unk2;
+	uint32_t startaddr;
+	uint32_t numlibs;
+
+	uint64_t dyldaddr;
+	//uint64_t codesignoff;
+};
+
+#define LC_DYLD_INFO      0x22
+#define LC_DYLD_INFO_ONLY 0x80000022
+struct dyld_info_32 {
+	uint32_t cmd;
+	uint32_t cmdsize;
+	uint32_t rebase_off;
+	uint32_t rebase_size;
+	uint32_t bind_off;
+	uint32_t bind_size;
+	uint32_t weak_bind_off;
+	uint32_t weak_bind_size;
+	uint32_t lazy_bind_off;
+	uint32_t lazy_bind_size;
+	uint32_t export_off;
+	uint32_t export_size;
+};
 
 #endif /* _MACHO_LOADER_H_ */

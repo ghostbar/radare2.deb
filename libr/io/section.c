@@ -1,34 +1,30 @@
-/* radare - LGPL - Copyright 2008-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2008-2010 pancake<nopcode.org> nibble <.ds@gmail.com> */
 
 #include "r_io.h"
 
-// XXX use section->foo
-#define r_cons_printf printf
-
-R_API void r_io_section_init(struct r_io_t *io) {
+R_API void r_io_section_init(RIO *io) {
 	io->enforce_rwx = 0; // do not enforce RWX section permissions by default
 	io->enforce_seek = 0; // do not limit seeks out of the file by default
-	INIT_LIST_HEAD(&(io->sections));
+	INIT_LIST_HEAD (&(io->sections));
 }
 
 R_API void r_io_section_add(RIO *io, ut64 offset, ut64 vaddr, ut64 size, ut64 vsize, int rwx, const char *name) {
-	struct r_io_section_t *s = (struct r_io_section_t *)malloc(sizeof(struct r_io_section_t));
+	RIOSection *s = R_NEW (RIOSection);
 	s->offset = offset;
 	s->vaddr = vaddr;
 	s->size = size;
 	s->vsize = vsize;
 	s->rwx = rwx;
-	if (name)
-		strncpy(s->name, name, 254);
-	else s->name[0]='\0';
-	list_add(&(s->list), &io->sections);
+	if (name) strncpy (s->name, name, sizeof (s->name));
+	else *s->name = '\0';
+	list_add (&(s->list), &io->sections);
 }
 
-R_API struct r_io_section_t *r_io_section_get_i(struct r_io_t *io, int idx) {
+R_API RIOSection *r_io_section_get_i(RIO *io, int idx) {
 	int i = 0;
 	struct list_head *pos;
-	list_for_each_prev(pos, &io->sections) {
-		struct r_io_section_t *s = (struct r_io_section_t *)list_entry(pos, struct r_io_section_t, list);
+	list_for_each_prev (pos, &io->sections) {
+		RIOSection *s = (RIOSection *)list_entry(pos, RIOSection, list);
 		if (i == idx)
 			return s;
 		i++;
@@ -36,8 +32,8 @@ R_API struct r_io_section_t *r_io_section_get_i(struct r_io_t *io, int idx) {
 	return NULL;
 }
 
-R_API int r_io_section_rm(struct r_io_t *io, int idx) {
-	struct r_io_section_t *s = r_io_section_get_i (io, idx);
+R_API int r_io_section_rm(RIO *io, int idx) {
+	RIOSection *s = r_io_section_get_i (io, idx);
 	if (s != NULL) {
 		list_del ((&s->list));
 		free (s);
@@ -47,31 +43,32 @@ R_API int r_io_section_rm(struct r_io_t *io, int idx) {
 }
 
 // TODO: implement as callback
-R_API void r_io_section_list(struct r_io_t *io, ut64 offset, int rad) {
+R_API void r_io_section_list(RIO *io, ut64 offset, int rad) {
 	int i = 0;
 	struct list_head *pos;
 
-	offset = io->va ? r_io_section_vaddr_to_offset (io, offset) : offset;
+	if (io->va || io->debug)
+		offset = r_io_section_vaddr_to_offset (io, offset);
 	list_for_each_prev(pos, &io->sections) {
-		struct r_io_section_t *s = (struct r_io_section_t *)list_entry(pos, struct r_io_section_t, list);
-		if (rad) r_cons_printf ("S 0x%08llx 0x%08llx 0x%08llx 0x%08llx %s\n",
-			s->offset, s->vaddr, s->size, s->vsize, s->name);
-		else r_cons_printf ("[%02d] %c offset=0x%08llx vaddr=0x%08llx size=0x%08llx vsize=%08llx %s\n",
-			i, (offset>=s->offset && offset<s->offset+s->size)?'*':'.',
-			s->offset, s->vaddr, s->size, s->vsize, s->name);
+		RIOSection *s = (RIOSection *)list_entry(pos, RIOSection, list);
+		if (rad) io->printf ("S 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" %s %d\n",
+			s->offset, s->vaddr, s->size, s->vsize, s->name, s->rwx);
+		else io->printf ("[%02d] %c 0x%08"PFMT64x" %s va=0x%08"PFMT64x" sz=0x%08"PFMT64x" vsz=%08"PFMT64x" %s\n",
+			i, (offset>=s->offset && offset<s->offset+s->size)?'*':'.', 
+			s->offset, r_str_rwx_i (s->rwx), s->vaddr, s->size, s->vsize, s->name);
 		i++;
 	}
 }
 
 /* TODO: move to print ??? support pretty print of ranges following an array of offsetof */
-R_API void r_io_section_list_visual(struct r_io_t *io, ut64 seek, ut64 len) {
+R_API void r_io_section_list_visual(RIO *io, ut64 seek, ut64 len) {
 	struct list_head *pos;
 	ut64 min = -1;
 	ut64 max = -1;
 	ut64 mul;
-	int j, i, width = 78; //config.width-30;
+	int j, i, width = 50; //config.width-30;
 
-	seek = io->va ? r_io_section_vaddr_to_offset (io, seek) : seek;
+	seek = (io->va || io->debug) ? r_io_section_vaddr_to_offset (io, seek) : seek;
 	list_for_each (pos, &io->sections) {
 		RIOSection *s = (RIOSection *)list_entry(pos, RIOSection, list);
 		if (min == -1 || s->offset < min)
@@ -83,67 +80,65 @@ R_API void r_io_section_list_visual(struct r_io_t *io, ut64 seek, ut64 len) {
 	mul = (max-min) / width;
 	if (min != -1 && mul != 0) {
 		i = 0;
-		list_for_each_prev(pos, &io->sections) {
-			struct r_io_section_t *s = (struct r_io_section_t *)list_entry(pos, struct r_io_section_t, list);
-			r_cons_printf("%02d  0x%08llx |", i, s->offset);
-			for(j=0;j<width;j++) {
+		list_for_each_prev (pos, &io->sections) {
+			RIOSection *s = (RIOSection *)list_entry (pos, RIOSection, list);
+			io->printf ("%02d%c 0x%08"PFMT64x" |",
+					i, (seek>=s->offset && seek<s->offset+s->size)?'*':' ', s->offset);
+			for (j=0; j<width; j++) {
 				if ((j*mul)+min >= s->offset && (j*mul)+min <=s->offset+s->size)
-					r_cons_printf("#");
+					io->printf("#");
 				else
-					r_cons_printf("-");
+					io->printf("-");
 			}
-			r_cons_printf("| 0x%08llx %s\n", s->offset+s->size, s->name);
+			io->printf ("| 0x%08"PFMT64x" %s\n", s->offset+s->size, s->name);
 			i++;
 		}
 		/* current seek */
 		if (i>0 && len != 0) {
-			r_cons_printf("=>  0x%08llx |", seek);
+			io->printf ("=>  0x%08"PFMT64x" |", seek);
 			for(j=0;j<width;j++) {
-				r_cons_printf (
+				io->printf (
 					((j*mul)+min >= seek &&
 					 (j*mul)+min <= seek+len)
 					?"#":"-");
 			}
-			r_cons_printf("| 0x%08llx\n", seek+len);
+			io->printf ("| 0x%08"PFMT64x"\n", seek+len);
 		}
 	}
 }
 
-R_API struct r_io_section_t *r_io_section_get(struct r_io_t *io, ut64 offset)
-{
+R_API RIOSection *r_io_section_get(RIO *io, ut64 offset) {
 	struct list_head *pos;
 	list_for_each (pos, &io->sections) {
-		RIOSection *s = (struct r_io_section_t *)list_entry(pos, struct r_io_section_t, list);
+		RIOSection *s = (RIOSection *)list_entry(pos, RIOSection, list);
 		if (offset >= s->offset && offset <= s->offset + s->size)
 			return s;
 	}
 	return NULL;
 }
 
-R_API ut64 r_io_section_get_offset(struct r_io_t *io, ut64 offset)
-{
+R_API ut64 r_io_section_get_offset(RIO *io, ut64 offset) {
 	RIOSection *s = r_io_section_get(io, offset);
 	return s?s->offset:-1;
 }
 
-R_API ut64 r_io_section_get_vaddr(struct r_io_t *io, ut64 offset)
-{
-	struct r_io_section_t *s = r_io_section_get(io, offset);
+R_API ut64 r_io_section_get_vaddr(RIO *io, ut64 offset) {
+	RIOSection *s = r_io_section_get (io, offset);
 	return s?s->vaddr:-1;
 }
 
-R_API int r_io_section_get_rwx(struct r_io_t *io, ut64 offset)
-{
-	struct r_io_section_t *s = r_io_section_get(io, offset);
+// TODO: deprecate
+R_API int r_io_section_get_rwx(RIO *io, ut64 offset) {
+	RIOSection *s = r_io_section_get (io, offset);
+eprintf ("r_io_section_get_rwx: must be deprecated\n");
 	return s?s->rwx:R_IO_READ|R_IO_WRITE|R_IO_EXEC;
 }
 
-R_API int r_io_section_overlaps(struct r_io_t *io, struct r_io_section_t *s)
-{
+R_API int r_io_section_overlaps(RIO *io, RIOSection *s) {
 	int i = 0;
 	struct list_head *pos;
 	list_for_each_prev(pos, &io->sections) {
-		struct r_io_section_t *s2 = (struct r_io_section_t *)list_entry(pos, struct r_io_section_t, list);
+		RIOSection *s2 = (RIOSection *)list_entry(pos, RIOSection, list);
 		if (s != s2) {
 			if (s->offset >= s2->offset) {
 				if (s2->offset+s2->size < s->offset)
@@ -158,26 +153,22 @@ R_API int r_io_section_overlaps(struct r_io_t *io, struct r_io_section_t *s)
 	return -1;
 }
 
-R_API ut64 r_io_section_vaddr_to_offset(struct r_io_t *io, ut64 vaddr)
-{
+R_API ut64 r_io_section_vaddr_to_offset(RIO *io, ut64 vaddr) {
 	struct list_head *pos;
-
-	list_for_each_prev(pos, &io->sections) {
-		struct r_io_section_t *s = (struct r_io_section_t *)list_entry(pos, struct r_io_section_t, list);
+	list_for_each_prev (pos, &io->sections) {
+		RIOSection *s = (RIOSection *)list_entry (pos, RIOSection, list);
 		if (vaddr >= s->vaddr && vaddr < s->vaddr + s->vsize)
 			return (vaddr - s->vaddr + s->offset); 
 	}
-	return vaddr;
+	return -1;
 }
 
-R_API ut64 r_io_section_offset_to_vaddr(struct r_io_t *io, ut64 offset)
-{
+R_API ut64 r_io_section_offset_to_vaddr(RIO *io, ut64 offset) {
 	struct list_head *pos;
-
 	list_for_each_prev(pos, &io->sections) {
-		struct r_io_section_t *s = (struct r_io_section_t *)list_entry(pos, struct r_io_section_t, list);
+		RIOSection *s = (RIOSection *)list_entry(pos, RIOSection, list);
 		if (offset >= s->offset && offset < s->offset + s->size)
 			return (s->vaddr + offset - s->offset); 
 	}
-	return offset;
+	return -1;
 }

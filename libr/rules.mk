@@ -9,19 +9,31 @@ ifeq (${BINDEPS},)
 
 ifneq ($(NAME),)
 
+ALL?=
 CFLAGS+=-I../include
-real_all all: ${LIBSO} ${LIBAR} ${EXTRA_TARGETS}
+
+all: $(ALL)
+	@$(MAKE) real_all
+
+real_all: ${LIBSO} ${LIBAR} ${EXTRA_TARGETS}
 	@-if [ -e t/Makefile ]; then (cd t && ${MAKE} all) ; fi
 	@-if [ -e p/Makefile ]; then (cd p && ${MAKE} all) ; fi
 	@true
 
 SRC=$(subst .o,.c,$(OBJ))
 
-# TODO: 0 -> version
-LIBNAME=-Wl,-soname,${LIBSO}
+ifeq (${OSTYPE},gnulinux)
+LIBNAME=${LDFLAGS_SONAME}${LIBSO}.${VERSION}
+else
+LIBNAME=${LDFLAGS_SONAME}${LIBSO}
+endif
+
+# -j trick
+waitfordeps:
+	@sh ../waitfordeps.sh ${DEPS}
 
 ifeq ($(WITHPIC),1)
-${LIBSO}: ${OBJ}
+${LIBSO}: waitfordeps ${OBJ}
 	@for a in ${OBJ} ${SRC}; do \
 	  do=0 ; [ ! -e ${LIBSO} ] && do=1 ; \
 	  test $$a -nt ${LIBSO} && do=1 ; \
@@ -35,8 +47,12 @@ else
 ${LIBSO}:
 endif
 
-${LIBAR}: ${OBJ}
+ifeq ($(WITHNONPIC),1)
+$(LIBAR): ${OBJ}
 	${CC_AR} ${OBJ}
+else
+$(LIBAR):
+endif
 
 pkgcfg:
 	@echo Generating pkgconfig stub for ${NAME}
@@ -62,8 +78,14 @@ deinstall uninstall:
 clean: ${EXTRA_CLEAN}
 	-rm -f *.${EXT_EXE} *.${EXT_SO} *.${EXT_AR}
 	-rm -f ${LIBSO} ${LIBAR} ${OBJ} ${BIN} *.exe a.out
-	@if [ -e t/Makefile ]; then (cd t && ${MAKE} clean) ; fi
-	@if [ -e p/Makefile ]; then (cd p && ${MAKE} clean) ; fi
+	-@if [ -e t/Makefile ]; then (cd t && ${MAKE} clean) ; fi
+	-@if [ -e p/Makefile ]; then (cd p && ${MAKE} clean) ; fi
+	@true
+
+mrproper: clean
+	-@if [ -e t/Makefile ]; then (cd t && ${MAKE} mrproper) ; fi
+	-@if [ -e p/Makefile ]; then (cd p && ${MAKE} mrproper) ; fi
+	-rm -f *.d
 	@true
 
 sloc:
@@ -101,6 +123,9 @@ myclean:
 
 clean: myclean
 	-rm -f ${OBJ} ${BIN}
+
+mrproper: clean
+	-rm -f *.d
 
 install:
 	cd ../.. && ${MAKE} install

@@ -1,6 +1,6 @@
 include ../../config.mk
 
-CFLAGS=-I../../include -Wall -fPIC ${LDFLAGS_LIB} ${LDFLAGS_LINKPATH}..
+CFLAGS=-I../../include -Wall -shared -fPIC ${LDFLAGS_LIB} ${LDFLAGS_LINKPATH}..
 # XXX
 CFLAGS+=-DLIL_ENDIAN=1
 #CFLAGS+=-L../../util -lr_util
@@ -15,6 +15,9 @@ all: ${ALL_TARGETS}
 	@true
 
 clean:
-	-rm -f *.${LIB_SO} *.o ${STATIC_OBJ}
+	-rm -f *.${EXT_SO} *.o ${STATIC_OBJ}
 
-.PHONY: all clean foo
+mrproper: clean
+	-rm -f *.d
+
+.PHONY: all clean foo mrproper

@@ -16,6 +16,7 @@
 
 typedef struct r_bin_elf_section_t {
 	ut64 offset;
+	ut64 rva;
 	ut64 size;
 	ut64 align;
 	ut32 flags;
@@ -26,11 +27,21 @@ typedef struct r_bin_elf_section_t {
 typedef struct r_bin_elf_symbol_t {
 	ut64 offset;
 	ut64 size;
+	int ordinal;
 	char bind[ELF_STRING_LENGTH];
 	char type[ELF_STRING_LENGTH];
 	char name[ELF_STRING_LENGTH];
 	int last;
 } RBinElfSymbol;
+
+typedef struct r_bin_elf_reloc_t {
+	int sym;
+	int type;
+	ut64 offset;
+	ut64 rva;
+	int last;
+	char name[ELF_STRING_LENGTH];
+} RBinElfReloc;
 
 typedef struct r_bin_elf_field_t {
 	ut64 offset;
@@ -66,6 +77,7 @@ struct Elf_(r_bin_elf_obj_t) {
 
 ut64 Elf_(r_bin_elf_get_baddr)(struct Elf_(r_bin_elf_obj_t) *bin);
 ut64 Elf_(r_bin_elf_get_entry_offset)(struct Elf_(r_bin_elf_obj_t) *bin);
+ut64 Elf_(r_bin_elf_get_main_offset)(struct Elf_(r_bin_elf_obj_t) *bin);
 int Elf_(r_bin_elf_get_stripped)(struct Elf_(r_bin_elf_obj_t) *bin);
 int Elf_(r_bin_elf_get_static)(struct Elf_(r_bin_elf_obj_t) *bin);
 char* Elf_(r_bin_elf_get_data_encoding)(struct Elf_(r_bin_elf_obj_t) *bin);
@@ -76,6 +88,7 @@ char* Elf_(r_bin_elf_get_elf_class)(struct Elf_(r_bin_elf_obj_t) *bin);
 int Elf_(r_bin_elf_get_bits)(struct Elf_(r_bin_elf_obj_t) *bin);
 char* Elf_(r_bin_elf_get_osabi_name)(struct Elf_(r_bin_elf_obj_t) *bin);
 int Elf_(r_bin_elf_is_big_endian)(struct Elf_(r_bin_elf_obj_t) *bin);
+struct r_bin_elf_reloc_t* Elf_(r_bin_elf_get_relocs)(struct Elf_(r_bin_elf_obj_t) *bin);
 struct r_bin_elf_lib_t* Elf_(r_bin_elf_get_libs)(struct Elf_(r_bin_elf_obj_t) *bin);
 struct r_bin_elf_section_t* Elf_(r_bin_elf_get_sections)(struct Elf_(r_bin_elf_obj_t) *bin);
 struct r_bin_elf_symbol_t* Elf_(r_bin_elf_get_symbols)(struct Elf_(r_bin_elf_obj_t) *bin, int type);
@@ -83,6 +96,7 @@ struct r_bin_elf_field_t* Elf_(r_bin_elf_get_fields)(struct Elf_(r_bin_elf_obj_t
 char *Elf_(r_bin_elf_get_rpath)(struct Elf_(r_bin_elf_obj_t) *bin);
 void* Elf_(r_bin_elf_free)(struct Elf_(r_bin_elf_obj_t)* bin);
 struct Elf_(r_bin_elf_obj_t)* Elf_(r_bin_elf_new)(const char* file);
+struct Elf_(r_bin_elf_obj_t)* Elf_(r_bin_elf_new_buf)(struct r_buf_t *buf);
 ut64 Elf_(r_bin_elf_resize_section)(struct Elf_(r_bin_elf_obj_t) *bin, const char *name, ut64 size);
 int Elf_(r_bin_elf_del_rpath)(struct Elf_(r_bin_elf_obj_t) *bin);
 

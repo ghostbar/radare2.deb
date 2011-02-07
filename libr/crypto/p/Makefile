@@ -1,6 +1,7 @@
 include ../../config.mk
 # XXX
-CFLAGS=-I../../include -I../arch/ -I../arch/include -Wall -fPIC ${LDFLAGS_LIB} ${LDFLAGS_LINKPATH}..
+CFLAGS=-I../../include -I../arch/ -I../arch/include -Wall -shared -fPIC ${LDFLAGS_LIB} ${LDFLAGS_LINKPATH}..
+LDFLAGS+=${LINK}
 
 foo: all
 
@@ -14,4 +15,7 @@ all: ${ALL_TARGETS}
 clean:
 	-rm -f *.${EXT_SO} *.o ${STATIC_OBJ}
 
-.PHONY: all clean foo
+mrproper: clean
+	-rm -f *.d
+
+.PHONY: all clean foo mrproper

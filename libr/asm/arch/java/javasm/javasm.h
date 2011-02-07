@@ -25,6 +25,12 @@ struct cp_item {
 	ut64 off;
 };
 
+struct java_op {
+	char *name;
+	unsigned char byte;
+	int size;
+};
+extern struct java_op java_ops[];
 //extern struct cp_item *cp_items;
 //extern struct cp_item cp_null_item; // NOTE: must be initialized for safe use
 
@@ -32,5 +38,5 @@ int java_print_opcode(int idx, const ut8 *bytes, char *output);
 int java_disasm(const ut8 *bytes, char *output);
 int java_assemble(unsigned char *bytes, const char *string);
 unsigned short read_short(FILE *fd);
-int javasm_init();
-int java_classdump(const char *file);
+void javasm_init();
+int java_classdump(const char *file, int verbose);

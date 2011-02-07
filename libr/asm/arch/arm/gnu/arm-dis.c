@@ -1549,7 +1549,7 @@ static unsigned int regname_selected = 1;
 #define arm_regnames      regnames[regname_selected].reg_names
 
 //static bfd_boolean force_thumb = FALSE;
-int force_thumb = FALSE;
+//int force_thumb = FALSE;
 
 /* Current IT instruction state.  This contains the same state as the IT
    bits in the CPSR.  */
@@ -1569,7 +1569,6 @@ enum map_type {
   MAP_DATA
 };
 
-static enum map_type last_type;
 int last_mapping_sym = -1;
 bfd_vma last_mapping_addr = 0;
 
@@ -4053,16 +4052,11 @@ print_insn_arm (bfd_vma pc, struct disassemble_info *info)
     }
 #endif
 /* do not audotedtect thumb mode */
-  int little;
-
-  little = (info->endian == BFD_ENDIAN_LITTLE);
-  is_thumb |= (pc & 1);
+  int little = (info->endian == BFD_ENDIAN_LITTLE);
+ // is_thumb |= (pc & 1);
+is_thumb = (info->bytes_per_line == 2)?1:0;
+//is_thumb = 1;
   pc &= ~(bfd_vma)1;
-
-  if (force_thumb)
-    is_thumb = TRUE;
-
-  info->bytes_per_line = 4;
 
   if (is_data)
     {

@@ -1,36 +1,184 @@
 /* radare - LGPL - Copyright 2010 pancake<@nopcode.org> */
 
+/* this vapi is broken as shit... we need to rename some stuff here ..
+   if we can just avoid to use cname CCode attribute... */
+
+namespace Radare {
 [Compact]
-[CCode (cheader_filename="r_anal.h", cprefix="r_anal_", lowercase_c_prefix="r_anal_", free_function="r_anal_free")]
-public class Radare.RAnal {
+[CCode (cheader_filename="r_anal.h,r_list.h,r_types_base.h", cprefix="r_anal_", lowercase_c_prefix="r_anal_", free_function="r_anal_free", cname="RAnal")]
+public class RAnal {
 	public int bits;
 	public bool big_endian;
 	public void *user;
-	RList <BasicBlock> bbs;
-	RList <Function> fcns;
-	RList <VariableType> vartypes;
+	public RList<RAnal.Block> bbs;
+	public RList<RAnal.Fcn> fcns;
+	public RList<RAnal.VarType> vartypes;
 
 	public RAnal ();
-	//public weak RAnal init ();
 	public bool set_bits (int bits);
 	public bool set_big_endian (bool big);
 	//public bool set_pc (uint64 addr);
+	public RList<RAnal.Block> fcn_bb_list(Fcn fun);
 
 	[Compact]
-	[CCode (cname="RAnalBB")]
-	public class BasicBlock {
+	[CCode (cname="RAnalValue")]
+	public class Value {
+		public bool absolute;
+		public bool memref;
+		public uint64 @base;
+		public int64 delta;
+		public int64 imm;
+		public int mul;
+		//public uint16 sel;
+		public RReg.Item reg;
+		public RReg.Item regdelta;
+	}
+
+	[Compact]
+	[CCode (cname="RAnalCond")]
+	public class Cond {
+		public int type;
+		public RAnal.Value arg[2];
+	}
+
+	[CCode (cname="int", cprefix="R_ANAL_COND_")]
+	public enum Cnd {
+		EQ,
+		NE,
+		GE,
+		GT,
+		LE,
+		LT
+	}
+
+	[CCode (cname="int", cprefix="R_ANAL_VAR_TYPE_")]
+	public enum VarClass {
+		NULL,
+		GLOBAL,
+		LOCAL,
+		ARG,
+		ARGREG
+	}
+
+	[CCode (cname="int", cprefix="R_ANAL_BB_TYPE_")]
+	public enum BlockType {
+		NULL,
+		HEAD,
+		BODY,
+		LAST,
+		FOOT
+	}
+
+	[CCode (cname="int", cprefix="R_ANAL_DIFF_")]
+	public enum BlockDiff {
+		NULL,
+		MATCH,
+		UNMATCH
+	}
+
+	[CCode (cname="int", cprefix="R_ANAL_REFLINE_TYPE_")]
+	public enum ReflineType {
+		STYLE,
+		WIDE
+	}
+
+	[CCode (cname="int", cprefix="R_ANAL_RET_")]
+	public enum Ret {
+		ERROR,
+		DUP,
+		NEW,
+		END
+	}
+
+	[CCode (cname="int", cprefix="R_ANAL_STACK_")]
+	public enum Stack {
+		NULL,
+		NOP,
+		INCSTACK,
+		GET,
+		SET
+	}
+
+	[CCode (cname="int", cprefix="R_ANAL_DATA_")]
+	public enum Data {
+		NULL,
+		HEX,
+		STR,
+		CODE,
+		FUN,
+		STRUCT,
+		LAST
+	}
+
+	[CCode (cname="int", cprefix="R_ANAL_OP_FAMILY_")]
+	public enum OpFamily {
+		UNKNOWN,
+		CPU,
+		FPU,
+		MMX,
+		PRIV,
+		LAST
+	}
+
+	[CCode (cname="int", cprefix="R_ANAL_VAR_DIR_")]
+	public enum VarDir {
+		NONE,
+		IN,
+		OUT
+	}
+
+	[CCode (cname="int", cprefix="R_ANAL_OP_TYPE_")]
+	public enum OpType {
+		NULL,
+		JMP,
+		UJMP,
+		CJMP,
+		CALL,
+		UCALL,
+		REP,
+		RET,
+		ILL,
+		UNK,
+		NOP,
+		MOV,
+		TRAP, 
+		SWI,  
+		UPUSH,
+		PUSH, 
+		POP,  
+		CMP,  
+		ADD,
+		SUB,
+		MUL,
+		DIV,
+		SHR,
+		SHL,
+		OR,
+		AND,
+		XOR,
+		NOT,
+		STORE,
+		LOAD, 
+		//LAST
+	}
+
+	[Compact]
+	[CCode (cprefix="r_anal_bb_", cname="RAnalBlock")]
+	public class Block {
 		public uint64 addr;
 		public uint64 size;
 		public uint64 jump;
 		public uint64 fail;
-		public RList<Opcode> aops;
+		public BlockType type;
+		public BlockDiff diff;
+		public RList<RAnal.Op> aops;
 	}
-	public bool bb_split(BasicBlock bb, RList<BasicBlock> bbs, uint64 addr);
-	public bool bb_overlap(BasicBlock bb, RList<BasicBlock> bbs);
+	public bool bb_split(Block bb, RList<RAnal.Block> bbs, uint64 addr);
+	public bool bb_overlap(Block bb, RList<RAnal.Block> bbs);
 
 	[Compact]
-	[CCode (cprefix="r_anal_aop_t")]
-	public class Opcode {
+	[CCode (cprefix="r_anal_aop_", cname="RAnalOp")]
+	public class Op {
 		public uint64 addr;
 		public int type;
 		public int stackop;
@@ -45,46 +193,93 @@ public class Radare.RAnal {
 	}
 
 	[Compact]
-	[CCode (cprefix="r_anal_fcn_t")]
-	public class Function {
+	[CCode (cprefix="r_anal_fcn_", cname="RAnalFcn")]
+	public class Fcn {
 		public string name;
 		public uint64 addr;
 		public uint64 size;
-		public RList<Variable> vars;
+		public RList<RAnal.Var> vars;
 		public RList<uint64> refs;
 		public RList<uint64> xrefs;
 	}
 
 	[Compact]
-	[CCode (cprefix="r_anal_var_t")]
-	public class Variable {
+	[CCode (cname="RAnalVar")]
+	public class Var {
 		public string name;
 		public int delta;
 		public int type;
-		public RList<VariableAccess> accesses;
+		public RList<RAnal.VarAccess> accesses;
 	}
 
 	[Compact]
-	[CCode (cprefix="r_anal_var_access_t")]
-	public class VariableAccess {
+	[CCode (cname="RAnalVarAccess")]
+	public class VarAccess {
 		public string name;
 		public int delta;
 		public int type;
-		public RList<VariableAccess> accessess;
+		public RList<RAnal.VarAccess> accessess;
 	}
 
 	[Compact]
-	[CCode (cprefix="r_anal_var_type_t")]
-	public class VariableType {
+	[CCode (cname="RAnalVarType")]
+	public class VarType {
 		public string name;
 		public string fmt;
 		public uint size;
 	}
 
 	[Compact]
+	[CCode (cname="RAnalRefline", free_function="")]
 	public class Refline {
-		uint64 from;
-		uint64 to;
-		int index;
+		public uint64 from;
+		public uint64 to;
+		public int index;
+	}
+}
+
+
+/* meta */
+	[Compact]
+	[CCode (cheader_filename="r_meta.h,r_list.h,r_types_base.h", cname="RMeta", free_function="r_meta_free", cprefix="r_meta_")]
+	public class RMeta {
+		[Compact]
+		[CCode (cname="RMetaItem")]
+		public class Item {
+			public uint64 from;
+			public uint64 to;
+			public uint64 size;
+			public int type;
+			public string str;
+		}
+		
+		public RList<RMeta.Item> data;
+
+		[CCode (cname="int", cprefix="R_META_WHERE_")]
+		public enum Where {
+			PREV,
+			HERE,
+			NEXT
+		}
+
+		[CCode (cname="int", cprefix="R_META_")]
+		public enum Type {
+			ANY,
+			DATA,
+			CODE,
+			STRING,
+			STRUCT,
+			COMMENT,
+			FOLDER
+		}
+
+		//public int count (RMeta.Type type, uint64 from, uint64 to, 
+		//public string get_string(RMeta.Type, uint64 addr);
+		public bool @add(RMeta.Type type, uint64 from, uint64 size, string str);
+		public bool del(RMeta.Type type, uint64 from, uint64 size, string str);
+		public RMeta.Item find(uint64 off, RMeta.Type type, RMeta.Where where);
+		public bool cleanup (uint64 from, uint64 to);
+		public static unowned string type_to_string(RMeta.Type type);
+		public int list (RMeta.Type type);
 	}
 }

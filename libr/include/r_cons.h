@@ -34,13 +34,15 @@ typedef struct r_cons_grep_t {
 	char *str;
 	int counter;
 	int line;
-	int token;
+	int tokenfrom;
+	int tokento;
 	int neg;
 } RConsGrep;
 
 typedef struct r_cons_t {
 	RConsGrep grep;
 	char *buffer;
+	int line;
 	int buffer_len;
 	int buffer_sz;
 	char *lastline;
@@ -76,15 +78,10 @@ typedef void (*RConsBreakCallback)(void *user);
 //extern FILE *r_cons_stdin_fd;
 //extern int r_cons_stdout_fd;
 //extern int r_cons_stdout_file;
-extern const char *r_cons_palette_default;
-extern const char *r_cons_colors[CONS_COLORS_SIZE+1];
-//extern char r_cons_palette[CONS_PALETTE_SIZE][8];
-//extern const char *dl_prompt;
 //extern char *r_cons_filterline;
 //extern char *r_cons_teefile;
 // not needed anymoar
 //extern int (*r_cons_user_fgets)(char *buf, int len);
-
 
 /* plain colors */
 #define Color_BLACK    "\x1b[30m"
@@ -158,8 +155,9 @@ R_API void r_cons_break_end();
 R_API int r_cons_pipe_open(const char *file, int append);
 R_API void r_cons_pipe_close(int fd);
 
-/* constructor */
-R_API int  r_cons_init();
+#if __WINDOWS__
+R_API int r_cons_w32_print(ut8 *ptr);
+#endif
 
 /* control */
 R_API void r_cons_reset();
@@ -175,6 +173,7 @@ R_API void r_cons_printf(const char *format, ...);
 R_API void r_cons_strcat(const char *str);
 R_API void r_cons_memcat(const char *str, int len);
 R_API void r_cons_newline();
+R_API void r_cons_filter();
 R_API void r_cons_flush();
 R_API void r_cons_visual_flush();
 R_API void r_cons_visual_write (char *buffer);
@@ -190,11 +189,12 @@ R_API int r_cons_get_size(int *rows);
 R_API int r_cons_arrow_to_hjkl(int ch);
 R_API int r_cons_html_print(const char *ptr);
 
-// MUST BE DEPRECATED
+// TODO: use gets() .. MUST BE DEPRECATED
 R_API int r_cons_fgets(char *buf, int len, int argc, const char **argv);
 
 R_API const char *r_cons_get_buffer();
 R_API void r_cons_grep(const char *str);
+R_API int r_cons_grep_line(char *buf, int len); // must be static
 R_API int r_cons_grepbuf(char *buf, int len);
 
 R_API void r_cons_invert(int set, int color);

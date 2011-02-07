@@ -30,19 +30,20 @@ typedef struct r_cmd_macro_t {
 	ut64 _brk_value;
 	int brk;
 	int (*cmd)(void *user, const char *cmd);
-	int (*printf)(const char str, ...);
+	int (*printf)(const char *str, ...);
 	void *user;
-	struct r_num_t *num;
+	RNum *num;
 	int labels_n;
-	struct r_cmd_macro_label_t labels[MACRO_LABELS];
+	RCmdMacroLabel labels[MACRO_LABELS];
 	struct list_head macros;
 } RCmdMacro;
 
+typedef int (*RCmdCallback)(void *user, const char *cmd);
 
 typedef struct r_cmd_item_t {
 	char cmd[64];
 	char desc[128];
-	r_cmd_callback(callback);
+	r_cmd_callback (callback);
 } RCmdItem;
 
 typedef struct r_cmd_long_item_t {
@@ -55,17 +56,18 @@ typedef struct r_cmd_long_item_t {
 
 typedef struct r_cmd_t {
 	void *data;
-	r_cmd_nullcallback(nullcallback);
+	r_cmd_nullcallback (nullcallback);
 	struct list_head lcmds;
-	struct r_cmd_item_t *cmds[255];
+	RCmdItem *cmds[UT8_MAX];
 	RCmdMacro macro;
 	RList *plist;
 } RCmd;
 
-typedef struct r_cmd_handle_t {
+typedef struct r_cmd_plugin_t {
 	char *name;
-	int (*call)(void *user, const char *cmd);
-} RCmdHandle;
+	char *desc;
+	RCmdCallback call;
+} RCmdPlugin;
 
 #ifdef R_API
 
@@ -77,7 +79,7 @@ R_API int r_cmd_macro_call(struct r_cmd_macro_t *mac, const char *name);
 R_API int r_cmd_macro_break(struct r_cmd_macro_t *mac, const char *value);
 
 R_API RCmd *r_cmd_new();
-R_API RCmd * r_cmd_init(struct r_cmd_t *cmd);
+R_API RCmd *r_cmd_free(RCmd *cmd);
 R_API int r_cmd_set_data(struct r_cmd_t *cmd, void *data);
 R_API int r_cmd_add(struct r_cmd_t *cmd, const char *command, const char *desc, r_cmd_callback(callback));
 R_API int r_cmd_add_long(struct r_cmd_t *cmd, const char *longcmd, const char *shortcmd, const char *desc);
@@ -86,12 +88,12 @@ R_API int r_cmd_call(struct r_cmd_t *cmd, const char *command);
 R_API int r_cmd_call_long(struct r_cmd_t *cmd, const char *input);
 R_API char **r_cmd_args(struct r_cmd_t *cmd, int *argc);
 
-R_API int r_cmd_handle_init(struct r_cmd_t *cmd);
-R_API int r_cmd_handle_add(struct r_cmd_t *cmd, struct r_cmd_handle_t *plugin);
-R_API int r_cmd_handle_check(struct r_cmd_t *cmd, const char *a0);
+R_API int r_cmd_plugin_init(struct r_cmd_t *cmd);
+R_API int r_cmd_plugin_add(struct r_cmd_t *cmd, struct r_cmd_plugin_t *plugin);
+R_API int r_cmd_plugin_check(struct r_cmd_t *cmd, const char *a0);
 
 /* plugins */
-extern struct r_cmd_handle_t r_cmd_plugin_dummy;
+extern struct r_cmd_plugin_t r_cmd_plugin_dummy;
 
 /* r_cmd_macro */
 R_API void r_cmd_macro_init(struct r_cmd_macro_t *mac);

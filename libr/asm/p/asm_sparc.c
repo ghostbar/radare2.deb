@@ -38,7 +38,7 @@ static void print_address(bfd_vma address, struct disassemble_info *info)
 	char tmp[32];
 	if (buf_global == NULL)
 		return;
-	sprintf(tmp, "0x%08llx", (ut64)address);
+	sprintf(tmp, "0x%08"PFMT64x"", (ut64)address);
 	strcat(buf_global, tmp);
 }
 
@@ -85,7 +85,7 @@ static int disassemble(struct r_asm_t *a, struct r_asm_aop_t *aop, ut8 *buf, ut6
 	return aop->inst_len;
 }
 
-struct r_asm_handle_t r_asm_plugin_sparc = {
+RAsmPlugin r_asm_plugin_sparc = {
 	.name = "sparc",
 	.arch = "sparc",
 	.bits = (int[]){ 32, 0 },

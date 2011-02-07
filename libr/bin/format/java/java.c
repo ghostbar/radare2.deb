@@ -1,6 +1,8 @@
+// XXX this is dupped in r_asm and r_bin :O
+
 /*
- * Copyright (C) 2007, 2008, 2009
- *       pancake <youterm.com>, nibbke <develsec.org>
+ * Copyright (C) 2007, 2008, 2009, 2010
+ *       pancake <youterm.com>, nibble <develsec.org>
  *
  * radare is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -50,23 +52,20 @@ static struct constant_t {
 
 static struct r_bin_java_cp_item_t cp_null_item; // NOTE: must be initialized for safe use
 
-static unsigned short read_short(struct r_bin_java_obj_t *bin)
-{
+static unsigned short read_short(struct r_bin_java_obj_t *bin) {
 	unsigned short sh=0;
 
 	r_buf_read_at(bin->b, R_BUF_CUR, (ut8*)&sh, 2);
 	return R_BIN_JAVA_SWAPUSHORT(sh);
 }
 
-static struct r_bin_java_cp_item_t* get_cp(struct r_bin_java_obj_t *bin, unsigned short i)
-{
+static struct r_bin_java_cp_item_t* get_cp(struct r_bin_java_obj_t *bin, unsigned short i) {
 	if (i<0||i>bin->cf.cp_count)
 		return &cp_null_item;
 	return &bin->cp_items[i];
 }
 
-static int attributes_walk(struct r_bin_java_obj_t *bin, struct r_bin_java_attr_t *attr, int sz2, int fields)
-{
+static int attributes_walk(struct r_bin_java_obj_t *bin, struct r_bin_java_attr_t *attr, int sz2, int fields) {
 	char buf[0xffff+1];
 	int sz3, sz4;
 	int j=0,k;
@@ -104,7 +103,7 @@ static int attributes_walk(struct r_bin_java_obj_t *bin, struct r_bin_java_attr_
 				attr->info.code.code_length = R_BIN_JAVA_UINT(buf, 4);
 				IFDBG printf("      Code Length: %d\n", attr->info.code.code_length);
 				attr->info.code.code_offset = (ut64)bin->b->cur;
-				IFDBG printf("      Code At Offset: 0x%08llx\n", (ut64)attr->info.code.code_offset);
+				IFDBG printf("      Code At Offset: 0x%08"PFMT64x"\n", (ut64)attr->info.code.code_offset);
 
 				r_buf_read_at(bin->b, R_BUF_CUR, (ut8*)buf, R_BIN_JAVA_UINT(buf, 4)); // READ CODE
 				sz4 = read_short(bin);
@@ -204,7 +203,7 @@ static int javasm_init(struct r_bin_java_obj_t *bin)
 			}
 		}
 		if (c == NULL) {
-			fprintf(stderr, "Invalid tag '%d' at offset 0x%08llx\n",
+			fprintf(stderr, "Invalid tag '%d' at offset 0x%08"PFMT64x"\n",
 				buf[0], (ut64)bin->b->cur);
 			return R_FALSE;
 		}
@@ -347,8 +346,7 @@ char* r_bin_java_get_version(struct r_bin_java_obj_t* bin)
 			bin->cf.minor[1],bin->cf.minor[0]);
 }
 
-ut64 r_bin_java_get_entrypoint(struct r_bin_java_obj_t* bin)
-{
+ut64 r_bin_java_get_entrypoint(struct r_bin_java_obj_t* bin) {
 	int i, j;
 	for (i=0; i < bin->methods_count; i++)
 		if (!strcmp(bin->methods[i].name, "<init>"))
@@ -358,8 +356,7 @@ ut64 r_bin_java_get_entrypoint(struct r_bin_java_obj_t* bin)
 	return 0;
 }
 
-struct r_bin_java_sym_t* r_bin_java_get_symbols(struct r_bin_java_obj_t* bin)
-{
+struct r_bin_java_sym_t* r_bin_java_get_symbols(struct r_bin_java_obj_t* bin) {
 	struct r_bin_java_sym_t *symbols;
 	int i, j, ctr = 0;
 
@@ -380,8 +377,7 @@ struct r_bin_java_sym_t* r_bin_java_get_symbols(struct r_bin_java_obj_t* bin)
 	return symbols;
 }
 
-struct r_bin_java_str_t* r_bin_java_get_strings(struct r_bin_java_obj_t* bin)
-{
+struct r_bin_java_str_t* r_bin_java_get_strings(struct r_bin_java_obj_t* bin) {
 	struct r_bin_java_str_t *strings = NULL;
 	int i, ctr = 0;
 
@@ -404,8 +400,7 @@ struct r_bin_java_str_t* r_bin_java_get_strings(struct r_bin_java_obj_t* bin)
 	return strings;
 }
 
-void* r_bin_java_free(struct r_bin_java_obj_t* bin)
-{
+void* r_bin_java_free(struct r_bin_java_obj_t* bin) {
 	if (!bin)
 		return NULL;
 	if (bin->cp_items)
@@ -420,13 +415,13 @@ void* r_bin_java_free(struct r_bin_java_obj_t* bin)
 	return NULL;
 }
 
-struct r_bin_java_obj_t* r_bin_java_new(const char* file)
-{
+struct r_bin_java_obj_t* r_bin_java_new(const char* file) {
 	struct r_bin_java_obj_t *bin;
 	ut8 *buf;
 
 	if (!(bin = malloc(sizeof(struct r_bin_java_obj_t))))
 		return NULL;
+	memset (bin, 0, sizeof (struct r_bin_java_obj_t));
 	bin->file = file;
 	if (!(buf = (ut8*)r_file_slurp(file, &bin->size))) 
 		return r_bin_java_free(bin);
@@ -434,6 +429,19 @@ struct r_bin_java_obj_t* r_bin_java_new(const char* file)
 	if (!r_buf_set_bytes(bin->b, buf, bin->size))
 		return r_bin_java_free(bin);
 	free (buf);
+	if (!javasm_init(bin))
+		return r_bin_java_free(bin);
+	return bin;
+}
+
+struct r_bin_java_obj_t* r_bin_java_new_buf(struct r_buf_t *buf) {
+	struct r_bin_java_obj_t *bin;
+
+	if (!(bin = malloc(sizeof(struct r_bin_java_obj_t))))
+		return NULL;
+	memset (bin, 0, sizeof (struct r_bin_java_obj_t));
+	bin->b = buf;
+	bin->size = buf->length;
 	if (!javasm_init(bin))
 		return r_bin_java_free(bin);
 	return bin;

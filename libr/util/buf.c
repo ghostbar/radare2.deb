@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2010 pancake<nopcode.org> */
 
 #include "r_types.h"
 #include "r_util.h"
@@ -14,7 +14,10 @@ struct r_class_t {
 #define r_buf_init(x) r_buf_class->init
 #endif
 
-R_API struct r_buf_t *r_buf_init(RBuffer *b) {
+R_API struct r_buf_t *r_buf_new() {
+	RBuffer *b;
+	
+	b = R_NEW (RBuffer);
 	if (b) {
 		b->buf = NULL;
 		b->length = 0;
@@ -22,11 +25,6 @@ R_API struct r_buf_t *r_buf_init(RBuffer *b) {
 		b->base = 0LL;
 	}
 	return b;
-}
-
-R_API struct r_buf_t *r_buf_new() {
-	RBuffer *b = R_NEW (RBuffer);
-	return r_buf_init (b);
 }
 
 R_API int r_buf_set_bits(RBuffer *b, int bitoff, int bitsize, ut64 value) {
@@ -42,6 +40,14 @@ R_API int r_buf_set_bytes(RBuffer *b, ut8 *buf, int length) {
 		return R_FALSE;
 	memcpy (b->buf, buf, length);
 	b->length = length;
+	return R_TRUE;
+}
+
+R_API int r_buf_append_bytes(RBuffer *b, ut8 *buf, int length) {
+	if (!(b->buf = realloc (b->buf, b->length+length)))
+		return R_FALSE;
+	memcpy (b->buf+b->length, buf, length);
+	b->length += length;
 	return R_TRUE;
 }
 
@@ -90,11 +96,10 @@ static int r_buf_fcpy_at (RBuffer *b, ut64 addr, ut8 *buf, const char *fmt, int 
 		default: return -1;
 		}
 		for (k = 0; k < m; k++) {
-			if (write)
-				r_mem_copyendian((ut8*)&buf[addr+len+k*tsize],
-						(ut8*)&b->buf[len+k*tsize], tsize, endian);
+			if (write) r_mem_copyendian((ut8*)&buf[addr+len+k*tsize],
+					(ut8*)&b->buf[len+k*tsize], tsize, endian);
 			else r_mem_copyendian((ut8*)&buf[len+k*tsize],
-						(ut8*)&b->buf[addr+len+k*tsize], tsize, endian);
+					(ut8*)&b->buf[addr+len+k*tsize], tsize, endian);
 		}
 		len += m*tsize; m = 1;
 	}

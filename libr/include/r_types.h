@@ -15,6 +15,13 @@
 #include <stdarg.h>
 #include <sys/time.h>
 
+#undef FS
+#if __WINDOWS__
+#define FS "\\"
+#else
+#define FS "/"
+#endif
+
 /* provide a per-module debug-enabled feature */
 // TODO NOT USED. DEPREACATE
 #if R_DEBUG
@@ -23,12 +30,20 @@
 #define IFDBG if (0)
 #endif
 
+typedef void (*PrintfCallback)(const char *str, ...);
+
 // TODO NOT USED. DEPREACATE
 #if R_RTDEBUG
 #define IFRTDBG if (getenv ("LIBR_DEBUG"))
 #else
 #define IFRTDBG if (0)
 #endif
+
+/* compile-time introspection helpers */
+#define CTO(y,z) ((size_t) &((y*)0)->z)
+#define CTA(x,y,z) (x+CTO(y,z))
+#define CTI(x,y,z) (*((size_t*)(CTA(x,y,z))))
+#define CTS(x,y,z,t,v) {t* _=(t*)CTA(x,y,z);*_=v;}
 
 #if R_SWIG
   #define R_API export
@@ -60,6 +75,7 @@
 #endif
 #if defined(__linux__) || defined(__APPLE__)
   #define __UNIX__ 1
+  #undef __BSD__
 #endif
 #if __WIN32__ || __CYGWIN__ || MINGW32
   #define __addr_t_defined
@@ -67,6 +83,8 @@
   #include <winsock.h>
   #undef USE_SOCKETS
   #define __WINDOWS__ 1
+  #undef __UNIX__
+  #undef __BSD__
 #endif
 
 #if __UNIX__
@@ -86,7 +104,7 @@
 
 #define R_MAX(x,y) (x>y)?x:y
 #define R_MIN(x,y) (x>y)?y:x
-#define R_ABS(x) ((x<0)?-x:x)
+#define R_ABS(x) (((x)<0)?-(x):(x))
 
 #define R_FREE(x) { free(x); x = NULL; }
 
@@ -94,6 +112,16 @@
 #define HAVE_REGEXP 0
 #else
 #define HAVE_REGEXP 1
+#endif
+
+#if __WINDOWS__
+#define PFMT64x "I64x"
+#define PFMT64d "I64d"
+#define PFMT64o "I64o"
+#else
+#define PFMT64x "llx"
+#define PFMT64d "lld"
+#define PFMT64o "llo"
 #endif
 
 #endif

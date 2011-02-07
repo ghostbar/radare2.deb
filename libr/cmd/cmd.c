@@ -3,21 +3,23 @@
 #include <r_cmd.h>
 #include <r_util.h>
 
-R_API RCmd *r_cmd_init(RCmd *cmd) {
+R_API RCmd *r_cmd_new () {
 	int i;
+	RCmd *cmd = R_NEW (RCmd);
 	if (cmd) {
 		INIT_LIST_HEAD (&cmd->lcmds);
 		for (i=0;i<255;i++)
 			cmd->cmds[i] = NULL;
 		cmd->data = NULL;
 	}
-	r_cmd_handle_init (cmd);
+	r_cmd_plugin_init (cmd);
 	r_cmd_macro_init (&cmd->macro);
 	return cmd;
 }
 
-R_API RCmd *r_cmd_new () {
-	return r_cmd_init (R_NEW (RCmd));
+R_API RCmd *r_cmd_free(RCmd *cmd) {
+	free (cmd);
+	return NULL;
 }
 
 R_API int r_cmd_set_data(struct r_cmd_t *cmd, void *data) {
@@ -63,22 +65,22 @@ R_API int r_cmd_call(struct r_cmd_t *cmd, const char *input) {
 	struct r_cmd_item_t *c;
 	int ret = -1;
 	RListIter *iter;
-	RCmdHandle *cp;
+	RCmdPlugin *cp;
 	
 	iter = r_list_iterator (cmd->plist);
 	while (r_list_iter_next (iter)) {
-		cp = (RCmdHandle*) r_list_iter_get (iter);
-		if (cp->call (NULL, input))
+		cp = (RCmdPlugin*) r_list_iter_get (iter);
+		if (cp->call (cmd->data, input))
 			return R_TRUE;
 	}
 	
 	if (input == NULL || input[0] == '\0') {
 		if (cmd->nullcallback != NULL)
-			cmd->nullcallback(cmd->data);
+			cmd->nullcallback (cmd->data);
 	} else {
 		c = cmd->cmds[(ut8)input[0]];
-		if (c != NULL && c->callback!=NULL)
-			ret = c->callback(cmd->data, input+1);
+		if (c && c->callback)
+			ret = c->callback (cmd->data, input+1);
 		else ret = -1;
 	}
 	return ret;

@@ -1,7 +1,11 @@
 include config-user.mk
 include global.mk
 
-all: plugins.cfg libr r2rc
+REMOTE=radare.org:/srv/http/radareorg/get/beta
+
+all: plugins.cfg
+	${MAKE} libr
+	${MAKE} binr
 
 plugins.cfg:
 	./configure-plugins
@@ -9,21 +13,37 @@ plugins.cfg:
 libr:
 	cd libr && ${MAKE} all
 
-r2rc:
-	cd r2rc && ${MAKE} all
+binr:
+	cd binr && ${MAKE} all
+
+w32:
+	make clean
+	# TODO: add support for debian
+	./configure --without-ssl --without-gmp --with-compiler=i486-mingw32-gcc --with-ostype=windows --host=i486-unknown-windows
+	make
 
 w32dist:
+	rm -rf radare2-w32-${VERSION} w32dist
 	mkdir w32dist
 	for a in `find * | grep -e exe$$ -e dll$$`; do cp $$a w32dist ; done
+	rm w32dist/plugin.dll
 	mv w32dist radare2-w32-${VERSION}
 	zip -r radare2-w32-${VERSION}.zip radare2-w32-${VERSION}
 
+w32beta: w32dist
+	scp radare2-w32-${VERSION}.zip ${REMOTE}
+	cd swig ; $(MAKE) w32dist
+	scp radare2-swig-w32-${VERSION}.zip ${REMOTE}
+
 clean:
 	cd libr && ${MAKE} clean
+	cd binr && ${MAKE} clean
 
 mrproper:
 	cd libr && ${MAKE} mrproper
-	rm -f plugins.cfg libr/config.h libr/config.mk
+	cd binr && ${MAKE} mrproper
+	rm -f config-user.mk plugins.cfg libr/config.h libr/include/r_userconf.h libr/config.mk
+	rm -f pkgcfg/*.pc
 
 pkgcfg:
 	cd libr && ${MAKE} pkgcfg
@@ -31,19 +51,33 @@ pkgcfg:
 install-man:
 	mkdir -p ${DESTDIR}/${PREFIX}/share/man/man1
 	for a in man/*.1 ; do ${INSTALL_MAN} $$a ${DESTDIR}/${PREFIX}/share/man/man1 ; done
+	cd ${DESTDIR}/${PREFIX}/share/man/man1 && ln -fs radare2.1 r2.1
+
+install-man-symlink:
+	mkdir -p ${DESTDIR}/${PREFIX}/share/man/man1
+	cd man && for a in *.1 ; do ln -fs `pwd`/$$a ${DESTDIR}/${PREFIX}/share/man/man1/$$a ; done
+	cd ${DESTDIR}/${PREFIX}/share/man/man1 && ln -fs radare2.1 r2.1
 
 install: install-man
 	${INSTALL_DIR} ${DESTDIR}${PREFIX}/share/doc/radare2
 	for a in doc/* ; do ${INSTALL_DATA} $$a ${DESTDIR}/${PREFIX}/share/doc/radare2 ; done
 	cd libr && ${MAKE} install PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR}
-	cd r2rc && ${MAKE} install PREFIX=${PREFIX} DESTDIR=${DESTDIR}
+	cd binr && ${MAKE} install PREFIX=${PREFIX} DESTDIR=${DESTDIR}
+
+symstall install-symlink: install-man-symlink
+	cd libr && ${MAKE} install-symlink PREFIX=${PREFIX} DESTDIR=${DESTDIR}
+	cd binr && ${MAKE} install-symlink PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 
 uninstall:
 	rm -rf prefix
 
 deinstall: uninstall
 	cd libr && ${MAKE} uninstall PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR}
-	rm -rf ${DESTDIR}${PREFIX}/share/doc/radare2
+	cd binr && ${MAKE} uninstall PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR}
+
+beta: dist swig-dist
+	scp ../radare2-${VERSION}.tar.gz ${REMOTE}
+	scp radare2-swig-${VERSION}.tar.gz ${REMOTE}
 
 swig-dist:
 	cd swig && ${MAKE} dist
@@ -54,8 +88,9 @@ dist:
 	cd .. && mv radare2 radare2-${VERSION} && \
 	tar czvf radare2-${VERSION}.tar.gz $${FILES} ;\
 	mv radare2-${VERSION} radare2
-	if [ ${RELEASE} = 1 ]; then \
-	scp ../radare2-${VERSION}.tar.gz radare.org:/srv/http/radareorg/get ; fi
+
+pub:
+	scp ../radare2-${VERSION}.tar.gz radare.org:/srv/http/radareorg/get
 
 shot:
 	DATE=`date '+%Y%m%d'` ; \
@@ -67,4 +102,4 @@ shot:
 
 include ${MKPLUGINS}
 
-.PHONY: all clean mrproper install uninstall deinstall dist shot pkgcfg vdoc swig libr r2rc install-man
+.PHONY: all clean mrproper install symstall uninstall deinstall dist shot pkgcfg swig libr binr install-man

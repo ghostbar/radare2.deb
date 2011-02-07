@@ -15,8 +15,8 @@ static char *encodings[3] = { "ascii", "cp850", NULL };
 R_API int r_search_get_encoding(const char *name) {
 	int i;
 	if (name != NULL)
-		for(i=0;encodings[i];i++)
-			if (!strcasecmp(name, encodings[i]))
+		for (i=0;encodings[i];i++)
+			if (!strcasecmp (name, encodings[i]))
 				return i;
 	return ENCODING_ASCII;
 }
@@ -52,7 +52,9 @@ static int is_encoded(int encoding, unsigned char c) {
 	return 0;
 }
 
-R_API int r_search_strings_update(struct r_search_t *s, ut64 from, const char *buf, int len, int enc) {
+R_API int r_search_strings_update(void *_s, ut64 from, const ut8 *buf, int len) {
+	RSearch *s = (RSearch *)_s;
+	const int enc = 0; // hardcoded
 	int i = 0;
 	int widechar = 0;
 	int matches = 0;
@@ -60,7 +62,7 @@ R_API int r_search_strings_update(struct r_search_t *s, ut64 from, const char *b
 
 	for (i=0; i<len; i++) {
 		char ch = buf[i];
-		if (IS_PRINTABLE(ch) || IS_WHITESPACE(ch) || is_encoded(enc, ch)) {
+		if (IS_PRINTABLE(ch) || IS_WHITESPACE(ch) || is_encoded (enc, ch)) {
 			str[matches] = ch;
 			if (matches < sizeof(str))
 				matches++;
@@ -77,10 +79,10 @@ R_API int r_search_strings_update(struct r_search_t *s, ut64 from, const char *b
 				if (len>2) {
 					if (widechar) {
 						ut64 off = (ut64)from+i-(len*2)+1;
-						printf("0x%08llx %3d W %s\n", off, len, str);
+						printf("0x%08"PFMT64x" %3d W %s\n", off, len, str);
 					} else {
 						ut64 off = (ut64)from+i-matches;
-						printf("0x%08llx %3d A %s\n", off, len, str);
+						printf("0x%08"PFMT64x" %3d A %s\n", off, len, str);
 					}
 				}
 				fflush(stdout);
@@ -145,9 +147,9 @@ R_API int r_search_strings_update_char(const ut8 *buf, int min, int max, int enc
 					if (len>2) {
 						if (widechar) {
 							ut64 off = offset-(len*2)+1;
-							printf("0x%08llx %3d W %s\n", off, len, str);
+							printf("0x%08"PFMT64x" %3d W %s\n", off, len, str);
 						} else {
-							printf("0x%08llx %3d A %s\n",
+							printf("0x%08"PFMT64x" %3d A %s\n",
 								(ut64)offset-matches, len, str);
 						}
 					}

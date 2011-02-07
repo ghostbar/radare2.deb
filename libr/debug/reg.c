@@ -6,6 +6,8 @@
 R_API int r_debug_reg_sync(struct r_debug_t *dbg, int type, int write) {
 	ut8 buf[4096]; // XXX hacky!
 	int size, ret = R_FALSE;
+	if (!dbg || !dbg->reg)
+		return R_FALSE;
 	if (write) {
 		if (dbg && dbg->h && dbg->h->reg_write) {
 			ut8 *buf = r_reg_get_bytes (dbg->reg, type, &size);
@@ -25,31 +27,53 @@ R_API int r_debug_reg_sync(struct r_debug_t *dbg, int type, int write) {
 }
 
 R_API int r_debug_reg_list(struct r_debug_t *dbg, int type, int size, int rad) {
+	ut64 diff;
 	int cols, n = 0;
-	struct list_head *pos, *head = r_reg_get_list(dbg->reg, type);
+	RList *head; //struct list_head *pos, *head;
+	RListIter *iter;
+	RRegItem *item;
 	const char *fmt, *fmt2;
+
+	if (!dbg || !dbg->reg)
+		return R_FALSE;
+	head = r_reg_get_list (dbg->reg, type);
 	if (dbg->h && dbg->h->bits & R_SYS_BITS_64) {
-		fmt = "%s = 0x%016llx%s";
-		fmt2 = "%4s 0x%016llx%s";
+		fmt = "%s = 0x%016"PFMT64x"%s";
+		fmt2 = "%4s 0x%016"PFMT64x"%s";
 		cols = 3;
 	} else {
-		fmt = "%s = 0x%08llx%s";
-		fmt2 = "%4s 0x%08llx%s";
+		fmt = "%s = 0x%08"PFMT64x"%s";
+		fmt2 = "%4s 0x%08"PFMT64x"%s";
 		cols = 4;
 	}
-	list_for_each (pos, head) {
+	if (head)
+	r_list_foreach (head, iter, item) {
 		ut64 value;
-		struct r_reg_item_t *item = list_entry (pos, struct r_reg_item_t, list);
 		if (type != -1 && type != item->type)
 			continue;
 		if (size != 0 && size != item->size)
 			continue;
 		value = r_reg_get_value (dbg->reg, item);
+		diff = (ut64)r_reg_cmp (dbg->reg, item);
 		if (rad==1)
-			dbg->printf ("f %s @ 0x%llx\n", item->name, value);
-		else if (rad==2)
-			dbg->printf (fmt2, item->name, value, ((n+1)%cols)?"   ":"\n");
-		else dbg->printf (fmt, item->name, value, "\n");
+			dbg->printf ("f %s @ 0x%"PFMT64x"\n", item->name, value);
+		else if (rad==2) {
+			if (diff) // TODO: DO NOT COLORIZE ALWAYS ..do debug knows about console?? use inverse colors
+				dbg->printf ("\x1b[1;37m");
+			if (item->flags) {
+				char *str = r_reg_get_bvalue (dbg->reg, item);
+				dbg->printf ("%s = %s%s", item->name, str, ((n+1)%cols)?"   ":"\n");
+				free (str);
+			} else dbg->printf (fmt2, item->name, value, ((n+1)%cols)?"   ":"\n");
+			if (diff) // TODO: use inverse colors
+				dbg->printf ("\x1b[0m");
+		} else if (rad==3) {
+			if (diff) {
+				char woot[32];
+				snprintf (woot, sizeof(woot), " was 0x%08"PFMT64x"\n", diff);
+				dbg->printf (fmt, item->name, value, woot);
+			}
+		} else dbg->printf (fmt, item->name, value, "\n");
 		n++;
 	}
 	if (n>0 && rad==2 && (!((n+1)%cols)))
@@ -58,8 +82,10 @@ R_API int r_debug_reg_list(struct r_debug_t *dbg, int type, int size, int rad) {
 }
 
 R_API int r_debug_reg_set(struct r_debug_t *dbg, const char *name, ut64 num) {
-	RRegisterItem *ri;
+	RRegItem *ri;
 	int role = r_reg_get_name_idx (name);
+	if (!dbg || !dbg->reg)
+		return R_FALSE;
 	if (role != -1)
 		name = r_reg_get_name (dbg->reg, role);
 	ri = r_reg_get (dbg->reg, name, R_REG_TYPE_GPR);
@@ -71,13 +97,16 @@ R_API int r_debug_reg_set(struct r_debug_t *dbg, const char *name, ut64 num) {
 }
 
 R_API ut64 r_debug_reg_get(struct r_debug_t *dbg, const char *name) {
-	RRegisterItem *ri = NULL;
+	RRegItem *ri = NULL;
 	ut64 ret = 0LL;
 	int role = r_reg_get_name_idx (name);
+	if (!dbg || !dbg->reg)
+		return R_FALSE;
 	if (role != -1) {
 		name = r_reg_get_name (dbg->reg, role);
 		if (name == NULL || *name == '\0') {
 			eprintf ("Cannot resolve name for register role '%s'.\n", name);
+			return 0LL;
 		}
 	}
 	ri = r_reg_get (dbg->reg, name, R_REG_TYPE_GPR);

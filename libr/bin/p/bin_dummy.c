@@ -1,4 +1,4 @@
-/* radare - GPL3 - Copyright 2009 nibble<.ds@gmail.com> */
+/* radare - GPL3 - Copyright 2009-2010 nibble<.ds@gmail.com> */
 
 #include <r_types.h>
 #include <r_util.h>
@@ -6,31 +6,20 @@
 #include <r_bin.h>
 #include "java/java.h"
 
-static int load(struct r_bin_t *bin)
-{
-	ut8* buf;
-
-	if (!(buf = (ut8*)r_file_slurp (bin->file, &bin->size))) 
-		return R_FALSE;
-	bin->buf = r_buf_new ();
-	if (!r_buf_set_bytes (bin->buf, buf, bin->size))
-		return R_FALSE;
-	free (buf);
+static int load(RBinArch *arch) {
 	return R_TRUE;
 }
 
-static int destroy(struct r_bin_t *bin)
-{
-	r_buf_free(bin->buf);
+static int destroy(RBinArch *arch) {
+	r_buf_free (arch->buf);
 	return R_TRUE;
 }
 
-static ut64 baddr(struct r_bin_t *bin)
-{
+static ut64 baddr(RBinArch *arch) {
 	return 0LL;
 }
 
-struct r_bin_handle_t r_bin_plugin_dummy = {
+struct r_bin_plugin_t r_bin_plugin_dummy = {
 	.name = "dummy",
 	.desc = "dummy bin plugin",
 	.init = NULL,
@@ -39,6 +28,7 @@ struct r_bin_handle_t r_bin_plugin_dummy = {
 	.destroy = &destroy,
 	.check = NULL,
 	.baddr = &baddr,
+	.main = NULL,
 	.entries = NULL,
 	.sections = NULL,
 	.symbols = NULL,
@@ -47,7 +37,9 @@ struct r_bin_handle_t r_bin_plugin_dummy = {
 	.info = NULL,
 	.fields = NULL,
 	.libs = NULL,
+	.relocs = NULL,
 	.meta = NULL,
+	.write = NULL,
 };
 
 #ifndef CORELIB

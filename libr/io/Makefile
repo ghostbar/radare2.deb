@@ -1,7 +1,26 @@
+include ../config.mk
+
 NAME=r_io
-DEPS=r_lib r_util
-#DEPS=r_util
+DEPS=r_lib r_util r_socket
 CFLAGS+=-Wall -DCORELIB
+# on solaris only
+ifeq (${OSTYPE},solaris)
+LDFLAGS+=-lsocket
+endif
+# windows
+ifeq (${OSTYPE},windows)
+LDFLAGS+=-lws2_32
+endif
+
+# copypasted from socket/Makefile
+# on solaris only
+ifeq (${OSTYPE},solaris)
+LDFLAGS+=-lsocket
+endif
+# windows
+ifeq (${OSTYPE},windows)
+LDFLAGS=-lwsock32
+endif
 
 
 STATIC_OBJS=
@@ -11,7 +30,7 @@ foo: pre libr_io.${EXT_SO} libr_io.${EXT_AR} tests plugins
 
 include ${STATIC_IO_PLUGINS}
 STATIC_OBJS=$(subst ..,p/..,$(subst io_,p/io_,$(STATIC_OBJ)))
-OBJ=${STATIC_OBJS} io.o handle.o map.o section.o desc.o cache.o undo.o
+OBJ=${STATIC_OBJS} io.o plugin.o map.o section.o desc.o cache.o undo.o
 
 pre:
 	@echo STATICOBJS: ${STATIC_OBJS}

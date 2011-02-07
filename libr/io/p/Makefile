@@ -1,11 +1,19 @@
 CFLAGS=-I../../include -Wall -DWORDSIZE=64 ${PIC_CFLAGS} ${LDFLAGS_LIB} ${LDFLAGS_LINKPATH}.. -DCORELIB
 
 include ../../config.mk
+# on solaris only
+ifeq (${OSTYPE},solaris)
+CFLAGS+=-lsocket
+endif
+# windows
+ifeq (${OSTYPE},windows)
+CFLAGS+=-lws2_32
+endif
 
 foo: all
 
 ALL_TARGETS=
-DEBUGS=ptrace.mk debug.mk malloc.mk shm.mk mach.mk
+DEBUGS=ptrace.mk debug.mk gdb.mk malloc.mk shm.mk mach.mk w32dbg.mk procpid.mk
 include ${DEBUGS}
 
 #ALL_TARGETS+=io_ewf.so
@@ -19,4 +27,9 @@ io_ewf.${LIB_SO}: io_ewf.o
 	${CC} ${CFLAGS} ${PIC_CFLAGS} ${LDFLAGS_LIB} io_ewf.${LIB_SO} ewf.c -lr_io -L../../io ${LDFLAGS_LINKPTH}.. -lewf
 
 clean:
-	-rm -f *.so *.o
+	-rm -f *.so *.o *.dll *.dylib *.${EXT_SO}
+
+mrproper: clean
+	-rm -f *.d
+
+.PHONY: all clean foo mrproper

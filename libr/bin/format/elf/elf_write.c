@@ -39,14 +39,16 @@ ut64 Elf_(r_bin_elf_resize_section)(struct Elf_(r_bin_elf_obj_t) *bin, const cha
 		return 0;
 	}
  
-	printf("delta: %lld\n", delta);
+	printf("delta: %"PFMT64d"\n", delta);
 	
 	/* rewrite rel's (imports) */
 	for (i = 0, shdrp = shdr; i < ehdr->e_shnum; i++, shdrp++) {
-		if (!strcmp(&strtab[shdrp->sh_name], ".got"))
-			got_addr = (ut64)shdrp->sh_offset;
+		if (!strcmp(&strtab[shdrp->sh_name], ".got")) {
+			got_addr = (ut64)shdrp->sh_addr;
+			got_offset = (ut64)shdrp->sh_offset;
+		}
 	}
-	if (got_addr == 0) {
+	if (got_addr == 0 || got_offset == 0) {
 		/* TODO: Unknown GOT address */
 	}
 
@@ -61,12 +63,11 @@ ut64 Elf_(r_bin_elf_resize_section)(struct Elf_(r_bin_elf_obj_t) *bin, const cha
 			if (r_buf_read_at(bin->b, shdrp->sh_offset, (ut8*)rel, shdrp->sh_size) == -1)
 				perror("read (rel)");
 
-			got_offset = (rel->r_offset - bin->baddr - got_addr) & ELF_GOTOFF_MASK;
 			for (j = 0, relp = rel; j < shdrp->sh_size; j += sizeof(Elf_(Rel)), relp++) {
 				r_mem_copyendian((ut8*)&(relp->r_offset), (ut8*)&(relp->r_offset),
 						sizeof(Elf_(Addr)), !bin->endian);
 				/* rewrite relp->r_offset */
-				if (relp->r_offset - bin->baddr - got_offset >= rsz_offset + rsz_osize) {
+				if (relp->r_offset - got_addr + got_offset >= rsz_offset + rsz_osize) {
 					relp->r_offset+=delta;
 					off = shdrp->sh_offset + j;
 					if (r_buf_write_at (bin->b, off, (ut8*)relp, sizeof (Elf_(Rel))) == -1)
@@ -86,12 +87,11 @@ ut64 Elf_(r_bin_elf_resize_section)(struct Elf_(r_bin_elf_obj_t) *bin, const cha
 			if (r_buf_read_at(bin->b, shdrp->sh_offset, (ut8*)rel, shdrp->sh_size) == -1)
 				perror("read (rel)");
 
-			got_offset = (rel->r_offset - bin->baddr - got_addr) & ELF_GOTOFF_MASK;
 			for (j = 0, relp = rel; j < shdrp->sh_size; j += sizeof(Elf_(Rela)), relp++) {
 				r_mem_copyendian((ut8*)&(relp->r_offset), (ut8*)&(relp->r_offset),
 						sizeof(Elf_(Addr)), !bin->endian);
 				/* rewrite relp->r_offset */
-				if (relp->r_offset - bin->baddr - got_offset >= rsz_offset + rsz_osize) {
+				if (relp->r_offset - got_addr + got_offset >= rsz_offset + rsz_osize) {
 					relp->r_offset+=delta;
 					off = shdrp->sh_offset + j;
 
@@ -136,7 +136,7 @@ ut64 Elf_(r_bin_elf_resize_section)(struct Elf_(r_bin_elf_obj_t) *bin, const cha
 		off = ehdr->e_phoff + i * sizeof(Elf_(Phdr));
 		if (r_buf_write_at (bin->b, off, (ut8*)phdrp, sizeof (Elf_(Phdr))) == -1)
 			perror("write (phdr)");
-		printf("-> program header (0x%08llx)\n", (ut64) phdrp->p_offset);
+		printf("-> program header (0x%08"PFMT64x")\n", (ut64) phdrp->p_offset);
 	}
 
 	/* rewrite other elf pointers (entrypoint, phoff, shoff) */
@@ -157,9 +157,9 @@ ut64 Elf_(r_bin_elf_resize_section)(struct Elf_(r_bin_elf_obj_t) *bin, const cha
 	r_buf_read_at (bin->b, 0, (ut8*)buf, bin->size);
 	r_buf_set_bytes (bin->b, (ut8*)buf, (int)(rsz_offset+rsz_size+rest_size));
 
-	printf("COPY FROM 0x%08llx\n", (ut64)(rsz_offset+rsz_osize));
+	printf("COPY FROM 0x%08"PFMT64x"\n", (ut64)(rsz_offset+rsz_osize));
 	r_buf_read_at (bin->b, rsz_offset+rsz_osize, (ut8*)buf, rest_size);
-	printf("COPY TO 0x%08llx\n", (ut64)(rsz_offset+rsz_size));
+	printf("COPY TO 0x%08"PFMT64x"\n", (ut64)(rsz_offset+rsz_size));
 	r_buf_write_at (bin->b, rsz_offset+rsz_size, (ut8*)buf, rest_size);
 	printf("Shifted %d bytes\n", (int)delta);
 	free(buf);

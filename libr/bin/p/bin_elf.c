@@ -6,40 +6,47 @@
 #include <r_bin.h>
 #include "elf/elf.h"
 
-static int load(RBin *bin) {
-	if(!(bin->bin_obj = Elf_(r_bin_elf_new) (bin->file)))
+static int load(RBinArch *arch) {
+	if(!(arch->bin_obj = Elf_(r_bin_elf_new_buf) (arch->buf)))
 		return R_FALSE;
-	bin->size = ((struct Elf_(r_bin_elf_obj_t)*) (bin->bin_obj))->size;
-	bin->buf = ((struct Elf_(r_bin_elf_obj_t)*) (bin->bin_obj))->b;
 	return R_TRUE;
 }
 
-static int destroy(RBin *bin) {
-	Elf_(r_bin_elf_free) ((struct Elf_(r_bin_elf_obj_t)*)bin->bin_obj);
+static int destroy(RBinArch *arch) {
+	Elf_(r_bin_elf_free) ((struct Elf_(r_bin_elf_obj_t)*)arch->bin_obj);
 	return R_TRUE;
 }
 
-static ut64 baddr(RBin *bin) {
-	return Elf_(r_bin_elf_get_baddr) (bin->bin_obj);
+static ut64 baddr(RBinArch *arch) {
+	return Elf_(r_bin_elf_get_baddr) (arch->bin_obj);
 }
 
-static RList* entries(RBin *bin) {
+static RBinAddr* binmain(RBinArch *arch) {
+	RBinAddr *ret = NULL;
+
+	if (!(ret = R_NEW (RBinAddr)))
+		return NULL;
+	memset (ret, '\0', sizeof (RBinAddr));
+	ret->offset = ret->rva = Elf_(r_bin_elf_get_main_offset) (arch->bin_obj);
+	return ret;
+}
+
+static RList* entries(RBinArch *arch) {
 	RList *ret;
-	RBinEntry *ptr = NULL;
+	RBinAddr *ptr = NULL;
 
 	if (!(ret = r_list_new ()))
 		return NULL;
 	ret->free = free;
-	if (!(ptr = R_NEW (RBinEntry)))
+	if (!(ptr = R_NEW (RBinAddr)))
 		return ret;
-	memset (ptr, '\0', sizeof (RBinEntry));
-	ptr->offset = ptr->rva = Elf_(r_bin_elf_get_entry_offset) (bin->bin_obj);
+	memset (ptr, '\0', sizeof (RBinAddr));
+	ptr->offset = ptr->rva = Elf_(r_bin_elf_get_entry_offset) (arch->bin_obj);
 	r_list_append (ret, ptr);
 	return ret;
 }
 
-static RList* sections(RBin *bin)
-{
+static RList* sections(RBinArch *arch) {
 	RList *ret = NULL;
 	RBinSection *ptr = NULL;
 	struct r_bin_elf_section_t *section = NULL;
@@ -48,7 +55,7 @@ static RList* sections(RBin *bin)
 	if (!(ret = r_list_new ()))
 		return NULL;
 	ret->free = free;
-	if (!(section = Elf_(r_bin_elf_get_sections) (bin->bin_obj)))
+	if (!(section = Elf_(r_bin_elf_get_sections) (arch->bin_obj)))
 		return ret;
 	for (i = 0; !section[i].last; i++) {
 		if (!(ptr = R_NEW (RBinSection)))
@@ -57,22 +64,21 @@ static RList* sections(RBin *bin)
 		ptr->size = section[i].size;
 		ptr->vsize = section[i].size;
 		ptr->offset = section[i].offset;
-		ptr->rva = section[i].offset;
-		ptr->characteristics = 0;
+		ptr->rva = section[i].rva;
+		ptr->srwx = 0;
 		if (R_BIN_ELF_SCN_IS_EXECUTABLE (section[i].flags))
-			ptr->characteristics |= 0x1;
+			ptr->srwx |= 1;
 		if (R_BIN_ELF_SCN_IS_WRITABLE (section[i].flags))
-			ptr->characteristics |= 0x2;
+			ptr->srwx |= 2;
 		if (R_BIN_ELF_SCN_IS_READABLE (section[i].flags))
-			ptr->characteristics |= 0x4;
+			ptr->srwx |= 4;
 		r_list_append (ret, ptr);
 	}
 	free (section);
 	return ret;
 }
 
-static RList* symbols(RBin *bin)
-{
+static RList* symbols(RBinArch *arch) {
 	RList *ret = NULL;
 	RBinSymbol *ptr = NULL;
 	struct r_bin_elf_symbol_t *symbol = NULL;
@@ -81,7 +87,7 @@ static RList* symbols(RBin *bin)
 	if (!(ret = r_list_new ()))
 		return NULL;
 	ret->free = free;
-	if (!(symbol = Elf_(r_bin_elf_get_symbols) (bin->bin_obj, R_BIN_ELF_SYMBOLS)))
+	if (!(symbol = Elf_(r_bin_elf_get_symbols) (arch->bin_obj, R_BIN_ELF_SYMBOLS)))
 		return ret;
 	for (i = 0; !symbol[i].last; i++) {
 		if (!(ptr = R_NEW (RBinSymbol)))
@@ -93,15 +99,14 @@ static RList* symbols(RBin *bin)
 		ptr->rva = symbol[i].offset;
 		ptr->offset = symbol[i].offset;
 		ptr->size = symbol[i].size;
-		ptr->ordinal = 0;
+		ptr->ordinal = symbol[i].ordinal;
 		r_list_append (ret, ptr);
 	}
 	free (symbol);
 	return ret;
 }
 
-static RList* imports(RBin *bin)
-{
+static RList* imports(RBinArch *arch) {
 	RList *ret = NULL;
 	RBinImport *ptr = NULL;
 	struct r_bin_elf_symbol_t *import = NULL;
@@ -110,17 +115,18 @@ static RList* imports(RBin *bin)
 	if (!(ret = r_list_new ()))
 		return NULL;
 	ret->free = free;
-	if (!(import = Elf_(r_bin_elf_get_symbols) (bin->bin_obj, R_BIN_ELF_IMPORTS)))
+	if (!(import = Elf_(r_bin_elf_get_symbols) (arch->bin_obj, R_BIN_ELF_IMPORTS)))
 		return ret;
 	for (i = 0; !import[i].last; i++) {
 		if (!(ptr = R_NEW (RBinImport)))
 			break;
-		strncpy(ptr->name, import[i].name, R_BIN_SIZEOF_STRINGS);
-		strncpy(ptr->bind, import[i].bind, R_BIN_SIZEOF_STRINGS);
-		strncpy(ptr->type, import[i].type, R_BIN_SIZEOF_STRINGS);
+		strncpy (ptr->name, import[i].name, R_BIN_SIZEOF_STRINGS);
+		strncpy (ptr->bind, import[i].bind, R_BIN_SIZEOF_STRINGS);
+		strncpy (ptr->type, import[i].type, R_BIN_SIZEOF_STRINGS);
 		ptr->rva = import[i].offset;
 		ptr->offset = import[i].offset;
-		ptr->ordinal = 0;
+		ptr->size = import[i].size;
+		ptr->ordinal = import[i].ordinal;
 		ptr->hint = 0;
 		r_list_append (ret, ptr);
 	}
@@ -128,8 +134,7 @@ static RList* imports(RBin *bin)
 	return ret;
 }
 
-static RList* libs(RBin *bin)
-{
+static RList* libs(RBinArch *arch) {
 	RList *ret = NULL;
 	char *ptr = NULL;
 	struct r_bin_elf_lib_t *libs = NULL;
@@ -138,7 +143,7 @@ static RList* libs(RBin *bin)
 	if (!(ret = r_list_new ()))
 		return NULL;
 	ret->free = free;
-	if (!(libs = Elf_(r_bin_elf_get_libs) (bin->bin_obj)))
+	if (!(libs = Elf_(r_bin_elf_get_libs) (arch->bin_obj)))
 		return ret;
 	for (i = 0; !libs[i].last; i++) {
 		ptr = strdup (libs[i].name);
@@ -148,59 +153,80 @@ static RList* libs(RBin *bin)
 	return ret;
 }
 
-static RBinInfo* info(RBin *bin)
-{
-	struct r_bin_info_t *ret = NULL;
+static RList* relocs(RBinArch *arch) {
+	RList *ret = NULL;
+	RBinReloc *ptr = NULL;
+	struct r_bin_elf_reloc_t *relocs = NULL;
+	int i;
+
+	if (!(ret = r_list_new ()))
+		return NULL;
+	ret->free = free;
+	if (!(relocs = Elf_(r_bin_elf_get_relocs) (arch->bin_obj)))
+		return ret;
+	for (i = 0; !relocs[i].last; i++) {
+		if (!(ptr = R_NEW (RBinReloc)))
+			break;
+		strncpy (ptr->name, relocs[i].name, R_BIN_SIZEOF_STRINGS);
+		ptr->rva = relocs[i].rva;
+		ptr->offset = relocs[i].offset;
+		ptr->type = relocs[i].type;
+		ptr->sym = relocs[i].sym;
+		r_list_append (ret, ptr);
+	}
+	free (relocs);
+	return ret;
+}
+
+static RBinInfo* info(RBinArch *arch) {
+	RBinInfo *ret = NULL;
 	char *str;
 
 	if(!(ret = R_NEW (RBinInfo)))
 		return NULL;
-	memset(ret, '\0', sizeof (RBinInfo));
-	strncpy (ret->file, bin->file, R_BIN_SIZEOF_STRINGS);
-	if ((str = Elf_(r_bin_elf_get_rpath)(bin->bin_obj))) {
+	memset (ret, '\0', sizeof (RBinInfo));
+	strncpy (ret->file, arch->file, R_BIN_SIZEOF_STRINGS);
+	if ((str = Elf_(r_bin_elf_get_rpath)(arch->bin_obj))) {
 		strncpy (ret->rpath, str, R_BIN_SIZEOF_STRINGS);
 		free (str);
 	} else strncpy (ret->rpath, "NONE", R_BIN_SIZEOF_STRINGS);
-	if ((str = Elf_(r_bin_elf_get_file_type) (bin->bin_obj)) == NULL)
+	if ((str = Elf_(r_bin_elf_get_file_type) (arch->bin_obj)) == NULL)
 		return NULL;
 	strncpy (ret->type, str, R_BIN_SIZEOF_STRINGS);
 	free (str);
-	if ((str = Elf_(r_bin_elf_get_elf_class) (bin->bin_obj)) == NULL)
+	if ((str = Elf_(r_bin_elf_get_elf_class) (arch->bin_obj)) == NULL)
 		return NULL;
 	strncpy (ret->bclass, str, R_BIN_SIZEOF_STRINGS);
 	free (str);
-	if ((str = Elf_(r_bin_elf_get_osabi_name) (bin->bin_obj)) == NULL)
+	if ((str = Elf_(r_bin_elf_get_osabi_name) (arch->bin_obj)) == NULL)
 		return NULL;
 	strncpy (ret->os, str, R_BIN_SIZEOF_STRINGS);
 	free (str);
-	if ((str = Elf_(r_bin_elf_get_osabi_name) (bin->bin_obj)) == NULL)
+	if ((str = Elf_(r_bin_elf_get_osabi_name) (arch->bin_obj)) == NULL)
 		return NULL;
 	strncpy (ret->subsystem, str, R_BIN_SIZEOF_STRINGS);
 	free (str);
-	if ((str = Elf_(r_bin_elf_get_machine_name) (bin->bin_obj)) == NULL)
+	if ((str = Elf_(r_bin_elf_get_machine_name) (arch->bin_obj)) == NULL)
 		return NULL;
 	strncpy (ret->machine, str, R_BIN_SIZEOF_STRINGS);
 	free (str);
-	if ((str = Elf_(r_bin_elf_get_arch) (bin->bin_obj)) == NULL)
+	if ((str = Elf_(r_bin_elf_get_arch) (arch->bin_obj)) == NULL)
 		return NULL;
 	strncpy (ret->arch, str, R_BIN_SIZEOF_STRINGS);
 	free (str);
 	strncpy (ret->rclass, "elf", R_BIN_SIZEOF_STRINGS);
-	ret->bits = Elf_(r_bin_elf_get_bits) (bin->bin_obj);
-	ret->big_endian=Elf_(r_bin_elf_is_big_endian) (bin->bin_obj);
+	ret->bits = Elf_(r_bin_elf_get_bits) (arch->bin_obj);
+	ret->big_endian=Elf_(r_bin_elf_is_big_endian) (arch->bin_obj);
 	ret->dbg_info = 0;
-	if (!Elf_(r_bin_elf_get_stripped) (bin->bin_obj)) {
-		ret->dbg_info |= 0x04;
-		ret->dbg_info |= 0x08;
-		ret->dbg_info |= 0x10;
-	} else  ret->dbg_info |= 0x01;
-	if (Elf_(r_bin_elf_get_static) (bin->bin_obj))
+	if (!Elf_(r_bin_elf_get_stripped) (arch->bin_obj))
+		ret->dbg_info |= 0x04 | 0x08 | 0x10;
+	else  ret->dbg_info |= 0x01;
+	if (Elf_(r_bin_elf_get_static) (arch->bin_obj))
 		ret->dbg_info |= 0x02;
 	return ret;
 }
 
-static RList* fields(RBin *bin)
-{
+static RList* fields(RBinArch *arch) {
 	RList *ret = NULL;
 	RBinField *ptr = NULL;
 	struct r_bin_elf_field_t *field = NULL;
@@ -209,7 +235,7 @@ static RList* fields(RBin *bin)
 	if (!(ret = r_list_new ()))
 		return NULL;
 	ret->free = free;
-	if (!(field = Elf_(r_bin_elf_get_fields) (bin->bin_obj)))
+	if (!(field = Elf_(r_bin_elf_get_fields) (arch->bin_obj)))
 		return ret;
 	for (i = 0; !field[i].last; i++) {
 		if (!(ptr = R_NEW (RBinField)))
@@ -224,24 +250,16 @@ static RList* fields(RBin *bin)
 }
 
 #if !R_BIN_ELF64
-static int check(RBin *bin)
-{
-	ut8 *buf;
-	int ret = R_FALSE;
-
-	if (!(buf = (ut8*)r_file_slurp_range (bin->file, 0, 5)))
-		return R_FALSE;
-	/* buf[EI_CLASS] == ELFCLASS32 */
-	if (!memcmp (buf, "\x7F\x45\x4c\x46\x01", 5))
-		ret = R_TRUE;
-	free (buf);
-	return ret;
+static int check(RBinArch *arch) {
+	if (!memcmp (arch->buf->buf, "\x7F\x45\x4c\x46\x01", 5))
+		return R_TRUE;
+	return R_FALSE;
 }
 
 extern struct r_bin_meta_t r_bin_meta_elf;
 extern struct r_bin_write_t r_bin_write_elf;
 
-struct r_bin_handle_t r_bin_plugin_elf = {
+struct r_bin_plugin_t r_bin_plugin_elf = {
 	.name = "elf",
 	.desc = "ELF format r_bin plugin",
 	.init = NULL,
@@ -250,6 +268,7 @@ struct r_bin_handle_t r_bin_plugin_elf = {
 	.destroy = &destroy,
 	.check = &check,
 	.baddr = &baddr,
+	.main = &binmain,
 	.entries = &entries,
 	.sections = &sections,
 	.symbols = &symbols,
@@ -258,6 +277,7 @@ struct r_bin_handle_t r_bin_plugin_elf = {
 	.info = &info,
 	.fields = &fields,
 	.libs = &libs,
+	.relocs = &relocs,
 	.meta = &r_bin_meta_elf,
 	.write = &r_bin_write_elf,
 };

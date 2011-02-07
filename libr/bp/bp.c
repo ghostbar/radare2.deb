@@ -3,12 +3,14 @@
 #include <r_bp.h>
 #include "../config.h"
 
-static struct r_bp_handle_t *bp_static_plugins[] = 
+static struct r_bp_plugin_t *bp_static_plugins[] = 
 	{ R_BP_STATIC_PLUGINS };
 
-R_API RBreakpoint *r_bp_init(RBreakpoint *bp) {
-	int i;
+R_API RBreakpoint *r_bp_new() {
+	RBreakpointPlugin *static_plugin;
+	RBreakpoint *bp = R_NEW (RBreakpoint);
 	if (bp) {
+		int i;
 		bp->cur = NULL;
 		bp->nbps = 0;
 		bp->trace_bp = R_FALSE;
@@ -16,17 +18,17 @@ R_API RBreakpoint *r_bp_init(RBreakpoint *bp) {
 		bp->breakpoint = NULL;
 		bp->endian = 0; // little by default
 		bp->traces = r_bp_traptrace_new ();
-		INIT_LIST_HEAD (&bp->bps);
-		INIT_LIST_HEAD (&bp->plugins);
-		for (i=0; bp_static_plugins[i]; i++)
-			r_bp_handle_add (bp, bp_static_plugins[i]);
-		memset (&bp->iob, 0, sizeof(bp->iob));
+		bp->printf = (PrintfCallback)printf;
+		bp->bps = r_list_new ();
+		bp->plugins = r_list_new ();
+		for (i=0; bp_static_plugins[i]; i++) {
+			static_plugin = R_NEW (RBreakpointPlugin);
+			memcpy (static_plugin, bp_static_plugins[i], sizeof (RBreakpointPlugin));
+			r_bp_plugin_add (bp, static_plugin);
+		}
+		memset (&bp->iob, 0, sizeof (bp->iob));
 	}
 	return bp;
-}
-
-R_API RBreakpoint *r_bp_new() {
-	return r_bp_init (R_NEW (RBreakpoint));
 }
 
 R_API RBreakpoint *r_bp_free(RBreakpoint *bp) {
@@ -54,11 +56,20 @@ R_API int r_bp_get_bytes(RBreakpoint *bp, ut8 *buf, int len, int endian, int idx
 	return 0;
 }
 
+R_API RBreakpointItem *r_bp_get(RBreakpoint *bp, ut64 addr) {
+	RListIter *iter;
+	RBreakpointItem *b;
+	r_list_foreach(bp->bps, iter, b)
+		if (b->addr == addr)
+			return b;
+	return NULL;
+}
+
 R_API RBreakpointItem *r_bp_at_addr(RBreakpoint *bp, ut64 addr, int rwx) {
-	struct list_head *pos;
-	list_for_each(pos, &bp->bps) {
-		RBreakpointItem *b = list_entry (pos, RBreakpointItem, list);
-	//	eprintf ("---ataddr--- 0x%08llx %d %d\n", b->addr, b->size, b->recoil);
+	RListIter *iter;
+	RBreakpointItem *b;
+	r_list_foreach(bp->bps, iter, b) {
+	//	eprintf ("---ataddr--- 0x%08"PFMT64x" %d %d\n", b->addr, b->size, b->recoil);
 		if (addr>=b->addr && addr<=b->addr+b->size && rwx&b->rwx)
 			return b;
 	}
@@ -66,10 +77,9 @@ R_API RBreakpointItem *r_bp_at_addr(RBreakpoint *bp, ut64 addr, int rwx) {
 }
 
 R_API struct r_bp_item_t *r_bp_enable(RBreakpoint *bp, ut64 addr, int set) {
-	struct list_head *pos;
-	struct r_bp_item_t *b;
-	list_for_each(pos, &bp->bps) {
-		b = list_entry(pos, struct r_bp_item_t, list);
+	RListIter *iter;
+	RBreakpointItem *b;
+	r_list_foreach(bp->bps, iter, b) {
 		if (addr >= b->addr && addr <= b->addr+b->size) {
 			b->enabled = set;
 			return b;
@@ -86,7 +96,7 @@ R_API int r_bp_stepy_continuation(RBreakpoint *bp) {
 /* TODO: detect overlapping of breakpoints */
 static RBreakpointItem *r_bp_add(RBreakpoint *bp, const ut8 *obytes, ut64 addr, int size, int hw, int rwx) {
 	int ret;
-	struct r_bp_item_t *b;
+	RBreakpointItem *b;
 	if (r_bp_at_addr (bp, addr, rwx)) {
 		eprintf ("Breakpoint already set at this address.\n");
 		return NULL;
@@ -94,6 +104,7 @@ static RBreakpointItem *r_bp_add(RBreakpoint *bp, const ut8 *obytes, ut64 addr, 
 	b = R_NEW (struct r_bp_item_t);
 	b->pids[0] = 0; /* for any pid */
 	b->addr = addr;
+	b->data = NULL;
 	b->size = size;
 	b->enabled = R_TRUE;
 	b->hw = hw;
@@ -106,7 +117,7 @@ static RBreakpointItem *r_bp_add(RBreakpoint *bp, const ut8 *obytes, ut64 addr, 
 	} else {
 		b->bbytes = malloc (size+16);
 		if (obytes) {
-			b->obytes = malloc(size);
+			b->obytes = malloc (size);
 			memcpy (b->obytes, obytes, size);
 		} else b->obytes = NULL;
 		/* XXX: endian .. use bp->endian */
@@ -123,7 +134,7 @@ static RBreakpointItem *r_bp_add(RBreakpoint *bp, const ut8 *obytes, ut64 addr, 
 	}
 
 	bp->nbps++;
-	list_add_tail (&(b->list), &bp->bps);
+	r_list_append (bp->bps, b);
 	return b;
 }
 
@@ -133,7 +144,7 @@ R_API int r_bp_add_fault(RBreakpoint *bp, ut64 addr, int size, int rwx) {
 }
 
 R_API struct r_bp_item_t *r_bp_add_sw(RBreakpoint *bp, ut64 addr, int size, int rwx) {
-	struct r_bp_item_t *item;
+	RBreakpointItem *item;
 	ut8 *bytes;
 	if (size<1)
 		size = 1;
@@ -153,12 +164,11 @@ R_API struct r_bp_item_t *r_bp_add_hw(RBreakpoint *bp, ut64 addr, int size, int 
 }
 
 R_API int r_bp_del(RBreakpoint *bp, ut64 addr) {
-	struct list_head *pos;
-	struct r_bp_item_t *b;
-	list_for_each (pos, &bp->bps) {
-		b = list_entry (pos, struct r_bp_item_t, list);
+	RListIter *iter;
+	RBreakpointItem *b;
+	r_list_foreach (bp->bps, iter, b) {
 		if (b->addr == addr) {
-			list_del (&b->list);
+			r_list_delete (bp->bps, iter);
 			return R_TRUE;
 		}
 	}
@@ -169,10 +179,9 @@ R_API int r_bp_del(RBreakpoint *bp, ut64 addr) {
 // TODO: use a r_bp_item instead of address
 // TODO: we can just drop it.. its just b->trace = R_TRUE or so..
 R_API int r_bp_set_trace(RBreakpoint *bp, ut64 addr, int set) {
-	struct list_head *pos;
-	struct r_bp_item_t *b;
-	list_for_each (pos, &bp->bps) {
-		b = list_entry (pos, struct r_bp_item_t, list);
+	RListIter *iter;
+	RBreakpointItem *b;
+	r_list_foreach (bp->bps, iter, b) {
 		if (addr >= b->addr && addr <= b->addr+b->size) {
 			b->trace = set;
 			return R_TRUE;
@@ -194,20 +203,19 @@ R_API int r_bp_set_trace_bp(RBreakpoint *bp, ut64 addr, int set)
 // TODO: deprecate
 R_API int r_bp_list(RBreakpoint *bp, int rad) {
 	int n = 0;
-	struct r_bp_item_t *b;
-	struct list_head *pos;
-
+	RBreakpointItem *b;
+	RListIter *iter;
 	eprintf ("Breakpoint list:\n");
-	list_for_each (pos, &bp->bps) {
-		b = list_entry (pos, struct r_bp_item_t, list);
-		printf ("0x%08llx - 0x%08llx %d %c%c%c %s %s %s\n",
+	r_list_foreach (bp->bps, iter, b) {
+		bp->printf ("0x%08"PFMT64x" - 0x%08"PFMT64x" %d %c%c%c %s %s %s \"%s\"\n",
 			b->addr, b->addr+b->size, b->size,
 			(b->rwx & R_BP_PROT_READ)?'r':'-',
 			(b->rwx & R_BP_PROT_WRITE)?'w':'-',
 			(b->rwx & R_BP_PROT_EXEC)?'x':'-',
 			b->hw?"hw":"sw",
 			b->trace?"trace":"break",
-			b->enabled?"enabled":"disabled");
+			b->enabled?"enabled":"disabled",
+			b->data);
 		/* TODO: Show list of pids and trace points, conditionals */
 		n++;
 	}

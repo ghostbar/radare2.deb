@@ -50,9 +50,10 @@ static int r_line_readchar() {
 	SetConsoleMode (h, mode);
 #else
 	do {
-		if (read (0, buf, 1) != 1)
-			return -1;
-		if (feof (stdin))
+		int ret = read (0, buf, 1);
+		if (ret == -1)
+			return 0; // read no char
+		if (ret == 0) // EOF
 			return -1;
 		// TODO: add support for other invalid chars
 		if (*buf==0xc2 || *buf==0xc3) {
@@ -146,8 +147,8 @@ R_API int r_line_hist_load(const char *file) {
 R_API int r_line_hist_save(const char *file) {
 	FILE *fd;
 	int i, ret = R_FALSE;
-	char *path= r_str_home (file);
-	if (path!= NULL) {
+	char *path = r_str_home (file);
+	if (path != NULL) {
 		fd = fopen (path, "w");
 		if (fd != NULL) {
 			for (i=0; i<I.history.index; i++) {
@@ -168,46 +169,44 @@ R_API int r_line_hist_chop(const char *file, int limit) {
 }
 
 R_API void r_line_autocomplete() {
-	int argc;
-	const char **argv;
+	int argc = 0;
+	const char **argv = NULL;
 	int i, opt, len = 0;
 
 	/* prepare argc and argv */
-	if (I.completion.run != NULL)
+	if (I.completion.run != NULL) {
 		I.completion.run (&I);
+		opt = argc = I.completion.argc;
+		argv = I.completion.argv;
+	} else opt = 0;
 
-	argc = I.completion.argc;
-	argv = I.completion.argv;
+	// TODO: implement partial autocompletion ?
 
-	if (I.buffer.index>0)
-	for (i=0,opt=0; argv[i] && i<argc; i++)
-		if (!strncmp (argv[i], I.buffer.data, I.buffer.index))
-			opt++;
-
-	if (I.buffer.length>0 && opt==1)
-	for (i=0; i<argc; i++) {
-		if (!strncmp (I.buffer.data, argv[i], I.buffer.length)) {
-			strcpy (I.buffer.data, argv[i]);
-			I.buffer.index = I.buffer.length = strlen (I.buffer.data) + 1;
-			/* fucking inneficient */
-			strcat (I.buffer.data, " ");
-			I.buffer.length = ++I.buffer.index;
-			break;
-		}
+	/* autocomplete */
+	if (argc==1) {
+		char *p = strchr (I.buffer.data, ' ');
+		if (p) p++; else p = I.buffer.data;
+		strcpy (p, argv[0]);
+		I.buffer.index = I.buffer.length = strlen (I.buffer.data) + 1;
+		strcat (p, " ");
+		I.buffer.length = strlen (I.buffer.data);
 	}
 
+#define COLS 70
 	/* show options */
-	if (I.buffer.index==0 || opt>1) {
+	if (opt>1) {
 		if (I.echo)
 			printf ("%s%s\n", I.prompt, I.buffer.data);
-		for (i=0; i<argc; i++) {
-			if (argv[i] != NULL)
-			if (I.buffer.length==0 || !strncmp (argv[i], I.buffer.data, I.buffer.length)) {
-				len += strlen (argv[i]);
-	//			if (len+I.buffer.length+4 >= columns) break;
-				if (I.echo)
-					printf ("%s ", argv[i]);
+		for (len=i=0; i<argc; i++) {
+			if (argv[i] == NULL)
+				break;
+			len += strlen (argv[i]) + 4;
+			if (len>0 && len>COLS) {
+				printf ("\n");
+				len = 0;
 			}
+			if (I.echo)
+				printf ("%s\t", argv[i]);
 		}
 		if (I.echo)
 			printf ("\n");
@@ -218,9 +217,12 @@ R_API void r_line_autocomplete() {
 /* main readline function */
 //R_API char *r_line_readline(const char *prompt, RLineCallba 
 R_API char *r_line_readline() {
-	char buf[10];
-	int ch, i, gcomp = 0; /* grep completion */
 	int columns = r_cons_get_size (NULL)-2;
+	const char *gcomp_line = "";
+	static int gcomp_idx = 0;
+	static int gcomp = 0;
+	char buf[10];
+	int ch, i; /* grep completion */
 
 	I.buffer.index = I.buffer.length = 0;
 	I.buffer.data[0] = '\0';
@@ -265,8 +267,13 @@ R_API char *r_line_readline() {
 		columns = r_cons_get_size (NULL)-2;
 		if (columns<1)
 			columns = 40;
+#if __WINDOWS__
 		if (I.echo)
 			printf ("\r%*c\r", columns, ' ');
+#else
+		if (I.echo)
+			printf ("\r\x1b[2K\r"); //%*c\r", columns, ' ');
+#endif
 
 		switch (buf[0]) {
 		//case -1: // ^D
@@ -319,15 +326,12 @@ R_API char *r_line_readline() {
 			I.buffer.length = 0;
 			I.buffer.index = 0;
 			break;
-		case 23: // ^W
+		case 23: // ^W ^w
 			if (I.buffer.index>0) {
-				for (i=I.buffer.index-1; i&&I.buffer.data[i]==' '; i--);
+				for (i=I.buffer.index-1; i>0&&I.buffer.data[i]==' '; i--);
 				for (; i&&I.buffer.data[i]!=' '; i--);
-				for (; i>0&&I.buffer.data[i]==' '; i--);
-				if (i>1) {
-					if (I.buffer.data[i+1]==' ')
-					i+=2;
-				} else if (i<0) i=0;
+				if (!i) for (; i>0&&I.buffer.data[i]==' '; i--);
+				if (i>0) i++; else if (i<0) i=0;
 				strcpy (I.buffer.data+i, I.buffer.data+I.buffer.index);
 				I.buffer.length = strlen (I.buffer.data);
 				I.buffer.index = i;
@@ -344,10 +348,15 @@ R_API char *r_line_readline() {
 			}
 			break;
 		case 16:
-			r_line_hist_up ();
+			if (gcomp) {
+				gcomp_idx++;
+			} else r_line_hist_up ();
 			break;
 		case 14:
-			r_line_hist_down ();
+			if (gcomp) {
+				if (gcomp_idx>0)
+					gcomp_idx--;
+			} else r_line_hist_down ();
 			break;
 		case 27: //esc-5b-41-00-00
 			buf[0] = r_line_readchar();
@@ -368,10 +377,15 @@ R_API char *r_line_readline() {
 					break;
 				/* arrows */
 				case 0x41:
-					r_line_hist_up ();
+					if (gcomp) {
+						gcomp_idx++;
+					} else r_line_hist_up ();
 					break;
 				case 0x42:
-					r_line_hist_down ();
+					if (gcomp) {
+						if (gcomp_idx>0)
+							gcomp_idx--;
+					} else r_line_hist_down ();
 					break;
 				case 0x43:
 					I.buffer.index = I.buffer.index<I.buffer.length?
@@ -379,6 +393,12 @@ R_API char *r_line_readline() {
 					break;
 				case 0x44:
 					I.buffer.index = I.buffer.index?I.buffer.index-1:0;
+					break;
+				case 0x48: // Start
+					I.buffer.index = 0;
+					break;
+				case 0x46: // End
+					I.buffer.index = I.buffer.length;
 					break;
 				}
 			}
@@ -403,7 +423,13 @@ R_API char *r_line_readline() {
 		case 9: // tab
 			r_line_autocomplete ();
 			break;
-		case 13: 
+		case 13:
+			if (gcomp && I.buffer.length>0) {
+				// XXX overflow
+				strcpy (I.buffer.data, gcomp_line);
+				I.buffer.length = strlen (gcomp_line);
+			}
+			gcomp_idx = gcomp = 0;
 			goto _end;
 #if 0
 			// force command fit
@@ -437,16 +463,26 @@ R_API char *r_line_readline() {
 		}
 		if (I.echo) {
 			if (gcomp) {
-				if (I.buffer.length == 0)
-					gcomp = 0;
-				printf ("\r (reverse-i-search): %s\r", I.buffer.data);
+				gcomp_line = "";
+				//if (I.buffer.length == 0)
+				//	gcomp = 0;
+				if (I.history.data != NULL)
+				for (i=0; i<I.history.size; i++) {
+					if (I.history.data[i] == NULL)
+						break;
+					if (strstr (I.history.data[i], I.buffer.data)) {
+						gcomp_line = I.history.data[i];
+						if (!gcomp_idx--);
+							break;
+					}
+				}
+				printf ("\r (reverse-i-search (%s)): %s\r", I.buffer.data, gcomp_line);
 			} else {
 				printf ("\r%s%s", I.prompt, I.buffer.data);
 				printf ("\r%s", I.prompt);
+				for (i=0;i<I.buffer.index;i++)
+					printf ("%c", I.buffer.data[i]);
 			}
-		
-			for (i=0;i<I.buffer.index;i++)
-				printf ("%c", I.buffer.data[i]);
 			fflush (stdout);
 		}
 	}

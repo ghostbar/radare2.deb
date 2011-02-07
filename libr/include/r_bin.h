@@ -20,12 +20,13 @@
 #define R_BIN_DBG_RELOCS(x)   x & 0x10
 
 #define R_BIN_SIZEOF_STRINGS 256
+#define R_BIN_MAX_ARCH 1024
 
-typedef struct r_bin_t {
-	const char *file;
+typedef struct r_bin_arch_t {
+	char *file;
 	int size;
-	void *bin_obj;
 	ut64 baddr;
+	struct r_bin_addr_t *main;
 	struct r_bin_info_t *info;
 	RList* entries;
 	RList* sections;
@@ -34,38 +35,63 @@ typedef struct r_bin_t {
 	RList* strings;
 	RList* fields;
 	RList* libs;
+	RList* relocs;
 	RBuffer *buf;
+	void *bin_obj;
+	struct r_bin_plugin_t *curplugin;
+} RBinArch;
+
+typedef struct r_bin_t {
+	const char *file;
+	struct r_bin_arch_t curarch;
+	int narch;
 	void *user;
-	struct r_bin_handle_t *cur;
+	void *bin_obj;
+	struct r_bin_xtr_plugin_t *curxtr;
 	struct list_head bins;
+	struct list_head binxtrs;
 } RBin;
 
-typedef struct r_bin_handle_t {
+typedef struct r_bin_xtr_plugin_t {
 	char *name;
 	char *desc;
 	int (*init)(void *user);
 	int (*fini)(void *user);
+	int (*check)(RBin *bin);
+	int (*extract)(RBin *bin, int idx);
 	int (*load)(RBin *bin);
 	int (*destroy)(RBin *bin);
-	int (*check)(RBin *bin);
-	ut64 (*baddr)(RBin *bin);
-	RList* (*entries)(RBin *bin);
-	RList* (*sections)(RBin *bin);
-	RList* (*symbols)(RBin *bin);
-	RList* (*imports)(RBin *bin);
-	RList* (*strings)(RBin *bin);
-	struct r_bin_info_t* (*info)(RBin *bin);
-	RList* (*fields)(RBin *bin);
-	RList* (*libs)(RBin *bin);
+	struct list_head list;
+} RBinXtrPlugin;
+
+typedef struct r_bin_plugin_t {
+	char *name;
+	char *desc;
+	int (*init)(void *user);
+	int (*fini)(void *user);
+	int (*load)(RBinArch *arch);
+	int (*destroy)(RBinArch *arch);
+	int (*check)(RBinArch *arch);
+	ut64 (*baddr)(RBinArch *arch);
+	struct r_bin_addr_t* (*main)(RBinArch *arch);
+	RList* (*entries)(RBinArch *arch);
+	RList* (*sections)(RBinArch *arch);
+	RList* (*symbols)(RBinArch *arch);
+	RList* (*imports)(RBinArch *arch);
+	RList* (*strings)(RBinArch *arch);
+	struct r_bin_info_t* (*info)(RBinArch *arch);
+	RList* (*fields)(RBinArch *arch);
+	RList* (*libs)(RBinArch *arch);
+	RList* (*relocs)(RBinArch *arch);
 	struct r_bin_meta_t *meta;
 	struct r_bin_write_t *write;
 	struct list_head list;
-} RBinHandle;
+} RBinPlugin;
 
-typedef struct r_bin_entry_t {
+typedef struct r_bin_addr_t {
 	ut64 rva;
 	ut64 offset;
-} RBinEntry;
+} RBinAddr;
 
 typedef struct r_bin_section_t {
 	char name[R_BIN_SIZEOF_STRINGS];
@@ -73,8 +99,14 @@ typedef struct r_bin_section_t {
 	ut64 vsize;
 	ut64 rva;
 	ut64 offset;
-	ut64 characteristics;
+	ut64 srwx;
 } RBinSection;
+
+#define RBinSectionName r_offsetof(RBinSection, name)
+#define RBinSectionOffset r_offsetof(RBinSection, offset)
+// usage:
+// r_list_get_by_name(bin->sections, RBinSectionName, ".text");
+// bin.sections.get_by_name(SectionName, ".text");
 
 typedef struct r_bin_symbol_t {
 	char name[R_BIN_SIZEOF_STRINGS];
@@ -93,9 +125,18 @@ typedef struct r_bin_import_t {
 	char type[R_BIN_SIZEOF_STRINGS];
 	ut64 rva;
 	ut64 offset;
+	ut64 size;
 	ut64 ordinal;
 	ut64 hint;
 } RBinImport;
+
+typedef struct r_bin_reloc_t {
+	char name[R_BIN_SIZEOF_STRINGS];
+	ut64 rva;
+	ut64 offset;
+	int sym;
+	int type;
+} RBinReloc;
 
 typedef struct r_bin_string_t {
 	char string[R_BIN_SIZEOF_STRINGS];
@@ -127,28 +168,48 @@ typedef struct r_bin_field_t {
 } RBinField;
 
 typedef struct r_bin_meta_t {
-	int (*get_line)(RBin *bin, ut64 addr, char *file, int len, int *line);
+	int (*get_line)(RBinArch *arch, ut64 addr, char *file, int len, int *line);
 } RBinMeta;
 
 typedef struct r_bin_write_t {
-	ut64 (*scn_resize)(RBin *bin, const char *name, ut64 size);
-	int (*rpath_del)(RBin *bin);
+	ut64 (*scn_resize)(RBinArch *arch, const char *name, ut64 size);
+	int (*rpath_del)(RBinArch *arch);
 } RBinWrite;
+
+typedef struct r_bin_obj_t {
+	ut64 baddr;
+	RList/*<RBinSection>*/ *sections;
+	RList/*<RBinImport>*/ *imports;
+	RList/*<RBinSymbol>*/ *symbols;
+	RList/*<??>*/ *entries;
+	RList/*<??>*/ *fields;
+	RList/*<??>*/ *libs;
+	RList/*<??>*/ *relocs;
+	RList/*<??>*/ *strings;
+	RBinInfo *info;
+	RBinAddr *main;
+// TODO: deprecate r_bin_is_big_endian
+// TODO: r_bin_is_stripped .. wrapped inside rbinobj?
+// TODO: has_dbg_syms... maybe flags?
+} RBinObj;
 
 #ifdef R_API
 
 /* bin.c */
-R_API int r_bin_add(RBin *bin, RBinHandle *foo);
+R_API int r_bin_add(RBin *bin, RBinPlugin *foo);
+R_API int r_bin_xtr_add(RBin *bin, RBinXtrPlugin *foo);
 R_API void* r_bin_free(RBin *bin);
-R_API int r_bin_init(RBin *bin);
 R_API int r_bin_list(RBin *bin);
-R_API int r_bin_load(RBin *bin, const char *file, const char *plugin_name);
+R_API int r_bin_load(RBin *bin, const char *file, int dummy);
+R_API RBinObj *r_bin_get_object(RBin *bin, int flags);
 R_API ut64 r_bin_get_baddr(RBin *bin);
+R_API RBinAddr* r_bin_get_main(RBin *bin);
 R_API RList* r_bin_get_entries(RBin *bin);
 R_API RList* r_bin_get_fields(RBin *bin);
 R_API RList* r_bin_get_imports(RBin *bin);
 R_API RBinInfo* r_bin_get_info(RBin *bin);
 R_API RList* r_bin_get_libs(RBin *bin);
+R_API RList* r_bin_get_relocs(RBin *bin);
 R_API RList* r_bin_get_sections(RBin *bin);
 R_API RBinSection* r_bin_get_section_at(RBin *bin, ut64 off, int va);
 R_API RList* r_bin_get_strings(RBin *bin);
@@ -160,6 +221,9 @@ R_API int r_bin_has_dbg_linenums (RBin *bin);
 R_API int r_bin_has_dbg_syms (RBin *bin);
 R_API int r_bin_has_dbg_relocs (RBin *bin);
 R_API RBin* r_bin_new();
+R_API int r_bin_set_arch(RBin *bin, const char *arch, int bits, const char *name);
+R_API int r_bin_set_archidx(RBin *bin, int idx);
+R_API void r_bin_list_archs(RBin *bin);
 R_API void r_bin_set_user_ptr(RBin *bin, void *user);
 
 /* bin_meta.c */
@@ -170,6 +234,18 @@ R_API char *r_bin_meta_get_source_line(RBin *bin, ut64 addr);
 R_API ut64 r_bin_wr_scn_resize(RBin *bin, const char *name, ut64 size);
 R_API int r_bin_wr_rpath_del(RBin *bin);
 R_API int r_bin_wr_output(RBin *bin, const char *filename);
-#endif
 
+/* plugin pointers */
+extern RBinPlugin r_bin_plugin_elf;
+extern RBinPlugin r_bin_plugin_elf64;
+extern RBinPlugin r_bin_plugin_pe;
+extern RBinPlugin r_bin_plugin_pe64;
+extern RBinPlugin r_bin_plugin_mach0;
+extern RBinPlugin r_bin_plugin_mach064;
+extern RBinPlugin r_bin_plugin_java;
+extern RBinPlugin r_bin_plugin_dummy;
+extern RBinXtrPlugin r_bin_xtr_plugin_fatmach0;
+extern RBinXtrPlugin r_bin_xtr_plugin_dyldcache;
+
+#endif
 #endif

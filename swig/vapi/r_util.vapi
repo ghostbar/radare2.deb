@@ -1,9 +1,11 @@
-/* radare - LGPL - Copyright 2009 pancake<@nopcode.org> */
+/* radare - LGPL - Copyright 2009-2010 pancake<@nopcode.org> */
 
 namespace Radare {
-//[Compact]
-//[CCode (cheader_filename="r_util.h", cprefix="r_util_")]
-//public static class Radare.RUtil {
+#if 0
+[Compact]
+[CCode (cheader_filename="r_util.h", cprefix="r_hex_")]
+public static class Radare.RHex {
+	//public static int str2bin (string input, uint8 *buf);
 	//public static int hex_str2bin (string input, uint8 *buf);
 	//public static int hex_bin2str (uint8 *buf, int len, out string str);
 	//public static string hex_bin2strdup (uint8 *buf, int len);
@@ -15,21 +17,45 @@ namespace Radare {
 	/* num */
 	//public static uint64 num_get(void *num, string str); // XXX void *
 	//public static int offsetof(void *type, void *member);
-//}
+}
+#endif
 
 #if FAILFAIL
 	[CCode (cheader_filename="r_util.h", cprefix="r_str_")]
 	public static class RStr {
 		public RStr(string arg);
 		public static int hash(string str);
+		public static int write(int fd, string str);
+		public static int rwx(string str);
+		public static string rwx_i (int rwx);
+		public static void subchr(string str, int a, int b);
+		//public static string @bool(bool b);
+		public int int ansi_len(string str);
+		public int int ansi_filter(string str, int len);
+		//public static int writef(...);
 	}
 
-	[CCode (cheader_filename="r_util.h", cname="", cprefix="r_log_", free_function="")]
-	public static class RLog {
-		public static bool msg(string str);
-		public static bool err(string str);
-	}
+
 #endif
+	[CCode (cheader_filename="r_util.h", cprefix="r_file_")]
+	public static class RFile {
+		public static string slurp(string file, out int osz=0);
+		public static string slurp_range(string file, uint64 off, int sz, out int osz=0);
+		public static int dump(string file, uint8 *buf, int len);
+		public static string basename (string path);
+		public static string abspath(string path);
+		public static bool rm (string file);
+		public static bool exist (string file);
+		public static bool slurp_line (string file, int line, int ctx);
+		
+	}
+	[CCode (cheader_filename="r_util.h", cprefix="r_log_", free_function="")]
+	public static class RLog {
+		public static void msg(string str);
+		public static void error(string str);
+		public static void file(string str);
+		public static void progress(string str, int pc);
+	}
 
 	[CCode (cheader_filename="r_util.h", cprefix="r_hex_", free_function="")]
 	public static class RHex {
@@ -44,13 +70,16 @@ namespace Radare {
 		//public static const weak string ARCH;
 		public static int sleep (int secs);
 		public static int usleep (int usecs);
-		public static weak string getenv (string key);
+		public static unowned string getenv (string key);
+		public static bool setenv (string key, string val);
 		//public static string cmd_str_full(string str, string input = "", out int len = null, out string sterr = null);
 		public static int cmd (string command);
-		public static string cmd_str (string command, string? input, out int len=null);
+		//public static int cmdf (string command, ...);
+		public static string cmd_str (string command, string? input=null, out int len=null);
+		public static void backtrace();
 	}
 
-	[CCode (cheader_filename="r_util.h", cprefix="r_num_", free_function="")]
+	[CCode (cname="RNum", cheader_filename="r_util.h", cprefix="r_num_", free_function="")]
 	public static class RNum {
 		public RNum(RNumCallback cb, void *user);
 		public uint64 get(string str);
@@ -63,6 +92,7 @@ namespace Radare {
 	[CCode (cname="RBuffer", cheader_filename="r_util.h", cprefix="r_buf_", free_function="r_buf_free")]
 	public static class RBuffer {
 		public RBuffer();
+		public uint8 *buf;
 		public int read_at(uint64 addr, uint8 *buf, int len);
 		public int write_at(uint64 addr, uint8 *buf, int len);
 		public bool set_bytes(uint8 *buf, int len);
@@ -81,11 +111,13 @@ public class RFList<G> {
 }
 
 //[Compact]
-[CCode (cprefix="r_list_", cheader_filename="r_list.h", cname="struct r_list_t")]
+[CCode (cprefix="r_list_", cheader_filename="r_util.h", cname="RList")]
 public class RList<G> {
 	public void append(owned G foo);
 	public void prepend(owned G foo);
 	public RListIter<G> iterator();
+	public RList();
+	public uint length();
 	public bool next();
 	public unowned G @get();
 }

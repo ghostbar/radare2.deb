@@ -18,7 +18,7 @@
 1865         DWORD   ErrorSelector;
 1866         DWORD   DataOffset;
 1867         DWORD   DataSelector;
-1868         BYTE    RegisterArea[80];
+1868         BYTE    RegArea[80];
 1869         DWORD   Cr0NpxState;
 1870 } FLOATING_SAVE_AREA;
 
@@ -47,7 +47,7 @@
 1893         DWORD   EFlags;
 1894         DWORD   Esp;
 1895         DWORD   SegSs;
-1896         BYTE    ExtendedRegisters[MAXIMUM_SUPPORTED_EXTENSION];
+1896         BYTE    ExtendedRegs[MAXIMUM_SUPPORTED_EXTENSION];
 1897 } CONTEXT;
 #endif
 
@@ -68,8 +68,7 @@ static void print_lasterr(const char *str) {
 		(DWORD_PTR)6, (DWORD_PTR)L"Bill" };                               // %5!*s!
 	const DWORD size = 100+1;
 	WCHAR buffer[size];
-
-	if (!FormatMessage( FORMAT_MESSAGE_FROM_STRING |
+	if (!FormatMessage (FORMAT_MESSAGE_FROM_STRING |
 				FORMAT_MESSAGE_ARGUMENT_ARRAY,
 				pMessage,
 				0,  // ignored
@@ -77,12 +76,11 @@ static void print_lasterr(const char *str) {
 				(LPTSTR)&buffer,
 				size,
 				(va_list*)pArgs)) {
-
-		eprintf("Format message failed with 0x%x\n", GetLastError());
+		eprintf ("(%s): Format message failed with 0x%x\n",
+			r_str_get (str), GetLastError());
 		return;
 	}
-
-	eprintf("print_lasterr: %s ::: %s\n", str, buffer);
+	eprintf ("print_lasterr: %s ::: %s\n", r_str_get (str), r_str_get (buffer));
 }
 
 
@@ -194,7 +192,7 @@ err_load_th:
 		//print_lasterr((char *)__FUNCTION__);
 
 	if (th != INVALID_HANDLE_VALUE)
-		CloseHandle (th);
+		ClosePlugin (th);
 	return ret;
 #endif
 	return 0;
@@ -319,10 +317,9 @@ static inline int CheckValidPE(unsigned char * PeHeader) {
 }
 
 static RList *w32_dbg_maps() {
-	RList *list;
 	SYSTEM_INFO SysInfo;
 	MEMORY_BASIC_INFORMATION mbi;
-	HANDLE hProcess;
+	HANDLE hProcess = 0; // XXX NEEDS TO HAVE A VALUE
 	LPBYTE page;
 	char *mapname = NULL;
 	/* DEPRECATED */
@@ -334,8 +331,7 @@ static RList *w32_dbg_maps() {
 	int NumSections, i;
 	DWORD ret_len;
 	RDebugMap *mr;
-
-	list = r_list_new ();
+	RList *list = r_list_new ();
 
 	memset (&SysInfo, 0, sizeof (SysInfo));
 	GetSystemInfo (&SysInfo); // TODO: check return value
@@ -351,8 +347,10 @@ static RList *w32_dbg_maps() {
 	for (page=(LPBYTE)SysInfo.lpMinimumApplicationAddress;
 			page<(LPBYTE)SysInfo.lpMaximumApplicationAddress;) {
 		if (!VirtualQueryEx (WIN32_PI (hProcess), page, &mbi, sizeof (mbi)))  {
-			eprintf ("VirtualQueryEx ERROR, address = 0x%08X\n", page );
-			return -1;
+	//		eprintf ("VirtualQueryEx ERROR, address = 0x%08X\n", page);
+			page += SysInfo.dwPageSize;
+			continue;
+			//return NULL;
 		}
 		if (mbi.Type == MEM_IMAGE) {
 			ReadProcessMemory (WIN32_PI (hProcess), (const void *)page,
@@ -375,7 +373,7 @@ static RList *w32_dbg_maps() {
 					mapname = (char *)malloc(MAX_PATH);
 					if (!mapname) {
 						perror (":map_reg alloc");
-						return -1;
+						return NULL;
 					}
 					gmbn (WIN32_PI(hProcess), (HMODULE) page,
 						(LPTSTR)mapname, MAX_PATH);
@@ -387,8 +385,8 @@ static RList *w32_dbg_maps() {
 								+ SectionHeader->Misc.VirtualSize,
 							SectionHeader->Characteristics, // XXX?
 							0);
-						if(mr == NULL)
-							return -1;
+						if (mr == NULL)
+							return NULL;
 						r_list_append (list, mr);
 						SectionHeader++;
 					}
@@ -396,12 +394,12 @@ static RList *w32_dbg_maps() {
 				}
 			} else {
 				eprintf ("Invalid read\n");
-				return 0;
+				return NULL;
 			}
 
 			if (gmi (WIN32_PI (hProcess), (HMODULE) page,
 					(LPMODULEINFO) &ModInfo, sizeof(MODULEINFO)) == 0)
-				return 0;
+				return NULL;
 /* THIS CODE SEGFAULTS WITH NO REASON. BYPASS IT! */
 #if 0
 		eprintf("--> 0x%08x\n", ModInfo.lpBaseOfDll);

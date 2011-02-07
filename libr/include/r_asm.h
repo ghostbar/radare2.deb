@@ -31,6 +31,15 @@ enum {
 	R_ASM_SYNTAX_ATT
 };
 
+enum {
+	R_ASM_MOD_RAWVALUE = 'r',
+	R_ASM_MOD_VALUE = 'v',
+	R_ASM_MOD_DSTREG = 'd',
+	R_ASM_MOD_SRCREG0 = '0',
+	R_ASM_MOD_SRCREG1 = '1',
+	R_ASM_MOD_SRCREG2 = '2'
+};
+
 typedef struct r_asm_fastcall_t {
 	const char *arg[16];
 } RAsmFastcall;
@@ -63,13 +72,14 @@ typedef struct r_asm_t {
 	int  syntax;
 	ut64 pc;
 	void *user;
-	struct r_asm_handle_t *cur;
-	struct r_asm_fastcall_t *fastcall;
-	struct list_head asms;
+	struct r_asm_plugin_t *cur;
+	RAsmFastcall *fastcall;
+	RList *plugins;
 } RAsm;
 
-// TODO: rename to handler?
-typedef struct r_asm_handle_t {
+typedef int (*RAsmModifyCallback)(RAsm *a, ut8 *buf, int field, ut64 val);
+
+typedef struct r_asm_plugin_t {
 	char *name;
 	char *arch;
 	char *desc;
@@ -78,56 +88,55 @@ typedef struct r_asm_handle_t {
 	int *bits;
 	int (*init)(void *user);
 	int (*fini)(void *user);
-	int (*disassemble)(struct r_asm_t *a, struct r_asm_aop_t *aop, ut8 *buf, ut64 len);
-	int (*assemble)(struct r_asm_t *a, struct r_asm_aop_t *aop, const char *buf);
-	int (*set_subarch)(struct r_asm_t *a, const char *buf);
+	int (*disassemble)(RAsm *a, struct r_asm_aop_t *aop, ut8 *buf, ut64 len);
+	int (*assemble)(RAsm *a, struct r_asm_aop_t *aop, const char *buf);
+	RAsmModifyCallback modify;
+	int (*set_subarch)(RAsm *a, const char *buf);
 	struct r_asm_fastcall_t *fastcall[R_ASM_FASTCALL_ARGS];
-	struct list_head list;
-} RAsmHandle;
+} RAsmPlugin;
 
 #ifdef R_API
 /* asm.c */
-R_API struct r_asm_t *r_asm_new();
-R_API const char *r_asm_fastcall(struct r_asm_t *a, int idx, int num);
+R_API RAsm *r_asm_new();
+R_API const char *r_asm_fastcall(RAsm *a, int idx, int num);
 
-R_API void r_asm_free(struct r_asm_t *a);
-R_API void* r_asm_code_free(struct r_asm_code_t *acode);
-R_API struct r_asm_t *r_asm_init(struct r_asm_t *a);
-R_API void r_asm_set_user_ptr(struct r_asm_t *a, void *user);
-R_API int r_asm_add(struct r_asm_t *a, struct r_asm_handle_t *foo);
-R_API int r_asm_list(struct r_asm_t *a);
-R_API int r_asm_use(struct r_asm_t *a, const char *name);
-R_API int r_asm_set_bits(struct r_asm_t *a, int bits);
-R_API int r_asm_set_big_endian(struct r_asm_t *a, int boolean);
-R_API int r_asm_set_syntax(struct r_asm_t *a, int syntax);
-R_API int r_asm_set_pc(struct r_asm_t *a, ut64 pc);
-R_API int r_asm_disassemble(struct r_asm_t *a, struct r_asm_aop_t *aop, ut8 *buf, ut64 len);
-R_API int r_asm_assemble(struct r_asm_t *a, struct r_asm_aop_t *aop, const char *buf);
-R_API struct r_asm_code_t* r_asm_mdisassemble(struct r_asm_t *a, ut8 *buf, ut64 len);
-R_API struct r_asm_code_t* r_asm_massemble(struct r_asm_t *a, const char *buf);
+R_API void r_asm_free(RAsm *a);
+R_API int r_asm_modify(RAsm *a, ut8 *buf, int field, ut64 val);
+R_API void r_asm_set_user_ptr(RAsm *a, void *user);
+R_API int r_asm_add(RAsm *a, RAsmPlugin *foo);
+R_API int r_asm_use(RAsm *a, const char *name);
+R_API int r_asm_set_bits(RAsm *a, int bits);
+R_API int r_asm_set_big_endian(RAsm *a, int boolean);
+R_API int r_asm_set_syntax(RAsm *a, int syntax);
+R_API int r_asm_set_pc(RAsm *a, ut64 pc);
+R_API int r_asm_disassemble(RAsm *a, struct r_asm_aop_t *aop, ut8 *buf, ut64 len);
+R_API int r_asm_assemble(RAsm *a, struct r_asm_aop_t *aop, const char *buf);
+R_API struct r_asm_code_t* r_asm_mdisassemble(RAsm *a, ut8 *buf, ut64 len);
+R_API RAsmCode* r_asm_mdisassemble_hexstr(RAsm *a, const char *hexstr);
+R_API struct r_asm_code_t* r_asm_massemble(RAsm *a, const char *buf);
 
 /* code.c */
 R_API RAsmCode *r_asm_code_new();
-R_API int r_asm_code_init(struct r_asm_code_t *acode);
 R_API void* r_asm_code_free(struct r_asm_code_t *acode);
 R_API int r_asm_code_set_equ (RAsmCode *code, const char *key, const char *value);
 R_API char *r_asm_code_equ_replace (RAsmCode *code, char *str);
 
 /* plugin pointers */
-extern struct r_asm_handle_t r_asm_plugin_dummy;
-extern struct r_asm_handle_t r_asm_plugin_bf;
-extern struct r_asm_handle_t r_asm_plugin_java;
-extern struct r_asm_handle_t r_asm_plugin_mips;
-extern struct r_asm_handle_t r_asm_plugin_x86;
-extern struct r_asm_handle_t r_asm_plugin_x86_olly;
-extern struct r_asm_handle_t r_asm_plugin_x86_nasm;
-extern struct r_asm_handle_t r_asm_plugin_arm;
-extern struct r_asm_handle_t r_asm_plugin_csr;
-extern struct r_asm_handle_t r_asm_plugin_m68k;
-extern struct r_asm_handle_t r_asm_plugin_ppc;
-extern struct r_asm_handle_t r_asm_plugin_sparc;
-extern struct r_asm_handle_t r_asm_plugin_psosvm;
-extern struct r_asm_handle_t r_asm_plugin_avr;
+extern RAsmPlugin r_asm_plugin_dummy;
+extern RAsmPlugin r_asm_plugin_bf;
+extern RAsmPlugin r_asm_plugin_java;
+extern RAsmPlugin r_asm_plugin_mips;
+extern RAsmPlugin r_asm_plugin_x86;
+extern RAsmPlugin r_asm_plugin_x86_olly;
+extern RAsmPlugin r_asm_plugin_x86_nasm;
+extern RAsmPlugin r_asm_plugin_arm;
+extern RAsmPlugin r_asm_plugin_armthumb;
+extern RAsmPlugin r_asm_plugin_csr;
+extern RAsmPlugin r_asm_plugin_m68k;
+extern RAsmPlugin r_asm_plugin_ppc;
+extern RAsmPlugin r_asm_plugin_sparc;
+extern RAsmPlugin r_asm_plugin_psosvm;
+extern RAsmPlugin r_asm_plugin_avr;
 #endif
 
 #endif

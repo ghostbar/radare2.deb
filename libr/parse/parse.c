@@ -7,34 +7,36 @@
 #include <list.h>
 #include "../config.h"
 
-static struct r_parse_handle_t *parse_static_plugins[] = 
+static struct r_parse_plugin_t *parse_static_plugins[] = 
 	{ R_PARSE_STATIC_PLUGINS };
 
 R_API struct r_parse_t *r_parse_new() {
-	struct r_parse_t *p = R_NEW(struct r_parse_t);
-	return r_parse_init(p);
+	RParse *p;
+	RParsePlugin *static_plugin;
+	int i;
+	
+	p = R_NEW(RParse);
+	if (p) {
+		p->user = NULL;
+		INIT_LIST_HEAD(&p->parsers);
+		for(i=0;parse_static_plugins[i];i++) {
+			static_plugin = R_NEW (RParsePlugin);
+			memcpy (static_plugin, parse_static_plugins[i], sizeof (RParsePlugin));
+			r_parse_add(p, static_plugin);
+		}
+	}
+	return p;
 }
 
 R_API void r_parse_free(struct r_parse_t *p) {
 	free(p);
 }
 
-R_API struct r_parse_t *r_parse_init(struct r_parse_t *p) {
-	if (p) {
-		int i;
-		p->user = NULL;
-		INIT_LIST_HEAD(&p->parsers);
-		for(i=0;parse_static_plugins[i];i++)
-			r_parse_add(p, parse_static_plugins[i]);
-	}
-	return p;
-}
-
 R_API void r_parse_set_user_ptr(struct r_parse_t *p, void *user) {
 	p->user = user;
 }
 
-R_API int r_parse_add(struct r_parse_t *p, struct r_parse_handle_t *foo) {
+R_API int r_parse_add(struct r_parse_t *p, struct r_parse_plugin_t *foo) {
 	if (foo->init)
 		foo->init(p->user);
 	list_add_tail(&(foo->list), &(p->parsers));
@@ -44,7 +46,7 @@ R_API int r_parse_add(struct r_parse_t *p, struct r_parse_handle_t *foo) {
 R_API int r_parse_list(struct r_parse_t *p) {
 	struct list_head *pos;
 	list_for_each_prev(pos, &p->parsers) {
-		struct r_parse_handle_t *h = list_entry(pos, struct r_parse_handle_t, list);
+		struct r_parse_plugin_t *h = list_entry(pos, struct r_parse_plugin_t, list);
 		printf("parse %10s %s\n", h->name, h->desc);
 	}
 	return R_FALSE;
@@ -53,7 +55,7 @@ R_API int r_parse_list(struct r_parse_t *p) {
 R_API int r_parse_use(struct r_parse_t *p, const char *name) {
 	struct list_head *pos;
 	list_for_each_prev(pos, &p->parsers) {
-		struct r_parse_handle_t *h = list_entry(pos, struct r_parse_handle_t, list);
+		struct r_parse_plugin_t *h = list_entry(pos, struct r_parse_plugin_t, list);
 		if (!strcmp(h->name, name)) {
 			p->cur = h;
 			return R_TRUE;
@@ -88,9 +90,9 @@ R_API int r_parse_assemble(struct r_parse_t *p, char *data, char *str) {
 	return ret;
 }
 
-R_API int r_parse_filter(struct r_parse_t *p, struct r_flag_t *f, char *data, char *str) {
+R_API int r_parse_filter(struct r_parse_t *p, struct r_flag_t *f, char *data, char *str, int len) {
 	if (p->cur && p->cur->filter)
-		return p->cur->filter(p, f, data, str);
+		return p->cur->filter(p, f, data, str, len);
 	return R_FALSE;
 }
 

@@ -17,6 +17,9 @@ control_c() {
   exit 1
 }
 trap control_c 2
+[ -z "${USERCC}" ] && USERCC="gcc"
+[ -z "${USERCXX}" ] && USERCXX="g++"
+[ -z "${USEROSTYPE}" ] && USEROSTYPE="auto"
 split_host() {
 S="$"
 while : ; do
@@ -53,7 +56,7 @@ if [ -e "${VPATH}/config.guess" ]; then
 	return
 fi
 CPU="`uname -m|sed -e 's, ,,g'`"
-OS="`uname -s|awk '{print(tolower($0))}'`"
+OS="`uname -s|tr '[A-Z]' '[a-z]'`"
 GNU="`uname --help 2>&1 | grep gnu`"
 [ "${GNU}" ] && OS="${OS}-gnu"
 [ "${CPU}" = ppc ] && CPU="powerpc"
@@ -92,12 +95,12 @@ done
 : ${INSTALL_PROGRAM:=${INSTALL} -m 755 -s}
 : ${INSTALL_MAN:=${INSTALL} -m 444}
 : ${INSTALL_LIB:=${INSTALL} -c}
- PKGNAME='radare2-swig' ; VERSION='0.4' ; CONTACT_MAIL="pancake@nopcode.org" ; CONTACT_NAME="pancake" ; CONTACT="pancake <pancake@nopcode.org>" ;
+ PKGNAME='radare2-swig' ; VERSION='0.6' ; CONTACT_MAIL="pancake@nopcode.org" ; CONTACT_NAME="pancake" ; CONTACT="pancake <pancake@nopcode.org>" ;
 }
                 
 show_usage() {
 cat <<EOF2
-'configure' configures radare2-swig-0.4 to adapt to many kinds of systems.
+'configure' configures radare2-swig-0.6 to adapt to many kinds of systems.
 
 Usage: ./configure [OPTION]... [VAR=VALUE]...
 
@@ -135,6 +138,10 @@ System types:
   --target=TARGET        configure for building compilers for TARGET [HOST]
 EOF2
 
+printf "\nOptional Features:
+  --with-cc              Define C compiler to use (gcc by default)  (USERCC=gcc)
+  --with-cxx             Define C++ compiler to use (g++ by default)  (USERCXX=g++)
+  --with-ostype          Choose OS type ( gnulinux windows darwin )  (USEROSTYPE=auto)\n"
 printf "\nSome influential environment variables:
   CC          C compiler command
   CFLAGS      C compiler flags
@@ -160,7 +167,7 @@ take_environ() {
 }
 
 show_version() {
-echo "radare2-swig-0.4 configuration script done with acr v0.8.2.
+echo "radare2-swig-0.6 configuration script done with acr v0.8.2.
 The 'Free Software Foundation' message is only for autodetection.
 Originally written by pancake <youterm.com>."
 exit 0
@@ -178,8 +185,10 @@ case $flag in
 	show_version ; ;;
 "-r"|"--r"|"--report")
 echo "PKGNAME:   radare2-swig"
-echo "VERSION:   0.4"
+echo "VERSION:   0.6"
 echo "LANGS:     c c++"
+echo "PKG-CONFIG:  libr"
+echo "FLAGS:     --with-cc=gcc --with-cxx=g++ --with-ostype=auto"
 	exit 0
 	;;
 "--cache-file") 
@@ -221,6 +230,9 @@ echo "LANGS:     c c++"
 "--mandir")
 	MANDIR="$value"; ;;
 
+--with-cc) if [ -z "${value}" ]; then USERCC="gcc"; else USERCC="${value}" ; fi ;;
+--with-cxx) if [ -z "${value}" ]; then USERCXX="g++"; else USERCXX="${value}" ; fi ;;
+--with-ostype) if [ -z "${value}" ]; then USEROSTYPE="auto"; else USEROSTYPE="${value}" ; fi ;;
 *) if [ "$value" ]; then eval "`echo $flag2=$value`" ; 
 else echo ; echo "WARNING: Unknown flag '$flag'." >&2 ; echo ; fi ;;
 esac
@@ -238,7 +250,7 @@ parse_options $1
 shift
 done
 
-ENVWORDS="MANDIR INFODIR LIBDIR INCLUDEDIR LOCALSTATEDIR SYSCONFDIR DATADIR LIBEXECDIR SBINDIR BINDIR EPREFIX PREFIX SPREFIX TARGET HOST BUILD INSTALL INSTALL_LIB INSTALL_MAN INSTALL_PROGRAM INSTALL_DIR INSTALL_SCRIPT INSTALL_DATA HOST_OS HOST_CPU BUILD_OS BUILD_CPU TARGET_OS TARGET_CPU PKGNAME VPATH VERSION CONTACT CONTACT_NAME CONTACT_MAIL CC CFLAGS LDFLAGS HAVE_LANG_C CXX CXXFLAGS HAVE_LANG_CXX HAVE_VALASWIG VALASWIG HAVE_SWIG SWIG"
+ENVWORDS="MANDIR INFODIR LIBDIR INCLUDEDIR LOCALSTATEDIR SYSCONFDIR DATADIR LIBEXECDIR SBINDIR BINDIR EPREFIX PREFIX SPREFIX TARGET HOST BUILD INSTALL INSTALL_LIB INSTALL_MAN INSTALL_PROGRAM INSTALL_DIR INSTALL_SCRIPT INSTALL_DATA HOST_OS HOST_CPU BUILD_OS BUILD_CPU TARGET_OS TARGET_CPU PKGNAME VPATH VERSION CONTACT CONTACT_NAME CONTACT_MAIL CC CFLAGS LDFLAGS HAVE_LANG_C CXX CXXFLAGS HAVE_LANG_CXX HAVE_VALASWIG VALASWIG HAVE_SWIG SWIG USERCC USERCXX USEROSTYPE FOO HAVE_PKGCFG_LIBR"
 
 create_environ
 
@@ -277,7 +289,7 @@ if [ "${CROSSBUILD}" = 1 ]; then
 if [ "$?" = 0 ]; then CXX="${HOST}-${CXX}"; fi
 fi
 echo "#include <iostream>" > test.cxx
-echo "main(){ std::cout << \"\"; }" >> test.cxx
+echo "main(){ std::cout << 1; }" >> test.cxx
 (exec ${CXX} ${CXXFLAGS} ${LDFLAGS} test.cxx -lstdc++ >/dev/null 2>&1)
 if [ $? = 0 ]; then echo ${CXX}; else
 HAVE_LANG_CXX=0
@@ -331,6 +343,17 @@ else
  echo no
   echo "error: This program is required." >&2
   exit 1 ; fi
+printf 'checking pkg-config flags for libr... '
+tmp=`pkg-config --cflags libr 2>/dev/null`
+if [ $? = 1 ]; then echo no ; HAVE_PKGCFG_LIBR=0; 
+echo 'This package is required'
+exit 1
+else 
+FOO=$tmp; 
+tmp=`pkg-config --libs libr 2>/dev/null`
+if [ ! $? = 1 ]; then 
+echo yes; HAVE_PKGCFG_LIBR=1; 
+FOO=$tmp; fi; fi
 SEDFLAGS=" -e '"
 COUNT=0
 for A in ${ENVWORDS} ; do

@@ -26,7 +26,9 @@ R_API int r_file_mkdir(const char *path) {
 
 R_API int r_file_exist(const char *str) {
 	struct stat buf;
-	return (stat (str, &buf)==-1)?R_FALSE:R_TRUE;
+	if (stat (str, &buf)==-1)
+		return R_FALSE;
+	return (S_ISREG (buf.st_mode));
 }
 
 R_API const char *r_file_abspath(const char *file) {
@@ -42,7 +44,7 @@ R_API const char *r_file_abspath(const char *file) {
 
 R_API char *r_file_path(const char *bin) {
 	char file[1024];
-	char *path_env = r_sys_getenv ("PATH");
+	char *path_env = (char *)r_sys_getenv ("PATH");
 	char *path = NULL;
 	char *str, *ptr;
 	if (path_env) {
@@ -65,21 +67,27 @@ R_API char *r_file_path(const char *bin) {
 }
 
 R_API char *r_file_slurp(const char *str, int *usz) {
-        char *ret;
-        long sz;
-        FILE *fd = fopen (str, "rb");
-        if (fd == NULL)
-                return NULL;
-        fseek (fd, 0,SEEK_END);
-        sz = ftell (fd);
-        fseek (fd, 0,SEEK_SET);
-        ret = (char *)malloc (sz+1);
-        fread (ret, sz, 1, fd);
-        ret[sz]='\0';
-        fclose (fd);
+	size_t rsz;
+	char *ret;
+	FILE *fd;
+	long sz;
+	if (!r_file_exist (str))
+		return NULL;
+	fd = fopen (str, "rb");
+	if (fd == NULL)
+		return NULL;
+	fseek (fd, 0, SEEK_END);
+	sz = ftell (fd);
+	fseek (fd, 0, SEEK_SET);
+	ret = (char *)malloc (sz+1);
+	rsz = fread (ret, 1, sz, fd);
+	if (rsz != sz)
+		eprintf ("r_file_slurp: fread: error\n");
+	fclose (fd);
+	ret[rsz]='\0';
 	if (usz)
 		*usz = (ut32)sz;
-        return ret;
+	return ret;
 }
 
 R_API ut8 *r_file_slurp_hexpairs(const char *str, int *usz) {
@@ -116,18 +124,19 @@ R_API ut8 *r_file_slurp_hexpairs(const char *str, int *usz) {
 	return ret;
 }
 
-R_API char *r_file_slurp_range(const char *str, ut64 off, ut64 sz)
-{
-        char *ret;
-        FILE *fd = fopen(str, "r");
-        if (fd == NULL)
-                return NULL;
-        fseek(fd, off,SEEK_SET);
-        ret = (char *)malloc(sz+1);
-        fread(ret, sz, 1, fd);
-        ret[sz]='\0';
-        fclose(fd);
-        return ret;
+R_API char *r_file_slurp_range(const char *str, ut64 off, int sz, int *osz) {
+	char *ret;
+	FILE *fd = fopen (str, "rb");
+	if (fd == NULL)
+		return NULL;
+	fseek (fd, off, SEEK_SET);
+	ret = (char *)malloc (sz+1);
+	if (ret != NULL) {
+		*osz = (int)(size_t)fread (ret, 1, sz, fd);
+		ret[sz] = '\0';
+	}
+	fclose (fd);
+	return ret;
 }
 
 R_API char *r_file_slurp_random_line(const char *file) {
@@ -161,7 +170,7 @@ R_API char *r_file_slurp_random_line(const char *file) {
 R_API char *r_file_slurp_line(const char *file, int line, int context) {
 	int i, lines = 0;
 	int sz;
-	char *ptr, *str = r_file_slurp (file, &sz);
+	char *ptr = NULL, *str = r_file_slurp (file, &sz);
 	// TODO: Implement context
 	if (str) {
 		for (i=0;str[i];i++)
@@ -188,14 +197,17 @@ R_API char *r_file_slurp_line(const char *file, int line, int context) {
 }
 
 R_API int r_file_dump(const char *file, const ut8 *buf, int len) {
+	int ret;
 	FILE *fd = fopen(file, "wb");
 	if (fd == NULL) {
-		fprintf(stderr, "Cannot open '%s' for writing\n", file);
+		eprintf ("Cannot open '%s' for writing\n", file);
 		return R_FALSE;
 	}
-	fwrite(buf, len, 1, fd);
-	fclose(fd);
-	return R_TRUE;
+	ret = fwrite (buf, len, 1, fd) == len;
+	if (!ret)
+		eprintf ("r_file_dump: fwrite: error\n");
+	fclose (fd);
+	return ret;
 }
 
 R_API int r_file_rm(const char *file) {

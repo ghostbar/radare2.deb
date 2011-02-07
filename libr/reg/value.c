@@ -1,20 +1,26 @@
-/* radare - LGPL - Copyright 2009 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2010 pancake<nopcode.org> */
 
 #include <r_reg.h>
 #include <r_util.h>
 
 /* XXX: reg get can be accessed using the print_format stuff */
 // This is the same as r_buf_set_bits, arenas can be r_buf
-R_API ut64 r_reg_get_value(struct r_reg_t *reg, struct r_reg_item_t *item) {
+R_API ut64 r_reg_get_value(RReg *reg, RRegItem *item) {
 	struct r_reg_set_t *regset;
 	ut32 v32;
 	ut16 v16;
 	ut8 v8;
+	int off;
 	ut64 ret = 0LL;
-	int off = BITS2BYTES(item->offset);
+	if (reg == NULL || item == NULL)
+		return 0LL;
+	off = BITS2BYTES (item->offset);
 	regset = &reg->regset[item->type];
 	if (item)
 	switch (item->size) {
+	case 1:
+		ret = (regset->arena->bytes[item->offset/8] & (1<<(item->offset%8)))?1:0;
+		break;
 	case 8:
 		memcpy (&v8, regset->arena->bytes+off, 1);
 		ret = v8;
@@ -30,9 +36,6 @@ R_API ut64 r_reg_get_value(struct r_reg_t *reg, struct r_reg_item_t *item) {
 	case 64:
 		memcpy (&ret, regset->arena->bytes+off, 8);
 		break;
-	case 1:
-		ret = (regset->arena->bytes[item->offset/8] & (1<<(item->offset%8)))?1:0;
-		break;
 	default:
 		eprintf ("r_reg_get_value: Bit size %d not supported\n", item->size);
 		break;
@@ -41,7 +44,7 @@ R_API ut64 r_reg_get_value(struct r_reg_t *reg, struct r_reg_item_t *item) {
 }
 
 // TODO: cleanup this ugly code
-R_API int r_reg_set_value(struct r_reg_t *reg, struct r_reg_item_t *item, ut64 value) {
+R_API int r_reg_set_value(RReg *reg, RRegItem *item, ut64 value) {
 	ut64 v64;
 	ut32 v32;
 	ut16 v16;
@@ -77,23 +80,38 @@ R_API int r_reg_set_value(struct r_reg_t *reg, struct r_reg_item_t *item, ut64 v
 	return R_TRUE;
 }
 
+R_API char *r_reg_get_bvalue(RReg *reg, RRegItem *item) {
+	char *out;
+	ut64 num;
+	if (!item->flags)
+		return NULL;
+	out = malloc (strlen (item->flags)+1);
+	num = r_reg_get_value (reg, item);
+	r_str_bits (out, (ut8*)&num, strlen (item->flags)*8, item->flags);
+	return out;
+}
+
 /* floating point */
 // XXX: use double for better precission?
-R_API float r_reg_get_fvalue(struct r_reg_t *reg, struct r_reg_item_t *item) {
+R_API float r_reg_get_fvalue(RReg *reg, RRegItem *item) {
+	// TODO
 	return 0.0;
 }
 
-R_API int r_reg_set_fvalue(struct r_reg_t *reg, struct r_reg_item_t *item, float value) {
+R_API int r_reg_set_fvalue(RReg *reg, RRegItem *item, float value) {
 	int ret = R_FALSE;
+	// TODO
 	return ret;
 }
 
 /* packed registers */
-R_API ut64 r_reg_get_pvalue(struct r_reg_t *reg, struct r_reg_item_t *item, int packidx) {
+R_API ut64 r_reg_get_pvalue(RReg *reg, RRegItem *item, int packidx) {
+	// TODO
 	return 0LL;
 }
 
-R_API int r_reg_set_pvalue(struct r_reg_t *reg, struct r_reg_item_t *item, ut64 value, int packidx) {
+R_API int r_reg_set_pvalue(RReg *reg, RRegItem *item, ut64 value, int packidx) {
 	int ret = R_FALSE;
+	// TODO
 	return ret;
 }

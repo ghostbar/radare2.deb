@@ -9,11 +9,13 @@
 #include "r_parse.h"
 #include "r_anal.h"
 #include "r_cmd.h"
+#include "r_vm.h"
 #include "r_meta.h"
 #include "r_cons.h"
 #include "r_line.h"
 #include "r_print.h"
 #include "r_search.h"
+#include "r_sign.h"
 #include "r_debug.h"
 #include "r_flags.h"
 #include "r_config.h"
@@ -25,6 +27,27 @@
 
 #define R_CORE_ANAL_GRAPHLINES 0x1
 #define R_CORE_ANAL_GRAPHBODY  0x2
+#define R_CORE_ANAL_GRAPHDIFF  0x4
+
+/* rtr */
+#define RTR_PROT_RAP 0
+#define RTR_PROT_TCP 1
+#define RTR_PROT_UDP 2
+
+#define RTR_RAP_OPEN   0x01
+#define RTR_RAP_CMD    0x07
+#define RTR_RAP_REPLY  0x80
+
+#define RTR_MAX_HOSTS 255
+
+typedef struct r_core_rtr_host_t {
+	int proto;
+	char host[512];
+	int port;
+	char file[1024];
+	int fd;
+} RCoreRtrHost;
+/* rtr */
 
 typedef struct r_core_file_t {
 	char *uri;
@@ -34,6 +57,7 @@ typedef struct r_core_file_t {
 	int rwx;
 	int fd;
 	int dbg;
+	RBinObj *obj;
 	struct list_head list;
 } RCoreFile;
 
@@ -49,36 +73,47 @@ typedef struct r_core_t {
 	ut64 yank_off;
 	int interrupted; // XXX IS THIS DUPPED SOMEWHERE?
 	/* files */
-	struct r_io_t io;
-	struct r_core_file_t *file;
+	RCons *cons;
+	RIO *io;
+	RCoreFile *file;
 	struct list_head files;
-	struct r_num_t num;
-	struct r_lib_t lib;
-	struct r_cmd_t cmd;
-	struct r_anal_t anal;
-	RSyscall syscall;
-	RAsm assembler;
-	struct r_parse_t parser;
-	struct r_print_t print;
-	struct r_bin_t bin;
-	struct r_meta_t meta;
-	struct r_lang_t lang;
-	struct r_debug_t dbg;
-	struct r_flag_t flags;
-	struct r_config_t config;
-	struct r_search_t *search;
+	RNum *num;
+	RLib *lib;
+	RCmd *cmd;
+	RAnal *anal;
+	RSyscall *syscall;
+	RAsm *assembler;
+	RAnalRefline *reflines;
+	RAnalRefline *reflines2;
+	RParse *parser;
+	RPrint *print;
+	RBin *bin;
+	RMeta *meta;
+	RLang *lang;
+	RDebug *dbg;
+	RFlag *flags;
+	RConfig *config;
+	RSearch *search;
+	RSign *sign;
+	RVm *vm;
+	char *cmdqueue;
+	int rtr_n;
+	RCoreRtrHost rtr_host[RTR_MAX_HOSTS];
 } RCore;
 
 #ifdef R_API
+#define r_core_cast(x) (RCore*)(size_t)(x)
 R_API int r_core_init(struct r_core_t *core);
 R_API struct r_core_t *r_core_new();
 R_API struct r_core_t *r_core_free(struct r_core_t *c);
 R_API int r_core_config_init(struct r_core_t *core);
-R_API int r_core_prompt(struct r_core_t *r);
+R_API int r_core_prompt(RCore *r, int sync);
+R_API int r_core_prompt_exec(RCore *r);
 R_API int r_core_cmd(struct r_core_t *r, const char *cmd, int log);
+// XXX void*?? must be RCore !
 R_API int r_core_cmdf(void *user, const char *fmt, ...);
 R_API int r_core_cmd0(void *user, const char *cmd);
-R_API int r_core_cmd_init(struct r_core_t *core);
+R_API void r_core_cmd_init(struct r_core_t *core);
 R_API char *r_core_cmd_str(struct r_core_t *core, const char *cmd);
 R_API int r_core_cmd_file(struct r_core_t *core, const char *file);
 R_API int r_core_cmd_command(struct r_core_t *core, const char *command);
@@ -87,13 +122,14 @@ R_API int r_core_seek_align(struct r_core_t *core, ut64 align, int count);
 R_API int r_core_block_read(struct r_core_t *core, int next);
 R_API int r_core_block_size(struct r_core_t *core, ut32 bsize);
 R_API int r_core_read_at(struct r_core_t *core, ut64 addr, ut8 *buf, int size);
-R_API int r_core_cmd_init(struct r_core_t *core); // MUST BE STATIC
 R_API int r_core_visual(struct r_core_t *core, const char *input);
 R_API int r_core_visual_cmd(struct r_core_t *core, int ch);
 
+R_API int r_core_serve(RCore *core, int fd);
 R_API struct r_core_file_t *r_core_file_open(struct r_core_t *r, const char *file, int mode);
 R_API struct r_core_file_t *r_core_file_get_fd(struct r_core_t *core, int fd);
-R_API int r_core_file_close(struct r_core_t *r, struct r_core_file_t *fh);
+R_API int r_core_file_close(struct r_core_t *r, RCoreFile *fh);
+R_API int r_core_file_close_fd(struct r_core_t *core, int fd);
 R_API int r_core_file_list(struct r_core_t *core);
 R_API int r_core_seek_delta(struct r_core_t *core, st64 addr);
 R_API int r_core_write_at(struct r_core_t *core, ut64 addr, const ut8 *buf, int size);
@@ -108,19 +144,53 @@ R_API int r_core_cmdf(void *user, const char *fmt, ...);
 R_API int r_core_cmd0(void *user, const char *cmd);
 R_API char *r_core_cmd_str(struct r_core_t *core, const char *cmd);
 R_API int r_core_cmd_foreach(struct r_core_t *core, const char *cmd, char *each);
+R_API char *r_core_op_str(RCore *core, ut64 addr);
+R_API RAnalOp *r_core_op_anal(RCore *core, ut64 addr);
+R_API char *r_core_disassemble_instr(RCore *core, ut64 addr, int l);
+R_API char *r_core_disassemble_bytes(RCore *core, ut64 addr, int b);
 
 /* anal.c */
-R_API int r_core_anal_bb(struct r_core_t *core, ut64 at, int depth);
-R_API int r_core_anal_bb_clean(struct r_core_t *core, ut64 addr);
-R_API int r_core_anal_bb_add(struct r_core_t *core, ut64 addr, ut64 size, ut64 jump, ut64 fail);
+R_API int r_core_anal_search(RCore *core, ut64 from, ut64 to, ut64 ref);
+R_API void r_core_anal_refs(RCore *core, ut64 addr, int gv);
+R_API int r_core_anal_bb(RCore *core, ut64 at, int depth, int head);
 R_API int r_core_anal_bb_list(struct r_core_t *core, int rad);
 R_API int r_core_anal_bb_seek(struct r_core_t *core, ut64 addr);
 R_API int r_core_anal_fcn(struct r_core_t *core, ut64 at, ut64 from, int depth);
-R_API int r_core_anal_fcn_add(struct r_core_t *core, ut64 addr, ut64 size, const char *name);
-R_API int r_core_anal_fcn_list(struct r_core_t *core, int rad);
-R_API int r_core_anal_fcn_clean(struct r_core_t *core, ut64 addr);
-R_API int r_core_anal_graph(struct r_core_t *core, ut64 addr, int lines);
-R_API int r_core_anal_graph_fcn(struct r_core_t *core, char *input, int lines);
+R_API int r_core_anal_fcn_list(RCore *core, const char *input, int rad);
+R_API int r_core_anal_graph(struct r_core_t *core, ut64 addr, int opts);
+R_API int r_core_anal_graph_fcn(struct r_core_t *core, char *input, int opts);
+R_API int r_core_anal_ref_list(struct r_core_t *core, int rad);
+
+/* asm.c */
+typedef struct r_core_asm_hit {
+	char *code;
+	int len;
+	ut64 addr;
+} RCoreAsmHit;
+
+R_API RCoreAsmHit *r_core_asm_hit_new();
+R_API RList *r_core_asm_hit_list_new();
+R_API void r_core_asm_hit_free(void *_hit);
+R_API char* r_core_asm_search(RCore *core, const char *input, ut64 from, ut64 to);
+R_API RList *r_core_asm_strsearch(RCore *core, const char *input, ut64 from, ut64 to);
+R_API RList *r_core_asm_bwdisassemble (RCore *core, ut64 addr, int n, int len);
+
+/* gdiff.c */
+R_API int r_core_gdiff(struct r_core_t *core, const char *file1, const char *file2, int va);
+
+R_API int r_core_project_open(RCore *core, const char *file);
+R_API int r_core_project_save(RCore *core, const char *file);
+R_API char *r_core_project_info(RCore *core, const char *file);
+R_API void r_core_sysenv_update(RCore *core);
+
+/* rtr */
+R_API void r_core_rtr_help(RCore *core);
+R_API void r_core_rtr_pushout(RCore *core, const char *input);
+R_API void r_core_rtr_list(RCore *core);
+R_API void r_core_rtr_add(RCore *core, const char *input);
+R_API void r_core_rtr_remove(RCore *core, const char *input);
+R_API void r_core_rtr_session(RCore *core, const char *input);
+R_API void r_core_rtr_cmd(RCore *core, const char *input);
 #endif
 
 #endif
