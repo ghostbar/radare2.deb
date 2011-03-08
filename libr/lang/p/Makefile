@@ -2,10 +2,14 @@ BINDEPS=foo
 #include ../../../config-user.mk
 include ../../config.mk
 
-CFLAGS=-I../../include -Wall -DPREFIX=\"${PREFIX}\"
+CFLAGS+=-I../../include -Wall -DPREFIX=\"${PREFIX}\"
+ifeq ($(OSTYPE),darwin)
+CFLAGS+=-undefined dynamic_lookup
+endif
+
 BINDEPS=
 
-LANGS=lang_dummy.${EXT_SO} lang_python.${EXT_SO} lang_perl.${EXT_SO}
+LANGS=lang_python.${EXT_SO} lang_perl.${EXT_SO}
 #LANGS+=lang_ruby.so
 ifeq ($(HAVE_LIB_TCC),1)
 LANGS+=lang_tcc.${EXT_SO}
@@ -21,13 +25,17 @@ all: ${LANGS}
 ifeq ($(OSTYPE),windows)
 lang_python.${EXT_SO}:
 	${CC} ${CFLAGS} -I${HOME}/.wine/drive_c/Python27/include \
-	-L${HOME}/.wine/drive_c/Python27/libs \
-	-L../../core/ -lr_core \
+	-L${HOME}/.wine/drive_c/Python27/libs -L../../core/ -lr_core \
 	${LDFLAGS_LIB} -shared -o lang_python.${EXT_SO} python.c -lpython27
 else
+PYCFLAGS=`python-config --cflags 2>/dev/null | sed -e 's/-arch [^\s]*//g' | sed s,-Wstrict-prototypes,,g`
+PYCFLAGS+=`python2-config --cflags 2>/dev/null | sed -e 's/-arch [^\s]*//g' | sed s,-Wstrict-prototypes,,g`
+PYLDFLAGS=`python-config --cflags 2>/dev/null | sed -e 's/-arch [^\s]*//g' | sed s,-Wstrict-prototypes,,g`
+PYLDFLAGS+=`python2-config --cflags 2>/dev/null | sed -e 's/-arch [^\s]*//g' | sed s,-Wstrict-prototypes,,g`
+
 lang_python.${EXT_SO}:
-	${CC} ${CFLAGS} ${LDFLAGS} `python-config --cflags` `python-config --ldflags` \
-	${LDFLAGS_LIB} -fPIC -o lang_python.${EXT_SO} python.c
+	${CC} ${CFLAGS} ${PYCFLAGS} ${PYLDFLAGS} \
+	${LDFLAGS} ${LDFLAGS_LIB} -fPIC -o lang_python.${EXT_SO} python.c
 endif
 
 ifeq ($(HAVE_LIB_TCC),1)
@@ -46,12 +54,8 @@ lang_ruby.${EXT_SO}:
 lang_perl.${EXT_SO}:
 	-${CC} ${CFLAGS} -I/usr/lib/perl/5.10/CORE/ \
 		-fPIC ${LDFLAGS_LIB} -o lang_perl.${EXT_SO} perl.c ${LDFLAGS_LINKPATH}.. \
-		`perl -MExtUtils::Embed -e ccopts` \
-		`perl -MExtUtils::Embed -e ldopts` -lncurses
-
-lang_dummy.${EXT_SO}: dummy.o
-	${CC} ${CFLAGS} -shared -fPIC ${LDFLAGS_LIB} -o lang_dummy.${EXT_SO} dummy.c ${LDFLAGS_LINKPATH}.. -L..
-	@#strip -s lua.so
+		`perl -MExtUtils::Embed -e ccopts | sed -e 's/-arch [^\s]* //g'` \
+		`perl -MExtUtils::Embed -e ldopts | sed -e 's/-arch [^\s]* //g'` -lncurses
 
 clean:
 	-rm -f *.${EXT_SO} *.${EXT_AR} *.o

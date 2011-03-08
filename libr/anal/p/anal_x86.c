@@ -1,523 +1,1055 @@
-/* radare - LGPL - Copyright 2009-2010 */
-/*   pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009 */
 /*   nibble<.ds@gmail.com> */
 
 #include <string.h>
 
-#include <r_types.h>
 #include <r_lib.h>
-#include <r_asm.h>
+#include <r_types.h>
 #include <r_anal.h>
+#include <r_util.h>
 
-#include "x86/dislen/dislen.h"
+#include "x86/x86im/x86im.h"
 
-/* code analysis functions */
-
-/* arch_aop for x86 */
-// CMP ARG1
-// 837d0801        cmp dword [ebp+0x8], 0x1
-// 803db501060800  cmp byte [0x80601b5], 0x0
-// SET VAR_41c
-// 8985e4fbffff    mov [ebp-41C],eax 
-// GET VAR_41c
-// 8b85e4fbffff    mov eax,[ebp-41C]
-// 8b450c          mov eax,[ebp+C] 
-// 8d85e8fbffff    lea eax,[ebp-418]
-// c68405e7fbffff. mov byte ptr [ebp+eax-419],0x0
-
-
-
-//3d00400000  cmp eax, 0x4000
-//81fa00c00000  cmp edx, 0xc000
-//83fa01  cmp edx, 0x1
-
-static const char *testregs[] = {
+static const char *gpr8[] = {
+	"al", "cl", "dl", "bl", "ah", "ch", "dh", "bh" };
+static const char *gpr8b[] = {
+	"spl", "bpl", "sil", "dil" };
+static const char *gpr16[] = {
+	"ax", "cx", "dx", "bx", "sp", "bp", "si", "di" };
+static const char *gpr32[] = {
 	"eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi" };
+static const char *gpr64[] = {
+	"rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi",
+	"r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15" };
+static const char unkreg[] = "";
 
-// NOTE: buf should be at least 16 bytes!
-// XXX addr should be off_t for 64 love
-static int myaop(RAnal *anal, RAnalOp *aop, ut64 addr, const ut8 *data, int len) {
-	ut8 *buf = (ut8*)data;
+static const char* anal_reg(ut32 rop) {
+	const char **table = NULL, *ret = NULL;
+
+	if (X86IM_IO_ROP_IS_GPR8 (rop))
+		table = gpr8;
+	else
+	if (X86IM_IO_ROP_IS_GPR8B (rop))
+		table = gpr8b;
+	else
+	if (X86IM_IO_ROP_IS_GPR16 (rop))
+		table = gpr16;
+	else
+	if (X86IM_IO_ROP_IS_GPR32 (rop))
+		table = gpr32;
+	else
+	if (X86IM_IO_ROP_IS_GPR64 (rop))
+		table = gpr64;
+	else
+	if (rop == X86IM_IO_ROP_ID_RIP)
+		return "rip";
+	if (table)
+		ret = table[X86IM_IO_ROP_GET_ID (rop)];
+	else ret = unkreg;
+	return ret;
+}
+
+/* 0x0ff */
+/* io.imm = rel 0x0ff */
+static RAnalValue *anal_fill_r(RAnal *anal, x86im_instr_object io, ut64 addr) {
+	RAnalValue *ret = r_anal_value_new ();
+	st64 imm = r_hex_bin_truncate (io.imm, io.imm_size);
+	ret->base = addr + io.len + imm;
+	return ret;
+}
+
+/* dword sel:0x0ff */
+/* io.selector = sel; io.imm = 0x0ff */
+static RAnalValue *anal_fill_f(RAnal *anal, x86im_instr_object io) {
+	RAnalValue *ret = r_anal_value_new ();
+	st64 imm = r_hex_bin_truncate (io.imm, io.imm_size);
+	ret->sel = io.selector;
+	ret->delta = imm;
+	return ret;
+}
+
+/* n */
+/* io.imm = n */
+static RAnalValue *anal_fill_im(RAnal *anal, x86im_instr_object io) {
+	RAnalValue *ret = r_anal_value_new ();
+	st64 imm = r_hex_bin_truncate (io.imm, io.imm_size);
+	ret->imm = imm;
+	return ret;
+}
+
+/* reg */
+/* io.rop[0] = reg */
+static RAnalValue *anal_fill_ai_rg(RAnal *anal, x86im_instr_object io, int idx) {
+	RAnalValue *ret = r_anal_value_new ();
+	ret->reg = r_reg_get (anal->reg,
+			anal_reg (io.rop[idx]), R_REG_TYPE_GPR);
+	return ret;
+}
+
+/* [0x0ff | reg1+reg2+0x0ff] */
+/* io.mem_base = reg1; io.mem_index = reg2; io.disp = 0x0ff */
+static RAnalValue *anal_fill_ai_mm(RAnal *anal, x86im_instr_object io) {
+	RAnalValue *ret = r_anal_value_new ();
+	st64 disp = r_hex_bin_truncate (io.disp, io.disp_size);
+	ret->memref = anal->bits/8;
+	if (io.mem_base == 0) {
+		ret->base = disp;
+	} else {
+		ret->reg = r_reg_get (anal->reg,
+				anal_reg (io.mem_base), R_REG_TYPE_GPR);
+		ret->delta = disp;
+		if (io.mem_index != 0)
+			ret->regdelta = r_reg_get (anal->reg,
+					anal_reg (io.mem_index), R_REG_TYPE_GPR);
+	}
+	return ret;
+}
+
+static void anal_jmp(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	st64 imm, disp;
+	imm = r_hex_bin_truncate (io.imm, io.imm_size);
+	disp = r_hex_bin_truncate (io.disp, io.disp_size);
+
+	op->eob = R_TRUE;
+	switch (io.id) {
+	case X86IM_IO_ID_JMP_N_R_S: /* jmp short 0x0ff */ 
+	case X86IM_IO_ID_JMP_N_R:   /* jmp 0x0ff */
+		op->type = R_ANAL_OP_TYPE_JMP;
+		op->dst = anal_fill_r (anal, io, op->addr);
+		op->jump = op->addr + io.len + imm;
+		break;
+	case X86IM_IO_ID_JMP_N_AI_MM: /* jmp  [0x0ff | reg1+reg2+0x0ff] */
+	case X86IM_IO_ID_JMP_F_AI_MM: /* jmp dword far  [0x0ff | reg1+reg2+0x0ff] */
+		op->type = R_ANAL_OP_TYPE_UJMP;
+		op->dst = anal_fill_ai_mm (anal, io);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0)
+			op->ref = disp;
+		break;
+	case X86IM_IO_ID_JMP_N_AI_RG: /* jmp reg */
+		op->type = R_ANAL_OP_TYPE_UJMP;
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		break;
+	case X86IM_IO_ID_JMP_F_A: /* jmp dword sel:0x0ff */
+		op->type = R_ANAL_OP_TYPE_UJMP;
+		op->dst = anal_fill_f (anal, io);
+		/* TODO: Deprecate */
+		op->selector = io.selector;
+		op->ref = imm;
+		break;
+	}
+}
+
+static void anal_cjmp(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	st64 imm;
+	imm = r_hex_bin_truncate (io.imm, io.imm_size);
+
+	op->eob = R_TRUE;
+	switch (io.id) {
+	case X86IM_IO_ID_JCC_S: /* j* 0x0ff */
+	case X86IM_IO_ID_JCC_N: /* j* dword 0x0ff */ 
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->dst = anal_fill_r (anal, io, op->addr);
+		op->fail = op->addr + io.len;
+		op->jump = op->addr + io.len + imm;
+		break;
+	}
+}
+
+static void anal_call(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	st64 imm, disp;
+	imm = r_hex_bin_truncate (io.imm, io.imm_size);
+	disp = r_hex_bin_truncate (io.disp, io.disp_size);
+
+	switch (io.id) {
+	case X86IM_IO_ID_CALL_N_R: /* call 0x0ff */
+		op->type = R_ANAL_OP_TYPE_CALL;
+		op->dst = anal_fill_r (anal, io, op->addr);
+		op->jump = op->addr + io.len + imm;
+		op->fail = op->addr + io.len;
+		break;
+	case X86IM_IO_ID_CALL_N_AI_MM: /* call [0x0ff | reg1+reg2+0x0ff] */
+	case X86IM_IO_ID_CALL_F_AI_MM: /* call dword far [0x0ff | reg1+reg2+0x0ff] */
+		op->type = R_ANAL_OP_TYPE_UCALL;
+		op->dst = anal_fill_ai_mm (anal, io);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0)
+			op->ref = disp;
+		break;
+	case X86IM_IO_ID_CALL_N_AI_RG: /* call reg */
+		op->type = R_ANAL_OP_TYPE_UCALL;
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->fail = op->addr + io.len;
+		break;
+	case X86IM_IO_ID_CALL_F_A: /* call dword sel:0x0ff */
+		op->type = R_ANAL_OP_TYPE_UCALL;
+		op->dst = anal_fill_f (anal, io);
+		/* TODO: Deprecate */
+		op->selector = io.selector;
+		op->ref = imm;
+		op->fail = op->addr + io.len;
+		break;
+	}
+}
+
+static void anal_ret(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	st64 imm;
+	imm = r_hex_bin_truncate (io.imm, io.imm_size);
+
+	op->eob = R_TRUE;
+	op->type = R_ANAL_OP_TYPE_RET;
+	switch (io.id) {
+	case X86IM_IO_ID_RET_N: /* ret */
+	case X86IM_IO_ID_RET_F: /* retf */
+		op->stackptr = anal->bits/8;
+		break;
+	case X86IM_IO_ID_RET_N_IM: /* ret n */
+	case X86IM_IO_ID_RET_F_IM: /* retf n */
+		op->dst = anal_fill_im (anal, io);
+		op->stackptr = anal->bits/8 + imm;
+		/* TODO: Deprecate */
+		op->value = imm;
+		break;
+	}
+}
+
+static void anal_hlt(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	op->eob = R_TRUE;
+	op->type = R_ANAL_OP_TYPE_RET;
+}
+
+static void anal_mov(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	st64 imm, disp;
+	imm = r_hex_bin_truncate (io.imm, io.imm_size);
+	disp = r_hex_bin_truncate (io.disp, io.disp_size);
+
+	op->type = R_ANAL_OP_TYPE_MOV;
+	switch (io.id) {
+	case X86IM_IO_ID_MOV_MM_RG:  /* mov [0x0ff | reg1+reg2+0x0ff], reg */
+	case X86IM_IO_ID_MOV_MM_AC:
+		op->dst = anal_fill_ai_mm (anal, io);
+		op->src[0] = anal_fill_ai_rg (anal, io, 0);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* mov [0x0ff], reg */
+			op->ref = disp;
+		} else 
+		if ((X86IM_IO_ROP_GET_ID (io.mem_base) == X86IM_IO_ROP_ID_EBP) &&
+			io.mem_index == 0) { /* mov [ebp+0x0ff], reg */
+			op->stackop = R_ANAL_STACK_SET;
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_MOV_R2_R1: /* mov reg2, reg1 */
+	case X86IM_IO_ID_MOV_R1_R2:
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_ai_rg (anal, io, 1);
+		break;
+	case X86IM_IO_ID_MOV_RG_MM: /* mov reg, [0x0ff | reg1+reg2+0x0ff] */
+	case X86IM_IO_ID_MOV_AC_MM:
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_ai_mm (anal, io);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* mov reg, [0x0ff] */
+			op->ref = disp;
+		} else 
+		if ((X86IM_IO_ROP_GET_ID (io.mem_base) == X86IM_IO_ROP_ID_EBP) &&
+			io.mem_index == 0) { /* mov reg, [ebp+0x0ff] */
+			op->stackop = R_ANAL_STACK_GET;
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_MOV_MM_IM: /* mov [0x0ff | reg1+reg2+0x0ff], 0x1 */
+		op->dst = anal_fill_ai_mm (anal, io);
+		op->src[0] = anal_fill_im (anal, io);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* [0x0ff], 0x1 */
+			op->ref = disp;
+		} else 
+		if ((X86IM_IO_ROP_GET_ID (io.mem_base) == X86IM_IO_ROP_ID_EBP) &&
+			io.mem_index == 0) { /* mov [ebp+0x0ff], 0x1 */
+			op->stackop = R_ANAL_STACK_SET;
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_MOV_RG_IM: /* mov reg, 0x1 */
+	case X86IM_IO_ID_MOV_AC_IM:
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_im (anal, io);
+		break;
+	case X86IM_IO_ID_MOV_CR0_RG: /* mov cr0, reg */
+	case X86IM_IO_ID_MOV_CR2_RG: /* mov cr2, reg */
+	case X86IM_IO_ID_MOV_CR3_RG: /* mov cr3, reg */
+	case X86IM_IO_ID_MOV_CR4_RG: /* mov cr4, reg */
+	case X86IM_IO_ID_MOV_CRX_RG: /* mov cr*, reg */
+		/* io.rop[0] = cr & io.rop[1] = reg */
+		break;
+	case X86IM_IO_ID_MOV_RG_CRX: /* mov reg, cr* */
+		/* io.rop[0] = reg & io.rop[1] = cr */
+		break;
+	case X86IM_IO_ID_MOV_DRX_RG: /* mov dr*, reg */
+		/* io.rop[0] = dr & io.rop[1] = reg */
+		break;
+	case X86IM_IO_ID_MOV_RG_DRX: /* mov reg, dr* */
+		/* io.rop[0] = reg & io.rop[1] = dr */
+		break;
+	case X86IM_IO_ID_MOV_SR_MM: /* mov sr, [reg1+reg2+0ff | 0x0ff] */
+		/* io.rop[0] = sr & io.mem_base = reg1 & io.mem_index = reg2 &
+		 * io.disp = 0x0ff */
+		break;
+	case X86IM_IO_ID_MOV_MM_SR: /* mov [reg1+reg2+0ff | 0x0ff], sr */
+		/* io.rop[0] = sr & io.mem_base = reg1 & io.mem_index = reg2 &
+		 * io.disp = 0x0ff */
+		break;
+	case X86IM_IO_ID_MOV_SR_RG: /* mov sr, reg */
+		/* io.rop[0] = sr & io.rop[1] = reg */
+		break;
+	case X86IM_IO_ID_MOV_RG_SR: /* mov reg, sr */
+		/* io.rop[0] = reg & io.rop[1] = sr */
+		break;
+	}
+}
+
+static void anal_cmp(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	st64 imm, disp;
+	imm = r_hex_bin_truncate (io.imm, io.imm_size);
+	disp = r_hex_bin_truncate (io.disp, io.disp_size);
+
+	op->type = R_ANAL_OP_TYPE_CMP;
+	switch (io.id) {
+	case X86IM_IO_ID_CMP_MM_RG: /* cmp [0x0ff | reg1+reg2+0x0ff], reg */
+		op->src[0] = anal_fill_ai_mm (anal, io);
+		op->src[1] = anal_fill_ai_rg (anal, io, 0);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* cmp [0x0ff], reg */
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_CMP_R1_R2: /* cmp reg2, reg1 */
+	case X86IM_IO_ID_CMP_R2_R1:
+		op->src[0] = anal_fill_ai_rg (anal, io, 0);
+		op->src[1] = anal_fill_ai_rg (anal, io, 1);
+		break;
+	case X86IM_IO_ID_CMP_RG_MM: /* cmp reg, [0x0ff | reg1+reg2+0x0ff] */
+		op->src[0] = anal_fill_ai_rg (anal, io, 0);
+		op->src[1] = anal_fill_ai_mm (anal, io);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* cmp reg, [0x0ff] */
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_CMP_MM_IM: /* cmp [0x0ff | reg1+reg2+0x0ff], 0x1 */
+		op->src[0] = anal_fill_ai_mm (anal, io);
+		op->src[1] = anal_fill_im (anal, io);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* cmp [0x0ff], 0x1 */
+			op->ref = disp;
+		} else 
+		if ((X86IM_IO_ROP_GET_ID (io.mem_base) == X86IM_IO_ROP_ID_EBP) &&
+			io.mem_index == 0) { /* cmp [ebp+0x0ff], 0x1*/
+			op->stackop = R_ANAL_STACK_GET;
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_CMP_RG_IM: /* cmp reg, 0x1 */
+	case X86IM_IO_ID_CMP_AC_IM:
+		op->src[0] = anal_fill_ai_rg (anal, io, 0);
+		op->src[1] = anal_fill_im (anal, io);
+		break;
+	}
+}
+
+static void anal_test(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	st64 imm, disp;
+	imm = r_hex_bin_truncate (io.imm, io.imm_size);
+	disp = r_hex_bin_truncate (io.disp, io.disp_size);
+
+	op->type = R_ANAL_OP_TYPE_CMP;
+	switch (io.id) {
+	case X86IM_IO_ID_TEST_MM_R1: /* test [0x0ff | reg1+reg2+0x0ff], reg */
+		op->src[0] = anal_fill_ai_mm (anal, io);
+		op->src[1] = anal_fill_ai_rg (anal, io, 0);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* test [0x0ff], reg */
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_TEST_R1_R2: /* test reg2, reg1 */
+		op->src[0] = anal_fill_ai_rg (anal, io, 0);
+		op->src[1] = anal_fill_ai_rg (anal, io, 1);
+		break;
+	case X86IM_IO_ID_TEST_MM_IM: /* test [0x0ff | reg1+reg2+0x0ff], 0x1 */
+		op->src[0] = anal_fill_ai_mm (anal, io);
+		op->src[1] = anal_fill_im (anal, io);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* test [0x0ff], 0x1 */
+			op->ref = disp;
+		} else 
+		if ((X86IM_IO_ROP_GET_ID (io.mem_base) == X86IM_IO_ROP_ID_EBP) &&
+			io.mem_index == 0) { /* test [ebp+0x0ff], 0x1*/
+			op->stackop = R_ANAL_STACK_GET;
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_TEST_RG_IM: /* test reg, 0x1 */
+	case X86IM_IO_ID_TEST_AC_IM:
+		op->src[0] = anal_fill_ai_rg (anal, io, 0);
+		op->src[1] = anal_fill_im (anal, io);
+		break;
+	}
+}
+
+static void anal_push(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	st64 imm, disp;
+	imm = r_hex_bin_truncate (io.imm, io.imm_size);
+	disp = r_hex_bin_truncate (io.disp, io.disp_size);
+
+	switch (io.id) {
+	case X86IM_IO_ID_PUSH_MM: /* push [0x0ff | reg1+reg2+0x0ff] */
+		op->type = R_ANAL_OP_TYPE_UPUSH;
+		op->src[0] = anal_fill_ai_mm (anal, io);
+		/* TODO: Deprecate */
+		op->stackptr = io.mem_size;
+		if (io.mem_base == 0) { /* push [0x0ff] */
+			op->ref = disp;
+		} else 
+		if ((X86IM_IO_ROP_GET_ID (io.mem_base) == X86IM_IO_ROP_ID_EBP) &&
+			io.mem_index == 0) { /* push [ebp+0x0ff] */
+			op->stackop = R_ANAL_STACK_GET;
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_PUSH_RG1: /* push reg */
+	case X86IM_IO_ID_PUSH_RG2:
+		op->type = R_ANAL_OP_TYPE_UPUSH;
+		op->src[0] = anal_fill_ai_rg (anal, io, 0);
+		/* TODO: Deprecate */
+		if (X86IM_IO_ROP_IS_GPR16(io.rop[0]))
+			op->stackptr = 2;
+		else if (X86IM_IO_ROP_IS_GPR32(io.rop[0]))
+			op->stackptr = 4;
+		else if (X86IM_IO_ROP_IS_GPR64(io.rop[0]))
+			op->stackptr = 8;
+		break;
+	case X86IM_IO_ID_PUSH_IM: /* push 0x1 */
+		op->type = R_ANAL_OP_TYPE_PUSH;
+		op->src[0] = anal_fill_im (anal, io);
+		/* TODO: Deprecate */
+		op->value = imm;
+		op->stackptr = io.imm_size;
+		break;
+	case X86IM_IO_ID_PUSH_SR1: /* push sr */
+	case X86IM_IO_ID_PUSH_SR2:
+		/* io.rop[0] = sr */
+		op->type = R_ANAL_OP_TYPE_UPUSH;
+		break;
+	case X86IM_IO_ID_PUSHAD: /* pushad */
+	case X86IM_IO_ID_PUSHF: /* pushf */
+		op->type = R_ANAL_OP_TYPE_UPUSH;
+		break;
+	}
+}
+
+static void anal_pop(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	st64 imm, disp;
+	imm = r_hex_bin_truncate (io.imm, io.imm_size);
+	disp = r_hex_bin_truncate (io.disp, io.disp_size);
+
+	op->type = R_ANAL_OP_TYPE_POP;
+	switch (io.id) {
+	case X86IM_IO_ID_POP_MM: /* pop [0x0ff | reg1+reg2+0x0ff] */
+		op->dst = anal_fill_ai_mm (anal, io);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* pop [0x0ff] */
+			op->ref = disp;
+		}
+		op->stackptr = -io.mem_size;
+		break;
+	case X86IM_IO_ID_POP_RG1: /* pop reg */
+	case X86IM_IO_ID_POP_RG2:
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		/* TODO: Deprecate */
+		if (X86IM_IO_ROP_IS_GPR16 (io.rop[0]))
+			op->stackptr = -2;
+		else
+		if (X86IM_IO_ROP_IS_GPR32 (io.rop[0]))
+			op->stackptr = -4;
+		else
+		if (X86IM_IO_ROP_IS_GPR64 (io.rop[0]))
+			op->stackptr = -8;
+		break;
+	case X86IM_IO_ID_POP_SR2: /* pop sr */
+	case X86IM_IO_ID_POP_SR1:
+		/* io.rop[0] = sr */
+		break;
+	case X86IM_IO_ID_POPAD: /* popad */
+	case X86IM_IO_ID_POPF: /* popf */
+		break;
+	}
+}
+
+static void anal_add(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	st64 imm, disp;
+	imm = r_hex_bin_truncate (io.imm, io.imm_size);
+	disp = r_hex_bin_truncate (io.disp, io.disp_size);
+
+	op->type = R_ANAL_OP_TYPE_ADD;
+	switch (io.id) {
+	case X86IM_IO_ID_ADD_MM_RG: /* add [0x0ff | reg1+reg2+0x0ff], reg */
+		op->dst = anal_fill_ai_mm (anal, io);
+		op->src[0] = anal_fill_ai_rg (anal, io, 0);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* add [0x0ff], reg */
+			op->ref = disp;
+		} else 
+		if ((X86IM_IO_ROP_GET_ID (io.mem_base) == X86IM_IO_ROP_ID_EBP) &&
+			io.mem_index == 0) { /* add [ebp+0x0ff], reg*/
+			op->stackop = R_ANAL_STACK_SET;
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_ADD_RG_MM: /* add reg, [0x0ff | reg1+reg2+0x0ff] */
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_ai_mm (anal, io);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* add reg, [0x0ff] */
+			op->ref = disp;
+		} else 
+		if ((X86IM_IO_ROP_GET_ID (io.mem_base) == X86IM_IO_ROP_ID_EBP) &&
+			io.mem_index == 0) { /* add reg, [ebp+0x0ff] */
+			op->stackop = R_ANAL_STACK_GET;
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_ADD_R1_R2: /* add reg2, reg1 */
+	case X86IM_IO_ID_ADD_R2_R1:
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_ai_rg (anal, io, 1);
+		break;
+	case X86IM_IO_ID_ADD_MM_IM: /* add [0x0ff | reg1+reg2+0x0ff], 0x1 */
+		op->dst = anal_fill_ai_mm (anal, io);
+		op->src[0] = anal_fill_im (anal, io);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* add [0x0ff], 0x1 */
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_ADD_RG_IM: /* add reg, 0x1 */
+	case X86IM_IO_ID_ADD_AC_IM:
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_im (anal, io);
+		/* TODO: Deprecate */
+		if (X86IM_IO_ROP_GET_ID (io.rop[0]) == X86IM_IO_ROP_ID_ESP) { /* add esp, 0x1 */
+			op->stackop = R_ANAL_STACK_INCSTACK;
+			op->value = imm;
+			op->stackptr = -imm;
+		}
+		break;
+	}
+}
+
+static void anal_sub(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	st64 imm, disp;
+	imm = r_hex_bin_truncate (io.imm, io.imm_size);
+	disp = r_hex_bin_truncate (io.disp, io.disp_size);
+
+	op->type = R_ANAL_OP_TYPE_SUB;
+	switch (io.id) {
+	case X86IM_IO_ID_SUB_MM_RG: /* sub [0x0ff | reg1+reg2+0x0ff], reg */
+		op->dst = anal_fill_ai_mm (anal, io);
+		op->src[0] = anal_fill_ai_rg (anal, io, 0);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* sub [0x0ff], reg */
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_SUB_R1_R2: /* sub reg2, reg1 */
+	case X86IM_IO_ID_SUB_R2_R1:
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_ai_rg (anal, io, 1);
+		break;
+	case X86IM_IO_ID_SUB_RG_MM: /* sub reg, [0x0ff | reg1+reg2+0x0ff] */
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_ai_mm (anal, io);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* sub reg, [0x0ff] */
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_SUB_MM_IM: /* sub [0x0ff | reg1+reg2+0x0ff], 0x1 */
+		op->dst = anal_fill_ai_mm (anal, io);
+		op->src[0] = anal_fill_im (anal, io);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* sub [0x0ff], 0x1 */
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_SUB_RG_IM: /* sub reg, 0x1 */
+	case X86IM_IO_ID_SUB_AC_IM:
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_im (anal, io);
+		/* TODO: Deprecate */
+		if (X86IM_IO_ROP_GET_ID (io.rop[0]) == X86IM_IO_ROP_ID_ESP) { /* sub esp, 0x1*/
+			op->stackop = R_ANAL_STACK_INCSTACK;
+			op->value = imm;
+			op->stackptr = imm;
+		}
+		break;
+	}
+}
+
+static void anal_and(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	st64 imm, disp;
+	imm = r_hex_bin_truncate (io.imm, io.imm_size);
+	disp = r_hex_bin_truncate (io.disp, io.disp_size);
+
+	op->type = R_ANAL_OP_TYPE_AND;
+	switch (io.id) {
+	case X86IM_IO_ID_AND_MM_RG: /* and [0x0ff | reg1+reg2+0x0ff], reg */
+		op->dst = anal_fill_ai_mm (anal, io);
+		op->src[0] = anal_fill_ai_rg (anal, io, 0);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* and [0x0ff], reg */
+			op->ref = disp;
+		} else 
+		if ((X86IM_IO_ROP_GET_ID (io.mem_base) == X86IM_IO_ROP_ID_EBP) &&
+			io.mem_index == 0) { /* and [ebp+0x0ff], reg*/
+			op->stackop = R_ANAL_STACK_SET;
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_AND_RG_MM: /* and reg, [0x0ff | reg1+reg2+0x0ff] */
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_ai_mm (anal, io);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* and reg, [0x0ff] */
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_AND_R1_R2: /* and reg2, reg1 */
+	case X86IM_IO_ID_AND_R2_R1:
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_ai_rg (anal, io, 1);
+		break;
+	case X86IM_IO_ID_AND_MM_IM: /* and [0x0ff | reg1+reg2+0x0ff], 0x1 */
+		op->dst = anal_fill_ai_mm (anal, io);
+		op->src[0] = anal_fill_im (anal, io);
+		/* TODO: Deprecate */
+		op->value = imm;
+		if (io.mem_base == 0) { /* and [0x0ff], 0x1 */
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_AND_RG_IM: /* and reg, 0x1 */
+	case X86IM_IO_ID_AND_AC_IM:
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_im (anal, io);
+		/* TODO: Deprecate */
+		op->value = imm;
+		break;
+	}
+}
+
+static void anal_or(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	st64 imm, disp;
+	imm = r_hex_bin_truncate (io.imm, io.imm_size);
+	disp = r_hex_bin_truncate (io.disp, io.disp_size);
+
+	op->type = R_ANAL_OP_TYPE_OR;
+	switch (io.id) {
+	case X86IM_IO_ID_OR_MM_RG: /* or [0x0ff | reg1+reg2+0x0ff], reg */
+		op->dst = anal_fill_ai_mm (anal, io);
+		op->src[0] = anal_fill_ai_rg (anal, io, 0);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* or [0x0ff], reg */
+			op->ref = disp;
+		} else 
+		if ((X86IM_IO_ROP_GET_ID (io.mem_base) == X86IM_IO_ROP_ID_EBP) &&
+			io.mem_index == 0) { /* or [ebp+0x0ff], reg*/
+			op->stackop = R_ANAL_STACK_SET;
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_OR_RG_MM: /* or reg, [0x0ff | reg1+reg2+0x0ff] */
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_ai_mm (anal, io);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* or reg, [0x0ff] */
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_OR_R1_R2: /* or reg2, reg1 */
+	case X86IM_IO_ID_OR_R2_R1:
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_ai_rg (anal, io, 1);
+		break;
+	case X86IM_IO_ID_OR_MM_IM: /* or [0x0ff | reg1+reg2+0x0ff], 0x1 */
+		op->dst = anal_fill_ai_mm (anal, io);
+		op->src[0] = anal_fill_im (anal, io);
+		/* TODO: Deprecate */
+		op->value = imm;
+		if (io.mem_base == 0) { /* or [0x0ff], 0x1 */
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_OR_RG_IM: /* or reg, 0x1 */
+	case X86IM_IO_ID_OR_AC_IM:
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_im (anal, io);
+		/* TODO: Deprecate */
+		op->value = imm;
+		break;
+	}
+}
+
+static void anal_xor(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	st64 imm, disp;
+	imm = r_hex_bin_truncate (io.imm, io.imm_size);
+	disp = r_hex_bin_truncate (io.disp, io.disp_size);
+
+	op->type = R_ANAL_OP_TYPE_XOR;
+	switch (io.id) {
+	case X86IM_IO_ID_XOR_MM_RG: /* xor [0x0ff | reg1+reg2+0x0ff], reg */
+		op->dst = anal_fill_ai_mm (anal, io);
+		op->src[0] = anal_fill_ai_rg (anal, io, 0);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* xor [0x0ff], reg */
+			op->ref = disp;
+		} else 
+		if ((X86IM_IO_ROP_GET_ID (io.mem_base) == X86IM_IO_ROP_ID_EBP) &&
+			io.mem_index == 0) { /* xor [ebp+0x0ff], reg*/
+			op->stackop = R_ANAL_STACK_SET;
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_XOR_RG_MM: /* xor reg, [0x0ff | reg1+reg2+0x0ff] */
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_ai_mm (anal, io);
+		/* TODO: Deprecate */
+		if (io.mem_base == 0) { /* xor reg, [0x0ff] */
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_XOR_R1_R2: /* xor reg2, reg1 */
+	case X86IM_IO_ID_XOR_R2_R1:
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_ai_rg (anal, io, 1);
+		break;
+	case X86IM_IO_ID_XOR_MM_IM: /* xor [0x0ff | reg1+reg2+0x0ff], 0x1 */
+		op->dst = anal_fill_ai_mm (anal, io);
+		op->src[0] = anal_fill_im (anal, io);
+		/* TODO: Deprecate */
+		op->value = imm;
+		if (io.mem_base == 0) { /* xor [0x0ff], 0x1 */
+			op->ref = disp;
+		}
+		break;
+	case X86IM_IO_ID_XOR_RG_IM: /* xor reg, 0x1 */
+	case X86IM_IO_ID_XOR_AC_IM:
+		op->dst = anal_fill_ai_rg (anal, io, 0);
+		op->src[0] = anal_fill_im (anal, io);
+		/* TODO: Deprecate */
+		op->value = imm;
+		break;
+	}
+}
+
+static void anal_lea(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	st64 imm, disp;
+	imm = r_hex_bin_truncate (io.imm, io.imm_size);
+	disp = r_hex_bin_truncate (io.disp, io.disp_size);
+
+	op->type = R_ANAL_OP_TYPE_LEA;
+	/* lea reg, [0x0ff | reg1+reg2+0x0ff] */
+	op->dst = anal_fill_ai_rg (anal, io, 0);
+	op->src[0] = anal_fill_ai_mm (anal, io);
+}
+
+static void anal_int(RAnal *anal, RAnalOp *op, x86im_instr_object io) {
+	op->type = R_ANAL_OP_TYPE_SWI;
+	switch (io.id) {
+	case X86IM_IO_ID_INTN:
+		op->value = io.imm; /* io.imm doesn't need to be trucated here */
+		break;
+	case X86IM_IO_ID_INT3:
+		op->value = 3;
+		break;
+	case X86IM_IO_ID_INTO:
+		break;
+	}
+}
+
+static int x86_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len) {
+	x86im_instr_object io;
+	st64 imm, disp;
+	char mnem[256];
+
 	if (data == NULL)
 		return 0;
-	memset (aop, 0, sizeof (RAnalOp));
-	aop->type = R_ANAL_OP_TYPE_UNK;
-	aop->addr = addr;
-	aop->jump = aop->fail = -1;
-	aop->ref = aop->value = -1;
 
-	switch (buf[0]) {
-	case 0x8a:
-	case 0x8b:
-	case 0x03: //  034518          add eax, [ebp+0x18]
-		switch (buf[1]) {
-		case 0x45:
-		case 0x46:
-		case 0x55:
-		case 0x5d:
-		case 0x7d:
-			/* mov -0xc(%ebp, %eax */
-			aop->ref = (st64)((char)buf[2]);
-			aop->stackop = R_ANAL_STACK_GET;
-			break;
-		case 0x95:
-			if (buf[2]==0xe0) { // ebp
-				aop->ref = (st64)((int)(buf[3]+(buf[4]<<8)+(buf[5]<<16)+(buf[6]<<24)));
-				aop->stackop = R_ANAL_STACK_GET;
-			}
-			//aop->ref = -(buf[2]+(buf[3]<<8)+(buf[4]<<16)+(buf[5]<<24));
-			break;
-		case 0xbd:
-			aop->ref = (st64)((int)(buf[2]+(buf[3]<<8)+(buf[4]<<16)+(buf[5]<<24)));
-			//aop->ref = -(buf[2]+(buf[3]<<8)+(buf[4]<<16)+(buf[5]<<24));
-			aop->stackop = R_ANAL_STACK_GET;
-			break;
-		}
-		break;
-	case 0x88:
-	case 0x89: // move
-		switch (buf[1]) {
-		case 0x45:
-		case 0x4d: //  894de0          mov [ebp-0x20], ecx 
-		case 0x55:
-			aop->stackop = R_ANAL_STACK_SET;
-			aop->ref = (st64)((char)buf[2]);
-			break;
-		case 0x85:
-			aop->stackop = R_ANAL_STACK_SET;
-			aop->ref = (st64)((int)(buf[2]+(buf[3]<<8)+(buf[4]<<16)+(buf[5]<<24)));
-			break;
-		case 0x75:
-			aop->stackop = R_ANAL_STACK_GET;
-			aop->ref = (st64)((char)buf[2]); //+(buf[3]<<8)+(buf[4]<<16)+(buf[5]<<24));
-			break;
-		}
-		// XXX: maybe store or mov depending on opcode
-		// 89c3  mov ebx, eax
-		// 897c2408  mov [esp+0x8], edi
-		aop->type = R_ANAL_OP_TYPE_STORE;
-		break;
-	case 0xf4: // hlt
-		aop->type   = R_ANAL_OP_TYPE_RET;
-		aop->length = 1;
-		break;
-	case 0xc3: // ret
-	case 0xc2: // ret + 2 bytes
-	case 0xcb: // lret
-	case 0xcf: // iret
-		aop->type   = R_ANAL_OP_TYPE_RET;
-		aop->eob = 1;
-		break;
-	//case 0xea: // far jmp
-	// TODO moar
-	case 0x3b: //cmp
-		aop->ref = (st64)((char)buf[2]);
-		aop->stackop = R_ANAL_STACK_GET;
-	case 0x39:
-	case 0x3c:
-	case 0x3d:
-		// 3d 00 40 00 00  cmp eax, 0x4000
-		aop->src[0] = r_anal_value_new ();
-		aop->src[0]->reg = r_reg_get (anal->reg, testregs[(buf[0]&7)%8], R_REG_TYPE_GPR);
-		aop->src[1] = r_anal_value_new ();
-		aop->src[1]->base = buf[1]+(buf[2]<<8)+(buf[3]<<16)+(buf[4]<<24);
-		aop->type = R_ANAL_OP_TYPE_CMP;
-		break;
-	case 0x80:
-		aop->type = R_ANAL_OP_TYPE_CMP;
-		switch (buf[1]) {
-		case 0x3d: // 80 3d b5010608 00  cmp byte [0x80601b5], 0x0
-			aop->src[0] = r_anal_value_new ();
-			aop->src[0]->memref = 1;
-			aop->src[0]->base = buf[2]+(buf[3]<<8)+(buf[4]<<16)+(buf[5]<<24);
-			aop->src[1] = r_anal_value_new ();
-			aop->src[1]->base = buf[6];
-			break;
-		}
-		break;
-	case 0x85:
-		aop->type = R_ANAL_OP_TYPE_CMP;
-		if (buf[1]>=0xc0 && buf[1]<=0xff) { // test eax, eax
-			int src = buf[1]&7;
-			int dst = (buf[1]&0x38)>>3;
-			aop->src[0] = r_anal_value_new ();
-			aop->src[0]->reg = r_reg_get (anal->reg, testregs[src%8], R_REG_TYPE_GPR);
-			aop->src[1] = r_anal_value_new ();
-			aop->src[1]->reg = r_reg_get (anal->reg, testregs[dst%8], R_REG_TYPE_GPR);
-			aop->src[2] = NULL;
-//eprintf ("REGZ (%s)\n", anal->reg);
-//eprintf ("REG IZ: (%s)\n", testregs[src%8]);
-//eprintf ("REG IZ: %p (%s)\n", aop->src[0], aop->src[0]->reg->name);
-			if (aop->src[0]->reg == aop->src[1]->reg) {
-//eprintf ("fruity\n");
-				r_anal_value_free (aop->src[1]);
-				aop->src[1] = NULL;
-			}
-			//eprintf ("0x%"PFMT64x": (%02x) %d %d\n", addr, buf[1], src, dst);
-		} else if (buf[1]<0xc0) { // test [eax+delta], eax
-			/* not yet supported */
-		}
-		// c0-c7 : eax, ecx, edx, ebx, esp, ebp, esi, edi
-		// 83f821  cmp eax, 0x21
-		// 85c0    test eax, eax
-		// 85c9  test ecx, ecx
-		break;
-	case 0x90:
-		aop->type   = R_ANAL_OP_TYPE_NOP;
-		aop->length = 1;
-		break;
-	case 0x0f: // 3 byte nop
-		//0fbe55ff        movsx edx, byte [ebp-0x1]
-		if (buf[1]==0xbe) {
-			aop->ref = (st64)((char)buf[3]);
-			aop->stackop = R_ANAL_STACK_GET;
-		} else
-		if (buf[1]==0x31) {
-			// RDTSC // colorize or sthg?
-			aop->eob = 0;
-		} else
-		if (buf[1]>=0x18 && buf[1]<=0x1f) {
-			aop->type = R_ANAL_OP_TYPE_NOP;
-			aop->length = 3;
-		} else
-		if (buf[1]>=0x80 && buf[1]<=0x8f) {
-			aop->type   = R_ANAL_OP_TYPE_CJMP;
-			aop->jump   = addr+6+buf[2]+(buf[3]<<8)+(buf[4]<<16)+(buf[5]<<24);//((unsigned long)((buf+2))+6);
-			aop->fail   = addr+6;
-			aop->length = 6;
-			//aop->eob    = 1;
-		} else
-		if (buf[1]>=0x40 && buf[1]<=0x4f) { /* Conditional MOV */
-			aop->type = R_ANAL_OP_TYPE_MOV;
-			aop->eob = 0;
-			aop->length = 4;
-			return 4;
-		}
-		break;
-	case 0xcc: // int3
-//		aop->eob = 1;
-		aop->value = 3;
-		aop->type = R_ANAL_OP_TYPE_SWI;
-		break;
-	case 0xf1: // int1
-		aop->length = 1;
-		aop->value = 1;
-		aop->type = R_ANAL_OP_TYPE_SWI;
-		break;
-	case 0xb8: // mov eax, <inmedate>
-	case 0xb9: // mov ecx, <inmedate>
-	case 0xba: // mov edx, <inmedate>
-	case 0xbb: // mov ebx, <inmedate>
-	case 0xbc: // mov esp, <inmedate>
-	case 0xbd: // mov esp, <inmedate>
-	case 0xbf:
-		aop->type = R_ANAL_OP_TYPE_MOV; //  bfdc054000      mov edi, 0x4005dc
-		aop->ref = (st64)((int)buf[1]+(buf[2]<<8)+(buf[3]<<16)+(buf[4]<<24));//((unsigned long)((buf+2))+6);
-		break;
-	case 0xcd:
-		aop->length = 2;
-		aop->type = R_ANAL_OP_TYPE_SWI;
-		aop->value = buf[1];
-		break;
-	case 0xe8: // call
-		aop->type   = R_ANAL_OP_TYPE_CALL;
-		aop->length = 5;
-		//aop->jump   = addr+*ptr+5; //(unsigned long)((buf+1)+5);
-		aop->jump = addr+5+buf[1]+(buf[2]<<8)+(buf[3]<<16)+(buf[4]<<24);//((unsigned long)((buf+2))+6);
-		aop->fail = addr+5;
-//printf("addr: %08"PFMT64x"\n call %08"PFMT64x" \n ret %08"PFMT64x"\n", addr, aop->jump, aop->fail);
-	//	aop->eob    = 1;
-		break;
-	case 0xe9: // jmp
-		aop->type = R_ANAL_OP_TYPE_JMP;
-		aop->length = 5;
-		//aop->jump   = (unsigned long)((buf+1)+5);
-		aop->jump = addr+5+buf[1]+(buf[2]<<8)+(buf[3]<<16)+(buf[4]<<24);//((unsigned long)((buf+2))+6);
-		aop->fail = 0L;
-		aop->eob = 1;
-		break;
-	case 0xeb: // short jmp 
-		aop->type = R_ANAL_OP_TYPE_JMP;
-		aop->length = 2;
-		aop->jump = addr+((unsigned long)((char)buf[1])+2);
-		aop->fail = 0L;
-		aop->eob = 1;
-		break;
-	case 0xf2: // repnz
-	case 0xf3: // repz
-		aop->type   = R_ANAL_OP_TYPE_REP;
-		//aop->length = dislen((unsigned char *)&buf); //instLength(buf, 16, 0);
-		aop->jump   = 0L;
-		aop->fail   = 0L;
-		break;
-	case 0xff:
-		if (buf[1]== 0x75) {
-			aop->type = R_ANAL_OP_TYPE_PUSH;
-			aop->stackop = R_ANAL_STACK_GET;
-			aop->ref = 0LL;
-			aop->ref = (st64)((char)(buf[2]));
-			aop->stackptr = 4;
-		} else
-		if (buf[1]== 0x45) {
-			aop->type = R_ANAL_OP_TYPE_ADD;
-			aop->stackop = R_ANAL_STACK_SET;
-			aop->ref = (st64)((char)buf[2]);
-		} else
-		if (buf[1]>=0x50 && buf[1]<=0x6f) {
-			aop->type = R_ANAL_OP_TYPE_UJMP;
-			aop->eob    = 1;
-		} else
-		if (buf[1]>=0xd0 && buf[1]<=0xd7) {
-			aop->type = R_ANAL_OP_TYPE_CALL;
-			aop->length = 2;
-			aop->eob    = 1;
-			//aop->jump   = vm_arch_x86_regs[VM_X86_EAX+buf[1]-0xd0];
-			aop->fail   = addr+2;
-		} else
-		if (buf[1]>=0xe0 && buf[1]<=0xe7) {
-			aop->type = R_ANAL_OP_TYPE_UJMP;
-			aop->length = 2;
-			//aop->jump   = vm_arch_x86_regs[VM_X86_EAX+buf[1]-0xd0];
-			aop->eob    = 1;
-		}
-		break;
-	case 0x50:
-	case 0x51:
-	case 0x52:
-	case 0x53:
-	case 0x54:
-	case 0x55:
-	case 0x56:
-	case 0x57:
-	case 0x58:
-	case 0x59:
-		aop->type = R_ANAL_OP_TYPE_UPUSH;
-		aop->ref = 0; // TODO value of register here! get_offset
-		aop->stackptr = 4;
-		break;
-	case 0x6a: // push $7
-		aop->type = R_ANAL_OP_TYPE_PUSH;
-		aop->ref = buf[1];
-		aop->stackptr = 4;
-		break;
-		break;
-	case 0x5a:
-	case 0x5b:
-	case 0x5c:
-	case 0x5d:
-	case 0x5e:
-	case 0x5f:
-		aop->type = R_ANAL_OP_TYPE_POP;
-		aop->length = 1;
-		aop->stackptr = -4;
-		break;
-	case 0x2e: // 2e64796e jns 0xb770a4ab !!
-		if (buf[1]>=0x64 && buf[1]<=0x67) {
-			int ret = myaop (anal, aop, addr, data+1, len-1);
-			aop->jump++;
-			aop->length++;
-			return ret;
-		}
-		break;
-	case 0x64:
-	case 0x65:
-	case 0x66:
-	case 0x67:
-		aop->type = R_ANAL_OP_TYPE_CJMP;
-		aop->jump = addr+3+buf[2]; //+(buf[2]<<8)+(buf[3]<<16); // XXX
-		aop->length = 3;
-		aop->fail = addr+aop->length;
-		//aop->eob    = 1;
-		break;
-	case 0x68:
-		aop->type = R_ANAL_OP_TYPE_PUSH;
-		aop->ref = (st64)((int)buf[1]+(buf[2]<<8)+(buf[3]<<16)+(buf[4]<<24));
-		aop->stackptr = 4;
-		break;
-	case 0x81:
-		aop->type = R_ANAL_OP_TYPE_ADD;
-		if (buf[1] == 0xec) {
-			/* sub $0x????????, $esp*/
-  			// 81ece00d0000    sub esp, 0xde0 ; 
-			aop->value = buf[2]+(buf[3]<<8)+(buf[4]<<16)+(buf[5]<<24);
-			aop->stackop = R_ANAL_STACK_INCSTACK;
-			aop->stackptr = aop->value;
-			break;
-		} else
-		if (buf[1] == 0xfa) {
-			aop->type = R_ANAL_OP_TYPE_CMP;
-			// 81fa00c00000  cmp edx, 0xc000
-			// XXX TODO
-		}
-		break;
-	case 0x83:
-		switch (buf[1]) {
-		case 0xe4: // and
-			aop->value = (ut64)(unsigned char)buf[2];
-			aop->type = R_ANAL_OP_TYPE_AND;
-			break;
-		case 0xc4:
-			/* inc $0x????????, $esp*/
-			aop->value = -(ut64)(unsigned char)buf[2];
-			aop->stackop = R_ANAL_STACK_INCSTACK;
-			aop->stackptr = aop->value;
-			break;
-		case 0xf8:
-		case 0xf9:
-		case 0xfa:
-			{
-			int src = buf[1]&7;
-			aop->src[0] = r_anal_value_new ();
-			aop->src[0]->reg = r_reg_get (anal->reg, testregs[src%8], R_REG_TYPE_GPR);
-			aop->src[1] = r_anal_value_new ();
-			aop->src[1]->base = buf[2];
-			// 83f821  cmp eax, 0x21
-			aop->type = R_ANAL_OP_TYPE_CMP;
-			aop->length = 3;
-			}
-			break;
-		case 0xec:
-			/* sub $0x????????, $esp*/
-			aop->value = (ut64)(unsigned char)buf[2];
-			aop->stackop = R_ANAL_STACK_INCSTACK;
-			aop->stackptr = aop->value;
-			break;
-		case 0xbd: /* 837dfc02        cmp dword [ebp-0x4], 0x2 */
-			switch (buf[2]) {
-			case 0xe0: // ebp
-				if ((char)buf[2]>0) {
-					aop->stackop = R_ANAL_STACK_GET;
-					aop->value = buf[3]+(buf[4]<<8)+(buf[5]<<16)+(buf[6]<<24);
-				} else {
-					aop->stackop = R_ANAL_STACK_GET;
-					aop->value = buf[3]+(buf[4]<<8)+(buf[5]<<16)+(buf[6]<<24);
-				}
-				aop->type = R_ANAL_OP_TYPE_CMP;
-				break;
-			}
-			break;
-		case 0x7d: /* 837dfc02        cmp dword [ebp-0x4], 0x2 */
-			if ((char)buf[2]>0) {
-				aop->stackop = R_ANAL_STACK_GET;
-				aop->value = (ut64)(char)buf[2];
-			} else {
-				aop->stackop = R_ANAL_STACK_GET;
-				aop->value = (ut64)-(char)buf[2];
-			}
-			aop->type = R_ANAL_OP_TYPE_CMP;
-			break;
-		}
-		break;
-	case 0x8d:
-		/* LEA */
-		if (buf[1] == 0x85) {
-			aop->ref = (st64)((int)(buf[2]+(buf[3]<<8)+(buf[4]<<16)+(buf[5]<<24)));
-			aop->stackop = R_ANAL_STACK_GET;
-		}
-		aop->type =R_ANAL_OP_TYPE_MOV;
-		break;
-	case 0xc6:
-	case 0xc7:
-		/* mov dword [ebp-0xc], 0x0  ||  c7 45 f4 00000000 */
-		switch (buf[1]) {
-		case 0x85:
-			aop->ref = (st64)(((int)(buf[2]+(buf[3]<<8)+(buf[4]<<16)+(buf[5]<<24))));
-			break;
- 			//c785 e4fbffff 00. mov dword [ebp+0xfffffbe4], 0x0
-		case 0x45:
-			aop->stackop = R_ANAL_STACK_SET;
-			aop->ref = (st64)((char)buf[2]);
-			break;
-		case 0x05:
-			// c7050c0106080000. mov dword [0x806010c], 0x0
-			//  c605b401060800  mov byte [0x80601b4], 0x0
-			// TODO: 
-			break;
-		case 0x04:
-			// c7042496850408    dword [esp] = 0x8048596 ; LOL
-			aop->refptr = 4;
-			aop->ref = (st64)(((int)(buf[3]+(buf[4]<<8)+(buf[5]<<16)+(buf[6]<<24))));
-			break;
-		}
-		aop->type = R_ANAL_OP_TYPE_STORE;
-		break;
-	case 0x82:
-		aop->type = R_ANAL_OP_TYPE_ADD;
-		break;
-	case 0x29:
-		aop->type = R_ANAL_OP_TYPE_SUB;
-		break;
-	case 0x31:
-		aop->type = R_ANAL_OP_TYPE_XOR;
-		break;
-	case 0x32:
-		aop->type = R_ANAL_OP_TYPE_AND;
-		break;
+	memset (op, '\0', sizeof (RAnalOp));
+	op->type = R_ANAL_OP_TYPE_UNK;
+	op->addr = addr;
+	op->jump = op->fail = -1;
+	op->ref = op->value = -1;
 
-	case 0xa1: // mov eax, [addr]
-		aop->type = R_ANAL_OP_TYPE_MOV;
-		//vm_arch_x86_regs[VM_X86_EAX] = addr+buf[1]+(buf[2]<<8)+(buf[3]<<16)+(buf[4]<<24);
-		//radare_read_at((ut64)vm_arch_x86_regs[VM_X86_EAX], (unsigned char *)&(vm_arch_x86_regs[VM_X86_EAX]), 4);
-		break;
-#if 0
-	case0xF
-		/* conditional jump */
-		if (buf[1]>=0x80&&buf[1]<=0x8F) {
-			aop->type   = R_ANAL_OP_TYPE_CJMP;
-			aop->length = 6;
-			aop->jump   = (unsigned long)((buf+2)+6);
-			aop->fail   = addr+6;
-			aop->eob    = 1;
-			return 5;
-		}
-		break;
-#endif
-	case 0x70:
-	case 0x71:
-	case 0x72:
-	case 0x73:
-	case 0x74:
-	case 0x75:
-	case 0x76:
-	case 0x77:
-	case 0x78:
-	case 0x79:
-	case 0x7a:
-	case 0x7b:
-	case 0x7c:
-	case 0x7d:
-	case 0x7e:
-	case 0x7f: {
-		int bo = (int)((char) buf[1]);
-		/* conditional jump */
-		//if (buf[1]>=0x80&&buf[1]<=0x8F) {
-			aop->type = R_ANAL_OP_TYPE_CJMP;
-			aop->length = 2;
-		//	aop->jump   = (unsigned long)((buf+2)+6);
-			aop->jump = addr+bo+2; //(unsigned long)((buf+1)+5);
-			aop->fail = addr+2;
-			aop->eob = 1;
-			//return 2;
-		}
-		break;
-	//default:
-		//aop->type = R_ANAL_OP_TYPE_UNK;
+	if ((x86im_dec (&io,
+			anal->bits == 32 ? X86IM_IO_MODE_32BIT : X86IM_IO_MODE_64BIT,
+			(unsigned char*)data)) == X86IM_STATUS_SUCCESS) {
+		if (io.len > len)
+			return 0;
+		x86im_fmt_format_name (&io, mnem);	
+		op->mnemonic = strdup (mnem);
+		imm = r_hex_bin_truncate (io.imm, io.imm_size);
+		disp = r_hex_bin_truncate (io.disp, io.disp_size);
+		if (X86IM_IO_IS_GPI_JMP (&io)) /* jump */
+			anal_jmp (anal, op, io);
+		else
+		if (X86IM_IO_IS_GPI_JCC (&io)) /* conditional jump*/
+			anal_cjmp (anal, op, io);
+		else
+		if (X86IM_IO_IS_GPI_CALL (&io)) /* call */
+			anal_call (anal, op, io);
+		else
+		if (X86IM_IO_IS_GPI_RET (&io)) /* ret */
+			anal_ret (anal, op, io);
+		else
+		if (io.id == X86IM_IO_ID_HLT) /* htl */
+			anal_hlt (anal, op, io);
+		else
+		if (X86IM_IO_IS_GPI_MOV (&io)) /* mov */
+			anal_mov (anal, op, io);
+		else
+		if (X86IM_IO_IS_GPI_CMP (&io)) /* cmp */
+			anal_cmp (anal, op, io);
+		else
+		if (X86IM_IO_IS_GPI_TEST (&io)) /* test */
+			anal_test (anal, op, io);
+		else
+		if (X86IM_IO_IS_GPI_PUSH (&io)) /* push */
+			anal_push (anal, op, io);
+		else
+		if (X86IM_IO_IS_GPI_POP (&io)) /* pop */
+			anal_pop (anal, op, io);
+		else
+		if (X86IM_IO_IS_GPI_ADD (&io)) /* add */
+			anal_add (anal, op, io);
+		else
+		if (X86IM_IO_IS_GPI_SUB (&io)) /* sub */
+			anal_sub (anal, op, io);
+		else
+		if (X86IM_IO_IS_GPI_INT (&io)) /* int */
+			anal_int (anal, op, io);
+		else
+		if (X86IM_IO_IS_GPI_MUL (&io)) { /* mul */
+			op->type = R_ANAL_OP_TYPE_MUL;
+			op->value = imm;
+		} else
+		if (X86IM_IO_IS_GPI_DIV (&io)) { /* div */
+			op->type = R_ANAL_OP_TYPE_DIV;
+			op->value = imm;
+		} else
+		if (X86IM_IO_IS_GPI_SHR (&io)) { /* shr */
+			op->type = R_ANAL_OP_TYPE_SHR;
+			op->value = imm;
+		} else
+		if (X86IM_IO_IS_GPI_SHL (&io)) { /* shl */
+			op->type = R_ANAL_OP_TYPE_SHL;
+			op->value = imm;
+		} else
+		if (X86IM_IO_IS_GPI_OR (&io)) /* or */
+			anal_or (anal, op, io);
+		else
+		if (X86IM_IO_IS_GPI_AND (&io)) /* and */
+			anal_and (anal, op, io);
+		else
+		if (X86IM_IO_IS_GPI_XOR (&io)) /* xor */
+			anal_xor (anal, op, io);
+		else
+		if (X86IM_IO_IS_GPI_NOT (&io)) { /* not */
+			op->type = R_ANAL_OP_TYPE_NOT;
+			op->value = imm;
+		} else
+		if (io.id == X86IM_IO_ID_NOP) /* nop */
+			op->type = R_ANAL_OP_TYPE_NOP;
+		else
+		if (io.id == X86IM_IO_ID_LEA) /* lea */
+			anal_lea (anal, op, io);
+		else
+		if (io.id == X86IM_IO_ID_LEAVE) /* leave */
+			op->type = R_ANAL_OP_TYPE_LEAVE;
+		op->length = io.len;
+		op->nopcode = io.opcode_count;
 	}
 
-	//if (aop->length == 0)
-	aop->length = dislen ((unsigned char *)buf, 64); //instLength(buf, 16, 0);
-		//aop->length = instLength(buf, 16, 0);
-	if (!(aop->jump>>33))
-		aop->jump &= 0xFFFFFFFF; // XXX may break on 64 bits here
-	return aop->length;
+	return op->length;
+}
+
+static int set_reg_profile(RAnal *anal) {
+	/* XXX Dupped Profiles */
+	if (anal->bits == 32)
+#if __WINDOWS__
+		return r_reg_set_profile_string (anal->reg,
+				"=pc	eip\n"
+				"=sp	esp\n"
+				"=bp	ebp\n"
+				"=a0	eax\n"
+				"=a1	ebx\n"
+				"=a2	ecx\n"
+				"=a3	edi\n"
+				"drx	dr0	.32	4	0\n"
+				"drx	dr1	.32	8	0\n"
+				"drx	dr2	.32	12	0\n"
+				"drx	dr3	.32	16	0\n"
+				"drx	dr6	.32	20	0\n"
+				"drx	dr7	.32	24	0\n"
+				/* floating save area 4+4+4+4+4+4+4+80+4 = 112 */
+				"seg	gs	.32	132	0\n"
+				"seg	fs	.32	136	0\n"
+				"seg	es	.32	140	0\n"
+				"seg	ds	.32	144	0\n"
+				"gpr	edi	.32	156	0\n"
+				"gpr	esi	.32	160	0\n"
+				"gpr	ebx	.32	164	0\n"
+				"gpr	edx	.32	168	0\n"
+				"gpr	ecx	.32	172	0\n"
+				"gpr	eax	.32	176	0\n"
+				"gpr	ebp	.32	180	0\n"
+				"gpr	esp	.32	196	0\n"
+				"gpr	eip	.32	184	0\n"
+				"seg	cs	.32	184	0\n"
+				"seg	ds	.32	152	0\n"
+				"seg	gs	.32	140	0\n"
+				"seg	fs	.32	144	0\n"
+				"gpr	eflags	.32	192	0	c1p.a.zstido.n.rv\n" // XXX must be flg
+				"seg	ss	.32	200	0\n"
+				/* +512 bytes for maximum supoprted extension extended registers */
+				);
+#else
+		return r_reg_set_profile_string (anal->reg,
+				"=pc	eip\n"
+				"=sp	esp\n"
+				"=bp	ebp\n"
+				"=a0	eax\n"
+				"=a1	ebx\n"
+				"=a2	ecx\n"
+				"=a3	edi\n"
+				"gpr	eip	.32	48	0\n"
+				"gpr	ip	.16	48	0\n"
+				"gpr	oeax	.32	44	0\n"
+				"gpr	eax	.32	24	0\n"
+				"gpr	ax	.16	24	0\n"
+				"gpr	ah	.8	24	0\n"
+				"gpr	al	.8	25	0\n"
+				"gpr	ebx	.32	0	0\n"
+				"gpr	bx	.16	0	0\n"
+				"gpr	bh	.8	0	0\n"
+				"gpr	bl	.8	1	0\n"
+				"gpr	ecx	.32	4	0\n"
+				"gpr	cx	.16	4	0\n"
+				"gpr	ch	.8	4	0\n"
+				"gpr	cl	.8	5	0\n"
+				"gpr	edx	.32	8	0\n"
+				"gpr	dx	.16	8	0\n"
+				"gpr	dh	.8	8	0\n"
+				"gpr	dl	.8	9	0\n"
+				"gpr	esp	.32	60	0\n"
+				"gpr	sp	.16	60	0\n"
+				"gpr	ebp	.32	20	0\n"
+				"gpr	bp	.16	20	0\n"
+				"gpr	esi	.32	12	0\n"
+				"gpr	si	.16	12	0\n"
+				"gpr	edi	.32	16	0\n"
+				"gpr	di	.16	16	0\n"
+				"seg	xfs	.32	36	0\n"
+				"seg	xgs	.32	40	0\n"
+				"seg	xcs	.32	52	0\n"
+				"seg	cs	.16	52	0\n"
+				"seg	xss	.32	52	0\n"
+				"gpr	eflags	.32	56	0	c1p.a.zstido.n.rv\n"
+				"gpr	flags	.16	56	0\n"
+				"flg	carry	.1	.448	0\n"
+				"flg	flag_p	.1	.449	0\n"
+				"flg	flag_a	.1	.450	0\n"
+				"flg	zero	.1	.451	0\n"
+				"flg	sign	.1	.452	0\n"
+				"flg	flag_t	.1	.453	0\n"
+				"flg	flag_i	.1	.454	0\n"
+				"flg	flag_d	.1	.455	0\n"
+				"flg	flag_o	.1	.456	0\n"
+				"flg	flag_r	.1	.457	0\n"
+				"drx	dr0	.32	0	0\n"
+				"drx	dr1	.32	4	0\n"
+				"drx	dr2	.32	8	0\n"
+				"drx	dr3	.32	12	0\n"
+				//"drx	dr4	.32	16	0\n"
+				//"drx	dr5	.32	20	0\n"
+				"drx	dr6	.32	24	0\n"
+				"drx	dr7	.32	28	0\n");
+#endif
+	else return r_reg_set_profile_string (anal->reg,
+				"=pc	rip\n"
+				"=sp	rsp\n"
+				"=bp	rbp\n"
+				"=a0	rax\n"
+				"=a1	rbx\n"
+				"=a2	rcx\n"
+				"=a3	rdx\n"
+				"# no profile defined for x86-64\n"
+				"gpr	r15	.64	0	0\n"
+				"gpr	r14	.64	8	0\n"
+				"gpr	r13	.64	16	0\n"
+				"gpr	r12	.64	24	0\n"
+				"gpr	rbp	.64	32	0\n"
+				"gpr	ebp	.32	32	0\n"
+				"gpr	rbx	.64	40	0\n"
+				"gpr	ebx	.32	40	0\n"
+				"gpr	r11	.64	48	0\n"
+				"gpr	r10	.64	56	0\n"
+				"gpr	r9	.64	64	0\n"
+				"gpr	r8	.64	72	0\n"
+				"gpr	rax	.64	80	0\n"
+				"gpr	eax	.32	80	0\n"
+				"gpr	rcx	.64	88	0\n"
+				"gpr	ecx	.32	88	0\n"
+				"gpr	rdx	.64	96	0\n"
+				"gpr	edx	.32	96	0\n"
+				"gpr	rsi	.64	104	0\n"
+				"gpr	esi	.32	104	0\n"
+				"gpr	rdi	.64	112	0\n"
+				"gpr	edi	.32	112	0\n"
+				"gpr	oeax	.64	120	0\n"
+				"gpr	rip	.64	128	0\n"
+				"seg	cs	.64	136	0\n"
+				//"flg	eflags	.64	144	0\n"
+				"gpr	eflags	.32	144	0	c1p.a.zstido.n.rv\n"
+				"gpr	rsp	.64	152	0\n"
+				"seg	ss	.64	160	0\n"
+				"seg	fs_base	.64	168	0\n"
+				"seg	gs_base	.64	176	0\n"
+				"seg	ds	.64	184	0\n"
+				"seg	es	.64	192	0\n"
+				"seg	fs	.64	200	0\n"
+				"seg	gs	.64	208	0\n"
+				"drx	dr0	.32	0	0\n"
+				"drx	dr1	.32	4	0\n"
+				"drx	dr2	.32	8	0\n"
+				"drx	dr3	.32	12	0\n"
+				"drx	dr6	.32	24	0\n"
+				"drx	dr7	.32	28	0\n");
 }
 
 struct r_anal_plugin_t r_anal_plugin_x86 = {
 	.name = "x86",
-	.desc = "X86 analysis plugin",
+	.desc = "X86 analysis plugin (x86im backend)",
 	.init = NULL,
 	.fini = NULL,
-	.aop = &myaop
+	.op = &x86_op,
+	.set_reg_profile = &set_reg_profile,
+	.fingerprint_bb = NULL,
+	.fingerprint_fcn = NULL,
+	.diff_bb = NULL,
+	.diff_fcn = NULL,
+	.diff_eval = NULL
 };
 
 #ifndef CORELIB

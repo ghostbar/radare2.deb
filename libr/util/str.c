@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
 
 #include "r_types.h"
 #include "r_util.h"
@@ -10,9 +10,63 @@
 static const char *nullstr = "";
 static const char *nullstr_c = "(null)";
 
+// TODO: simplify this horrible loop
+R_API void r_str_chop_path (char *s) {
+	char *src, *dst, *p;
+	int i = 0;
+	dst = src = s+1;
+	while (*src) {
+		if (*(src-1) == '/' && *src == '.' && *(src+1) == '.') {
+			if (*(src+2) == '/' || *(src+2) == '\0') {
+				p = dst-1;
+				while (s != p) {
+					if (*p == '/') {
+						if (i) {
+							dst = p+1;
+							i = 0;
+							break;
+						} i++;
+					}
+					p--;
+				}
+				src = src+2;
+			} else {
+				*dst = *src;
+				dst++;
+			}
+		} else if (*src != '/' || *(src-1) != '/') {
+			*dst = *src;
+			dst++;
+		}
+		src++;
+	}
+	if (dst>s+1 && *(dst-1) == '/')
+		*(dst-1) = 0;
+	else *dst = 0;
+}
+
+#if 0
+// TEST CASE FOR r_str_chop_path
+main () {
+	char buf[1024];
+	strcpy (buf, "/foo/boo/");
+	r_str_chop_path (buf);
+	printf ("%d %s\n", strcmp ("/foo/boo", buf), buf);
+	strcpy (buf, "/foo/boo");
+	r_str_chop_path (buf);
+	printf ("%d %s\n", strcmp ("/foo/boo", buf), buf);
+	strcpy (buf, "/foo");
+	r_str_chop_path (buf);
+	printf ("%d %s\n", strcmp ("/foo", buf), buf);
+	strcpy (buf, "/");
+	r_str_chop_path (buf);
+	printf ("%d %s\n", strcmp ("/", buf), buf);
+}
+#endif
+
 R_API void r_str_subchr (char *s, int a, int b) {
 	while (*s) {
-		if(*s==a) {
+		if (*s==a) {
 			if (b) *s = b;
 			else strcpy (s, s+1);
 		}
@@ -21,11 +75,21 @@ R_API void r_str_subchr (char *s, int a, int b) {
 }
 
 // TODO: do not use toupper.. must support modes to also append lowercase chars like in r1
+// TODO: this functions needs some stabilization
 R_API int r_str_bits (char *strout, const ut8 *buf, int len, const char *bitz) {
-	int i, j, *p = (int*)buf;
-	for (i=j=0; i<len && bitz[i]; i++) {
-		if (*p&(1<<i))
-			strout[j++] = toupper (bitz[i]);
+	int i, j;
+	if (bitz) {
+		for (i=j=0; i<len && (!bitz||bitz[i]); i++)
+			if (i>0 && (i%8)==0)
+				buf++;
+	                if (*buf&(1<<i))
+				strout[j++] = toupper (bitz[i]);
+	} else {
+		for (i=j=0; i<len; i++) {
+			if (i>0 && (i%8)==0)
+				buf++;
+			strout[j++] = (*buf&(1<<(7-(i%8))))?'1':'0';
+		}
 	}
 	strout[j] = 0;
 	return j;
@@ -168,13 +232,12 @@ R_API int r_str_word_count(const char *string) {
 }
 
 R_API char *r_str_ichr(char *str, char chr) {
-	while (*str==chr)
-		str = str+1;
+	while (*str==chr) str++;
 	return str;
 }
 
 R_API char *r_str_lchr(char *str, char chr) {
-	int len = strlen(str)+1;
+	int len = strlen (str)+1;
 	for (;len>=0;len--)
 		if (str[len]==chr)
 			return str+len;
@@ -240,10 +303,9 @@ R_API char *r_str_chop(char *str) {
 }
 
 R_API char *r_str_trim_head(char *str) {
-	if (str == NULL)
-		return NULL;
-	while (*str && iswhitechar(*str)) 
-		str++;
+	if (str)
+		while (*str && iswhitechar(*str)) 
+			str++;
 	return str;
 }
 
@@ -642,7 +704,6 @@ R_API void r_str_argv_free(char **argv) {
 	free (argv);
 }
 
-
 #if 0
 /* XXX this is necessary ??? */
 // TODO: make it dynamic
@@ -650,8 +711,7 @@ static int bprintf_init = 0;
 static char bprintf_buf[4096];
 
 // XXX overflow
-R_API int r_bprintf(const char *fmt, ...)
-{
+R_API int r_bprintf(const char *fmt, ...) {
 	va_list ap;
 	if (bprintf_init==0)
 		*bprintf_buf = 0;
@@ -661,8 +721,7 @@ R_API int r_bprintf(const char *fmt, ...)
 	return strlen(bprintf_buf);
 }
 
-R_API char *r_bprintf_get()
-{
+R_API char *r_bprintf_get() {
 	char *s;
 	if (bprintf_init==0)
 		*bprintf_buf = 0;

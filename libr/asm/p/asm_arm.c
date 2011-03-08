@@ -53,17 +53,18 @@ static int buf_fprintf(void *stream, const char *format, ...) {
 	return R_TRUE;
 }
 
-static int disassemble(struct r_asm_t *a, struct r_asm_aop_t *aop, ut8 *buf, ut64 len) {
+static int disassemble(struct r_asm_t *a, struct r_asm_op_t *op, ut8 *buf, ut64 len) {
 	static struct disassemble_info disasm_obj;
 
-	buf_global = aop->buf_asm;
+	buf_global = op->buf_asm;
 	Offset = a->pc;
 	memcpy (bytes, buf, 4); // TODO handle thumb
 
 	/* prepare disassembler */
-	memset(&disasm_obj,'\0', sizeof(struct disassemble_info));
+	memset (&disasm_obj,'\0', sizeof(struct disassemble_info));
 	arm_mode = a->bits;
-	//info.arch = ARM_EXT_V1|ARM_EXT_V4T|ARM_EXT_V5;
+	//disasm_obj.arch = ARM_EXT_V1|ARM_EXT_V4T|ARM_EXT_V5;
+	disasm_obj.arch = 1; //ARM_EXT_V1|ARM_EXT_V4T|ARM_EXT_V5;
 	disasm_obj.buffer = bytes;
 	disasm_obj.read_memory_func = &arm_buffer_read_memory;
 	disasm_obj.symbol_at_address_func = &symbol_at_address;
@@ -75,20 +76,21 @@ static int disassemble(struct r_asm_t *a, struct r_asm_aop_t *aop, ut8 *buf, ut6
 	disasm_obj.bytes_per_chunk =
 	disasm_obj.bytes_per_line = (a->bits/8);
 
-	aop->buf_asm[0]='\0';
-	aop->inst_len = print_insn_arm((bfd_vma)Offset, &disasm_obj);
-	if (aop->inst_len == -1)
-		strncpy(aop->buf_asm, " (data)", R_ASM_BUFSIZE);
-	return aop->inst_len; //(a->bits/8); //aop->inst_len;
+	op->buf_asm[0]='\0';
+	op->inst_len = print_insn_arm((bfd_vma)Offset, &disasm_obj);
+	if (op->inst_len == -1)
+		strncpy(op->buf_asm, " (data)", R_ASM_BUFSIZE);
+	return op->inst_len; //(a->bits/8); //op->inst_len;
 }
 
-static int assemble(RAsm *a, RAsmAop *aop, const char *buf) {
-	int op = armass_assemble(buf, a->pc, (a->bits==16)?1:0);
-	if (op==-1)
+// XXX: This is wrong, some opcodes are 32bit in thumb mode
+static int assemble(RAsm *a, RAsmOp *op, const char *buf) {
+	int opcode = armass_assemble(buf, a->pc, (a->bits==16)?1:0);
+	if (opcode==-1)
 		return -1;
 	if (a->bits==32)
-		r_mem_copyendian (aop->buf, (void *)&op, 4, a->big_endian);
-	else r_mem_copyendian (aop->buf, (void *)&op, 2, a->big_endian);
+		r_mem_copyendian (op->buf, (void *)&opcode, 4, a->big_endian);
+	else r_mem_copyendian (op->buf, (void *)&opcode, 2, a->big_endian);
 	return (a->bits/8);
 }
 

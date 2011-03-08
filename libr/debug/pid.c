@@ -2,12 +2,13 @@
 
 #include <r_debug.h>
 
-R_API RDebugPid *r_debug_pid_new(char *path, int pid, char status) {
+R_API RDebugPid *r_debug_pid_new(const char *path, int pid, char status, ut64 pc) {
 	RDebugPid *p = R_NEW (RDebugPid);
 	p->path = strdup (path);
 	p->pid = pid;
 	p->status = status;
 	p->runnable = R_TRUE;
+	p->pc = pc;
 	return p;
 }
 
@@ -17,6 +18,13 @@ R_API RDebugPid *r_debug_pid_free(RDebugPid *pid) {
 	return NULL;
 }
 
+R_API RList *r_debug_pids(RDebug *dbg, int pid) {
+	if (dbg && dbg->h && dbg->h->pids)
+		return dbg->h->pids (pid);
+	return NULL;
+}
+
+// TODO: deprecate? iterating in api? wtf?
 R_API int r_debug_pid_list(struct r_debug_t *dbg, int pid) {
 	RList *list;
 	RListIter *iter;
@@ -27,7 +35,9 @@ R_API int r_debug_pid_list(struct r_debug_t *dbg, int pid) {
 		iter = r_list_iterator (list);
 		while (r_list_iter_next (iter)) {
 			RDebugPid *p = r_list_iter_get (iter);
-			eprintf (" %d %c %s\n", p->pid, p->status, p->path);
+			eprintf (" %c %d %c %s\n", 
+				dbg->pid==p->pid?'*':'-',
+				p->pid, p->status, p->path);
 		}
 		r_list_free (list);
 	}
@@ -44,7 +54,9 @@ R_API int r_debug_thread_list(struct r_debug_t *dbg, int pid) {
 		iter = r_list_iterator (list);
 		while (r_list_iter_next (iter)) {
 			RDebugPid *p = r_list_iter_get (iter);
-			eprintf (" %d %c %s\n", p->pid, p->status, p->path);
+			eprintf (" %c %d %c %s\n",
+				dbg->tid==p->pid?'*':'-',
+				p->pid, p->status, p->path);
 		}
 		r_list_free (list);
 	}

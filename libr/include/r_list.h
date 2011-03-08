@@ -31,8 +31,8 @@ typedef struct r_oflist_t {
 	for (it = list->head; it && (pos = it->data); it = it->n)
 #define r_list_foreach_prev(list, it, pos) \
 	for (it = list->tail; it && (pos = it->data); it = it->p)
-#define r_list_iterator(x) (x)->head
-#define r_list_empty(x) (x->head==NULL && x->tail==NULL)
+#define r_list_iterator(x) (x)?(x)->head:NULL
+#define r_list_empty(x) (x==NULL || (x->head==NULL && x->tail==NULL))
 #define r_list_head(x) x->head
 #define r_list_tail(x) x->tail
 #define r_list_unref(x) x
@@ -40,9 +40,9 @@ typedef struct r_oflist_t {
 #define r_list_iter_next(x) (x?1:0)
 #define r_list_iter_cur(x) x->p
 #define r_list_iter_unref(x) x
-RList *r_list_new();
-RListIter *r_list_append(RList *list, void *data);
-RListIter *r_list_prepend(RList *list, void *data);
+R_API RList *r_list_new();
+R_API RListIter *r_list_append(RList *list, void *data);
+R_API RListIter *r_list_prepend(RList *list, void *data);
 R_API int r_list_length(RList *list);
 R_API void r_list_add_sorted(RList *list, void *data, RListComparator cmp);
 R_API void r_list_sort(RList *list, RListComparator cmp);

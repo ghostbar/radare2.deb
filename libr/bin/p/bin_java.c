@@ -1,4 +1,5 @@
-/* radare - GPL3 - Copyright 2009 nibble<.ds@gmail.com> */
+/* radare - GPL3 - Copyright 2009-2011 */
+/* authors: pancake, nibble */
 
 #include <r_types.h>
 #include <r_util.h>
@@ -81,6 +82,7 @@ static RList* strings(RBinArch *arch) {
 		ptr->rva = ptr->offset = strings[i].offset;
 		ptr->size = strings[i].size;
 		ptr->ordinal = strings[i].ordinal;
+		r_list_append (ret, ptr);
 	}
 	free (strings);
 	return ret;
@@ -118,7 +120,7 @@ static int check(RBinArch *arch) {
 		memcpy (&off, arch->buf->buf+4*sizeof(int), sizeof(int));
 		r_mem_copyendian ((ut8*)&off, (ut8*)&off, sizeof(int), !LIL_ENDIAN);
 		if (off > 0 && off < arch->buf->length) {
-			memcpy (arch->buf->buf, arch->buf->buf+off, 4);
+			memmove (arch->buf->buf, arch->buf->buf+off, 4);
 			if (!memcmp (arch->buf->buf, "\xce\xfa\xed\xfe", 4) ||
 				!memcmp (arch->buf->buf, "\xfe\xed\xfa\xce", 4) ||
 				!memcmp (arch->buf->buf, "\xfe\xed\xfa\xcf", 4) ||
@@ -127,6 +129,10 @@ static int check(RBinArch *arch) {
 		}
 	}
 	return ret;
+}
+
+static int retdemangle(const char *str) {
+	return R_BIN_NM_JAVA;
 }
 
 struct r_bin_plugin_t r_bin_plugin_java = {
@@ -138,7 +144,7 @@ struct r_bin_plugin_t r_bin_plugin_java = {
 	.destroy = &destroy,
 	.check = &check,
 	.baddr = &baddr,
-	.main = NULL,
+	.binsym = NULL,
 	.entries = &entries,
 	.sections = NULL,
 	.symbols = &symbols,
@@ -150,6 +156,7 @@ struct r_bin_plugin_t r_bin_plugin_java = {
 	.relocs = NULL,
 	.meta = NULL,
 	.write = NULL,
+	.demangle_type = retdemangle
 };
 
 #ifndef CORELIB

@@ -1,12 +1,13 @@
+#include <r_cons.h>
 #include <r_flags.h>
 
 int main()
 {
-	struct r_flag_t *flags;
-	struct r_flag_item_t *fi;
+	RFlag *flags;
+	RFlagItem *fi;
 
 	r_cons_new ();
-	flags = r_flag_new(flags);
+	flags = r_flag_new();
 	r_flag_set(flags, "foo", 1024, 50, 0);
 
 	fi = r_flag_get_i(flags, 1024);
@@ -35,6 +36,7 @@ int main()
 	r_flag_list (flags, 1);
 	r_cons_flush ();
 	r_flag_free (flags);
+	r_cons_free ();
 
 	return 0;
 }

@@ -3,15 +3,18 @@
 
 #include "r_types.h"
 #include "r_util.h"
+#include "r_io.h"
 
 #define R_PRINT_FLAGS_COLOR   0x00000001
 #define R_PRINT_FLAGS_ADDRMOD 0x00000002
 #define R_PRINT_FLAGS_CURSOR  0x00000004
 #define R_PRINT_FLAGS_HEADER  0x00000008
 
+typedef int (*RPrintZoomCallback)(void *user, int mode, ut64 addr, ut8 *bufz, ut64 size);
+
 typedef struct r_print_t {
 	void *user;
-	int (*read_at)(ut64 addr, ut8 *buf, int len, void *user);
+	RIOBind iob;
 	char datefmt[32];
 	int (*printf)(const char *str, ...);
 	/* TODO: add printf callback */
@@ -32,8 +35,7 @@ R_API char *r_print_hexpair(RPrint *p, const char *str, int idx);
 R_API RPrint *r_print_new();
 R_API RPrint *r_print_free(RPrint *p);
 R_API void r_print_set_flags(RPrint *p, int _flags);
-void r_print_unset_flags(RPrint *p, int flags);
-R_API void r_print_set_width(RPrint *p, int width);
+R_API void r_print_unset_flags(RPrint *p, int flags);
 R_API void r_print_addr(RPrint *p, ut64 addr);
 R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int base, int step);
 R_API void r_print_hexpairs(RPrint *p, ut64 addr, const ut8 *buf, int len);
@@ -50,6 +52,8 @@ R_API int r_print_string(RPrint *p, ut64 seek, const ut8 *str, int len, int wide
 R_API int r_print_date_dos(struct r_print_t *p, ut8 *buf, int len);
 R_API int r_print_date_w32(struct r_print_t *p, const ut8 *buf, int len);
 R_API int r_print_date_unix(struct r_print_t *p, const ut8 *buf, int len);
+R_API void r_print_zoom (RPrint *p, void *user, RPrintZoomCallback cb, ut64 from, ut64 to, int mode, int len);
+R_API void r_print_progressbar(RPrint *pr, int pc, int _cols);
 #endif
 
 #endif

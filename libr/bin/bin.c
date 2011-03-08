@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2010 nibble<.ds@gmail.com> */
+/* radare - LGPL - Copyright 2009-2011 nibble<.ds@gmail.com> */
 
 /* TODO:
  * dlopen library and show address
@@ -24,26 +24,26 @@ static void get_strings_range(RBinArch *arch, RList *list, int min, ut64 from, u
 		if ((IS_PRINTABLE (arch->buf->buf[i])) && matches < R_BIN_SIZEOF_STRINGS-1) {
 			str[matches] = arch->buf->buf[i];
 			matches++;
-		} else {
-			/* check if the length fits in our request */
-			if (matches >= min) {
-				if (!(ptr = R_NEW (RBinString))) {
-					eprintf ("Error allocating string\n");
-					break;
-				}
-				str[matches] = '\0';
-				ptr->offset = i-matches;
-				ptr->rva = ptr->offset-from+scnrva;
-				ptr->size = matches;
-				ptr->ordinal = ctr;
-				// copying so many bytes here..
-				memcpy (ptr->string, str, R_BIN_SIZEOF_STRINGS);
-				ptr->string[R_BIN_SIZEOF_STRINGS-1] = '\0';
-				r_list_append (list, ptr);
-				ctr++;
-			}
-			matches = 0;
+			continue;
 		}
+		/* check if the length fits in our request */
+		if (matches >= min) {
+			if (!(ptr = R_NEW (RBinString))) {
+				eprintf ("Error allocating string\n");
+				break;
+			}
+			str[matches] = '\0';
+			ptr->offset = i-matches;
+			ptr->rva = ptr->offset-from+scnrva;
+			ptr->size = matches;
+			ptr->ordinal = ctr;
+			// copying so many bytes here..
+			memcpy (ptr->string, str, R_BIN_SIZEOF_STRINGS);
+			ptr->string[R_BIN_SIZEOF_STRINGS-1] = '\0';
+			r_list_append (list, ptr);
+			ctr++;
+		}
+		matches = 0;
 	}
 }
 
@@ -78,6 +78,7 @@ static RList* get_strings(RBinArch *arch, int min) {
 }
 
 static int r_bin_init_items(RBin *bin, int dummy) {
+	int i;
 	struct list_head *pos;
 	RBinArch *arch = &bin->curarch;
 
@@ -95,8 +96,9 @@ static int r_bin_init_items(RBin *bin, int dummy) {
 		return R_FALSE;
 	if (arch->curplugin->baddr)
 		arch->baddr = arch->curplugin->baddr (arch);
-	if (arch->curplugin->main)
-		arch->main = arch->curplugin->main (arch);
+	if (arch->curplugin->binsym)
+		for (i=0; i<R_BIN_SYM_LAST; i++)
+			arch->binsym[i] = arch->curplugin->binsym (arch, i);
 	if (arch->curplugin->entries)
 		arch->entries = arch->curplugin->entries (arch);
 	if (arch->curplugin->fields)
@@ -121,8 +123,9 @@ static int r_bin_init_items(RBin *bin, int dummy) {
 
 /* TODO: Free plugins */
 static void r_bin_free_items(RBin *bin) {
+	int i;
 	RBinArch *arch = &bin->curarch;
-
+	// XXX: drop all those silly conditionals! if it's null is not for freeing
 	if (arch->entries)
 		r_list_free (arch->entries);
 	if (arch->fields)
@@ -141,8 +144,9 @@ static void r_bin_free_items(RBin *bin) {
 		r_list_free (arch->strings);
 	if (arch->symbols)
 		r_list_free (arch->symbols);
-	if (arch->main)
-		free (arch->main);
+	if (arch->binsym)
+		for (i=0; i<R_BIN_SYM_LAST; i++)
+			free (arch->binsym[i]);
 	if (arch->file)
 		free (arch->file);
 	if (arch->curplugin && arch->curplugin->destroy)
@@ -166,30 +170,25 @@ static void r_bin_init(RBin *bin) {
 
 static int r_bin_extract(RBin *bin, int idx) {
 	ut8 *buf;
-	int n = 1;
-
 	if (bin->curxtr && bin->curxtr->extract)
-		n = bin->curxtr->extract (bin, idx);
-	else {
-		bin->curarch.file = strdup (bin->file);
-		if (!(buf = (ut8*)r_file_slurp (bin->file, &bin->curarch.size))) 
-			return 0;
-		bin->curarch.buf = r_buf_new ();
-		if (!r_buf_set_bytes (bin->curarch.buf, buf, bin->curarch.size)) {
-			free (buf);
-			return 0;
-		}
+		return bin->curxtr->extract (bin, idx);
+	bin->curarch.file = strdup (bin->file);
+	if (!(buf = (ut8*)r_file_slurp (bin->file, &bin->curarch.size))) 
+		return 0;
+	bin->curarch.buf = r_buf_new ();
+	if (!r_buf_set_bytes (bin->curarch.buf, buf, bin->curarch.size)) {
 		free (buf);
+		return 0;
 	}
-	return n;
+	free (buf);
+	return 1;
 }
 
 R_API int r_bin_add(RBin *bin, RBinPlugin *foo) {
 	struct list_head *pos;
-
 	if (foo->init)
 		foo->init (bin->user);
-	list_for_each_prev (pos, &bin->bins) {
+	list_for_each_prev (pos, &bin->bins) { // XXX: use r_list here
 		RBinPlugin *h = list_entry (pos, RBinPlugin, list);
 		if (!strcmp (h->name, foo->name))
 			return R_FALSE;
@@ -213,8 +212,7 @@ R_API int r_bin_xtr_add(RBin *bin, RBinXtrPlugin *foo) {
 }
 
 R_API void* r_bin_free(RBin *bin) {
-	if (!bin)
-		return NULL;
+	if (!bin) return NULL;
 	r_bin_free_items (bin);
 	if (bin->curxtr && bin->curxtr->destroy)
 		bin->curxtr->destroy (bin);
@@ -252,8 +250,10 @@ R_API ut64 r_bin_get_baddr(RBin *bin) {
 	return bin->curarch.baddr;
 }
 
-R_API RBinAddr* r_bin_get_main(RBin *bin) {
-	return bin->curarch.main;
+R_API RBinAddr* r_bin_get_sym(RBin *bin, int sym) {
+	if (sym<0 || sym>=R_BIN_SYM_LAST)
+		return NULL;
+	return bin->curarch.binsym[sym];
 }
 
 R_API RList* r_bin_get_entries(RBin *bin) {
@@ -334,12 +334,10 @@ R_API int r_bin_has_dbg_relocs (RBin *bin) {
 }
 
 R_API RBin* r_bin_new() {
-	RBin *bin; 
+	int i;
 	RBinPlugin *static_plugin;
 	RBinXtrPlugin *static_xtr_plugin;
-	int i;
-
-	bin = R_NEW (RBin);
+	RBin *bin = R_NEW (RBin);
 	if (bin) {
 		memset (bin, 0, sizeof (RBin));
 		INIT_LIST_HEAD (&bin->bins);
@@ -360,7 +358,6 @@ R_API RBin* r_bin_new() {
 
 R_API int r_bin_set_arch(RBin *bin, const char *arch, int bits, const char *name) {
 	int i;
-
 	for (i = 0; i < bin->narch; i++) {
 		r_bin_set_archidx (bin, i);
 		if (!bin->curarch.info || !bin->curarch.file ||
@@ -382,7 +379,6 @@ R_API int r_bin_set_archidx(RBin *bin, int idx) {
 
 R_API void r_bin_list_archs(RBin *bin) {
 	int i;
-
 	for (i = 0; i < bin->narch; i++)
 		if (r_bin_set_archidx (bin, i) && bin->curarch.info)
 			printf ("%03i %s %s_%i (%s)\n", i, bin->curarch.file,
@@ -395,12 +391,14 @@ R_API void r_bin_set_user_ptr(RBin *bin, void *user) {
 }
 
 R_API RBinObj *r_bin_get_object(RBin *bin, int flags) {
+	int i;
 	RBinObj *obj = R_NEW (RBinObj);
 	if (obj) {
 		obj->symbols = r_bin_get_symbols (bin);
 		obj->imports = r_bin_get_imports (bin);
 		obj->entries = r_bin_get_entries (bin);
-		obj->main = r_bin_get_main (bin);
+		for (i=0; i<R_BIN_SYM_LAST; i++)
+			obj->binsym[i] = r_bin_get_sym (bin, i);
 		obj->baddr = r_bin_get_baddr (bin);
 	}
 	return obj;

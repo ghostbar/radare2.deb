@@ -14,7 +14,9 @@ enum {
 	R_DBG_PROC_STOP = 's',
 	R_DBG_PROC_RUN = 'r',
 	R_DBG_PROC_SLEEP = 'S',
-	R_DBG_PROC_ZOMBIE = 'z'
+	R_DBG_PROC_ZOMBIE = 'z',
+	R_DBG_PROC_DEAD = 'd',
+	R_DBG_PROC_RAISED = 'R' // has produced a signal, breakpoint, etc..
 };
 
 // signal handling must support application and debugger level options
@@ -27,14 +29,20 @@ enum {
 };
 
 enum { // TODO: not yet used by r_debug
-	R_DBG_REASON_NEWPROC,
+	R_DBG_REASON_UNKNOWN,
+	R_DBG_REASON_NEW_PID,
+	R_DBG_REASON_NEW_TID,
+	R_DBG_REASON_NEW_LIB,
+	R_DBG_REASON_EXIT_PID,
+	R_DBG_REASON_EXIT_TID,
+	R_DBG_REASON_EXIT_LIB,
 	R_DBG_REASON_TRAP,
 	R_DBG_REASON_ILL,
 	R_DBG_REASON_INT,
 	R_DBG_REASON_SIGNAL,
 	R_DBG_REASON_FPU,
 	R_DBG_REASON_BP,
-	R_DBG_REASON_UNKNOWN,
+	R_DBG_REASON_DEAD
 };
 
 /* TODO: move to r_anal */
@@ -80,6 +88,7 @@ typedef struct r_debug_t {
 	int swstep; /* steps with software traps */
 	int steps;  /* counter of steps done */
 	int newstate;
+	int reason; /* stop reason */
 	RDebugTrace *trace;
 	int stop_all_threads;
 	char *reg_profile;
@@ -126,16 +135,17 @@ typedef struct r_debug_plugin_t {
 	RList *(*pids)(int pid);
 	RFList (*backtrace)(int count);
 	/* flow */
-	int (*step)(RDebug *dbg, int pid); // if step() is NULL; reimplement it with traps
-	int (*cont)(int pid, int sig);
+	int (*step)(RDebug *dbg);
+	int (*cont)(int pid, int tid, int sig);
 	int (*wait)(int pid);
-	int (*kill)(RDebug *dbg, int sig);
+	int (*kill)(RDebug *dbg, boolt thread, int sig);
 	int (*contsc)(int pid, int sc);
 	RList* (*frames)(RDebug *dbg);
 	RBreakpointCallback breakpoint;
+// XXX: specify, pid, tid, or RDebug ?
 	int (*reg_read)(struct r_debug_t *dbg, int type, ut8 *buf, int size);
+	int (*reg_write)(int pid, int tid, int type, const ut8 *buf, int size); //XXX struct r_regset_t regs);
 	char* (*reg_profile)();
-	int (*reg_write)(int pid, int type, const ut8 *buf, int size); //XXX struct r_regset_t regs);
 	/* memory */
 	RList *(*map_get)(RDebug *dbg);
 	ut64 (*map_alloc)(RDebug *dbg, RDebugMap *map);
@@ -152,9 +162,7 @@ typedef struct r_debug_pid_t {
 	char status; /* stopped, running, zombie, sleeping ,... */
 	int runnable; /* when using 'run', 'continue', .. this proc will be runnable */
 	const char *path;
-	//struct list_head threads;
-	//struct list_head childs;
-	//struct r_debug_pid_t *parent;
+	ut64 pc;
 } RDebugPid;
 
 #ifdef R_API
@@ -174,8 +182,9 @@ R_API int r_debug_continue_syscall(struct r_debug_t *dbg, int sc);
 //R_API int r_debug_pid_del(struct r_debug_t *dbg);
 //R_API int r_debug_pid_del_thread(struct r_debug_t *dbg);
 R_API int r_debug_pid_list(RDebug *dbg, int pid);
-R_API RDebugPid *r_debug_pid_new(char *path, int pid, char status);
+R_API RDebugPid *r_debug_pid_new(const char *path, int pid, char status, ut64 pc);
 R_API RDebugPid *r_debug_pid_free(RDebugPid *pid);
+R_API RList *r_debug_pids(RDebug *dbg, int pid);
 
 R_API int r_debug_use(struct r_debug_t *dbg, const char *str);
 R_API int r_debug_plugin_add(struct r_debug_t *dbg, struct r_debug_plugin_t *foo);
@@ -186,7 +195,7 @@ R_API struct r_debug_t *r_debug_new(int hard);
 R_API struct r_debug_t *r_debug_free(struct r_debug_t *dbg);
 
 /* send signals */
-R_API int r_debug_kill(struct r_debug_t *dbg, int sig);
+R_API int r_debug_kill(struct r_debug_t *dbg, boolt thread, int sig);
 // XXX: must be uint64 action
 R_API int r_debug_kill_setup(struct r_debug_t *dbg, int sig, int action);
 R_API int r_debug_step(struct r_debug_t *dbg, int steps);
@@ -240,7 +249,7 @@ R_API int r_debug_arg_set (RDebug *dbg, int fast, int num, ut64 value);
 R_API int r_debug_pid_list(struct r_debug_t *dbg, int pid);
 R_API int r_debug_thread_list(struct r_debug_t *dbg, int pid);
 
-R_API void r_debug_trace_reset (RDebug *dbg, int liberate);
+R_API void r_debug_trace_reset (RDebug *dbg);
 R_API int r_debug_trace_pc (RDebug *dbg);
 R_API void r_debug_trace_at (RDebug *dbg, const char *str);
 R_API RDebugTracepoint *r_debug_trace_get (RDebug *dbg, ut64 addr);
@@ -249,6 +258,8 @@ R_API RDebugTracepoint *r_debug_trace_add (RDebug *dbg, ut64 addr, int size);
 R_API RDebugTrace *r_debug_trace_new ();
 R_API void r_debug_trace_free (RDebug *dbg);
 R_API int r_debug_trace_tag (RDebug *dbg, int tag);
+R_API int r_debug_fork (RDebug *dbg);
+R_API int r_debug_clone (RDebug *dbg);
 
 #endif
 #endif

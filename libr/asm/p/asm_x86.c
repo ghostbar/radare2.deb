@@ -1,11 +1,10 @@
-/* radare - LGPL - Copyright 2009-2010 nibble<.ds@gmail.com> */
+/* radare - LGPL - Copyright 2009-2011 nibble<.ds@gmail.com> */
 
 #include <stdio.h>
 #include <string.h>
 #include <r_types.h>
 #include <r_lib.h>
 #include <r_asm.h>
-#include "fastcall_x86.h"
 #include "x86/udis86/types.h"
 #include "x86/udis86/extern.h"
 
@@ -44,7 +43,7 @@ static int modify(RAsm *a, ut8 *buf, int field, ut64 val) {
 	return ret;
 }
 
-static int disassemble(RAsm *a, RAsmAop *aop, ut8 *buf, ut64 len) {
+static int disassemble(RAsm *a, RAsmOp *op, ut8 *buf, ut64 len) {
 	static ud_t disasm_obj;
 
 	ud_init (&disasm_obj);
@@ -55,10 +54,10 @@ static int disassemble(RAsm *a, RAsmAop *aop, ut8 *buf, ut64 len) {
 	ud_set_pc (&disasm_obj, a->pc);
 	ud_set_input_buffer (&disasm_obj, buf, len);
 	ud_disassemble (&disasm_obj);
-	aop->inst_len = ud_insn_len (&disasm_obj);
-	snprintf (aop->buf_asm, R_ASM_BUFSIZE, "%s", ud_insn_asm (&disasm_obj));
+	op->inst_len = ud_insn_len (&disasm_obj);
+	snprintf (op->buf_asm, R_ASM_BUFSIZE, "%s", ud_insn_asm (&disasm_obj));
 
-	return aop->inst_len;
+	return op->inst_len;
 }
 
 RAsmPlugin r_asm_plugin_x86 = {
@@ -71,7 +70,6 @@ RAsmPlugin r_asm_plugin_x86 = {
 	.disassemble = &disassemble,
 	.modify = &modify,
 	.assemble = NULL,
-	.fastcall = fastcall,
 };
 
 #ifndef CORELIB

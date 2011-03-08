@@ -9,7 +9,7 @@ R_API struct r_anal_refline_t *r_anal_reflines_get(struct r_anal_t *anal,
 	ut64 addr, ut8 *buf, ut64 len, int nlines, int linesout, int linescall)
 {
 	RAnalRefline *list2, *list = R_NEW (RAnalRefline);
-	RAnalOp aop;
+	RAnalOp op;
 	ut8 *ptr = buf;
 	ut8 *end = buf + len;
 	ut64 opc = addr;
@@ -36,22 +36,22 @@ R_API struct r_anal_refline_t *r_anal_reflines_get(struct r_anal_t *anal,
 #endif
 
 		addr += sz;
-		sz = r_anal_aop (anal, &aop, addr, ptr, (int)(end-ptr));
+		sz = r_anal_op (anal, &op, addr, ptr, (int)(end-ptr));
 		if (sz > 0) {
 			/* store data */
-			switch(aop.type) {
+			switch(op.type) {
 			case R_ANAL_OP_TYPE_CALL:
 				if (!linescall)
 					break;
 			case R_ANAL_OP_TYPE_CJMP:
 			case R_ANAL_OP_TYPE_JMP:
-				if (!linesout && (aop.jump > opc+len || aop.jump < opc))
+				if (!linesout && (op.jump > opc+len || op.jump < opc))
 					goto __next;
-				if (aop.jump == 0LL)
+				if (op.jump == 0LL)
 					goto __next;
 				list2 = R_NEW (RAnalRefline);
 				list2->from = addr;
-				list2->to = aop.jump;
+				list2->to = op.jump;
 				list2->index = index++;
 				list_add_tail (&(list2->list), &(list->list));
 				break;
@@ -64,9 +64,7 @@ R_API struct r_anal_refline_t *r_anal_reflines_get(struct r_anal_t *anal,
 }
 
 /* umf..this should probably be outside this file */
-R_API char* r_anal_reflines_str(struct r_anal_t *anal, struct r_anal_refline_t *list,
-	ut64 addr, int opts)
-{
+R_API char* r_anal_reflines_str(RAnal *anal, RAnalRefline *list, ut64 addr, int opts) {
 	struct r_anal_refline_t *ref;
 	struct list_head *pos;
 	int dir = 0;
@@ -82,40 +80,36 @@ R_API char* r_anal_reflines_str(struct r_anal_t *anal, struct r_anal_refline_t *
 		ref = list_entry (pos, RAnalRefline, list);
 
 		if (addr == ref->to) dir = 1;
-		// TODO: use else here
-		if (addr == ref->from) dir = 2;
-
+		else if (addr == ref->from) dir = 2;
 		// TODO: if dir==1
 		if (addr == ref->to) {
-			if (ref->from > ref->to)
-				str = r_str_concat (str, ".");
-			else str = r_str_concat (str, "`");
+			str = r_str_concat (str, (ref->from>ref->to)?".":"`");
 			ch = '-';
 		} else if (addr == ref->from) {
-			if (ref->from > ref->to)
-				str = r_str_concat (str, "`");
-			else str = r_str_concat (str, ".");
+			str = r_str_concat (str, (ref->from>ref->to)?"`":",");
 			ch = '=';
 		} else if (ref->from < ref->to) { /* down */
 			if (addr > ref->from && addr < ref->to) {
 				if (ch=='-'||ch=='=')
 					str = r_str_concatch (str, ch);
-				else str = r_str_concat(str, "|");
+				else str = r_str_concatch (str, '|');
 			} else str = r_str_concatch (str, ch);
 		} else { /* up */
 			if (addr < ref->from && addr > ref->to) {
 				if (ch=='-'||ch=='=')
 					str = r_str_concatch (str, ch);
-				else str = r_str_concat (str, "|");
+				else str = r_str_concatch (str, '|');
 			} else str = r_str_concatch (str, ch);
 		}
-		if (wide) {
-			if (ch == '=' || ch == '-')
-				str = r_str_concatch (str, ch);
-			else str = r_str_concat (str, " ");
-		}
+		if (wide)
+			str = r_str_concatch (str, (ch=='='||ch=='-')?ch:' ');
 	}
 	str = r_str_concat (str, (dir==1)?"-> ":(dir==2)?"=< ":"   ");
+	if (anal->lineswidth>0) {
+		int len = strlen (str);
+		if (len>anal->lineswidth)
+			strcpy (str, str+len-anal->lineswidth);
+	}
 	return str;
 }
 

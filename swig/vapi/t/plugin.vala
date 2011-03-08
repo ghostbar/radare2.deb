@@ -2,9 +2,10 @@
 using Radare;
 
 [CCode (has_target = false)]
-private bool mycall(void *user, string cmd) {
+public bool mycall(void *user, string cmd) {
+	print ("hello world\n");
 	if (cmd.has_prefix (":bc")) {
-		if (cmd.len () == 3) {
+		if (cmd.length == 3) {
 			print ( "BinCrowd radare2 plugin help:\n"+
 				":bc pull       retrieve signatures from server\n"+
 				":bc push       upload signatures to server\n"+
@@ -26,6 +27,7 @@ private bool mycall(void *user, string cmd) {
 	return false;
 }
 
+/*
 private const RCmdPlugin plugin = {
 	"my plugin", mycall
 };
@@ -33,3 +35,4 @@ private const RCmdPlugin plugin = {
 const RCmdStruct radare_plugin = {
 	RLibType.CMD, ref plugin
 };
+*/

@@ -20,7 +20,7 @@ public class Radare.RDebug {
 	[CCode (cname="r_debug_wait")]
 	public bool hold();
 
-	public bool kill(int sig);
+	public bool kill(bool thread, int sig);
 	public bool kill_setup(int sig, int action); // XXX must be uint64 action
 	public bool select (int pid, int tid);
 	public bool step(int count);
@@ -41,7 +41,7 @@ public class Radare.RDebug {
 	public RDebug.Map map_get(uint64 addr);
 	public bool map_sync ();
 
-	public RList<RDebug.Frame> frames ();
+	// TODO: public RList<RDebug.Frame> frames ();
 
 	public uint64 arg_get (int fast, int num);
 	public bool arg_set (int fast, int num, uint64 val);
@@ -63,10 +63,12 @@ public class Radare.RDebug {
 	//public bool reg_set(string name, uint64 num);
 	//public uint64 reg_get(string name);
 	
+	public RList<RDebug.Pid> pids (int pid);
+	// must deprecate //
 	public int pid_list (int pid);
 	public int thread_list (int pid);
 
-	public void trace_reset (bool liberate);
+	public void trace_reset ();
 	public int trace_pc ();
 	public void trace_at (string str);
 	//public RDebug.Tracepoint trace_get(uint64 addr);
@@ -75,7 +77,7 @@ public class Radare.RDebug {
 	public bool trace_tag (int tag);
 
 	[CCode (cname="RDebugPid", free_function="r_debug_pid_free", cprefix="r_debug_pid_")]
-	public struct Pid {
+	public class Pid {
 		public int pid;
 		public int status;
 		public int runnable;
@@ -83,21 +85,27 @@ public class Radare.RDebug {
 		// list for childs
 		// list for threads
 		//public struct Process *parent;
-		public Pid ();
+		public Pid (string path, int pid, char status, uint64 pc);
 	}
 
 // XXX cname=int must be deprecated by valaswig
-	[CCode (cprefix="R_DBG_PROC_", cname="int")]
+	[CCode (cname="int", cprefix="R_DBG_PROC_")]
 	public enum ProcessStatus {
 		STOP,
 		RUN,
 		SLEEP,
 		ZOMBIE,
+		DEAD
 	}
 
-	[CCode (cprefix="R_DBG_REASON_", cname="int")]
+	[CCode (cname="int", cprefix="R_DBG_REASON_")]
 	public enum Reason {
-		NEWPROC,
+		NEW_PID,
+		NEW_TID,
+		NEW_LIB,
+		EXIT_PID,
+		EXIT_TID,
+		EXIT_LIB,
 		TRAP,
 		ILL,
 		SIGNAL,

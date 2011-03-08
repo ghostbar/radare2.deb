@@ -7,6 +7,7 @@
 #include <r_lib.h>
 #include <r_util.h>
 #include <r_flags.h>
+#include <r_anal.h>
 #include <r_parse.h>
 
 static int replace(int argc, const char *argv[], char *newstr) {
@@ -124,19 +125,20 @@ static int parse(struct r_parse_t *p, void *data, char *str)
 	return R_TRUE;
 }
 
-static int assemble(struct r_parse_t *p, void *data, char *str) {
+static int assemble(struct r_parse_t *p, char *data, char *str) {
 	char *ptr;
 	printf ("assembling '%s' to generate real asm code\n", str);
-	ptr = strchr(str, '=');
+	ptr = strchr (str, '=');
 	if (ptr) {
 		*ptr='\0';
-		sprintf(data, "mov %s, %s", str, ptr+1);
-	} else strcpy(data, str);
+		sprintf (data, "mov %s, %s", str, ptr+1);
+	} else strcpy (data, str);
 	return R_TRUE;
 }
 
 static int filter(struct r_parse_t *p, struct r_flag_t *f, char *data, char *str, int len) {
-	struct list_head *pos;
+	RListIter *iter;
+	RFlagItem *flag;
 	char *ptr, *ptr2;
 	ut64 off;
 	ptr = data;
@@ -147,8 +149,7 @@ static int filter(struct r_parse_t *p, struct r_flag_t *f, char *data, char *str
 			ptr=ptr2;
 			continue;
 		}
-		list_for_each_prev (pos, &f->flags) {
-			RFlagItem *flag = list_entry (pos, RFlagItem, list);
+		r_list_foreach (f->flags, iter, flag) {
 			if (flag->offset == off) {
 				*ptr = 0;
 				snprintf (str, len, "%s%s%s", data, flag->name, ptr2!=ptr?ptr2:"");
@@ -157,8 +158,23 @@ static int filter(struct r_parse_t *p, struct r_flag_t *f, char *data, char *str
 		}
 		ptr = ptr2;
 	}
-	strcpy (str, data);
+	strncpy (str, data, len);
 	return R_FALSE;
+}
+
+static int varsub(struct r_parse_t *p, struct r_anal_fcn_t *f, char *data, char *str, int len) {
+	char *ptr, *ptr2;
+	int i;
+
+	strncpy (str, data, len);
+	for (i = 0; i < R_ANAL_VARSUBS; i++)
+		if (f->varsubs[i].pat[0] != '\0' && f->varsubs[i].sub[0] != '\0' &&
+			(ptr = strstr (data, f->varsubs[i].pat))) {
+				*ptr = '\0';
+				ptr2 = ptr + strlen (f->varsubs[i].pat);
+				snprintf (str, len, "%s%s%s", data, f->varsubs[i].sub, ptr2);
+		}
+	return R_TRUE;
 }
 
 struct r_parse_plugin_t r_parse_plugin_x86_pseudo = {
@@ -169,6 +185,7 @@ struct r_parse_plugin_t r_parse_plugin_x86_pseudo = {
 	.parse = &parse,
 	.assemble = &assemble,
 	.filter = &filter,
+	.varsub = &varsub,
 };
 
 struct r_lib_struct_t radare_plugin = {

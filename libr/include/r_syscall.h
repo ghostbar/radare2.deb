@@ -1,8 +1,16 @@
+/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
+
 #ifndef _INCLUDE_R_SYSCALL_H_
 #define _INCLUDE_R_SYSCALL_H_
 
 #include <r_types.h>
 #include <list.h>
+
+#define R_SYSCALL_ARGS 6
+
+typedef struct r_syscall_regs_t {
+	const char *arg[R_SYSCALL_ARGS];
+} RSyscallRegs;
 
 typedef struct r_syscall_item_t {
 	const char *name;
@@ -21,6 +29,7 @@ typedef struct r_syscall_t {
 	FILE *fd;
 	// TODO char *arch;
 	// TODO char *os;
+	RSyscallRegs *regs;
 	RSyscallItem *sysptr;
 	RSyscallPort *sysport;
 	PrintfCallback printf;
@@ -57,6 +66,7 @@ R_API RSyscallItem *r_syscall_get(RSyscall *ctx, int num, int swi);
 R_API int r_syscall_get_num(RSyscall *ctx, const char *str);
 R_API RSyscallItem *r_syscall_get_n(RSyscall *ctx, int n); // broken iterator.. must remove
 R_API const char *r_syscall_get_i(RSyscall *ctx, int num, int swi); // XXX const char *
+R_API const char *r_syscall_reg(RSyscall *s, int idx, int num);
 R_API void r_syscall_list(RSyscall *ctx);
 #endif
 

@@ -1,14 +1,21 @@
 -include config.mk
+LANGS=python perl ruby lua go java vapi
 W32PY="${HOME}/.wine/drive_c/Python27/"
 
+ifeq ($(DEVEL_MODE),1)
 all: supported.langs ruby perl python lua go
-
-check:
-	rm -f supported.langs
-	${MAKE} supported.langs
-
 supported.langs:
 	CC=${CC} CXX=${CXX} sh check-langs.sh
+else
+# compile more
+all: supported.langs python
+supported.langs:
+	CC=${CC} CXX=${CXX} sh check-langs.sh force-all
+endif
+
+chect:
+	rm -f supported.langs
+	${MAKE} supported.langs
 
 check-w32:
 	if [ ! -d "${W32PY}/libs" ]; then \
@@ -31,10 +38,11 @@ w32dist:
 
 dist:
 	PKG=radare2-swig-${VERSION} ; \
-	FILES=`cd .. && hg st -mac . | grep swig | sed -e "s,swig/,$${PKG}/," | cut -c 3-` ; \
+	FILES=`cd .. ; hg st -mac . | grep swig | sed -e "s,swig/,$${PKG}/," | cut -c 3-` ; \
+	CXXFILES=`cd .. ; find swig | grep -e cxx$$ -e py$$ | sed -e "s,swig/,$${PKG}/,"` ; \
 	cd .. && mv swig $${PKG} && \
 	echo $$FILES ; \
-	tar czvf $${PKG}.tar.gz $${FILES} ; \
+	tar czvf $${PKG}.tar.gz $${FILES} $${CXXFILES} ; \
 	mv $${PKG} swig
 
 # TODO: valadoc
@@ -52,20 +60,20 @@ vdoc_pkg:
 
 # TODO: unspaguetti this targets
 perl:
-	@-[ "`grep perl supported.langs`" ] && cd perl && make
+	@-[ "`grep perl supported.langs`" ] && cd perl && make ; true
 
 python:
-	@-[ "`grep python supported.langs`" ] && cd python && make
+	@-[ "`grep python supported.langs`" ] && cd python && make ; true
 
 ruby:
-	@-[ "`grep ruby supported.langs`" ] && cd ruby && make
+	@-[ "`grep ruby supported.langs`" ] && cd ruby && make ; true
 
 lua:
-	@-[ "`grep lua supported.langs`" ] && cd lua && make
+	@-[ "`grep lua supported.langs`" ] && cd lua && make ; true
 
 go:
 	@-[ -x "${GOBIN}/5g" -o -x "${GOBIN}/6g" -o -x "${GOBIN}/8g" ] && \
-	[ "`grep go supported.langs`" ] && cd go && make
+	[ "`grep go supported.langs`" ] && cd go && make ; true
 
 java:
 	@-[ "`grep java supported.langs`" ] && cd java && make
@@ -81,11 +89,15 @@ test:
 install-python:
 	@# py2.6 in debian uses dist-packages, but site-packages in arch..
 	@if [ "`grep python supported.langs`" ]; then \
-	a=python`python --version 2>&1 | cut -d ' ' -f 2 | cut -d . -f 1,2`/site-packages ; \
-	echo "Installing $$a r2 modules in ${DESTDIR}${PREFIX}/lib/$$a/r2" ; \
-	mkdir -p ${DESTDIR}${PREFIX}/lib/$$a/r2 ; \
-	touch ${DESTDIR}${PREFIX}/lib/$$a/r2/__init__.py ; \
-	cp -rf python/*.${SOEXT} python/r_*.py python/libr.py ${DESTDIR}${PREFIX}/lib/$$a/r2 ; \
+	a=python`python --version 2>&1 | cut -d ' ' -f 2 | cut -d . -f 1,2` ; \
+	echo "Installing $$a/site-packages r2 modules in ${DESTDIR}${PREFIX}/lib/$$a/site-packages/r2" ; \
+	mkdir -p ${DESTDIR}${PREFIX}/lib/$$a/site-packages/r2 ; \
+	touch ${DESTDIR}${PREFIX}/lib/$$a/site-packages/r2/__init__.py ; \
+	cp -rf python/*.${SOEXT} python/r_*.py python/libr.py ${DESTDIR}${PREFIX}/lib/$$a/site-packages/r2 ; \
+	echo "Installing $$a/dist-packages r2 modules in ${DESTDIR}${PREFIX}/lib/$$a/dist-packages/r2" ; \
+	mkdir -p ${DESTDIR}${PREFIX}/lib/$$a/dist-packages/r2 ; \
+	touch ${DESTDIR}${PREFIX}/lib/$$a/dist-packages/r2/__init__.py ; \
+	cp -rf python/*.${SOEXT} python/r_*.py python/libr.py ${DESTDIR}${PREFIX}/lib/$$a/dist-packages/r2 ; \
 	fi
 
 install-lua:
@@ -136,25 +148,40 @@ install-perl:
 
 install-vapi:
 	@${INSTALL_DIR} ${DESTDIR}${PREFIX}/share/vala/vapi
+	#@${INSTALL_DIR} ${DESTDIR}${PREFIX}/share/vala/vapi-0.12
 	${INSTALL_DATA} vapi/*.vapi vapi/*.deps ${DESTDIR}${PREFIX}/share/vala/vapi
+	#${INSTALL_DATA} vapi/*.vapi vapi/*.deps ${DESTDIR}${PREFIX}/share/vala/vapi-0.12
 
-install: install-python install-ruby install-perl install-lua install-go install-java install-vapi
+EXAMPLEDIR=${DESTDIR}${PREFIX}/share/radare2-swig
+install-examples: install-examples-python
+	mkdir -p ${EXAMPLEDIR}/vala
+	cp -rf vapi/t/*.vala vapi/t/*.gs ${EXAMPLEDIR}/vala
+
+install-examples-python:
+	if [ "`grep python supported.langs`" ]; then \
+		mkdir -p ${EXAMPLEDIR}/python ; \
+		cp -rf python/test-*.py ${EXAMPLEDIR}/python ; \
+	fi
+
+install: install-python install-ruby install-perl install-lua install-go install-java install-vapi install-examples
 
 deinstall: uninstall
 uninstall:
 	cd vapi/ ; for a in *.vapi *.deps ; do rm -f ${DESTDIR}${PREFIX}/share/vala/vapi/$$a ; done
+	rm -rf ${EXAMPLEDIR}
 
 oldtest:
 	sh do-swig.sh r_bp
 	python test.py
 
 clean:
-	cd python && make clean
-	cd perl && make clean
-	cd ruby && make clean
-	cd lua && make clean
-	cd go && make clean
-	cd java && make clean
-	cd vapi/t && ${MAKE} clean
+	for a in $(LANGS); do \
+		cd $$a ; ${MAKE} clean ; cd .. ; \
+	done
 
-.PHONY: ruby lua go java python perl clean oldtest test all vdoc w32 w32dist check-w32
+mrproper:
+	for a in $(LANGS); do \
+		cd $$a ; ${MAKE} mrproper; cd .. ; \
+	done
+
+.PHONY: $(LANGS) clean mrproper oldtest test all vdoc w32 w32dist check check-w32 deinstall uninstall install

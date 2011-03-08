@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2010 nibble<.ds@gmail.com> */
+/* radare - LGPL - Copyright 2008-2011 nibble<.ds@gmail.com> */
 
 #ifndef _INCLUDE_R_BIN_H_
 #define _INCLUDE_R_BIN_H_
@@ -22,11 +22,27 @@
 #define R_BIN_SIZEOF_STRINGS 256
 #define R_BIN_MAX_ARCH 1024
 
+enum {
+	R_BIN_SYM_ENTRY,
+	R_BIN_SYM_INIT,
+	R_BIN_SYM_MAIN,
+	R_BIN_SYM_FINI,
+	R_BIN_SYM_LAST
+};
+
+// name mangling types
+enum {
+	R_BIN_NM_JAVA,
+	R_BIN_NM_CXX,
+	R_BIN_NM_ANY=-1,
+};
+
+// XXX: isnt this a copy of Obj ?
 typedef struct r_bin_arch_t {
 	char *file;
 	int size;
 	ut64 baddr;
-	struct r_bin_addr_t *main;
+	struct r_bin_addr_t *binsym[R_BIN_SYM_LAST];
 	struct r_bin_info_t *info;
 	RList* entries;
 	RList* sections;
@@ -43,7 +59,7 @@ typedef struct r_bin_arch_t {
 
 typedef struct r_bin_t {
 	const char *file;
-	struct r_bin_arch_t curarch;
+	RBinArch curarch;
 	int narch;
 	void *user;
 	void *bin_obj;
@@ -73,7 +89,7 @@ typedef struct r_bin_plugin_t {
 	int (*destroy)(RBinArch *arch);
 	int (*check)(RBinArch *arch);
 	ut64 (*baddr)(RBinArch *arch);
-	struct r_bin_addr_t* (*main)(RBinArch *arch);
+	struct r_bin_addr_t* (*binsym)(RBinArch *arch, int num);
 	RList* (*entries)(RBinArch *arch);
 	RList* (*sections)(RBinArch *arch);
 	RList* (*symbols)(RBinArch *arch);
@@ -83,6 +99,7 @@ typedef struct r_bin_plugin_t {
 	RList* (*fields)(RBinArch *arch);
 	RList* (*libs)(RBinArch *arch);
 	RList* (*relocs)(RBinArch *arch);
+	int (*demangle_type)(const char *str);
 	struct r_bin_meta_t *meta;
 	struct r_bin_write_t *write;
 	struct list_head list;
@@ -139,6 +156,7 @@ typedef struct r_bin_reloc_t {
 } RBinReloc;
 
 typedef struct r_bin_string_t {
+	// TODO: rename string->name (avoid colisions)
 	char string[R_BIN_SIZEOF_STRINGS];
 	ut64 rva;
 	ut64 offset;
@@ -187,14 +205,13 @@ typedef struct r_bin_obj_t {
 	RList/*<??>*/ *relocs;
 	RList/*<??>*/ *strings;
 	RBinInfo *info;
-	RBinAddr *main;
+	RBinAddr *binsym[R_BIN_SYM_LAST];
 // TODO: deprecate r_bin_is_big_endian
 // TODO: r_bin_is_stripped .. wrapped inside rbinobj?
 // TODO: has_dbg_syms... maybe flags?
 } RBinObj;
 
 #ifdef R_API
-
 /* bin.c */
 R_API int r_bin_add(RBin *bin, RBinPlugin *foo);
 R_API int r_bin_xtr_add(RBin *bin, RBinXtrPlugin *foo);
@@ -203,7 +220,11 @@ R_API int r_bin_list(RBin *bin);
 R_API int r_bin_load(RBin *bin, const char *file, int dummy);
 R_API RBinObj *r_bin_get_object(RBin *bin, int flags);
 R_API ut64 r_bin_get_baddr(RBin *bin);
-R_API RBinAddr* r_bin_get_main(RBin *bin);
+R_API RBinAddr* r_bin_get_sym(RBin *bin, int sym);
+R_API char* r_bin_demangle(RBin *bin, const char *str);
+R_API int r_bin_demangle_type (const char *str);
+R_API char *r_bin_demangle_java(const char *str);
+R_API char *r_bin_demangle_cxx(const char *str);
 R_API RList* r_bin_get_entries(RBin *bin);
 R_API RList* r_bin_get_fields(RBin *bin);
 R_API RList* r_bin_get_imports(RBin *bin);
@@ -225,11 +246,9 @@ R_API int r_bin_set_arch(RBin *bin, const char *arch, int bits, const char *name
 R_API int r_bin_set_archidx(RBin *bin, int idx);
 R_API void r_bin_list_archs(RBin *bin);
 R_API void r_bin_set_user_ptr(RBin *bin, void *user);
-
 /* bin_meta.c */
 R_API int r_bin_meta_get_line(RBin *bin, ut64 addr, char *file, int len, int *line);
 R_API char *r_bin_meta_get_source_line(RBin *bin, ut64 addr);
-
 /* bin_write.c */
 R_API ut64 r_bin_wr_scn_resize(RBin *bin, const char *name, ut64 size);
 R_API int r_bin_wr_rpath_del(RBin *bin);
@@ -246,6 +265,5 @@ extern RBinPlugin r_bin_plugin_java;
 extern RBinPlugin r_bin_plugin_dummy;
 extern RBinXtrPlugin r_bin_xtr_plugin_fatmach0;
 extern RBinXtrPlugin r_bin_xtr_plugin_dyldcache;
-
 #endif
 #endif

@@ -4,6 +4,7 @@
 #include <r_types.h>
 #include <r_util.h>
 #include <r_list.h>
+#include <r_io.h>
 
 enum {
 	R_SEARCH_KEYWORD,
@@ -53,9 +54,8 @@ typedef struct r_search_t {
 	int distance;
 	int align;
 	RSearchUpdate update;
-	//struct r_search_binparse_t *bp;
 	RList *kws; // TODO: Use r_search_kw_new ()
-	//struct list_head kws; //r_search_hw_t kws;
+	RIOBind iob;
 } RSearch;
 
 #ifdef R_API
@@ -67,6 +67,7 @@ R_API int r_search_set_mode(RSearch *s, int mode);
 R_API RSearch *r_search_free(RSearch *s);
 
 /* keyword management */
+R_API RList *r_search_find(RSearch *s, ut64 addr, const ut8 *buf, int len);
 R_API int r_search_update(RSearch *s, ut64 *from, const ut8 *buf, long len);
 R_API int r_search_update_i(RSearch *s, ut64 from, const ut8 *buf, long len);
 
@@ -84,7 +85,7 @@ R_API int r_search_range_set(RSearch *s, ut64 from, ut64 to);
 R_API int r_search_range_reset(RSearch *s);
 R_API int r_search_set_blocksize(RSearch *s, ut32 bsize);
 
-// TODO: this is internal API?
+// TODO: is this an internal API?
 R_API int r_search_mybinparse_update(void *s, ut64 from, const ut8 *buf, int len);
 R_API int r_search_aes_update(void *s, ut64 from, const ut8 *buf, int len);
 R_API int r_search_strings_update(void *s, ut64 from, const ut8 *buf, int len);
@@ -92,13 +93,13 @@ R_API int r_search_regexp_update(void *s, ut64 from, const ut8 *buf, int len);
 R_API int r_search_xrefs_update(void *s, ut64 from, const ut8 *buf, int len);
 R_API int r_search_hit_new(RSearch *s, RSearchKeyword *kw, ut64 addr);
 R_API void r_search_set_distance(RSearch *s, int dist);
-R_API void r_search_set_pattern_size(RSearch *s, int size);
-
-/* pattern search */
-R_API int r_search_pattern(RSearch *s, ut32 size);
 R_API int r_search_strings(RSearch *s, ut32 min, ut32 max);
 //R_API int r_search_set_callback(RSearch *s, int (*callback)(struct r_search_kw_t *, void *, ut64), void *user);
 R_API void r_search_set_callback(RSearch *s, RSearchCallback(callback), void *user);
 R_API int r_search_begin(RSearch *s);
+
+/* pattern search */
+R_API void r_search_pattern_size(RSearch *s, int size);
+R_API int r_search_pattern(RSearch *s, ut64 from, ut64 to);
 #endif
 #endif

@@ -1,6 +1,7 @@
-/* radare - LGPL - Copyright 2008-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2008-2011 pancake<nopcode.org> */
 
 #include <r_search.h>
+#include <r_list.h>
 
 R_API RSearch *r_search_new(int mode) {
 	RSearch *s = R_NEW (RSearch);
@@ -62,11 +63,8 @@ R_API int r_search_set_mode(RSearch *s, int mode) {
 	case R_SEARCH_STRING:
 		s->update = r_search_strings_update;
 		break;
-	case R_SEARCH_PATTERN:
-		//ret += r_search_pattern_update(buf, s->pattern_size
-		break;
 	}
-	if (s->update) {
+	if (s->update || mode == R_SEARCH_PATTERN) {
 		s->mode = mode;
 		ret = R_TRUE;
 	} else ret = R_FALSE;
@@ -79,7 +77,7 @@ R_API int r_search_begin(RSearch *s) {
 	r_list_foreach (s->kws, iter, kw) {
 		kw->count = 0;
 		kw->idx[0] = 0;
-		kw->distance = 0;//s->distance;
+		kw->distance = 0; //s->distance;
 	}
 #if 0
 	/* TODO: compile regexpes */
@@ -118,7 +116,7 @@ R_API int r_search_mybinparse_update(void *_s, ut64 from, const ut8 *buf, int le
 	for (i=0; i<len; i++) {
 		RSearchKeyword *kw;
 		r_list_foreach (s->kws, iter, kw) {
-			for (j=0;j<=kw->distance;j++) {
+			for (j=0; j<=kw->distance; j++) {
 				ut8 ch = kw->bin_keyword[kw->idx[j]];
 				ut8 ch2 = buf[i];
 				if (kw->binmask_length != 0 && kw->idx[j]<kw->binmask_length) {
@@ -163,7 +161,7 @@ R_API void r_search_set_distance(RSearch *s, int dist) {
 }
 
 // deprecate? or standarize with ->align ??
-R_API void r_search_set_pattern_size(RSearch *s, int size) {
+R_API void r_search_pattern_size(RSearch *s, int size) {
 	s->pattern_size = size;
 }
 
@@ -189,6 +187,21 @@ R_API int r_search_update(RSearch *s, ut64 *from, const ut8 *buf, long len) {
 
 R_API int r_search_update_i(RSearch *s, ut64 from, const ut8 *buf, long len) {
 	return r_search_update (s, &from, buf, len);
+}
+
+static int listcb(RSearchKeyword *k, void *user, ut64 addr) {
+	RSearchHit *hit = R_NEW (RSearchHit);
+	hit->kw = k;
+	hit->addr = addr;
+	r_list_append (user, hit);
+	return R_TRUE;
+}
+
+R_API RList *r_search_find(RSearch *s, ut64 addr, const ut8 *buf, int len) {
+	RList *ret = r_list_new ();
+	r_search_set_callback (s, listcb, ret);
+	r_search_update (s, &addr, buf, len);
+	return ret;
 }
 
 /* --- keywords --- */

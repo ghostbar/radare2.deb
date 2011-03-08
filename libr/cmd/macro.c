@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2008-2011 pancake<nopcode.org> */
 
 #include <stdio.h>
 #include "r_cmd.h"
@@ -12,7 +12,7 @@ int macro_counter = 0;
 static struct list_head macros;
 #endif
 
-void r_cmd_macro_init(RCmdMacro *mac) {
+R_API void r_cmd_macro_init(RCmdMacro *mac) {
 	mac->counter = 0;
 	mac->_brk_value = 0;
 	mac->brk_value = &mac->_brk_value;
@@ -25,7 +25,7 @@ void r_cmd_macro_init(RCmdMacro *mac) {
 
 // XXX add support single line function definitions
 // XXX add support for single name multiple nargs macros
-int r_cmd_macro_add(RCmdMacro *mac, const char *oname) {
+R_API int r_cmd_macro_add(RCmdMacro *mac, const char *oname) {
 	struct list_head *pos;
 	struct r_cmd_macro_item_t *macro;
 	char buf[1024];
@@ -36,20 +36,26 @@ int r_cmd_macro_add(RCmdMacro *mac, const char *oname) {
 	int macro_update;
 	char *name, *args = NULL;
 
-	if (oname[0]=='\0')
-		return r_cmd_macro_list(mac);
+	if (oname[0]=='\0') {
+		r_cmd_macro_list(mac);
+		return 0;
+	}
 
-	name = alloca (strlen(oname)+1);
-	strcpy (name, oname);
+	name = strdup (oname);
+	if (name == NULL) {
+		perror ("strdup");
+		return 0;
+	}
 
 	pbody = strchr (name, ',');
 	if (pbody) {
-		pbody[0]='\0';
+		pbody[0] = '\0';
 		pbody = pbody + 1;
 	}
 
-	if (name[strlen(name)-1]==')') {
-		eprintf("No body?\n");
+	if (name[strlen (name)-1]==')') {
+		eprintf ("No body?\n");
+		free (name);
 		return -1;
 	}
 
@@ -61,45 +67,47 @@ int r_cmd_macro_add(RCmdMacro *mac, const char *oname) {
 		args = ptr +1;
 	}
 	list_for_each_prev (pos, &mac->macros) {
-		RCmdMacroItem *m = list_entry(pos, struct r_cmd_macro_item_t, list);
-		if (!strcmp(name, m->name)) {
+		RCmdMacroItem *m = list_entry (pos, struct r_cmd_macro_item_t, list);
+		if (!strcmp (name, m->name)) {
 			macro = m;
-	//		free(macro->name);
-			free(macro->code);
-			free(macro->args);
+	//		free (macro->name);
+			free (macro->code);
+			free (macro->args);
 			macro_update = 1;
 			break;
 		}
 	}
+	if (ptr)
+		*ptr=' ';
 	if (macro == NULL) {
-		macro = (struct r_cmd_macro_item_t *)malloc(sizeof(struct r_cmd_macro_item_t));
-		macro->name = strdup(name);
+		macro = (struct r_cmd_macro_item_t *)malloc (sizeof(struct r_cmd_macro_item_t));
+		macro->name = strdup (name);
 	}
-	if (pbody) macro->code = (char *)malloc(strlen(pbody)+2);
-	else macro->code = (char *)malloc(4096);
+	if (pbody) macro->code = (char *)malloc (strlen (pbody)+2);
+	else macro->code = (char *)malloc (4096);
 	macro->code[0]='\0';
 	macro->nargs = 0;
 	if (args == NULL)
 		args = "";
-	macro->args = strdup(args);
-	ptr = strchr(macro->name, ' ');
+	macro->args = strdup (args);
+	ptr = strchr (macro->name, ' ');
 	if (ptr != NULL) {
 		*ptr='\0';
-		macro->nargs = r_str_word_set0(ptr+1);
+		macro->nargs = r_str_word_set0 (ptr+1);
 	}
 
 	if (pbody) {
-		for(lidx=0;pbody[lidx];lidx++) {
+		for (lidx=0; pbody[lidx]; lidx++) {
 			if (pbody[lidx]==',')
 				pbody[lidx]='\n';
 			else
-			if (pbody[lidx]==')') // && pbody[lidx-1]=='\n')
+			if (pbody[lidx]==')' && pbody[lidx-1]=='\n')
 				pbody[lidx]='\0';
 		}
-		strcpy(macro->code, pbody);
-		strcat(macro->code, ",");
+		strcpy (macro->code, pbody);
+		strcat (macro->code, ",");
 	} else {
-		while(1) { // XXX input from mac->fd
+		for (;;) { // XXX input from mac->fd
 #if 0
 			if (stdin == r_cons_stdin_fd) {
 				mac->printf(".. ");
@@ -107,10 +115,10 @@ int r_cmd_macro_add(RCmdMacro *mac, const char *oname) {
 			}
 			fgets(buf, 1023, r_cons_stdin_fd);
 #endif
-			fgets(buf, 1023, stdin);
+			fgets (buf, 1023, stdin);
 			if (buf[0]==')')
 				break;
-			for(bufp=buf;*bufp==' '||*bufp=='\t';bufp=bufp+1);
+			for (bufp=buf;*bufp==' '||*bufp=='\t';bufp=bufp+1);
 			lidx = strlen(buf)-2;
 			if (buf[lidx]==')' && buf[lidx-1]!='(') {
 				buf[lidx]='\0';
@@ -123,10 +131,11 @@ int r_cmd_macro_add(RCmdMacro *mac, const char *oname) {
 	}
 	if (macro_update == 0)
 		list_add_tail (&(macro->list), &(mac->macros));
+	free (name);
 	return 0;
 }
 
-int r_cmd_macro_rm(struct r_cmd_macro_t *mac, const char *_name) {
+R_API int r_cmd_macro_rm(struct r_cmd_macro_t *mac, const char *_name) {
 	char *name = alloca (strlen(_name));
 	struct list_head *pos;
 	char *ptr = strchr (name, ')');
@@ -139,14 +148,14 @@ int r_cmd_macro_rm(struct r_cmd_macro_t *mac, const char *_name) {
 			list_del (&(mac->list));
 			free (mac);
 			eprintf ("Macro '%s' removed.\n", name);
-			return 1;
+			return R_TRUE;
 		}
 	}
-	return 0;
+	return R_FALSE;
 }
 
 // TODO: use mac->printf which is r_cons_printf at the end
-int r_cmd_macro_list(RCmdMacro *mac) {
+R_API void r_cmd_macro_list(RCmdMacro *mac) {
 	int j, idx = 0;
 	struct list_head *pos;
 	list_for_each_prev (pos, &mac->macros) {
@@ -160,7 +169,6 @@ int r_cmd_macro_list(RCmdMacro *mac) {
 		/* mac->*/ printf (")\n");
 		idx++;
 	}
-	return 0;
 }
 #if 0
 (define name value
@@ -176,21 +184,19 @@ int r_cmd_macro_list(RCmdMacro *mac) {
 .(define patata 3)
 #endif
 
-int r_cmd_macro_cmd_args(RCmdMacro *mac, const char *ptr, const char *args, int nargs) {
+R_API int r_cmd_macro_cmd_args(RCmdMacro *mac, const char *ptr, const char *args, int nargs) {
 	int i,j;
 	char *cmd = alloca(strlen(ptr)+1024);
 	char *arg = args?strdup(args):strdup("");
 	cmd[0]='\0';
 
-//	eprintf("call(%s)\n", ptr);
-	for(i=j=0;ptr[j];i++,j++) {
+	for (i=j=0; ptr[j]; i++,j++) {
 		if (ptr[j]=='$') {
 			if (ptr[j+1]>='0' && ptr[j+1]<='9') {
-				char *word = r_str_word_get0(arg, ptr[j+1]-'0');
-// TODO: use r_str_concat ??
-				strcat(cmd, word);
+				char *word = r_str_word_get0 (arg, ptr[j+1]-'0');
+				 strcat (cmd, word);
 				j++;
-				i = strlen(cmd)-1;
+				i = strlen (cmd)-1;
 			} else
 			if (ptr[j+1]=='@') {
 				char off[32];
@@ -209,11 +215,11 @@ int r_cmd_macro_cmd_args(RCmdMacro *mac, const char *ptr, const char *args, int 
 	}
 	while(*cmd==' '||*cmd=='\t')
 		cmd = cmd + 1;
-	free(arg);
-	return (*cmd==')')?0:mac->cmd(mac->user, cmd);
+	free (arg);
+	return (*cmd==')')?0:mac->cmd (mac->user, cmd);
 }
 
-char *r_cmd_macro_label_process(RCmdMacro *mac, RCmdMacroLabel *labels, int *labels_n, char *ptr) {
+R_API char *r_cmd_macro_label_process(RCmdMacro *mac, RCmdMacroLabel *labels, int *labels_n, char *ptr) {
 	int i;
 	for (;ptr[0]==' ';ptr=ptr+1);
 	if (ptr[strlen(ptr)-1]==':') {
@@ -278,7 +284,7 @@ char *r_cmd_macro_label_process(RCmdMacro *mac, RCmdMacroLabel *labels, int *lab
 }
 
 /* TODO: add support for spaced arguments */
-int r_cmd_macro_call(RCmdMacro *mac, const char *name) {
+R_API int r_cmd_macro_call(RCmdMacro *mac, const char *name) {
 	char *args;
 	int nargs = 0;
 	char *str, *ptr, *ptr2;
@@ -288,25 +294,30 @@ int r_cmd_macro_call(RCmdMacro *mac, const char *name) {
 	int labels_n = 0;
 	struct r_cmd_macro_label_t labels[MACRO_LABELS];
 
-	str = alloca (strlen (name)+1);
-	strcpy (str, name);
+	str = strdup (name);
+	if (str == NULL) {
+		perror ("strdup");
+		return R_FALSE;
+	}
 	ptr = strchr (str, ')');
 	if (ptr == NULL) {
 		eprintf ("Missing end ')' parenthesis.\n");
+		free (str);
 		return R_FALSE;
 	} else *ptr='\0';
 
 	args = strchr (str, ' ');
 	if (args) {
-		*args='\0';
-		args = args+1;
+		*args = '\0';
+		args++;
 		nargs = r_str_word_set0 (args);
 	}
 
-	macro_level ++;
+	macro_level++;
 	if (macro_level > MACRO_LIMIT) {
 		eprintf ("Maximum macro recursivity reached.\n");
-		macro_level --;
+		macro_level--;
+		free (str);
 		return 0;
 	}
 
@@ -318,8 +329,9 @@ int r_cmd_macro_call(RCmdMacro *mac, const char *name) {
 			char *end = strchr (ptr, '\n');
 
 			if (m->nargs != 0 && nargs != m->nargs) {
-				eprintf ("Macro '%s' expects %d args\n", m->name, m->nargs);
+				eprintf ("Macro '%s' expects %d args, not %d\n", m->name, m->nargs, nargs);
 				macro_level --;
+				free (str);
 				return R_FALSE;
 			}
 
@@ -339,15 +351,15 @@ int r_cmd_macro_call(RCmdMacro *mac, const char *name) {
 					end = strchr(ptr, '\n');
 					continue;
 				}
-
 				/* Command execution */
 				if (*ptr)
 					r_cmd_macro_cmd_args (mac, ptr, args, nargs);
 				if (end) {
-					*end='\n';
+					*end = '\n';
 					ptr = end + 1;
 				} else {
 					macro_level --;
+					free (str);
 					return R_TRUE;
 				}
 
@@ -357,18 +369,20 @@ int r_cmd_macro_call(RCmdMacro *mac, const char *name) {
 
 			if (mac->brk) {
 				macro_level--;
+				free (str);
 				return R_TRUE;
 			}
 		}
 	}
 	eprintf ("No macro named '%s'\n", str);
 	macro_level--;
+	free (str);
 	return R_TRUE;
 }
 
-int r_cmd_macro_break(RCmdMacro *mac, const char *value) {
+R_API int r_cmd_macro_break(RCmdMacro *mac, const char *value) {
 	mac->brk = 1;
-	mac->brk_value= NULL;
+	mac->brk_value = NULL;
 	mac->_brk_value = (ut64)r_num_math (mac->num, value);
 	if (value && *value)
 		mac->brk_value = &mac->_brk_value;

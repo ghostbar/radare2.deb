@@ -1,4 +1,4 @@
-CFLAGS=-I../../include -Wall -DWORDSIZE=64 ${PIC_CFLAGS} ${LDFLAGS_LIB} ${LDFLAGS_LINKPATH}.. -DCORELIB
+CFLAGS+=-I../../include -Wall -DWORDSIZE=64 ${PIC_CFLAGS} ${LDFLAGS_LIB} ${LDFLAGS_LINKPATH}.. -DCORELIB
 
 include ../../config.mk
 # on solaris only
@@ -13,8 +13,9 @@ endif
 foo: all
 
 ALL_TARGETS=
-DEBUGS=ptrace.mk debug.mk gdb.mk malloc.mk shm.mk mach.mk w32dbg.mk procpid.mk
-include ${DEBUGS}
+PLUGINS=ptrace.mk debug.mk gdb.mk malloc.mk shm.mk mach.mk w32dbg.mk procpid.mk
+#PLUGINS=ptrace.mk debug.mk gdb.mk malloc.mk mach.mk w32dbg.mk procpid.mk
+include ${PLUGINS}
 
 #ALL_TARGETS+=io_ewf.so
 
