@@ -10,7 +10,6 @@ public class RAnal {
 	public int bits;
 	public bool big_endian;
 	public void *user;
-	public RList<RAnal.Block> bbs;
 	public RList<RAnal.Fcn> fcns;
 	public RList<RAnal.VarType> vartypes;
 
@@ -18,7 +17,7 @@ public class RAnal {
 	public bool set_bits (int bits);
 	public bool set_big_endian (bool big);
 	//public bool set_pc (uint64 addr);
-	public RList<RAnal.Block> fcn_bb_list(Fcn fun);
+	public RList<RAnal.Fcn> get_fcns();
 
 	[Compact]
 	[CCode (cname="RAnalValue")]
@@ -60,6 +59,15 @@ public class RAnal {
 		ARGREG
 	}
 
+	[CCode (cname="int", cprefix="R_ANAL_FCN_TYPE_")]
+	public enum FcnType {
+		NULL,
+		FCN,
+		LOC,
+		SYM,
+		IMP
+	}
+
 	[CCode (cname="int", cprefix="R_ANAL_BB_TYPE_")]
 	public enum BlockType {
 		NULL,
@@ -69,7 +77,7 @@ public class RAnal {
 		FOOT
 	}
 
-	[CCode (cname="int", cprefix="R_ANAL_DIFF_")]
+	[CCode (cname="int", cprefix="R_ANAL_DIFF_TYPE_")]
 	public enum BlockDiff {
 		NULL,
 		MATCH,
@@ -171,13 +179,11 @@ public class RAnal {
 		public uint64 fail;
 		public BlockType type;
 		public BlockDiff diff;
-		public RList<RAnal.Op> aops;
+		public RList<RAnal.Op> ops;
 	}
-	public bool bb_split(Block bb, RList<RAnal.Block> bbs, uint64 addr);
-	public bool bb_overlap(Block bb, RList<RAnal.Block> bbs);
 
 	[Compact]
-	[CCode (cprefix="r_anal_aop_", cname="RAnalOp")]
+	[CCode (cprefix="r_anal_op_", cname="RAnalOp")]
 	public class Op {
 		public uint64 addr;
 		public int type;
@@ -193,11 +199,21 @@ public class RAnal {
 	}
 
 	[Compact]
-	[CCode (cprefix="r_anal_fcn_", cname="RAnalFcn")]
+	[CCode (cprefix="r_anal_diff_", cname="RAnalDiff")]
+	public class Diff {
+		public BlockDiff type;
+		public string name;
+		public uint64 addr;
+	}
+
+	[CCode (cname="RAnalFcn", free_function="", ref_function="", unref_function="")]
 	public class Fcn {
 		public string name;
 		public uint64 addr;
 		public uint64 size;
+		public Diff diff;
+		public FcnType type;
+		public RList<RAnal.Block> bbs;
 		public RList<RAnal.Var> vars;
 		public RList<uint64> refs;
 		public RList<uint64> xrefs;
@@ -241,7 +257,7 @@ public class RAnal {
 
 /* meta */
 	[Compact]
-	[CCode (cheader_filename="r_meta.h,r_list.h,r_types_base.h", cname="RMeta", free_function="r_meta_free", cprefix="r_meta_")]
+	[CCode (cname="RMeta", free_function="r_meta_free", cprefix="r_meta_")]
 	public class RMeta {
 		[Compact]
 		[CCode (cname="RMetaItem")]
@@ -262,15 +278,13 @@ public class RAnal {
 			NEXT
 		}
 
-		[CCode (cname="int", cprefix="R_META_")]
+		[CCode (cname="int", cprefix="R_META_TYPE_")]
 		public enum Type {
 			ANY,
 			DATA,
 			CODE,
 			STRING,
-			STRUCT,
-			COMMENT,
-			FOLDER
+			COMMENT
 		}
 
 		//public int count (RMeta.Type type, uint64 from, uint64 to, 

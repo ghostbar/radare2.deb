@@ -1,6 +1,6 @@
 include ../../config.mk
 
-CFLAGS=-I../../include -I../arch -Wall -shared -fPIC ${LDFLAGS_LIB} ${LDFLAGS_LINKPATH}..
+CFLAGS+=-I../../include -I../arch -Wall -shared -fPIC ${LDFLAGS_LIB} ${LDFLAGS_LINKPATH}..
 CFLAGS+=-L../../util -lr_util -L../../anal -lr_anal -L../../reg -lr_reg
 LDFLAGS+=${LINK}
 
@@ -8,7 +8,7 @@ foo: all
 
 ALL_TARGETS=
 # TODO: rename to enabled plugins
-ARCHS=dummy.mk x86.mk x86_x86im.mk ppc.mk arm.mk
+ARCHS=x86.mk x86_simple.mk ppc.mk arm.mk avr.mk csr.mk dalvik.mk
 include $(ARCHS)
 
 all: ${ALL_TARGETS}

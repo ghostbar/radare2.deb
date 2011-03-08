@@ -6,55 +6,16 @@ PFX=${DESTDIR}${PREFIX}
 #PREFIX=${PFX}
 
 # Libraries
-LIBLIST=util vm socket cons line lib io lang flags bin hash config syscall cmd
-LIBLIST+=reg asm anal print parse search diff bp sign th db crypto debug core
+LIBLIST=util socket cons line lib io lang flags bin hash config syscall cmd
+LIBLIST+=reg asm diff anal print parse search bp sign th db crypto debug fs core
+# sysproxy ... common wat du?
 
-# TODO : generate single library linking against the rest
-#LIBSO=libr.so
-#LIBAR=libr.a
-
-all: libs libr
+all: libs
 
 libs:
-	@for lib in ${LIBLIST}; do ( cd $${lib} && ${MAKE} all ); done
+	@for lib in ${LIBLIST}; do \
+		cd $${lib} && ${MAKE} all || exit 1 ; cd .. ; done
 	@echo Build done for: ${LIBLIST}
-
-ifeq ($(ONELIB),1)
-libr: .objs
-	$(MAKE) libr2.${EXT_SO} libr2.${EXT_AR}
-else
-libr:
-endif
-
-ifeq ($(WITHPIC),1)
-libr2.${EXT_SO}: .objs
-ifeq ($(OSTYPE),darwin)
-	@echo Linkage of libr2.dylib is broken on OSX because of dupped .o in .objs extraction
-else
-	${CC} -shared -fPIC ${LDFLAGS_SONAME}libr2.${EXT_SO}.${VERSION} ${PIC_CFLAGS} .objs/*.o -o libr2.${EXT_SO}
-endif
-
-libr2.${EXT_AR}:
-	@echo NOTE: Use --without-pic in configure to create libr2.${EXT_AR}
-else
-libr2.${EXT_SO}:
-
-ifeq ($(WITHNONPIC),1)
-libr2.${EXT_AR}:
-	ar -r libr2.${EXT_AR} .objs/*.o
-else
-libr2.${EXT_AR}:
-	@# do nothing
-endif
-endif
-
-# XXX needs autodetection of deps to remake and so..
-.objs:
-	cd vm ; sh ../waitfordeps.sh r_`echo ${LIBLIST}|sed -e 's, , r_,g'`
-	mkdir -p .objs
-	-for a in ${LIBLIST} ; do \
-		(cd .objs && ar x ../$$a/libr_$$a.a) ; \
-	done
 
 pkgcfg:
 	@for lib in ${LIBLIST}; do ( cd $${lib} && ${MAKE} pkgcfg ); done
@@ -99,7 +60,7 @@ install: install-includes install-pkgconfig
 	@for a in `find * | grep -e '\.${EXT_SO}$$' | grep -v lib/t | grep lib` ; do \
 	  b=`echo $$a|cut -d / -f 2`; \
 	  echo " ${PFX}/lib/$$b.${VERSION}"; \
-	  ${INSTALL_DATA} $$a ${PFX}/lib/$$b.${VERSION} ; \
+	  ${INSTALL_LIB} $$a ${PFX}/lib/$$b.${VERSION} ; \
 	  ( cd ${PFX}/lib ; ln -fs $$b.${VERSION} $$b.0 ; ln -fs $$b.0 $$b ); \
 	done
 	# object archives
@@ -152,14 +113,9 @@ deinstall uninstall:
 
 clean:
 	for lib in ${LIBLIST}; do ( cd $${lib} && ${MAKE} clean ); done
-	rm -f libr2.so
-	rm -rf .objs
 
 mrproper:
 	for lib in ${LIBLIST}; do ( cd $${lib} && ${MAKE} mrproper ); done
-	rm -f libr2.so
-	rm -rf .objs
-	rm -f libr.pc
 
 sloc:
 	${MAKE} -C .. sloc SLOCDIR=libr

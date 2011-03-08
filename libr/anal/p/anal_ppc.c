@@ -7,8 +7,8 @@
 
 // NOTE: buf should be at least 16 bytes!
 // XXX addr should be off_t for 64 love
-int aop(RAnal *anal, RAnalOp *aop, ut64 addr, const ut8 *bytes, int len) {
-//int arch_ppc_aop(ut64 addr, const u8 *bytes, struct aop_t *aop)
+int ppc_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *bytes, int len) {
+//int arch_ppc_op(ut64 addr, const u8 *bytes, struct op_t *op)
 // TODO swap endian here??
 	int opcode = (bytes[0] & 0xf8) >> 3; // bytes 0-5
 	short baddr  = ((bytes[2]<<8) | (bytes[3]&0xfc));// 16-29
@@ -17,61 +17,119 @@ int aop(RAnal *anal, RAnalOp *aop, ut64 addr, const ut8 *bytes, int len) {
 	//if (baddr>0x7fff)
 	//      baddr = -baddr;
 
-	memset (aop, '\0', sizeof (RAnalOp));
-	aop->addr = addr;
-	aop->type = R_ANAL_OP_TYPE_NOP;
-	aop->length = 4;
+	memset (op, '\0', sizeof (RAnalOp));
+	op->addr = addr;
+	op->type = R_ANAL_OP_TYPE_NOP;
+	op->length = 4;
 
 	//printf("OPCODE IS %08x : %02x (opcode=%d) baddr = %d\n", addr, bytes[0], opcode, baddr);
 
 	switch(opcode) {
 	case 11: // cmpi
-		aop->type = R_ANAL_OP_TYPE_CMP;
+		op->type = R_ANAL_OP_TYPE_CMP;
 		break;
 	case 9: // pure branch
 		if (bytes[0] == 0x4e) {
 			// bctr
 		} else {
-			aop->jump = (aa)?(baddr):(addr+baddr);
-			if (lk) aop->fail = addr+4;
+			op->jump = (aa)?(baddr):(addr+baddr);
+			if (lk) op->fail = addr+4;
 		}
-		aop->eob = 1;
+		op->eob = 1;
 		break;
 	case 6: // bc // conditional jump
-		aop->type = R_ANAL_OP_TYPE_JMP;
-		aop->jump = (aa)?(baddr):(addr+baddr+4);
-		aop->eob = 1;
+		op->type = R_ANAL_OP_TYPE_JMP;
+		op->jump = (aa)?(baddr):(addr+baddr+4);
+		op->eob = 1;
 		break;
 	case 7: // sc/svc
-		aop->type = R_ANAL_OP_TYPE_SWI;
+		op->type = R_ANAL_OP_TYPE_SWI;
 		break;
 #if 0
 	case 15: // bl
 		// OK
-		aop->type = R_ANAL_OP_TYPE_CJMP;
-		aop->jump = (aa)?(baddr):(addr+baddr);
-		aop->fail = addr+4;
-		aop->eob = 1;
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->jump = (aa)?(baddr):(addr+baddr);
+		op->fail = addr+4;
+		op->eob = 1;
 		break;
 #endif
 	case 8: // bne i tal
 		// OK
-		aop->type = R_ANAL_OP_TYPE_CJMP;
-		aop->jump = (aa)?(baddr):(addr+baddr+4);
-		aop->fail = addr+4;
-		aop->eob = 1;
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->jump = (aa)?(baddr):(addr+baddr+4);
+		op->fail = addr+4;
+		op->eob = 1;
 		break;
 	case 19: // bclr/bcr/bcctr/bcc
-		aop->type = R_ANAL_OP_TYPE_RET; // jump to LR
+		op->type = R_ANAL_OP_TYPE_RET; // jump to LR
 		if (lk) {
-			aop->jump = 0xFFFFFFFF; // LR ?!?
-			aop->fail = addr+4;
+			op->jump = 0xFFFFFFFF; // LR ?!?
+			op->fail = addr+4;
 		}
-		aop->eob = 1;
+		op->eob = 1;
 		break;
 	}
-	aop->length = 4;
-	return aop->length;
+	op->length = 4;
+	return op->length;
+}
+
+static int set_reg_profile(RAnal *anal) {
+	/* XXX Dupped Profiles */
+	return r_reg_set_profile_string (anal->reg,
+			"=pc	srr0\n"
+			"=sr	srr1\n" // status register
+			"=a0	r0\n"
+			"=a1	r1\n"
+			"=a2	r2\n"
+			"=a3	r3\n"
+#if 0
+			"=a4	r4\n"
+			"=a5	r5\n"
+			"=a6	r6\n"
+			"=a7	r7\n"
+#endif
+			"gpr	srr0	.32	0	0\n"
+			"gpr	srr1	.32	4	0\n"
+			"gpr	r0	.32	8	0\n"
+			"gpr	r1	.32	12	0\n"
+			"gpr	r2	.32	16	0\n"
+			"gpr	r3	.32	20	0\n"
+			"gpr	r4	.32	24	0\n"
+			"gpr	r5	.32	28	0\n"
+			"gpr	r6	.32	32	0\n"
+			"gpr	r7	.32	36	0\n"
+			"gpr	r8	.32	40	0\n"
+			"gpr	r9	.32	44	0\n"
+			"gpr	r10	.32	48	0\n"
+			"gpr	r11	.32	52	0\n"
+			"gpr	r12	.32	56	0\n"
+			"gpr	r13	.32	60	0\n"
+			"gpr	r14	.32	64	0\n"
+			"gpr	r15	.32	68	0\n"
+			"gpr	r16	.32	72	0\n"
+			"gpr	r17	.32	76	0\n"
+			"gpr	r18	.32	80	0\n"
+			"gpr	r19	.32	84	0\n"
+			"gpr	r20	.32	88	0\n"
+			"gpr	r21	.32	92	0\n"
+			"gpr	r22	.32	96	0\n"
+
+			"gpr	r23	.32	100	0\n"
+			"gpr	r24	.32	104	0\n"
+			"gpr	r25	.32	108	0\n"
+			"gpr	r26	.32	112	0\n"
+			"gpr	r27	.32	116	0\n"
+			"gpr	r28	.32	120	0\n"
+			"gpr	r29	.32	124	0\n"
+			"gpr	r30	.32	128	0\n"
+			"gpr	r31	.32	132	0\n"
+			"gpr	cr	.32	136	0\n"
+			"gpr	xer	.32	140	0\n"
+			"gpr	lr	.32	144	0\n"
+			"gpr	ctr	.32	148	0\n"
+			"gpr	mq	.32	152	0\n"
+			"gpr	vrsave	.32	156	0\n");
 }
 
 struct r_anal_plugin_t r_anal_plugin_ppc = {
@@ -79,7 +137,13 @@ struct r_anal_plugin_t r_anal_plugin_ppc = {
 	.desc = "PowerPC analysis plugin",
 	.init = NULL,
 	.fini = NULL,
-	.aop = &aop
+	.op = &ppc_op,
+	.set_reg_profile = &set_reg_profile,
+	.fingerprint_bb = NULL,
+	.fingerprint_fcn = NULL,
+	.diff_bb = NULL,
+	.diff_fcn = NULL,
+	.diff_eval = NULL
 };
 
 #ifndef CORELIB

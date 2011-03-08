@@ -45,7 +45,7 @@ typedef struct r_hash_t {
 
 #define R_HASH_SIZE_MD4 16
 #define R_HASH_SIZE_MD5 16
-#define R_HASH_SIZE_SHA1 16
+#define R_HASH_SIZE_SHA1 20
 #define R_HASH_SIZE_SHA256 32
 #define R_HASH_SIZE_SHA384 64
 #define R_HASH_SIZE_SHA512 64
@@ -100,6 +100,7 @@ R_API const char *r_hash_name(int bit);
 /* analysis */
 R_API ut8  r_hash_hamdist(const ut8 *buf, int len);
 R_API double r_hash_entropy(const ut8 *data, ut64 len);
+R_API double r_hash_entropy_fraction(const ut8 *data, ut64 len);
 R_API int r_hash_pcprint(const ut8 *buffer, ut64 len);
 #endif
 

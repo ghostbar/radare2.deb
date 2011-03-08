@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
 
 #include "r_core.h"
 
@@ -60,14 +60,14 @@ R_API int r_core_write_op(RCore *core, const char *arg, char op) {
 	return ret;
 }
 
-R_API int r_core_seek(RCore *core, ut64 addr, int rb) {
+R_API boolt r_core_seek(RCore *core, ut64 addr, boolt rb) {
 	ut64 old = core->offset;
-	int ret;
+	ut64 ret;
 
 	/* XXX unnecesary call */
-	r_io_set_fd (core->io, core->file->fd);
+	//r_io_set_fd (core->io, core->file->fd);
 	ret = r_io_seek (core->io, addr, R_IO_SEEK_SET);
-	if (ret == -1) {
+	if (ret == UT64_MAX) {
 //eprintf ("RET =%d %llx\n", ret, addr);
 /*
 	XXX handle read errors correctly
@@ -75,7 +75,7 @@ R_API int r_core_seek(RCore *core, ut64 addr, int rb) {
 			core->offset = addr;
 		} else return R_FALSE;
 */
-		core->offset = addr;
+		//core->offset = addr;
 	} else core->offset = addr;
 	if (rb) {
 		ret = r_core_block_read (core, 0);
@@ -96,7 +96,10 @@ R_API int r_core_seek(RCore *core, ut64 addr, int rb) {
 }
 
 R_API int r_core_write_at(RCore *core, ut64 addr, const ut8 *buf, int size) {
-	int ret = r_io_set_fd (core->io, core->file->fd);
+	int ret;
+	if (!core->io || !core->file || size<1)
+		return R_FALSE;
+	ret = r_io_set_fd (core->io, core->file->fd);
 	if (ret != -1) {
 		ret = r_io_write_at (core->io, addr, buf, size);
 		if (addr >= core->offset && addr <= core->offset+core->blocksize)
@@ -106,17 +109,22 @@ R_API int r_core_write_at(RCore *core, ut64 addr, const ut8 *buf, int size) {
 }
 
 R_API int r_core_block_read(RCore *core, int next) {
-	if (core->file == NULL)
+	if (core->file == NULL) {
+		memset (core->block, 0xff, core->blocksize);
 		return -1;
+	}
 	r_io_set_fd (core->io, core->file->fd);
 	r_io_seek (core->io, core->offset+((next)?core->blocksize:0), R_IO_SEEK_SET);
 	return r_io_read (core->io, core->block, core->blocksize);
 }
 
 R_API int r_core_read_at(RCore *core, ut64 addr, ut8 *buf, int size) {
-	int ret = r_io_set_fd (core->io, core->file->fd);
+	int ret;
+	if (!core->io || !core->file || size<1)
+		return R_FALSE;
+	r_io_set_fd (core->io, core->file->fd); // XXX ignore ret? -- ultra slow method.. inverse resolution of io plugin brbrb
 	ret = r_io_read_at (core->io, addr, buf, size);
 	if (addr>=core->offset && addr<=core->offset+core->blocksize)
 		r_core_block_read (core, 0);
-	return (ret==-1)?R_FALSE:R_TRUE;
+	return (ret!=-1);
 }

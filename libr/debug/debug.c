@@ -15,6 +15,7 @@ static int r_debug_recoil(RDebug *dbg) {
 		recoil = r_bp_recoil (dbg->bp, addr);
 		eprintf ("Recoil at 0x%"PFMT64x" = %d\n", addr, recoil);
 		if (recoil) {
+			dbg->reason = R_DBG_REASON_BP;
 			r_reg_set_value (dbg->reg, ri, addr-recoil);
 			r_debug_reg_sync (dbg, R_REG_TYPE_GPR, R_TRUE);
 			ret = R_TRUE;
@@ -31,6 +32,7 @@ R_API RDebug *r_debug_new(int hard) {
 		dbg->tid = -1;
 		dbg->swstep = 0;
 		dbg->newstate = 0;
+		dbg->reason = R_DBG_REASON_UNKNOWN;
 		dbg->stop_all_threads = R_FALSE;
 		dbg->trace = r_debug_trace_new ();
 		dbg->printf = (void *)printf;
@@ -61,13 +63,15 @@ R_API int r_debug_attach(struct r_debug_t *dbg, int pid) {
 	int ret = R_FALSE;
 	if (dbg && dbg->h && dbg->h->attach) {
 		ret = dbg->h->attach (pid);
-		if (ret) {
+		if (ret != -1) {
+			eprintf ("pid = %d tid = %d\n", pid, ret);
 			// TODO: get arch and set io pid
 			//int arch = dbg->h->arch;
 			//r_reg_set(dbg->reg->nregs, arch); //R_DBG_ARCH_X86);
 			// dbg->bp->iob->system("pid %d", pid);
-			dbg->pid = pid;
-			dbg->tid = pid;
+			//dbg->pid = pid;
+			//dbg->tid = ret;
+			r_debug_select (dbg, pid, ret); //dbg->pid, dbg->tid);
 		} else eprintf ("Cannot attach to this pid\n");
 	} else eprintf ("dbg->attach = NULL\n");
 	return ret;
@@ -156,14 +160,16 @@ R_API int r_debug_stop_reason(RDebug *dbg) {
 	// - illegal instruction
 	// - fpu exception
 	// return dbg->reason
-	return R_DBG_REASON_UNKNOWN;
+	return dbg->reason;
 }
 
 /* Returns PID */
 R_API int r_debug_wait(RDebug *dbg) {
 	int ret = 0;
 	if (dbg && dbg->h && dbg->h->wait) {
+		dbg->reason = R_DBG_REASON_UNKNOWN;
 		ret = dbg->h->wait (dbg->pid);
+		dbg->reason = ret;
 		dbg->newstate = 1;
 		eprintf ("wait = %d\n", ret);
 		if (dbg->trace->enabled)
@@ -172,17 +178,43 @@ R_API int r_debug_wait(RDebug *dbg) {
 	return ret;
 }
 
+// XXX: very experimental
+R_API int r_debug_step_soft(RDebug *dbg) {
+	ut8 buf[32];
+	RAnalOp op;
+	ut64 pc0, pc1, pc2;
+	pc0 = r_debug_reg_get (dbg, dbg->reg->name[R_REG_NAME_PC]);
+	int ret = r_anal_op (dbg->anal, &op, pc0, buf, sizeof (buf));
+	pc1 = pc0 + op.length;
+	// XXX: Does not works for 'ret'
+	pc2 = op.jump?op.jump:0;
+
+	r_bp_add_sw (dbg->bp, pc1, 4, R_BP_PROT_EXEC);
+	if (pc2) r_bp_add_sw (dbg->bp, pc2, 4, R_BP_PROT_EXEC);
+	r_debug_continue (dbg);
+	r_debug_wait (dbg);
+	r_bp_del (dbg->bp, pc1);
+	if (pc2) r_bp_del (dbg->bp, pc2);
+
+	return ret;
+}
+
+R_API int r_debug_step_hard(RDebug *dbg) {
+	if (!dbg->h->step (dbg))
+		return R_FALSE;
+	return r_debug_wait (dbg);
+}
+
 // TODO: count number of steps done to check if no error??
 R_API int r_debug_step(RDebug *dbg, int steps) {
 	int i, ret = R_FALSE;
 	if (dbg && dbg->h && dbg->h->step) {
 		for (i=0;i<steps;i++) {
-			if (!(ret = dbg->h->step (dbg, dbg->pid)))
-				break;
-			r_debug_wait (dbg);
+			ret = (dbg->swstep)?r_debug_step_soft (dbg):r_debug_step_hard (dbg);
 			// TODO: create wrapper for dbg_wait
 			// TODO: check return value of wait and show error
-			dbg->steps++;
+			if (ret)
+				dbg->steps++;
 		}
 	}
 	return ret;
@@ -200,7 +232,7 @@ R_API int r_debug_step_over(RDebug *dbg, int steps) {
 	if (dbg->anal && dbg->reg) {
 		ut64 pc = r_debug_reg_get (dbg, dbg->reg->name[R_REG_NAME_PC]);
 		dbg->iob.read_at (dbg->iob.io, pc, buf, sizeof (buf));
-		r_anal_aop (dbg->anal, &op, pc, buf, sizeof (buf));
+		r_anal_op (dbg->anal, &op, pc, buf, sizeof (buf));
 		if (op.type & R_ANAL_OP_TYPE_CALL) {
 			ut64 bpaddr = pc + op.length;
 			r_bp_add_sw (dbg->bp, bpaddr, 1, R_BP_PROT_EXEC);
@@ -211,11 +243,16 @@ R_API int r_debug_step_over(RDebug *dbg, int steps) {
 	return ret;
 }
 
+R_API int r_debug_kill_setup(RDebug *dbg, int sig, int action) {
+	// TODO: implement r_debug_kill_setup
+	return R_FALSE;
+}
+
 R_API int r_debug_continue_kill(RDebug *dbg, int sig) {
 	int ret = R_FALSE;
 	if (dbg && dbg->h && dbg->h->cont) {
 		r_bp_restore (dbg->bp, R_FALSE); // set sw breakpoints
-		ret = dbg->h->cont (dbg->pid, sig);
+		ret = dbg->h->cont (dbg->pid, dbg->tid, sig);
 		if (dbg->h->wait)
 			ret = dbg->h->wait (dbg->pid);
 		r_bp_restore (dbg->bp, R_TRUE); // unset sw breakpoints
@@ -256,7 +293,7 @@ R_API int r_debug_continue_until_optype(RDebug *dbg, int type, int over) {
 			}
 			pc = r_debug_reg_get (dbg, dbg->reg->name[R_REG_NAME_PC]);
 			dbg->iob.read_at (dbg->iob.io, pc, buf, sizeof (buf));
-			r_anal_aop (dbg->anal, &op, pc, buf, sizeof (buf));
+			r_anal_op (dbg->anal, &op, pc, buf, sizeof (buf));
 			n++;
 		} while (!(op.type&type));
 	} else eprintf ("Undefined pointer at dbg->anal\n");
@@ -319,10 +356,10 @@ R_API int r_debug_syscall(struct r_debug_t *dbg, int num) {
 	return ret;
 }
 
-R_API int r_debug_kill(struct r_debug_t *dbg, int sig) {
+R_API int r_debug_kill(struct r_debug_t *dbg, boolt thread, int sig) {
 	int ret = R_FALSE;
 	if (dbg->h && dbg->h->kill)
-		ret = dbg->h->kill (dbg, sig);
+		ret = dbg->h->kill (dbg, thread, sig);
 	else eprintf ("Backend does not implements kill()\n");
 	return ret;
 }
@@ -331,4 +368,17 @@ R_API RList *r_debug_frames (RDebug *dbg) {
 	if (dbg && dbg->h && dbg->h->frames)
 		return dbg->h->frames (dbg);
 	return NULL;
+}
+
+/* TODO: Implement fork and clone */
+R_API int r_debug_fork (RDebug *dbg) {
+	//if (dbg && dbg->h && dbg->h->frames)
+		//return dbg->h->frames (dbg);
+	return 0;
+}
+
+R_API int r_debug_clone (RDebug *dbg) {
+	//if (dbg && dbg->h && dbg->h->frames)
+		//return dbg->h->frames (dbg);
+	return 0;
 }

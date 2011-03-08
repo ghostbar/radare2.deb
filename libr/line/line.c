@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
 
 #include <r_line.h>
 
@@ -25,6 +25,11 @@ R_API void r_line_free () {
 	free ((void*)I.prompt);
 	I.prompt = NULL;
 	r_line_hist_free ();
+}
+
+// handle const or dynamic prompts?
+R_API void r_line_set_prompt (const char *prompt) {
+	I.prompt = prompt;
 }
 
 #include "dietline.c"

@@ -37,14 +37,6 @@ public class RAsm {
 		SRCREG2
 	}
 
-/*
-	[Compact]
-	[CCode (cname="RAsmFastcall", destroy_function="", free_function="")]
-	public struct Fastcall {
-		string arg[16];
-	}
-*/
-
 	[Compact]
 	[CCode (cname="RAsmPlugin", destroy_function="", free_function="")]
 	public class Plugin {
@@ -56,13 +48,16 @@ public class RAsm {
 	}
 
 	[Compact]
-	[CCode (cname="RAsmAop", destroy_function="")]
-	public struct Aop {
+	[CCode (cname="RAsmOp", destroy_function="")]
+	public class Op {
 		public int inst_len;
 		public uint8 *buf;
 		public string buf_asm;
 		public string buf_hex;
 		public string buf_err;
+		// accessors for bindings
+		public string get_hex();
+		public string get_asm();
 	}
 
 	[Compact]
@@ -95,13 +90,12 @@ public class RAsm {
 	public bool set_syntax(Syntax syntax);
 	public bool set_pc(uint64 addr);
 	public bool set_big_endian(bool big);
-	// TODO: Use Code? instead of aop??
-	public int disassemble(out Aop aop, uint8 *buf, uint64 length);
-	public int assemble(out Aop aop, string buf);
+	// TODO: Use Code? instead of op??
+	public int disassemble(out Op op, uint8 *buf, uint64 length);
+	public int assemble(out Op op, string buf);
 	public Code? mdisassemble(uint8 *buf, uint64 length);
 	public Code? mdisassemble_hexstr(string hexstr);
 	public Code? massemble(string buf);
-	public unowned string fastcall(int idx, int num);
 
 	/* TODO: not directy defined here */
 	public void free();

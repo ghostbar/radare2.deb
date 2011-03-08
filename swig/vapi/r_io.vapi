@@ -4,6 +4,14 @@ namespace Radare {
 	[Compact]
 	[CCode (cheader_filename="r_io.h", cname="RIO", free_function="r_io_free", cprefix="r_io_")]
 	public class RIO {
+		public int fd;
+		public bool cached;
+		public bool cached_read;
+		public bool enforce_rwx;
+		public bool enforce_seek;
+		public uint64 off;
+		public bool debug;
+
 		[CCode (cprefix="R_IO_")]
 		public enum Perm {
 			READ = 0,
@@ -31,10 +39,10 @@ namespace Radare {
 		 * flags: See Radare.Io.Flags
 		 * mode: ...
 		 */
-		public int open(string uri, int flags, int mode);
-		public int open_as(string urihandler, string path, int flags, int mode);
+		public RIO.Desc open(string uri, int flags, int mode);
+		public RIO.Desc open_as(string urihandler, string path, int flags, int mode);
 		public int redirect(string uri);
-		public int set_fd(int fd);
+		public int set_fd(RIO.Desc fd);
 		public int read(out uint8 *buf, int len);
 		public int read_at(uint64 addr, uint8 *buf, int len);
 		public RBuffer *read_buf(uint64 addr, int len);
@@ -42,8 +50,8 @@ namespace Radare {
 		public int write_at(uint64 addr, uint8 *buf, int len);
 		public uint64 seek(uint64 addr, int whence);
 		public int system(string cmd);
-		public int close(int fd);
-		public uint64 size(int fd);
+		public int close(RIO.Desc fd);
+		public uint64 size();
 
 
 		public void cache_commit ();
@@ -102,8 +110,6 @@ namespace Radare {
 		public Map map_resolve(int fd);
 		public bool map_add(int fd, int flags, uint64 delta, uint64 addr, uint64 size);
 		public bool map_del(int fd);
-		public int map_read_at(uint64 addr, uint8 *buf, uint64 len);
-		public int map_write_at(uint64 addr, uint8 *buf, uint64 len);
 
 		/* sections */
 		[Compact]
@@ -135,9 +141,9 @@ namespace Radare {
 			public string name;
 		}
 		// int perms -> RIOPerm ?
-		public bool desc_add(int fd, string file, int perms, RIO.Plugin plugin);
+		public void desc_add(RIO.Desc *desc);
 		public bool desc_del(int fd);
 		//public RIO.Desc desc_get (int fd);
-		public int desc_generate();
+		//public int desc_generate();
 	}
 }

@@ -7,7 +7,9 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <signal.h>
+#if __linux__
 #include <execinfo.h>
+#endif
 #elif __WINDOWS__
 #include <io.h>
 #endif
@@ -24,6 +26,23 @@ R_API ut64 r_sys_now(void) {
 	ret |= now.tv_usec;
 	//(sizeof (now.tv_sec) == 4
 	return ret;
+}
+
+R_API RList *r_sys_dir(const char *path) {
+	DIR *dir = opendir (path);
+	struct dirent *entry;
+	if (dir) {
+		RList *list = r_list_new ();
+		if (list) {
+			list->free = free;
+			while ((entry = readdir (dir))) {
+				r_list_append (list, strdup (entry->d_name));
+			}
+			closedir (dir);
+			return list;
+		}
+	}
+	return NULL;
 }
 
 R_API char *r_sys_cmd_strf(const char *fmt, ...) {

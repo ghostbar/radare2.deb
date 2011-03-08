@@ -2,7 +2,7 @@
 
 namespace Radare {
 [Compact]
-[CCode (cheader_filename="r_core.h,r_bin.h,r_parse.h,r_lang.h,r_sign.h,r_reg.h,r_list.h,r_types_base.h", cname="RCore", free_function="r_core_free", cprefix="r_core_")]
+[CCode (cheader_filename="r_flags.h,r_anal.h,r_core.h,r_bin.h,r_parse.h,r_lang.h,r_sign.h,r_reg.h,r_list.h,r_types_base.h", cname="RCore", free_function="r_core_free", cprefix="r_core_")]
 public class RCore {
 	public RFlag flags;
 	public RNum num;
@@ -10,7 +10,7 @@ public class RCore {
 	public RCore();
 	public RIO io;
 	public RCons cons;
-	public RDebug debug;
+	public RDebug dbg;
 	public RConfig config;
 	public RAsm assembler;
 	public RAnal anal;
@@ -22,6 +22,7 @@ public class RCore {
 	public RSign sign;
 	public RPrint print;
 	// TODO: public RVm vm;
+	public uint64 offset;
 
 	public static unowned RCore cast(uint64 ptr);
 	public bool loadlibs();
@@ -44,16 +45,16 @@ public class RCore {
 
 	public string op_str(uint64 addr);
 	public RAnal.Op op_anal(uint64 addr);
+	public RAsm.Op disassemble(uint64 addr);
 
 	public unowned string disassemble_instr(uint64 addr, int l);
 	public unowned string disassemble_bytes(uint64 addr, int b);
 
 	public int anal_search (uint64 from, uint64 to, uint64 ref);
 	public void anal_refs(uint64 addr, int gv);
-	public int anal_bb(uint64 at, int depth, int head);
-	public int anal_bb_list(bool rad);
+	public int anal_bb(RAnal.Fcn fcn, uint64 at, int head);
 	public int anal_bb_seek(uint64 addr);
-	public int anal_fcn(uint64 at, uint64 from, int depth);
+	public int anal_fcn(uint64 at, uint64 from, int reftype, int depth);
 	public int anal_fcn_list(string input, bool rad);
 	public int anal_graph(uint64 addr, int opts);
 	//public int anal_graph_fcn(string input, int opts);
@@ -63,9 +64,7 @@ public class RCore {
 	public int project_save (string file);
 	public string project_info (string file);
 
-	//public int gdiff(string file1, string file2, bool va);
-
-	public void sysenv_update ();
+	public int gdiff(RCore *c2);
 
 	public void rtr_help();
 	public void rtr_pushout(string input);
@@ -75,7 +74,7 @@ public class RCore {
 	public void rtr_session(string input);
 	public void rtr_cmd(string input);
 	/* io */
-	public int read_at(uint64 addr, out uint8 *buf, int size);
+	public int read_at(uint64 addr, uint8 *buf, int size);
 	public int write_at(uint64 addr, uint8 *buf, int size);
 	//public int write_op(uint64 addr, string arg, char op);
 	public int block_read(bool next);
@@ -89,7 +88,7 @@ public class RCore {
 	public int visual(string input);
 	public int visual_cmd(int ch);
 
-	public int serve(int fd);
+	public int serve(RIO.Desc fd);
 
 	/* asm */
 	//public static RCore.AsmHit asm_hit_new();
@@ -120,14 +119,18 @@ public class RCore {
 		// public static RList<RCoreAsmHit> AsmHit.list();
 	}
 
+	public delegate int SearchCallback (uint64 from, uint8 *buf, int len);
+	public bool search_cb(uint64 from, uint64 to, SearchCallback cb);
 
 	/* files */
-	public RCore.File file_open(string file, int mode);
+	public RCore.File file_open(string file, int mode, uint64 loadaddr=0);
 	public bool file_close(RCore.File cf);
 	public bool file_close_fd(int fd);
 	public bool file_list();
 
 	public int seek_delta(int64 addr);
+
+	public bool bin_load(string? file);
 
 	public RCore.File file;
 }

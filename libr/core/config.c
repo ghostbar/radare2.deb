@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
 
 #include <r_core.h>
 
@@ -10,7 +10,7 @@ static int config_scrcols_callback(void *user, void *data) {
 
 static int config_scrhtml_callback(void *user, void *data) {
 	RConfigNode *node = (RConfigNode *) data;
-	r_cons_singleton()->is_html = node->i_value;
+	r_cons_singleton ()->is_html = node->i_value;
 // TODO: control error and restore old value (return false?) show errormsg?
 	return R_TRUE;
 }
@@ -54,11 +54,12 @@ static int config_iocache_callback(void *user, void *data) {
 static int config_cfgdebug_callback(void *user, void *data) {
 	RCore *core = (RCore*) user;
 	RConfigNode *node = (RConfigNode*) data;
-	core->io->debug = node->i_value;
-	if (node->i_value) {
+	if (core && core->io)
+		core->io->debug = node->i_value;
+	if (core->dbg && node->i_value) {
 		r_debug_use (core->dbg, r_config_get (core->config, "dbg.backend"));
 		if (core->file)
-			r_debug_select (core->dbg, core->file->fd, core->file->fd);
+			r_debug_select (core->dbg, core->file->fd->fd, core->file->fd->fd);
 	}
 	return R_TRUE;
 }
@@ -84,10 +85,17 @@ static int config_analplugin_callback(void *user, void *data) {
 	return R_TRUE;
 }
 
+static int config_analsplit_callback(void *user, void *data) {
+	RCore *core = (RCore*) user;
+	RConfigNode *node = (RConfigNode*) data;
+	core->anal->split = node->i_value;
+	return R_TRUE;
+}
+
 static int config_asmos_callback(void *user, void *data) {
 	RCore *core = (RCore*) user;
 	RConfigNode *node = (RConfigNode*) data;
-	if (!r_syscall_setup (core->syscall, 
+	if (!r_syscall_setup (core->anal->syscall, 
 			r_config_get (core->config, "asm.arch"), node->value))
 		eprintf ("asm.os: Cannot setup syscall os/arch for '%s'\n", node->value);
 	return R_TRUE;
@@ -120,7 +128,7 @@ static int asm_profile(RConfig *cfg, const char *profile) {
 		r_config_set (cfg, "asm.flagsline", "false");
 		r_config_set (cfg, "asm.section", "false");
 		r_config_set (cfg, "asm.trace", "false");
-		r_config_set (cfg, "asm.split", "true");
+		r_config_set (cfg, "anal.split", "true");
 		r_config_set (cfg, "asm.flags", "true");
 		r_config_set (cfg, "asm.size", "false");
 		r_config_set (cfg, "asm.xrefs", "true");
@@ -177,7 +185,7 @@ static int asm_profile(RConfig *cfg, const char *profile) {
 		r_config_set (cfg, "asm.bytes", "false");
 		r_config_set (cfg, "asm.lines", "false");
 		r_config_set (cfg, "asm.comments", "true");
-		r_config_set (cfg, "asm.split", "false");
+		r_config_set (cfg, "anal.split", "false");
 		r_config_set (cfg, "asm.flags", "false");
 		r_config_set (cfg, "asm.flagsline", "true");
 		r_config_set (cfg, "asm.xrefs", "false");
@@ -220,10 +228,23 @@ static int config_scrprompt_callback(void *user, void *data) {
 	return R_TRUE;
 }
 
+static int config_teefile_callback(void *user, void *data) {
+	RConfigNode *node = (RConfigNode *) data;
+	r_cons_singleton()->teefile = node->value;
+	return R_TRUE;
+}
+
 static int config_swstep_callback(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
 	core->dbg->swstep = node->i_value;
+	return R_TRUE;
+}
+
+static int config_asmlineswidth_callback(void *user, void *data) {
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	core->anal->lineswidth = node->i_value;
 	return R_TRUE;
 }
 
@@ -232,17 +253,11 @@ static int config_asmarch_callback(void *user, void *data) {
 	RConfigNode *node = (RConfigNode *) data;
 	// TODO: control error and restore old value (return false?) show errormsg?
 	if (!r_asm_use (core->assembler, node->value))
-		eprintf ("asm.arch: Cannot set this arch (%s)\n", node->value);
-	if (!r_syscall_setup (core->syscall, node->value,
+		eprintf ("asm.arch: cannot find (%s)\n", node->value);
+	r_config_set (core->config, "anal.plugin", node->value);
+	if (!r_syscall_setup (core->anal->syscall, node->value,
 			r_config_get (core->config, "asm.os")))
 		eprintf ("asm.arch: Cannot setup syscall os/arch for '%s'\n", node->value);
-	return R_TRUE;
-}
-
-static int config_vmarch_callback(void *user, void *data) {
-	RCore *core = (RCore *) user;
-	RConfigNode *node = (RConfigNode *) data;
-	r_vm_set_arch (core->vm, node->value, core->assembler->bits);
 	return R_TRUE;
 }
 
@@ -271,8 +286,6 @@ static int config_asmbits_callback(void *user, void *data) {
 	}
 	if (!r_anal_set_bits (core->anal, node->i_value))
 		eprintf ("asm.arch: Cannot setup '%i' bits analysis engine\n", (int)node->i_value);
-	if (core->assembler->cur)
-	r_vm_set_arch (core->vm, core->assembler->cur->name, node->i_value);
 	// TODO: change debugger backend bit profile here
 	return ret;
 }
@@ -291,22 +304,21 @@ R_API int r_core_config_init(RCore *core) {
 	RConfig *cfg = cfg = core->config = r_config_new (core);
 	cfg->printf = r_cons_printf;
 
+	r_config_set (cfg, "dir.plugins", LIBDIR"/radare2/"R2_VERSION"/");
+	/* anal */
+	r_config_set_i (cfg, "anal.depth", 100);
+	r_config_set_i (cfg, "anal.ptrdepth", 3);
+	r_config_set_cb (cfg, "anal.split", "true", &config_analsplit_callback);
+	r_config_set_cb (cfg, "anal.plugin", "x86", &config_analplugin_callback);
+	/* asm */
 	r_config_set_cb (cfg, "asm.arch", R_SYS_ARCH, &config_asmarch_callback);
 	// XXX: not portable
 	r_parse_use (core->parser, "x86.pseudo");
 	r_config_set_cb (cfg, "asm.parser", "x86.pseudo",
 		&config_asmparser_callback);
-
-	r_config_set (cfg, "dir.plugins", LIBDIR"/radare2/"R2_VERSION"/");
-	/* anal */
-	r_config_set_i (cfg, "anal.depth", 10);
-	r_config_set_i (cfg, "anal.ptrdepth", 3);
-	r_config_set (cfg, "anal.split", "false");
-	r_config_set_cb (cfg, "anal.plugin", "x86", &config_analplugin_callback);
-	/* asm */
-	r_config_set_i_cb (cfg, "asm.bits", 32,
-		&config_asmbits_callback);
+	r_config_set_i_cb (cfg, "asm.bits", 32, &config_asmbits_callback);
 	r_config_set (cfg, "asm.bytes", "true"); 
+	r_config_set (cfg, "asm.lbytes", "true"); 
 	r_config_set (cfg, "asm.middle", "false"); // jump in the middle because of antidisasm tricks
 	r_config_set (cfg, "asm.comments", "true");
 	r_config_set (cfg, "asm.stackptr", "true");
@@ -314,14 +326,15 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_set_i (cfg, "asm.nbytes", 8);
 	r_config_set (cfg, "asm.pseudo", "false");  // DEPRECATED ???
 	r_config_set (cfg, "asm.filter", "true");
+	r_config_set (cfg, "asm.varsub", "true");
 	r_config_set (cfg, "asm.trace", "true");
 	r_config_set (cfg, "asm.decode", "false"); 
-	r_config_set (cfg, "asm.bytes", "true"); 
 	r_config_set (cfg, "asm.offset", "true"); 
 	r_config_set (cfg, "asm.lines", "true");
 	r_config_set (cfg, "asm.linesout", "true");
 	r_config_set (cfg, "asm.linesstyle", "false");
 	r_config_set (cfg, "asm.lineswide", "false");
+	r_config_set_i_cb (cfg, "asm.lineswidth", 10, &config_asmlineswidth_callback);
 	r_config_set (cfg, "asm.linescall", "false");
 	r_config_set (cfg, "asm.offset", "true"); 
 	r_config_set_cb (cfg, "asm.os", R_SYS_OS, &config_asmos_callback);
@@ -337,28 +350,32 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_set_cb (cfg, "cfg.datefmt", "%d:%m:%Y %H:%M:%S %z", &config_cfgdatefmt_callback);
 	r_config_set (cfg, "cfg.fortunes", "true");
 	r_config_set (cfg, "dbg.backend", "native");
+	r_config_set (cfg, "dbg.bep", "loader"); // loader, entry, constructor, main
 	r_config_set_cb (cfg, "dbg.stopthreads", "true", &config_stopthreads_callback);
 	r_config_set_cb (cfg, "dbg.swstep", "false", &config_swstep_callback);
 	r_config_set_cb (cfg, "dbg.trace", "true", &config_trace_callback);
 	r_config_set_cb (cfg, "dbg.trace.tag", "0xff", &config_tracetag_callback);
-	r_config_set (cfg, "cmd.hit", ""); 
-	r_config_set (cfg, "cmd.open", ""); 
-	r_config_set (cfg, "cmd.prompt", ""); 
+	r_config_set (cfg, "cmd.hit", "");
+	r_config_set (cfg, "cmd.open", "");
+	r_config_set (cfg, "cmd.prompt", "");
 	r_config_set (cfg, "cmd.vprompt", "");
 	r_config_set (cfg, "cmd.bp", "");
+	r_config_set_cb (cfg, "scr.tee", "", config_teefile_callback);
 	r_config_set_cb (cfg, "scr.prompt", "true", &config_scrprompt_callback);
 	r_config_set_cb (cfg, "scr.color",
 		(core->print->flags&R_PRINT_FLAGS_COLOR)?"true":"false",
 		&config_color_callback);
+	r_config_set (cfg, "scr.fkey", "function");
 	r_config_set (cfg, "scr.seek", "");
 	r_config_set_i_cb (cfg, "scr.cols", 16, &config_scrcols_callback);
+	r_config_set (cfg, "search.prefix", "hit");
 	r_config_set_i (cfg, "search.from", 0);
 	r_config_set_i (cfg, "search.to", 0);
 	r_config_set_i (cfg, "search.distance", 0); // TODO: use i_cb here and remove code in cmd.c
 	r_config_set_i_cb (cfg, "search.align", 0, &config_searchalign_callback);
-	r_config_set_i (cfg, "search.asmstr", 0);
+	r_config_set (cfg, "search.asmstr", "true");
 	r_config_set_cb (cfg, "scr.html", "false", &config_scrhtml_callback);
-	r_config_set_cb (cfg, "io.ffio", "false", &config_ioffio_callback);
+	r_config_set_cb (cfg, "io.ffio", "true", &config_ioffio_callback);
 	r_config_set_cb (cfg, "io.va", "true", &config_iova_callback);
 	r_config_set_cb (cfg, "io.cache", "false", &config_iocache_callback);
 	r_config_set (cfg, "file.path", "");
@@ -367,9 +384,12 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_set (cfg, "file.md5", "");
 	r_config_set (cfg, "file.sha1", "");
 	r_config_set (cfg, "file.type", "");
+	r_config_set_i (cfg, "magic.depth", 100);
 	r_config_set (cfg, "rap.loop", "true");
-	/* vm */
-	r_config_set_cb (cfg, "vm.arch", "x86", &config_vmarch_callback);
+	/* zoom */
+	r_config_set_i (cfg, "zoom.from", 0);
+	r_config_set_i (cfg, "zoom.to", 0);
+	r_config_set (cfg, "zoom.byte", "h");
 	/* TODO cmd */
 #if 0
 
@@ -525,7 +545,6 @@ R_API int r_core_config_init(RCore *core) {
 #else
 	config_set("dbg.hwbp", "true"); // hardware breakpoints by default // ALSO BSD
 #endif
-	config_set("dbg.bep", "loader"); // loader, main
 	config_set("dir.home", getenv("HOME"));
 
 	/* dir.monitor */
@@ -565,10 +584,6 @@ R_API int r_core_config_init(RCore *core) {
 	config_set("gui.right", "gtk-hello");  // graphviz
 	config_set("gui.bottom", "gtk-hello");  // graphviz
 
-	node = config_set_i("zoom.from", 0);
-	node = config_set_i("zoom.to", config.size);
-	node = config_set("zoom.byte", "head");
-	node->callback = &config_zoombyte_callback;
 
 	node = config_set("scr.palette", cons_palette_default);
 	node->callback = &config_palette_callback;
@@ -599,8 +614,6 @@ R_API int r_core_config_init(RCore *core) {
 		config_set_scr_pal("7f","magenta")
 
 	config_set("scr.grephigh", "");
-	node = config_set("scr.tee", "");
-	node->callback = &config_teefile_callback;
 	node = config_set("scr.buf", "false");
 	node->callback = &config_scrbuf_callback;
 	node = config_set_i("scr.width", config.width);

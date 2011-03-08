@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 // TODO: find better name (r_mem_length()); is this used somewhere?
-R_API int r_mem_count(ut8 **addr) {
+R_API int r_mem_count(const ut8 **addr) {
 	int i = 0;
 	while (*addr++)
 		i++;
@@ -103,6 +103,27 @@ src |__________|_________|
 */
 #endif
 	r_mem_copybits (dst, src, nbits);
+}
+
+// TODO: SEE: R_API ut64 r_reg_get_value(RReg *reg, RRegItem *item) { .. dupped code?
+R_API int r_mem_set_num (ut8 *dest, int dest_size, ut64 num, int endian) {
+	int num4;
+	short num2;
+	switch (dest_size) {
+	case 1: dest[0] = (ut8) num;
+		break;
+	case 2: num2 = (short)num;
+		r_mem_copyendian (dest, (const ut8*)&num2, 2, endian);
+		break;
+	case 4: num4 = (int)num;
+		r_mem_copyendian (dest, (const ut8*)&num4, 4, endian);
+		break;
+	case 8: r_mem_copyendian (dest, (const ut8*)&num, 8, endian);
+		break;
+	default:
+		return R_FALSE;
+	}
+	return R_TRUE;
 }
 
 /* XXX TODO check and use system endian */

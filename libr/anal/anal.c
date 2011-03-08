@@ -1,6 +1,5 @@
-/* radare - LGPL - Copyright 2009-2010 */
-/*   nibble<.ds@gmail.com> */
-/*   pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2011 */
+/* - nibble<.ds@gmail.com> + pancake<nopcode.org> */
 
 #include <r_anal.h>
 #include <r_util.h>
@@ -23,33 +22,34 @@ R_API RAnal *r_anal_new() {
 	int i;
 	RAnalPlugin *static_plugin;
 	RAnal *anal = R_NEW (RAnal);
-	if (anal) {
-		memset (anal, 0, sizeof (RAnal));
-		anal->reg = NULL;
-		anal->bbs = r_anal_bb_list_new ();
-		anal->fcns = r_anal_fcn_list_new ();
-		anal->refs = r_anal_ref_list_new ();
-		anal->vartypes = r_anal_var_type_list_new ();
-		r_anal_set_bits (anal, 32);
-		r_anal_set_big_endian (anal, R_FALSE);
-		INIT_LIST_HEAD (&anal->anals);
-		for (i=0; anal_static_plugins[i]; i++) {
-			static_plugin = R_NEW (RAnalPlugin);
-			memcpy (static_plugin, anal_static_plugins[i], sizeof (RAnalPlugin));
-			r_anal_add (anal, static_plugin);
-		}
-		for (i=0; anal_default_vartypes[i].name; i++)
-			r_anal_var_type_add (anal, anal_default_vartypes[i].name,
-					anal_default_vartypes[i].size, anal_default_vartypes[i].fmt);
+	if (!anal)
+		return NULL;
+	memset (anal, 0, sizeof (RAnal));
+	anal->meta = r_meta_new ();
+	anal->syscall = r_syscall_new ();
+	r_io_bind_init (anal->iob);
+	anal->reg = r_reg_new ();
+	anal->lineswidth = 0;
+	anal->fcns = r_anal_fcn_list_new ();
+	anal->refs = r_anal_ref_list_new ();
+	anal->vartypes = r_anal_var_type_list_new ();
+	r_anal_set_bits (anal, 32);
+	r_anal_set_big_endian (anal, R_FALSE);
+	INIT_LIST_HEAD (&anal->anals); // TODO: use RList here
+	for (i=0; anal_static_plugins[i]; i++) {
+		static_plugin = R_NEW (RAnalPlugin);
+		memcpy (static_plugin, anal_static_plugins[i], sizeof (RAnalPlugin));
+		r_anal_add (anal, static_plugin);
 	}
+	for (i=0; anal_default_vartypes[i].name; i++)
+		r_anal_var_type_add (anal, anal_default_vartypes[i].name,
+				anal_default_vartypes[i].size, anal_default_vartypes[i].fmt);
 	return anal;
 }
 
 R_API RAnal *r_anal_free(RAnal *anal) {
 	if (anal) {
 		/* TODO: Free a->anals here */
-		if (anal->bbs)
-			r_list_free (anal->bbs);
 		if (anal->fcns)
 			r_list_free (anal->fcns);
 		if (anal->vartypes)
@@ -86,9 +86,17 @@ R_API int r_anal_use(RAnal *anal, const char *name) {
 		RAnalPlugin *h = list_entry(pos, RAnalPlugin, list);
 		if (!strcmp (h->name, name)) {
 			anal->cur = h;
+			r_anal_set_reg_profile (anal);
 			return R_TRUE;
 		}
 	}
+	return R_FALSE;
+}
+
+R_API int r_anal_set_reg_profile(RAnal *anal) {
+	if (anal)
+	if (anal->cur && anal->cur->set_reg_profile)
+		return anal->cur->set_reg_profile (anal);
 	return R_FALSE;
 }
 
@@ -99,6 +107,7 @@ R_API int r_anal_set_bits(RAnal *anal, int bits) {
 	case 32:
 	case 64:
 		anal->bits = bits;
+		r_anal_set_reg_profile (anal);
 		return R_TRUE;
 	}
 	return R_FALSE;
@@ -110,34 +119,63 @@ R_API int r_anal_set_big_endian(RAnal *anal, int bigend) {
 }
 
 R_API char *r_anal_strmask (RAnal *anal, const char *data) {
-	RAnalOp *aop;
+	RAnalOp *op;
 	ut8 *buf;
 	char *ret = NULL;
 	int oplen, len, idx = 0;
 
 	ret = strdup (data);
 	buf = malloc (strlen (data));
-	aop = r_anal_aop_new ();
-	if (aop == NULL || ret == NULL || buf == NULL) {
-		free (aop);
+	op = r_anal_op_new ();
+	if (op == NULL || ret == NULL || buf == NULL) {
+		free (op);
 		free (buf);
 		free (ret);
 		return NULL;
 	}
 	len = r_hex_str2bin (data, buf);
 	while (idx < len) {
-		if ((oplen = r_anal_aop (anal, aop, 0, buf+idx, len-idx)) == 0)
+		if ((oplen = r_anal_op (anal, op, 0, buf+idx, len-idx)) == 0)
 			break;
-		switch (aop->type) {
+		switch (op->type) {
 		case R_ANAL_OP_TYPE_CALL:
+		case R_ANAL_OP_TYPE_UCALL:
 		case R_ANAL_OP_TYPE_CJMP:
 		case R_ANAL_OP_TYPE_JMP:
-			if (aop->nopcode != 0)
-				memset (ret+(idx+aop->nopcode)*2, '.', (oplen-aop->nopcode)*2);
+		case R_ANAL_OP_TYPE_UJMP:
+			if (op->nopcode != 0)
+				memset (ret+(idx+op->nopcode)*2, '.', (oplen-op->nopcode)*2);
 		}
 		idx += oplen;
 	}
-	free (aop);
+	free (op);
 	free (buf);
 	return ret;
+}
+
+R_API RList *r_anal_get_fcns(RAnal *anal) {
+	return anal->fcns;
+}
+
+R_API RAnalFcn *r_anal_get_fcn_at(RAnal *anal, ut64 addr) {
+	RAnalFcn *fcni;
+	RListIter *iter;
+	r_list_foreach (anal->fcns, iter, fcni)
+		if (fcni->addr == addr)
+			return fcni;
+	return NULL;
+}
+
+R_API void r_anal_trace_bb(RAnal *anal, ut64 addr) {
+	RAnalBlock *bbi;
+	RAnalFcn *fcni;
+	RListIter *iter, *iter2;
+	VERBOSE_ANAL eprintf("bbtraced\n"); // XXX Debug msg
+	r_list_foreach (anal->fcns, iter, fcni)
+		r_list_foreach (fcni->bbs, iter2, bbi) {
+			if (addr>=bbi->addr && addr<(bbi->addr+bbi->size)) {
+				bbi->traced = R_TRUE;
+				break;
+			}
+		}
 }

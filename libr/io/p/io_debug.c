@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
 
 #include <r_io.h>
 #include <r_lib.h>
@@ -134,8 +134,7 @@ static int fork_and_ptraceme(const char *cmd) {
 
         /* check if is a create process debug event */
         if (de.dwDebugEventCode != CREATE_PROCESS_DEBUG_EVENT) {
-                eprintf ("exception code %d\n",
-                                de.dwDebugEventCode);
+                eprintf ("exception code 0x%04x\n", (ut32)de.dwDebugEventCode);
                 goto err_fork;
         }
 
@@ -221,35 +220,33 @@ static int __plugin_open(struct r_io_t *io, const char *file) {
 	return R_FALSE;
 }
 
-static int __open(struct r_io_t *io, const char *file, int rw, int mode) {
+static RIODesc *__open(struct r_io_t *io, const char *file, int rw, int mode) {
 	char uri[1024];
 	if (__plugin_open (io, file)) {
 		int pid = atoi (file+6);
 		if (pid == 0) {
 			pid = fork_and_ptraceme (file+6);
 			if (pid==-1)
-				return -1;
+				return NULL;
 #if __WINDOWS__
 			sprintf (uri, "w32dbg://%d", pid);
 #elif __APPLE__
 			sprintf (uri, "mach://%d", pid);
 #else
+			// TODO: use io_procpid here? faster or what?
 			sprintf (uri, "ptrace://%d", pid);
 #endif
 			eprintf ("io_redirect: %s\n", uri);
-			return r_io_redirect (io, uri);
+			r_io_redirect (io, uri);
+			return NULL;
 		} else {
 			sprintf (uri, "attach://%d", pid);
 			r_io_redirect (io, uri);
-			return -1;
+			return NULL;
 		}
 	}
 	r_io_redirect (io, NULL);
-	return -1;
-}
-
-static int __init(struct r_io_t *io) {
-	return R_TRUE;
+	return NULL;
 }
 
 struct r_io_plugin_t r_io_plugin_debug = {
@@ -261,7 +258,6 @@ struct r_io_plugin_t r_io_plugin_debug = {
 	.lseek = NULL,
 	.system = NULL,
 	.debug = (void *)1,
-	.init = __init,
         //void *widget;
 /*
         struct debug_t *debug;

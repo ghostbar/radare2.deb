@@ -15,7 +15,7 @@ CFLAGS+=-I../include
 all: $(ALL)
 	@$(MAKE) real_all
 
-real_all: ${LIBSO} ${LIBAR} ${EXTRA_TARGETS}
+real_all: ${EXTRA_TARGETS} ${LIBSO} ${LIBAR}
 	@-if [ -e t/Makefile ]; then (cd t && ${MAKE} all) ; fi
 	@-if [ -e p/Makefile ]; then (cd p && ${MAKE} all) ; fi
 	@true
@@ -33,7 +33,7 @@ waitfordeps:
 	@sh ../waitfordeps.sh ${DEPS}
 
 ifeq ($(WITHPIC),1)
-${LIBSO}: waitfordeps ${OBJ}
+${LIBSO}: $(EXTRA_TARGETS) waitfordeps ${OBJ}
 	@for a in ${OBJ} ${SRC}; do \
 	  do=0 ; [ ! -e ${LIBSO} ] && do=1 ; \
 	  test $$a -nt ${LIBSO} && do=1 ; \
@@ -114,7 +114,7 @@ ifneq ($(BIN),)
 all: ${BIN}${EXT_EXE}
 
 ${BIN}${EXT_EXE}: ${OBJ}
-	${CC} -L.. ${LDFLAGS} ${LIBS} ${OBJ} -o ${BIN}${EXT_EXE}
+	${CC} ${OBJ} -L.. ${LDFLAGS} ${LIBS} -o ${BIN}${EXT_EXE}
 endif
 
 # Dummy myclean rule that can be overriden by the t/ Makefile

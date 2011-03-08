@@ -12,8 +12,6 @@
 #include "dis-asm.h"
 #include "opcode/mips.h"
 
-#include "fastcall_mips.h"
-
 static int mips_mode = 0;
 static unsigned long Offset = 0;
 static char *buf_global = NULL;
@@ -56,10 +54,10 @@ static int buf_fprintf(void *stream, const char *format, ...) {
 	return R_TRUE;
 }
 
-static int disassemble(struct r_asm_t *a, struct r_asm_aop_t *aop, ut8 *buf, ut64 len) {
+static int disassemble(struct r_asm_t *a, struct r_asm_op_t *op, ut8 *buf, ut64 len) {
 	static struct disassemble_info disasm_obj;
 
-	buf_global = aop->buf_asm;
+	buf_global = op->buf_asm;
 	Offset = a->pc;
 	memcpy (bytes, buf, 4); // TODO handle thumb
 
@@ -78,13 +76,13 @@ static int disassemble(struct r_asm_t *a, struct r_asm_aop_t *aop, ut8 *buf, ut6
 	disasm_obj.fprintf_func = &buf_fprintf;
 	disasm_obj.stream = stdout;
 
-	aop->buf_asm[0] = '\0';
+	op->buf_asm[0] = '\0';
 	if (a->big_endian)
-		aop->inst_len = print_insn_big_mips ((bfd_vma)Offset, &disasm_obj);
-	else aop->inst_len = print_insn_little_mips ((bfd_vma)Offset, &disasm_obj);
-	if (aop->inst_len == -1)
-		strncpy (aop->buf_asm, " (data)", R_ASM_BUFSIZE);
-	return aop->inst_len;
+		op->inst_len = print_insn_big_mips ((bfd_vma)Offset, &disasm_obj);
+	else op->inst_len = print_insn_little_mips ((bfd_vma)Offset, &disasm_obj);
+	if (op->inst_len == -1)
+		strncpy (op->buf_asm, " (data)", R_ASM_BUFSIZE);
+	return op->inst_len;
 }
 
 RAsmPlugin r_asm_plugin_mips = {
@@ -96,7 +94,6 @@ RAsmPlugin r_asm_plugin_mips = {
 	.fini = NULL,
 	.disassemble = &disassemble,
 	.assemble = NULL,
-	.fastcall = fastcall
 };
 
 #ifndef CORELIB

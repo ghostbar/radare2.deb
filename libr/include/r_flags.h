@@ -8,33 +8,32 @@
 #endif
 
 #include <r_types.h>
-#include "list.h"
+#include <r_list.h>
 
 #define R_FLAG_NAME_SIZE 128
 #define R_FLAG_BUF_SIZE 128
-#define R_FLAG_SPACES_MAX 128 
+#define R_FLAG_SPACES_MAX 128
 
 typedef struct r_flag_item_t {
 	char name[R_FLAG_NAME_SIZE];
 	ut64 namehash;
 	ut64 offset;
 	ut64 size;
-	int format; // ??? 
+	int format; // ???
 	int space;
 	char *cmd;
 	unsigned char data[R_FLAG_BUF_SIZE]; // only take a minor part of the data
-	struct list_head list;
 } RFlagItem;
 
 typedef struct r_flag_t {
 	int space_idx;
 	int space_idx2;
-	const char *space[R_FLAG_SPACES_MAX];
+	const char *spaces[R_FLAG_SPACES_MAX];
 #if USE_BTREE
 	struct btree_node *tree; /* index by offset */
 	struct btree_node *ntree; /* index by name */
 #endif
-	struct list_head flags;
+	RList *flags;
 } RFlag;
 
 #ifdef R_API
@@ -52,7 +51,8 @@ R_API int r_flag_name_filter(char *name);
 R_API void r_flag_item_rename(RFlagItem *item, const char *name);
 
 /* spaces */
-R_API const char *r_flag_space_get(RFlag *f, int idx);
+R_API int r_flag_space_get(RFlag *f, const char *name);
+R_API const char *r_flag_space_get_i(RFlag *f, int idx);
 R_API void r_flag_space_set(RFlag *f, const char *name);
 R_API void r_flag_space_list(RFlag *f);
 #endif

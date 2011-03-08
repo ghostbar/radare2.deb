@@ -1,6 +1,6 @@
-/* radare - LGPL - Copyright 2008-2010 nibble<develsec.org> + pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2008-2011 nibble<develsec.org> + pancake<nopcode.org> */
 
-#include <r_meta.h>
+#include <r_anal.h>
 
 R_API RMeta *r_meta_new() {
 	RMeta *m = R_NEW (RMeta);
@@ -18,17 +18,14 @@ R_API void r_meta_free(RMeta *m) {
 	free (m);
 }
 
-R_API int r_meta_count(RMeta *m, int type, ut64 from, ut64 to, struct r_meta_count_t *c) {
+R_API int r_meta_count(RMeta *m, int type, ut64 from, ut64 to) {
 	RMetaItem *d;
 	RListIter *iter;
 	int count = 0;
 
 	r_list_foreach (m->data, iter, d) {
-		if (d->type == type || type == R_META_ANY) {
+		if (d->type == type || type == R_META_TYPE_ANY) {
 			if (from >= d->from && d->to < to) {
-				if (c) {
-					/* */
-				}
 				count++;
 			}
 		}
@@ -42,29 +39,26 @@ R_API char *r_meta_get_string(RMeta *m, int type, ut64 addr) {
 	RMetaItem *d;
 
 	switch(type) {
-	case R_META_COMMENT:
-	case R_META_FOLDER:
-	case R_META_ANY:
+	case R_META_TYPE_COMMENT:
+	case R_META_TYPE_ANY:
 		break;
-	case R_META_CODE:
-	case R_META_DATA:
-	case R_META_STRING:
-	case R_META_STRUCT:
+	case R_META_TYPE_CODE:
+	case R_META_TYPE_DATA:
+	case R_META_TYPE_STRING:
+	case R_META_TYPE_FORMAT:
+	case R_META_TYPE_MAGIC:
 		/* we should remove overlapped types and so on.. */
 		return "(Unsupported meta type)";
 	default:
-		eprintf ("Unhandled\n");
+		eprintf ("r_meta_get_string: unhandled meta type\n");
 		return "(Unhandled meta type)";
 	}
 	r_list_foreach (m->data, iter, d) {
-		if (d->type == type || type == R_META_ANY) {
+		if (d->type == type || type == R_META_TYPE_ANY) {
 			if (d->from == addr)
 			switch (d->type) {
-			case R_META_COMMENT:
+			case R_META_TYPE_COMMENT:
 				str = r_str_concatf (str, "; %s\n", d->str);
-				break;
-			case R_META_FOLDER:
-				str = r_str_concatf (str, "; FOLDER %"PFMT64d" bytes\n", d->size);
 				break;
 			}
 		}
@@ -78,7 +72,7 @@ R_API int r_meta_del(RMeta *m, int type, ut64 from, ut64 size, const char *str) 
 	RMetaItem *d;
 
 	r_list_foreach (m->data, iter, d) {
-		if (d->type == type || type == R_META_ANY) {
+		if (d->type == type || type == R_META_TYPE_ANY) {
 			if (str != NULL && !strstr(d->str, str))
 				continue;
 			if (from >= d->from && from <= d->to) {
@@ -105,10 +99,10 @@ R_API int r_meta_cleanup(RMeta *m, ut64 from, ut64 to) {
 	}
 	r_list_foreach (m->data, iter, d) {
 		switch (d->type) {
-		case R_META_CODE:
-		case R_META_DATA:
-		case R_META_STRING:
-		case R_META_STRUCT:
+		case R_META_TYPE_CODE:
+		case R_META_TYPE_DATA:
+		case R_META_TYPE_STRING:
+		case R_META_TYPE_FORMAT:
 #if 0
 			   |__| |__|  |___|  |_|
 			 |__|     |_|  |_|  |___|
@@ -152,14 +146,13 @@ R_API RMetaItem *r_meta_item_new(int type) {
 R_API int r_meta_add(RMeta *m, int type, ut64 from, ut64 to, const char *str) {
 	RMetaItem *mi = r_meta_item_new (type);
 	switch (type) {
-	case R_META_CODE:
-	case R_META_DATA:
-	case R_META_STRING:
-	case R_META_STRUCT:
+	case R_META_TYPE_CODE:
+	case R_META_TYPE_DATA:
+	case R_META_TYPE_STRING:
+	case R_META_TYPE_FORMAT:
 		/* we should remove overlapped types and so on.. */
 		r_meta_cleanup (m, from, to);
-	case R_META_COMMENT:
-	case R_META_FOLDER:
+	case R_META_TYPE_COMMENT:
 		mi->size = R_ABS (to-from);//size;
 		mi->type = type;
 		mi->from = from;
@@ -169,7 +162,7 @@ R_API int r_meta_add(RMeta *m, int type, ut64 from, ut64 to, const char *str) {
 		r_list_append (m->data, mi);
 		break;
 	default:
-		eprintf ("Unsupported type '%c'\n", type);
+		eprintf ("r_meta_add: Unsupported type '%c'\n", type);
 		return R_FALSE;
 	}
 	return R_TRUE;
@@ -181,7 +174,7 @@ R_API RMetaItem *r_meta_find(RMeta *m, ut64 off, int type, int where) {
 	RListIter *iter;
 	if (off)
 	r_list_foreach (m->data, iter, d) {
-		if (d->type == type || type == R_META_ANY) {
+		if (d->type == type || type == R_META_TYPE_ANY) {
 			switch (where) {
 			case R_META_WHERE_PREV:
 				if (d->from < off)
@@ -233,12 +226,11 @@ int r_meta_get_bounds(RMeta *m, ut64 addr, int type, ut64 *from, ut64 *to)
 R_API const char *r_meta_type_to_string(int type) {
 	// XXX: use type as '%c'
 	switch(type) {
-	case R_META_CODE: return "Cc";
-	case R_META_DATA: return "Cd";
-	case R_META_STRING: return "Cs";
-	case R_META_STRUCT: return "Cm";
-	case R_META_COMMENT: return "CC";
-	case R_META_FOLDER: return "CF";
+	case R_META_TYPE_CODE: return "Cc";
+	case R_META_TYPE_DATA: return "Cd";
+	case R_META_TYPE_STRING: return "Cs";
+	case R_META_TYPE_FORMAT: return "Cf";
+	case R_META_TYPE_COMMENT: return "CC";
 	}
 	return "(...)";
 }
@@ -273,9 +265,8 @@ R_API int r_meta_list(RMeta *m, int type) {
 	int count = 0;
 	RListIter *iter;
 	RMetaItem *d;
-
 	r_list_foreach (m->data, iter, d) {
-		if (d->type == type || type == R_META_ANY) {
+		if (d->type == type || type == R_META_TYPE_ANY) {
 			printmetaitem (m, d);
 			count++;
 		}

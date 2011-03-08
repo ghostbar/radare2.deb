@@ -1,25 +1,29 @@
-/* radare - LGPL - Copyright 2009-2010 pancake<@nopcode.org> */
+/* radare - LGPL - Copyright 2009-2011 pancake<@nopcode.org> */
 
 namespace Radare {
 #if 0
-[Compact]
-[CCode (cheader_filename="r_util.h", cprefix="r_hex_")]
-public static class Radare.RHex {
-	//public static int str2bin (string input, uint8 *buf);
-	//public static int hex_str2bin (string input, uint8 *buf);
-	//public static int hex_bin2str (uint8 *buf, int len, out string str);
-	//public static string hex_bin2strdup (uint8 *buf, int len);
-	/* mem */
-	//public static uint8 *mem_mem (uint8 *a, int al, uint8 *b, int bl);
-	//public static void mem_copyendian (uint8 *dest, uint8 *orig, int size, int endian);
-	//public static void mem_copyloop (uint8 *dest, uint8 *orig, int dsize, int osize);
-	//public static void mem_cmp_mask (uint8 *dest, uint8 *orig, uint8 *mask, int len);
-	/* num */
-	//public static uint64 num_get(void *num, string str); // XXX void *
-	//public static int offsetof(void *type, void *member);
-}
+	[Compact]
+	[CCode (cheader_filename="r_util.h", cprefix="r_hex_")]
+	public static class Radare.RHex {
+		//public static int str2bin (string input, uint8 *buf);
+		//public static int hex_str2bin (string input, uint8 *buf);
+		//public static int hex_bin2str (uint8 *buf, int len, out string str);
+		//public static string hex_bin2strdup (uint8 *buf, int len);
+		/* mem */
+		//public static uint8 *mem_mem (uint8 *a, int al, uint8 *b, int bl);
+		//public static void mem_copyendian (uint8 *dest, uint8 *orig, int size, int endian);
+		//public static void mem_copyloop (uint8 *dest, uint8 *orig, int dsize, int osize);
+		//public static void mem_cmp_mask (uint8 *dest, uint8 *orig, uint8 *mask, int len);
+		/* num */
+		//public static uint64 num_get(void *num, string str); // XXX void *
+		//public static int offsetof(void *type, void *member);
+	}
 #endif
 
+	[CCode (cheader_filename="r_util.h", cprefix="r_str_", unref_function="")]
+	public static class RStr {
+		public static unowned string rwx_i (int rwx);
+	}
 #if FAILFAIL
 	[CCode (cheader_filename="r_util.h", cprefix="r_str_")]
 	public static class RStr {
@@ -39,8 +43,8 @@ public static class Radare.RHex {
 #endif
 	[CCode (cheader_filename="r_util.h", cprefix="r_file_")]
 	public static class RFile {
-		public static string slurp(string file, out int osz=0);
-		public static string slurp_range(string file, uint64 off, int sz, out int osz=0);
+		public static string slurp(string file, out int osz=null);
+		public static string slurp_range(string file, uint64 off, int sz, out int osz=null);
 		public static int dump(string file, uint8 *buf, int len);
 		public static string basename (string path);
 		public static string abspath(string path);
@@ -79,9 +83,9 @@ public static class Radare.RHex {
 		public static void backtrace();
 	}
 
-	[CCode (cname="RNum", cheader_filename="r_util.h", cprefix="r_num_", free_function="")]
+	[CCode (cname="RNum", cheader_filename="r_util.h", unref_function="", cprefix="r_num_", free_function="")]
 	public static class RNum {
-		public RNum(RNumCallback cb, void *user);
+		public RNum(RNumCallback? cb=null, void *user=null);
 		public uint64 get(string str);
 		public uint64 math(string str);
 	}

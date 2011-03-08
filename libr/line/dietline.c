@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
 /* dietline is a lighweight and portable library similar to GNU readline */
 
 #include <r_line.h>
@@ -18,10 +18,6 @@ static char *r_line_nullstr = "";
 
 /* initialize history stuff */
 R_API int r_line_dietline_init() {
-#if 0
-	if (labels==NULL)
-		labels = malloc(BLOCK);
-#endif
 	ZERO_FILL (&I.history);
 	ZERO_FILL (&I.completion);
 	I.history.data = (char **)malloc ((I.history.size+1024)*sizeof(char *));
@@ -69,7 +65,7 @@ R_API int r_line_hist_add(const char *line) {
 	if (I.history.top>=I.history.size)
 		I.history.top = I.history.index = 0; // workaround
 	if (*line) { // && I.history.index < I.history.size) {
-		I.history.data[I.history.top++] = strdup(line);
+		I.history.data[I.history.top++] = strdup (line);
 		I.history.index = I.history.top;
 		return R_TRUE;
 	}
@@ -125,20 +121,20 @@ R_API void r_line_hist_free() {
 
 /* load history from file. if file == NULL load from ~/.<prg>.history or so */
 R_API int r_line_hist_load(const char *file) {
-	char buf[1024];
+	char buf[R_LINE_BUFSIZE];
 	FILE *fd;
 
 	// XXX dupped shitty code.. see hist_save ()
-	snprintf (buf, 1023, "%s/%s", r_sys_getenv ("HOME"), file);
+	snprintf (buf, sizeof (buf)-1, "%s/%s", r_sys_getenv ("HOME"), file);
 	fd = fopen (buf, "r");
 	if (fd == NULL)
 		return R_FALSE;
 
-	fgets (buf, 1023, fd);
-	while (!feof(fd)) {
+	fgets (buf, sizeof (buf)-1, fd);
+	while (!feof (fd)) {
 		buf[strlen (buf)-1]='\0';
 		r_line_hist_add (buf);
-		fgets (buf, 1023, fd);
+		fgets (buf, sizeof (buf)-1, fd);
 	}
 	fclose (fd);
 	return R_TRUE;
@@ -170,8 +166,10 @@ R_API int r_line_hist_chop(const char *file, int limit) {
 
 R_API void r_line_autocomplete() {
 	int argc = 0;
+	char *p;
 	const char **argv = NULL;
-	int i, opt, len = 0;
+	int i, j, opt, len = 0;
+	int cols = r_cons_get_size (NULL)*0.82;
 
 	/* prepare argc and argv */
 	if (I.completion.run != NULL) {
@@ -180,36 +178,58 @@ R_API void r_line_autocomplete() {
 		argv = I.completion.argv;
 	} else opt = 0;
 
-	// TODO: implement partial autocompletion ?
-
+	p = r_str_lchr (I.buffer.data, ' ');
+	p = p? p+1: I.buffer.data; //+I.buffer.length;
 	/* autocomplete */
 	if (argc==1) {
-		char *p = strchr (I.buffer.data, ' ');
-		if (p) p++; else p = I.buffer.data;
 		strcpy (p, argv[0]);
 		I.buffer.index = I.buffer.length = strlen (I.buffer.data) + 1;
 		strcat (p, " ");
-		I.buffer.length = strlen (I.buffer.data);
+		I.buffer.length = strlen (I.buffer.data); // XXX: already calculated ?? wtf
+	} else
+	if (argc>0) {
+		if (*p) {
+			char *root = strdup (argv[0]);
+			// try to autocomplete argument
+			for (i=0; i<argc; i++) {
+				j = 0;
+				while (argv[i][j]==root[j]) j++;
+				free (root);
+				root = strdup (argv[i]);
+				if (j<strlen (root))
+					root[j] = 0;
+			}
+			strcpy (p, root);
+			I.buffer.index = I.buffer.length = strlen (I.buffer.data);
+			free (root);
+		}
 	}
 
-#define COLS 70
 	/* show options */
-	if (opt>1) {
-		if (I.echo)
-			printf ("%s%s\n", I.prompt, I.buffer.data);
-		for (len=i=0; i<argc; i++) {
-			if (argv[i] == NULL)
+	if (opt>1 && I.echo) {
+		const int sep = 3;
+		int col = 10;
+		int slen;
+		printf ("%s%s\n", I.prompt, I.buffer.data);
+		for (i=0; i<argc && argv[i]; i++) {
+			int l = strlen (argv[i]);
+			if ((sep+l)>col)
+				col = sep+l;
+			if (col>(cols>>1)) {
+				col = (cols>>1);
 				break;
-			len += strlen (argv[i]) + 4;
-			if (len>0 && len>COLS) {
+			}
+		}
+		for (len=i=0; i<argc && argv[i]; i++) {
+			slen = strlen (argv[i]);
+			len += (slen>col)? (slen+sep): col+sep;
+			if (len+col>cols) {
 				printf ("\n");
 				len = 0;
 			}
-			if (I.echo)
-				printf ("%s\t", argv[i]);
+			printf ("%-*s   ", col-sep, argv[i]);
 		}
-		if (I.echo)
-			printf ("\n");
+		printf ("\n");
 	}
 	fflush (stdout);
 }
@@ -256,7 +276,6 @@ R_API char *r_line_readline() {
 			fflush(stdout);
 		}
 #endif
-
 		I.buffer.data[I.buffer.length]='\0';
 		ch = r_line_readchar ();
 		if (ch == -1)
@@ -274,7 +293,6 @@ R_API char *r_line_readline() {
 		if (I.echo)
 			printf ("\r\x1b[2K\r"); //%*c\r", columns, ' ');
 #endif
-
 		switch (buf[0]) {
 		//case -1: // ^D
 		//	return NULL;
@@ -394,9 +412,13 @@ R_API char *r_line_readline() {
 				case 0x44:
 					I.buffer.index = I.buffer.index?I.buffer.index-1:0;
 					break;
+				case 0x31:
+					r_cons_readchar ();
 				case 0x48: // Start
 					I.buffer.index = 0;
 					break;
+				case 0x34:
+					r_cons_readchar ();
 				case 0x46: // End
 					I.buffer.index = I.buffer.length;
 					break;
@@ -408,7 +430,7 @@ R_API char *r_line_readline() {
 			if (I.buffer.index < I.buffer.length) {
 				if (I.buffer.index>0) {
 					I.buffer.index--;
-					memcpy (I.buffer.data+I.buffer.index,
+					memmove (I.buffer.data+I.buffer.index,
 						I.buffer.data+I.buffer.index+1,
 						strlen (I.buffer.data+I.buffer.index));
 				}
@@ -454,7 +476,7 @@ R_API char *r_line_readline() {
 			} else {
 				I.buffer.data[I.buffer.length]=buf[0];
 				I.buffer.length++;
-				if (I.buffer.length>1000)
+				if (I.buffer.length>(R_LINE_BUFSIZE-1))
 					I.buffer.length--;
 				I.buffer.data[I.buffer.length]='\0';
 			}
@@ -497,7 +519,5 @@ _end:
 		r_line_hist_list ();
 		return r_line_nullstr;
 	}
-	if (I.buffer.data == NULL)
-		return r_line_nullstr;
-	return I.buffer.data;
+	return I.buffer.data? I.buffer.data : r_line_nullstr;
 }

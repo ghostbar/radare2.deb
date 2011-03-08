@@ -9,7 +9,6 @@
 
 static inline int __strnlen(const char *str, int len) {
 	int l = 0;
-
 	while (*str && --len) {
 		str++;
 		l++;
@@ -285,6 +284,10 @@ char* Elf_(r_bin_elf_get_data_encoding)(struct Elf_(r_bin_elf_obj_t) *bin) {
 
 char* Elf_(r_bin_elf_get_arch)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	switch (bin->ehdr.e_machine) {
+	case EM_AVR:
+		return strdup ("avr");
+	case EM_68K:
+		return strdup ("m68k");
 	case EM_MIPS:
 	case EM_MIPS_RS3_LE:
 	case EM_MIPS_X:
@@ -297,9 +300,7 @@ char* Elf_(r_bin_elf_get_arch)(struct Elf_(r_bin_elf_obj_t) *bin) {
 		return strdup ("sparc");
 	case EM_PPC:
 	case EM_PPC64:
-		return strdup ("powerpc");
-	case EM_68K:
-		return strdup ("m68k");
+		return strdup ("ppc");
 	default:
 		return strdup ("x86");
 	}
@@ -386,7 +387,8 @@ char* Elf_(r_bin_elf_get_machine_name)(struct Elf_(r_bin_elf_obj_t) *bin) {
 }
 
 char* Elf_(r_bin_elf_get_file_type)(struct Elf_(r_bin_elf_obj_t) *bin) {
-	switch (bin->ehdr.e_type) {
+	ut32 e_type = (ut32)bin->ehdr.e_type; // cast to avoid warn in iphone-gcc, must be ut16
+	switch (e_type) {
 	case ET_NONE: return strdup ("NONE (None)");
 	case ET_REL:  return strdup ("REL (Relocatable file)");
 	case ET_EXEC: return strdup ("EXEC (Executable file)");
@@ -394,11 +396,11 @@ char* Elf_(r_bin_elf_get_file_type)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	case ET_CORE: return strdup ("CORE (Core file)");
 	}
 
-	if ((bin->ehdr.e_type >= ET_LOPROC) && (bin->ehdr.e_type <= ET_HIPROC))
-		return r_str_dup_printf ("Processor Specific: %x", bin->ehdr.e_type);
-	else if ((bin->ehdr.e_type >= ET_LOOS) && (bin->ehdr.e_type <= ET_HIOS))
-		return r_str_dup_printf ("OS Specific: %x", bin->ehdr.e_type);
-	else return r_str_dup_printf ("<unknown>: %x", bin->ehdr.e_type);
+	if ((e_type >= ET_LOPROC) && (e_type <= ET_HIPROC))
+		return r_str_dup_printf ("Processor Specific: %x", e_type);
+	else if ((e_type >= ET_LOOS) && (e_type <= ET_HIOS))
+		return r_str_dup_printf ("OS Specific: %x", e_type);
+	else return r_str_dup_printf ("<unknown>: %x", e_type);
 }
 
 char* Elf_(r_bin_elf_get_elf_class)(struct Elf_(r_bin_elf_obj_t) *bin) {

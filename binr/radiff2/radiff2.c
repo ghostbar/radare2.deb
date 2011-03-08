@@ -36,8 +36,8 @@ static int show_help(int line) {
 		"  -r     radare commands\n"
 		"  -d     use delta diffing\n"
 		"  -g     graph diff\n"
-		"  -v     Use vaddr"
-		"  -V     show version information\n");;
+		"  -v     Use vaddr\n"
+		"  -V     show version information\n");
 	return 1;
 }
 
@@ -122,24 +122,9 @@ int main(int argc, char **argv) {
 //	case MODE_LOCS:
 //		count = r_diff_lines(file, (char*)bufa, sza, file2, (char*)bufb, szb);
 //		break;
+	/* TODO: DEPRECATE */
 	case MODE_GRAPH:
-		{
-		RCore *core;
-		if (!(core = r_core_new ()))
-				return 1;
-		r_config_set_i (core->config, "io.va", va);
-		if (!r_core_file_open (core, file, 0)) {
-			fprintf (stderr, "Cannot open file '%s'\n", file);
-			return 1;
-		}
-		r_core_gdiff (core, file, file2, va);
-		if (rad) {
-			r_core_anal_bb_list (core, R_TRUE);
-			r_core_anal_fcn_list (core, NULL, R_TRUE);
-		} else
-			r_core_anal_graph (core, 0, R_CORE_ANAL_GRAPHBODY|R_CORE_ANAL_GRAPHDIFF);
-		r_core_free (core);
-		}
+		eprintf ("TODO: Use ragdiff2\n");
 		break;
 	}
 

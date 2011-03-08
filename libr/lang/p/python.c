@@ -1,9 +1,9 @@
-/* radare - LGPL - Copyright 2009-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
 /* python extension for libr (radare2) */
 
-#include "r_lib.h"
-#include "r_lang.h"
-#include "r_core.h"
+#include <r_lib.h>
+#include <r_lang.h>
+#include <r_core.h>
 #undef _GNU_SOURCE
 #undef _XOPEN_SOURCE
 #undef _POSIX_C_SOURCE
@@ -41,8 +41,6 @@ typedef struct {
 	PyObject *last;  /* last name */
 	int number;
 } Radare;
-
-
 
 #if PY_MAJOR_VERSION<3
 static char *py_nullstr = "";
@@ -185,8 +183,30 @@ static void init_radare_module(void) {
 			"Example module that creates an extension type.");
 }
 #else
-static void init_radare_module(void) {
-	eprintf ("TODO: python>3.x instantiate 'r' object\n");
+
+/*
+SEE 
+static PyMethodDef EmbMethods[] = {
+    {"numargs", emb_numargs, METH_VARARGS,
+     "Return the number of arguments received by the process."},
+    {NULL, NULL, 0, NULL}
+};
+*/
+
+static PyModuleDef EmbModule = {
+    PyModuleDef_HEAD_INIT, "radare", NULL, -1, NULL, //EmbMethods,
+    NULL, NULL, NULL, NULL
+};
+
+static int init_radare_module(void) {
+	// TODO import r2-swig api
+	//eprintf ("TODO: python>3.x instantiate 'r' object\n");
+	PyObject *m = PyModule_Create (&EmbModule);
+	if (m == NULL) {
+		eprintf ("Cannot create python3 r2 module\n");
+		return R_FALSE;
+	}
+	return R_TRUE;
 }
 #endif
 /* -init- */
@@ -200,11 +220,11 @@ static int prompt(void *user) {
 }
 
 static int setup(RLang *lang) {
+	RListIter *iter;
+	RLangDef *def;
 	char cmd[128];
-	struct list_head *pos;
 	PyRun_SimpleString ("from r2.r_core import RCore");
-	list_for_each (pos, &lang->defs) {
-		RLangDef *def = list_entry (pos, RLangDef, list);
+	r_list_foreach (lang->defs, iter, def) {
 		if (!def->type || !def->name)
 			continue;
 		if (!strcmp (def->type, "int"))
@@ -222,9 +242,6 @@ static int init(RLang *lang) {
 	core = lang->user;
 	Py_Initialize ();
 	init_radare_module ();
-	//Py_InitModule3("radare", Radare_methods, NULL);
-//	PyRun_SimpleString("import radare");
-//	PyRun_SimpleString("from radare import *");
 	return R_TRUE;
 }
 

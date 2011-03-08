@@ -3,10 +3,12 @@
 [CCode (cheader_filename="r_cons.h", cprefix="r_cons", lower_case_cprefix="r_cons_")]
 namespace Radare {
 	[Compact]
-	[CCode (cname="struct r_cons_t", free_function="r_cons_free", cprefix="r_cons_")]
+	[CCode (cname="struct r_cons_t", free_function="", cprefix="r_cons_")]
+	/* XXX: LEAK */
 	public class RCons {
 		public RCons ();
 
+		static void free();
 		[CCode (cname="Color_RED")]
 		public static const string RED;
 		[CCode (cname="Color_BLACK")]
@@ -63,7 +65,7 @@ namespace Radare {
 
 		public static int html_print (string ptr);
 		public static int arrow_to_hjkl (int ch);
-		public static weak string get_buffer ();
+		public static unowned string get_buffer ();
 		public static void grep (string str);
 		//public static int grep_line (string str, int len);
 		//public static int grepbuf (string str, int len);

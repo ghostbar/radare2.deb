@@ -1,6 +1,5 @@
-/* radare - LGPL - Copyright 2010 */
-/*   nibble<.ds@gmail.com> */
-/*   pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2010-2011 */
+/*   nibble<.ds@gmail.com> + pancake<nopcode.org> */
 
 #include <r_anal.h>
 #include <r_util.h>
@@ -125,6 +124,8 @@ R_API int r_anal_var_add(RAnal *anal, RAnalFcn *fcn, ut64 from, int delta, int t
 	if (vartype)
 		var->vartype = strdup (vartype);
 	var->type = type;
+	if ((type & R_ANAL_VAR_TYPE_ARG) || (type & R_ANAL_VAR_TYPE_ARGREG))
+		fcn->nargs++;
 	var->delta = delta;
 	if (from != 0LL)
 		r_anal_var_access_add (anal, var, from, set);
@@ -154,12 +155,16 @@ R_API RAnalVar *r_anal_var_get(RAnal *anal, RAnalFcn *fcn, int delta, int type) 
 
 // XXX: rename function type? i think this is 'scope' 
 R_API const char *r_anal_var_type_to_str (RAnal *anal, int type) {
-	switch(type) {
-	case R_ANAL_VAR_TYPE_GLOBAL: return "global";
-	case R_ANAL_VAR_TYPE_LOCAL:  return "local";
-	case R_ANAL_VAR_TYPE_ARG:    return "arg";
-	case R_ANAL_VAR_TYPE_ARGREG: return "fastarg";
-	}
+	if (type & R_ANAL_VAR_TYPE_GLOBAL)
+		return "global";
+	else if (type & R_ANAL_VAR_TYPE_LOCAL)
+		return "local";
+	else if (type & R_ANAL_VAR_TYPE_ARG)
+		return "arg";
+	else if (type & R_ANAL_VAR_TYPE_ARGREG)
+		return "fastarg";
+	else if (type & R_ANAL_VAR_TYPE_RET)
+		return "ret";
 	return "(?)";
 }
 
@@ -197,16 +202,11 @@ R_API RAnalVarAccess *r_anal_var_access_get(RAnal *anal, RAnalVar *var, ut64 fro
 	return NULL;
 }
 
-
 // XXX: move into core_anal?
-R_API int r_anal_var_list_show(RAnal *anal, RAnalFcn *fcn, ut64 addr) {
+R_API void r_anal_var_list_show(RAnal *anal, RAnalFcn *fcn, ut64 addr) {
 	RAnalVar *v;
 	RListIter *iter;
-
-	if (!fcn || !fcn->vars) {
-		eprintf ("No function here\n");
-		return R_FALSE;
-	}
+	if (fcn && fcn->vars)
 	r_list_foreach (fcn->vars, iter, v) {
 		if (addr == 0 || (addr >= v->addr && addr <= v->eaddr)) {
 			//ut32 value = r_var_dbg_read(v->delta);
@@ -227,20 +227,14 @@ R_API int r_anal_var_list_show(RAnal *anal, RAnalFcn *fcn, ut64 addr) {
 			eprintf ("\n"); //r_cons_newline();
 		}
 	}
-
-	return R_TRUE;
 }
 
 /* 0,0 to list all */
-R_API int r_anal_var_list(RAnal *anal, RAnalFcn *fcn, ut64 addr, int delta) {
+R_API void r_anal_var_list(RAnal *anal, RAnalFcn *fcn, ut64 addr, int delta) {
 	RAnalVarAccess *x;
 	RAnalVar *v;
 	RListIter *iter, *iter2;
-
-	if (!fcn || !fcn->vars) {
-		eprintf ("No function here\n");
-		return R_FALSE;
-	}
+	if (fcn && fcn->vars)
 	r_list_foreach (fcn->vars, iter, v) {
 		if (addr == 0 || (addr >= v->addr && addr <= v->eaddr)) {
 			eprintf ("0x%08llx - 0x%08llx type=%s type=%s name=%s delta=%d array=%d\n",
@@ -251,6 +245,4 @@ R_API int r_anal_var_list(RAnal *anal, RAnalFcn *fcn, ut64 addr, int delta) {
 			}
 		}
 	}
-
-	return 0;
 }
