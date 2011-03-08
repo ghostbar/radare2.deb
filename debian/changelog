@@ -1,3 +1,9 @@
+radare2 (0.7-1) UNRELEASED; urgency=low
+
+  * New upstream release
+
+ -- Sebastian Reichel <sre@debian.org>  Wed, 09 Mar 2011 00:54:02 +0100
+
 radare2 (0.6-1) unstable; urgency=low
 
   * Initial Upload to Debian (Closes: #573345)
