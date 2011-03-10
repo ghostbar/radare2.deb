@@ -1,4 +1,7 @@
 include ../../../config.mk
+
+CC?=i486-mingw32-gcc
+RANLIB?=i486-mingw32-ranlib 
 #CC?=gcc
 
 OSTYPE=$(shell uname -s)
@@ -61,9 +64,10 @@ ${BIN}: ${KERNOBJS} main.o
 
 lib: all libgrubfs.a
 
-libgrubfs.a:
+libgrubfs.a: ${KERNOBJS}
 	rm -f libgrubfs.a
 	ar -q libgrubfs.a ${KERNOBJS}
+	${RANLIB} libgrubfs.a
 
 clean:
 	rm -f ${KERNOBJS} ${BIN} main.o
