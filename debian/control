@@ -4,12 +4,12 @@ Priority: extra
 Maintainer: Sebastian Reichel <sre@debian.org>
 Build-Depends: cdbs,
                debhelper (>= 7),
-               libewf-dev,
+#              libewf-dev,
                libgmp3-dev,
-               liblua5.1-0-dev,
+#              liblua5.1-0-dev,
                libmagic-dev,
-               libtcc-dev,
-               lua5.1
+#              libtcc-dev,
+#              lua5.1
 Standards-Version: 3.9.1
 Homepage: http://www.radare.org
 Vcs-Browser: http://git.debian.org/?p=collab-maint/radare2.git
