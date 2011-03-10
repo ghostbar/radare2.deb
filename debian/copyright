@@ -5,8 +5,8 @@ Source: http://radare.org/
 
 Files: *
 Copyright: 2007-2009, th0rpe
-           2007-2010, pancake
-           2008-2010, nibble
+           2007-2011, pancake
+           2008-2011, nibble
 License: LGPL-3
  On Debian systems, the complete text of the LGPL-3 can be found in
  /usr/share/common-licenses/LGPL-3.
@@ -17,10 +17,20 @@ Files: r2rc/r2rc.c libr/asm/arch/include/opintl.h libr/asm/arch/include/elf-bfd.
  libr/asm/arch/sparc/gnu/sparc-dis.c libr/asm/arch/sparc/gnu/sparc-opc.c
  libr/asm/arch/mips/gnu/mips16-opc.c libr/asm/arch/mips/gnu/mips-dis.c
  libr/asm/arch/mips/gnu/mips-opc.c libr/asm/arch/ppc/gnu/ppc-dis.c
- libr/asm/arch/ppc/gnu/ppc-opc.c
-Copyright: 2009-2010, pancake
+ libr/asm/arch/ppc/gnu/ppc-opc.c libr/asm/arch/dalvik/opcode.h
+ libr/asm/p/asm_msil.c  libr/syscall/fastcall.h
+Copyright: 2009-2011, pancake
            2009-2010, nibble
+           2011,      capi_x <capi_x@badchecksum.net>
            1989-2008, Free Software Foundation, Inc.
+License: GPL-3+
+ On Debian systems, the complete text of the GPL-3 can be found in
+ /usr/share/common-licenses/GPL-3.
+
+
+Files: libr/fs/p/grub/fs/* libr/fs/p/grub/kern/* libr/fs/p/grub/partmap/*
+Copyright: 1999-2010, Free Software Foundation, Inc.
+           2010, Bean Lee
 License: GPL-3+
  On Debian systems, the complete text of the GPL-3 can be found in
  /usr/share/common-licenses/GPL-3.
@@ -37,10 +47,13 @@ Files: rsc2/rsc2.c libr/asm/arch/include/ansidecl.h
  libr/asm/arch/x86/ollyasm/asmserv.c libr/asm/arch/arm/gnu/arm-dis.c
  libr/asm/arch/psosvm/vmas/vmas.c libr/asm/arch/java/javasm/javasm.c
  libr/bin/format/java/java.c libr/flags/old_flags.c libr/search/old_xrefs.c
- libr/hash/md4.c libr/hash/crc32.c libr/hash/hamdist.c 
+ libr/hash/md4.c libr/hash/crc32.c libr/hash/hamdist.c
+ libr/bin/mangling/cxx/ansidecl.h libr/bin/mangling/cxx/cp-demangle.c
+ libr/bin/mangling/cxx/cp-demangle.h libr/bin/mangling/cxx/demangle.h
+ libr/bin/mangling/cxx/liberty.h
 Copyright: 2006-2010, pancake
            2009,      skurz0
-           1989-2007, Free Software Foundation, Inc.
+           1989-2010, Free Software Foundation, Inc.
            2001,      Oleh Yuschuk
            1997-1998, Andrew Tridgell
 License: GPL-2+
@@ -138,6 +151,15 @@ Copyright: 1995-1999, Cryptography Research, Inc.
 License: GPL-2+ or MPL-1.1
  On Debian systems, the complete text of the GPL-2 can be found in
  /usr/share/common-licenses/GPL-2.
+
+
+Files: libr/asm/arch/msil/demsil.c libr/asm/arch/msil/demsil.h
+Copyright: 2008, Daniel Pistelli
+License: public-domain
+ DisasMSIL is a free/open disasm engine for the Microsoft Intermediate
+ Language (MSIL). You can use it any context you wish. There are no
+ license restrictions. The only thing I ask you to do is to send me
+ your bug fixes (if any).
 
 
 Files: debian/*
