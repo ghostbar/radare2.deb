@@ -51,7 +51,7 @@ Description: free and advanced command line hexadecimal editor (debug)
  This package provides the debug symbols for the applications from the
  radare2 suite.
 
-Package: libradare2-0.6
+Package: libradare2-0.7
 Section: libs
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
@@ -73,7 +73,7 @@ Description: libraries from the radare2 suite
 Package: libradare2-dev
 Section: libdevel
 Architecture: any
-Depends: ${misc:Depends}, libradare2-0.6 (= ${binary:Version})
+Depends: ${misc:Depends}, libradare2-0.7 (= ${binary:Version})
 Description: devel files from the radare2 suite
  The project aims to create a complete, portable, multi-architecture,
  unix-like toolchain for reverse engineering.
@@ -89,10 +89,10 @@ Description: devel files from the radare2 suite
  .
  This package provides the devel files from radare2.
 
-Package: libradare2-0.6-dbg
+Package: libradare2-0.7-dbg
 Section: debug
 Architecture: any
-Depends: ${misc:Depends}, libradare2-0.6
+Depends: ${misc:Depends}, libradare2-0.7
 Description: debug symbols for libraries from radare suite
  The project aims to create a complete, portable, multi-architecture,
  unix-like toolchain for reverse engineering.
