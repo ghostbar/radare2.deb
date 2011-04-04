@@ -1,0 +1,3 @@
+fix-cflags.patch
+hide-drx-symbols.patch
+add-fcntl-header.patch

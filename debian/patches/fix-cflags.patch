@@ -1,0 +1,11 @@
+--- a/libr/asm/p/Makefile       Mon Apr 04 14:39:42 2011 +0200
++++ b/libr/asm/p/Makefile       Mon Apr 04 14:57:20 2011 +0200
+@@ -3,7 +3,7 @@
+ CFLAGS+=-I../../include -I../arch/ -I../arch/include -Wall -shared -fPIC ${LDFLAGS_LIB} ${LDFLAGS_LINKPATH}..
+ # XXX
+ CFLAGS+=-DLIL_ENDIAN=1
+-CFLAGS+=-L../../util -lr_util
++CFLAGS+=-L../../util -lr_util -L../../lib
+ LDFLAGS+=${LINK}
+ 
+ foo: all

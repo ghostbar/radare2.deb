@@ -2,3 +2,21 @@
 
 include /usr/share/cdbs/1/rules/debhelper.mk
 include /usr/share/cdbs/1/class/autotools.mk
+
+DEBUG_SUPPORT=0
+
+ifeq (arm,$(DEB_HOST_ARCH_CPU))
+DEBUG_SUPPORT=1
+endif
+
+ifeq (amd64,$(DEB_HOST_ARCH_CPU))
+DEBUG_SUPPORT=1
+endif
+
+ifeq (i386,$(DEB_HOST_ARCH_CPU))
+DEBUG_SUPPORT=1
+endif
+
+ifeq (0,$(DEBUG_SUPPORT))
+DEB_CONFIGURE_EXTRA_FLAGS += --without-debugger
+endif

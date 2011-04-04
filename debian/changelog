@@ -1,3 +1,13 @@
+radare2 (0.7-2) unstable; urgency=low
+
+  * disable debugger on all arches except i386, amd64, arm
+    to make them building
+  * new patch: drx_add / drx_del should not be exported
+  * new patch: add fcntl.h to fix build error on kfreebsd / hurd
+  * new patch: fix cflags to build some failing plugins
+
+ -- Sebastian Reichel <sre@debian.org>  Mon, 04 Apr 2011 15:27:16 +0200
+
 radare2 (0.7-1) unstable; urgency=low
 
   * New upstream release

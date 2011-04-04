@@ -1,0 +1,17 @@
+--- a/libr/debug/p/debug_native.c	2011-03-09 00:53:36.000000000 +0100
++++ b/libr/debug/p/debug_native.c	2011-04-04 15:20:42.000000000 +0200
+@@ -1451,12 +1451,12 @@
+ }
+ 
+ #if __i386__ || __x86_64__
+-int drx_add(RDebug *dbg, ut64 addr, int rwx) {
++static int drx_add(RDebug *dbg, ut64 addr, int rwx) {
+ 	// TODO
+ 	return R_FALSE;
+ }
+ 
+-int drx_del(RDebug *dbg, ut64 addr, int rwx) {
++static int drx_del(RDebug *dbg, ut64 addr, int rwx) {
+ 	// TODO
+ 	return R_FALSE;
+ }

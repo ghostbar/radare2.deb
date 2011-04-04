@@ -842,8 +842,6 @@ libr_db.so.0.7 libradare2-0.7 #MINVER#
  r_db_table_new@Base 0.6
 libr_debug.so.0.7 libradare2-0.7 #MINVER#
  RAnalRefType@Base 0.6
- drx_add@Base 0.6
- drx_del@Base 0.6
  r_debug_arg_get@Base 0.6
  r_debug_arg_set@Base 0.6
  r_debug_attach@Base 0.6
