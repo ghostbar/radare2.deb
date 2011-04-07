@@ -1,3 +1,6 @@
+From: pancake <pancake@nopcode.org>
+Subject: do not export drx_add / drx_del
+Origin: upstream, http://radare.org/cgi-bin/hg/radare2/rev/ebaccb3497ef
 --- a/libr/debug/p/debug_native.c	2011-03-09 00:53:36.000000000 +0100
 +++ b/libr/debug/p/debug_native.c	2011-04-04 15:20:42.000000000 +0200
 @@ -1451,12 +1451,12 @@
