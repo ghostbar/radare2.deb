@@ -1,3 +1,11 @@
+radare2 (0.7-3) unstable; urgency=low
+
+  * update the fcntl patch
+  * new patch: honor --without-debugger to fix build on unsupported
+    architectures
+
+ -- Sebastian Reichel <sre@debian.org>  Wed, 13 Apr 2011 09:04:47 +0200
+
 radare2 (0.7-2) unstable; urgency=low
 
   * disable debugger on all arches except i386, amd64, arm
