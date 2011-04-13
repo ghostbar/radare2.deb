@@ -1,3 +1,6 @@
+From: pancake <pancake@nopcode.org>
+Subject: add kfreebsd support
+Origin: upstream, http://radare.org/cgi-bin/hg/radare2/rev/e85eafa8d75c
 diff -r 2b66dcba68a4 configure
 --- a/configure	Thu Apr 07 23:26:14 2011 +0200
 +++ b/configure	Wed Apr 13 10:43:22 2011 +0200
