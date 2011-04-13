@@ -3,12 +3,11 @@ Subject: add missing fcntl.h
 Origin: upstream, http://radare.org/cgi-bin/hg/radare2/diff/c04088529c9a/libr/util/file.c
 --- a/libr/util/file.c	2011-03-09 00:53:36.000000000 +0100
 +++ b/libr/util/file.c	2011-04-04 15:25:50.000000000 +0200
-@@ -8,8 +8,8 @@
+@@ -8,6 +8,7 @@
  #include <sys/types.h>
  #include <sys/stat.h>
  #include <unistd.h>
 +#include <fcntl.h>
  #if __UNIX__
--#include <fcntl.h>
  #include <sys/mman.h>
  #endif
