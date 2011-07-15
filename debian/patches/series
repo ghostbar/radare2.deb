@@ -1,5 +1,0 @@
-fix-cflags.patch
-hide-drx-symbols.patch
-add-fcntl-header.patch
-honor-without-debugger.patch
-add-kfreebsd-support.patch
