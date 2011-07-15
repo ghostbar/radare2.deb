@@ -23,3 +23,6 @@ endif
 
 override_dh_auto_configure:
 	dh_auto_configure -- ${EXTRA_FLAGS}
+
+override_dh_auto_clean:
+	-dh_auto_clean
