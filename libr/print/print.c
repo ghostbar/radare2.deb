@@ -1,5 +1,4 @@
 /* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
-
 #include "r_cons.h"
 #include "r_print.h"
 #include "r_util.h"
@@ -14,6 +13,7 @@ R_API RPrint *r_print_new() {
 		p->interrupt = 0;
 		p->bigendian = 0;
 		p->width = 78;
+		p->cols = 16;
 		p->cur_enabled = R_FALSE;
 		p->cur = p->ocur = -1;
 		p->addrmod = 4;
@@ -21,8 +21,19 @@ R_API RPrint *r_print_new() {
 			   R_PRINT_FLAGS_COLOR |
 			   R_PRINT_FLAGS_HEADER |
 			   R_PRINT_FLAGS_ADDRMOD;
+		p->zoom = R_NEW0 (RPrintZoom);
 	}
 	return p;
+}
+
+R_API RPrint *r_print_free(RPrint *p) {
+	if (p->zoom) {
+		free (p->zoom->buf);
+		free (p->zoom);
+		p->zoom = NULL;
+	}
+	free (p);
+	return NULL;
 }
 
 // dummy setter can be removed
@@ -32,11 +43,6 @@ R_API void r_print_set_flags(RPrint *p, int _flags) {
 
 R_API void r_print_unset_flags(RPrint *p, int flags) {
 	p->flags = p->flags & (p->flags^flags);
-}
-
-R_API RPrint *r_print_free(RPrint *p) {
-	free(p);
-	return NULL;
 }
 
 R_API void r_print_set_cursor(RPrint *p, int enable, int ocursor, int cursor) {
@@ -54,10 +60,10 @@ R_API void r_print_cursor(RPrint *p, int cur, int set) {
 		int to = p->cur;
 		r_num_minmax_swap_i (&from, &to);
 		if (cur>=from&&cur<=to)
-			r_cons_invert (set, p->flags&R_PRINT_FLAGS_COLOR);
+			r_cons_invert (set, 1); //p->flags&R_PRINT_FLAGS_COLOR);
 	} else
 	if (cur==p->cur)
-		r_cons_invert (set, p->flags & R_PRINT_FLAGS_COLOR);
+		r_cons_invert (set, 1); //p->flags & R_PRINT_FLAGS_COLOR);
 }
 
 R_API void r_print_addr(RPrint *p, ut64 addr) {
@@ -93,6 +99,7 @@ R_API char *r_print_hexpair(RPrint *p, const char *str, int n) {
 	d = dst;
 #endif
 	// XXX: overflow here
+// TODO: Use r_cons primitives here
 #define memcat(x,y) { memcpy(x,y,strlen(y));x+=strlen(y); }
 	//for (s=str, d=dst; *s; s+=2, d+=2, i++) {
 	for (s=str, i=0 ; *s; s+=2, d+=2, i++) {
@@ -102,17 +109,19 @@ R_API char *r_print_hexpair(RPrint *p, const char *str, int n) {
 			if (i>=cur-n && i<ocur-n)
 				memcat (d, "\x1b[7m");
 		}
-		if (s[0]=='0' && s[1]=='0') { memcat (d, "\x1b[32m"); }
-		else if (s[0]=='7' && s[1]=='f') { memcat (d, "\x1b[33m"); }
-		else if (s[0]=='f' && s[1]=='f') { memcat (d, "\x1b[31m"); }
-		else {
-			sscanf (s, "%02x", &ch);
-			if (IS_PRINTABLE (ch))
-				memcat (d, "\x1b[35m");
+		if ((p->flags & R_PRINT_FLAGS_COLOR)) {
+			if (s[0]=='0' && s[1]=='0') { memcat (d, Color_GREEN); }
+			else if (s[0]=='7' && s[1]=='f') { memcat (d, Color_YELLOW); }
+			else if (s[0]=='f' && s[1]=='f') { memcat (d, Color_RED); }
+			else {
+				sscanf (s, "%02x", &ch);
+				if (IS_PRINTABLE (ch))
+					memcat (d, Color_MAGENTA);
+			}
 		}
 		memcpy (d, s, 2);
 	}
-	memcpy (d, "\x1b[0m", 5);
+	memcpy (d, Color_RESET, strlen (Color_RESET)+1);
 	return dst;
 }
 
@@ -125,32 +134,31 @@ R_API void r_print_byte(RPrint *p, const char *fmt, int idx, ut8 ch) {
 	if (p->flags & R_PRINT_FLAGS_COLOR) {
 		char *pre = NULL;
 		switch (ch) {
-		case 0x00: pre = "\x1b[32m"; break;
-		case 0x7F: pre = "\x1b[33m"; break;
-		case 0xFF: pre = "\x1b[31m"; break;
+		case 0x00: pre = Color_GREEN; break;
+		case 0x7F: pre = Color_YELLOW; break;
+		case 0xFF: pre = Color_RED; break;
 		default:
 			if (IS_PRINTABLE (ch))
-				pre = "\x1b[35m";
+				pre = Color_MAGENTA;
 		}
 		if (pre) p->printf (pre);
 		p->printf (fmt, rch);
-		if (pre) p->printf ("\x1b[0m");
+		if (pre) p->printf (Color_RESET);
 	} else p->printf (fmt, rch);
 	r_print_cursor (p, idx, 0);
 }
 
 R_API void r_print_code(RPrint *p, ut64 addr, ut8 *buf, int len) {
-	int i, w = 0;
+	int i, w = p->cols*0.7;
 	p->printf ("#define _BUFFER_SIZE %d\n", len);
 	p->printf ("unsigned char buffer[%d] = {", len);
 	p->interrupt = 0;
-	for (i=0;!p->interrupt&&i<len;i++) {
-		if (!(w%p->width))
+	for (i=0; !p->interrupt && i<len; i++) {
+		if (!(i%w))
 			p->printf ("\n  ");
 		r_print_cursor (p, i, 1);
-		p->printf("0x%02x, ", buf[i]);
+		p->printf ("0x%02x, ", buf[i]);
 		r_print_cursor (p, i, 0);
-		w+=6;
 	}
 	p->printf ("};\n");
 }
@@ -193,9 +201,11 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 	const char *pre = "";
 	if (step<1) step = 1;
 
-	switch(base) {
-	case 8: fmt = "%03x"; pre = " "; break;
+	switch (base) {
+	case 8: fmt = "%03o"; pre = " "; break;
 	case 10: fmt = "%03d"; pre = " "; break;
+	case 32: fmt = "0x%08x "; pre = " "; break;
+	case 64: fmt = "0x%016x "; pre = " "; break;
 	}
 
 	// TODO: Use base to change %03o and so on
@@ -205,16 +215,19 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 		return;
 	}
 
-	inc = 2 + (int)((p->width-14)/4);
-	if (inc%2) inc++;
-	inc = 16;
 	inc = p->cols;
-
+	if (base==64) inc = p->cols/1.2;
+		
+	if (base<32)
 	if (p->flags & R_PRINT_FLAGS_HEADER) {
-		// only for color..too many options .. brbr
-		//p->printf(r_cons_palette[PAL_HEADER]);
+		ut32 opad = (ut32)(addr >> 32);
 		p->printf ("   offset   ");
+		while (opad>0) {
+			p->printf (" ");
+			opad >>= 4;
+		}
 		k = 0; // TODO: ??? SURE??? config.seek & 0xF;
+		/* extra padding for offsets > 8 digits */
 		for (i=0; i<inc; i++) {
 			p->printf (pre);
 			p->printf (" %c", hex[(i+k)%16]);
@@ -229,17 +242,28 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 	p->interrupt = 0;
 	for (i=0; !p->interrupt && i<len; i+=inc) {
 		r_print_addr (p, addr+(i*step));
-
-		for (j=i;j<i+inc;j++) {
+		for (j=i; j<i+inc; j++) {
 			if (j>=len) {
-				if (j%2) p->printf ("   ");
-				else p->printf("  ");
+				p->printf (j%2?"   ":"  ");
 				continue;
 			}
-			r_print_byte(p, fmt, j, buf[j]);
-			if (j%2) p->printf(" ");
+			if (base==32) {
+				ut32 n;
+				memcpy (&n, buf+j, sizeof (n));
+				p->printf ("0x%08x ", n);
+				j+=3;
+			} else
+			if (base==64) {
+				ut64 n;
+				memcpy (&n, buf+j, sizeof (n));
+				j+=4;
+				p->printf ("0x%016"PFMT64x" ", n);
+			} else {
+				r_print_byte (p, fmt, j, buf[j]);
+				if (j%2) p->printf (" ");
+			}
 		}
-
+		p->printf (" ");
 		for (j=i; j<i+inc; j++) {
 			if (j >= len) p->printf (" ");
 			else r_print_byte (p, "%c", j, buf[j]);
@@ -262,12 +286,12 @@ R_API void r_print_raw(RPrint *p, const ut8* buf, int len) {
 }
 
 R_API void r_print_c(RPrint *p, const ut8 *str, int len) {
-	int i,j;
+	int i;
 	int inc = p->width/6;
 	p->printf ("#define _BUFFER_SIZE %d\n"
 		"unsigned char buffer[_BUFFER_SIZE] = {\n", len);
 	p->interrupt = 0;
-	for (j = i = 0; !p->interrupt && i < len;) {
+	for (i = 0; !p->interrupt && i < len;) {
 		r_print_byte (p, "0x%02x", i, str[i]);
 		if (++i<len) p->printf (", ");
 		if (!(i%inc)) p->printf ("\n");
@@ -282,33 +306,52 @@ R_API void r_print_progressbar(RPrint *p, int pc, int _cols) {
         (pc<0)?pc=0:(pc>100)?pc=100:0;
         p->printf ("%4d%% [", pc);
         cols -= 15;
-        for(tmp=cols*pc/100;tmp;tmp--) p->printf ("#");
-        for(tmp=cols-(cols*pc/100);tmp;tmp--) p->printf ("-");
+        for (tmp=cols*pc/100;tmp;tmp--) p->printf ("#");
+        for (tmp=cols-(cols*pc/100);tmp;tmp--) p->printf ("-");
         p->printf ("]");
 }
 
-R_API void r_print_zoom (RPrint *p, void *user, RPrintZoomCallback cb, ut64 from, ut64 to, int mode, int len) {
-	ut64 size;
+
+R_API void r_print_zoom (RPrint *p, void *user, RPrintZoomCallback cb, ut64 from, ut64 to, int len, int maxlen) {
 	ut8 *bufz, *bufz2;
 	int i, j = 0;
+	ut64 size = (to-from)/len;
 
-	size = (to-from)/len;
-	if (size < 1)
-		size = 1;
-	bufz = (ut8 *) malloc (len);
-	bufz2 = (ut8 *) malloc (size);
-	memset (bufz, 0, len);
+	bufz = bufz2 = NULL;
+	if (maxlen<2) maxlen = 1024*1024;
+	if (size>maxlen) size = maxlen;
+	if (size<1) size = 1;
+	if (from == p->zoom->from && to == p->zoom->to && size==p->zoom->size) {
+		// get from cache
+		bufz = p->zoom->buf;
+		size = p->zoom->size;
+	} else {
+		bufz = (ut8 *) malloc (len);
+		if (bufz == NULL) return;
+		bufz2 = (ut8 *) malloc (size);
+		if (bufz2 == NULL) {
+			free (bufz);
+			return;
+		}
+		memset (bufz, 0, len);
 
-	for (i=0; i<len; i++) {
-		p->iob.read_at (p->iob.io, from+j, bufz2, size);
-		bufz[i] = cb (user, mode, from+j, bufz2, size);
-		j += size;
+		// TODO: memoize blocks or gtfo
+		for (i=0; i<len; i++) {
+			p->iob.read_at (p->iob.io, from+j, bufz2, size);
+			bufz[i] = cb (user, p->zoom->mode, from+j, bufz2, size);
+			j += size;
+		}
+		free (bufz2);
+		// memoize
+		free (p->zoom->buf);
+		p->zoom->buf = bufz;
+		p->zoom->from = from;
+		p->zoom->to = to;
+		p->zoom->size = size;
 	}
 	p->flags &= ~R_PRINT_FLAGS_HEADER;
 	r_print_hexdump (p, from, bufz, len, 16, size);
 	p->flags |= R_PRINT_FLAGS_HEADER;
-	free (bufz);
-	free (bufz2);
 }
 
 #if 0

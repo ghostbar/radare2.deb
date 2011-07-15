@@ -1,35 +1,27 @@
-/* radare - LGPL - Copyright 2007-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
 
 #include <r_flags.h>
 #include <r_util.h>
 #include <r_cons.h>
 #include <stdio.h>
 
-// TODO: remove dependency of r_cons here..
-// TODO: implement btree
+// TODO: remove r_cons dependency here..
+// remove btree here.. we want something funnier like.. RMixed :D
 
 /* compare names */
 static int ncmp(const void *a, const void *b) {
 	RFlagItem *fa = (RFlagItem *)a;
 	RFlagItem *fb = (RFlagItem *)b;
-	int ret = 0;
-	/* we cannot use a simple substraction coz ut64 > s32 :) */
-	ret = strcmp (fa->name, fb->name);
-// TODO: Deprecate namehash..
-//	if (fa->namehash > fb->namehash) ret = 1;
-//	else if (fa->namehash < fb->namehash) ret = -1;
-	return ret;
+	return strcmp (fa->name, fb->name);
 }
 
 /* compare offsets */
 static int cmp(const void *a, const void *b) {
 	RFlagItem *fa = (RFlagItem *)a;
 	RFlagItem *fb = (RFlagItem *)b;
-	int ret = 0;
-	/* we cannot use a simple substraction coz ut64 > s32 :) */
-	if (fa->offset > fb->offset) ret = 1;
-	else if (fa->offset < fb->offset) ret = -1;
-	return ret;
+	if (fa->offset > fb->offset) return 1;
+	else if (fa->offset < fb->offset) return -1;
+	return 0;
 }
 
 R_API int r_flag_sort(RFlag *f, int namesort) {
@@ -37,9 +29,7 @@ R_API int r_flag_sort(RFlag *f, int namesort) {
 	int changes;
 	RFlagItem *flag, *fi = NULL;
 	RListIter *iter, *it_elem;
-	RList *tmp;
-
-	tmp = r_list_new ();
+	RList *tmp = r_list_new ();
 	// find bigger ones after this
 	do {
 		changes = 0;
@@ -76,22 +66,19 @@ R_API RFlag * r_flag_free(RFlag *f) {
 }
 
 R_API RFlag * r_flag_new() {
-	RFlag *f;
 	int i;
-
-	f = R_NEW (RFlag);
-	if (f) {
-		f->flags = r_list_new ();
-		f->flags->free = free;
-		f->space_idx = -1;
-		f->space_idx2 = -1;
+	RFlag *f = R_NEW (RFlag);
+	if (!f) return NULL;
+	f->flags = r_list_new ();
+	f->flags->free = free;
+	f->space_idx = -1;
+	f->space_idx2 = -1;
 #if USE_BTREE
-		btree_init (&f->tree);
-		btree_init (&f->ntree);
+	btree_init (&f->tree);
+	btree_init (&f->ntree);
 #endif
-		for (i=0;i<R_FLAG_SPACES_MAX;i++)
-			f->spaces[i] = NULL;
-	}
+	for (i=0; i<R_FLAG_SPACES_MAX; i++)
+		f->spaces[i] = NULL;
 	return f;
 }
 
@@ -117,25 +104,16 @@ R_API void r_flag_list(RFlag *f, int rad) {
 }
 
 R_API RFlagItem *r_flag_get(RFlag *f, const char *name) {
-#if USE_BTREE
-	RFlagItem tmp;
-#else
 	RFlagItem *flag;
 	RListIter *iter;
-#endif
-	if (name==NULL || name[0]=='\0' || (name[0]>='0'&& name[0]<='9'))
+	if (strnull (name) || (name[0]>='0' && name[0]<='9'))
 		return NULL;
-#if USE_BTREE
-	tmp.namehash = r_str_hash64 (name);
-	return btree_get (f->ntree, &tmp, ncmp);
-#else
 	ut64 hash = r_str_hash64 (name);
 	r_list_foreach_prev (f->flags, iter, flag) {
 		//if (!strcmp (name, flag->name))
 		if (hash == flag->namehash)
 			return flag;
 	}
-#endif
 	return NULL;
 }
 
@@ -156,13 +134,13 @@ R_API RFlagItem *r_flag_get_i(RFlag *f, ut64 off) {
 #endif
 }
 
-R_API int r_flag_unset_i(RFlag *f, ut64 addr) {
+R_API int r_flag_unset_i(RFlag *f, ut64 addr, RFlagItem *p) {
 	RFlagItem *item;
 	RListIter *iter;
 
 	r_list_foreach (f->flags, iter, item) {
 		if (item->offset == addr) {
-			r_list_unlink (f->flags, item);
+			r_list_delete (f->flags, iter);
 			return R_TRUE;
 		}
 	}
@@ -175,16 +153,16 @@ R_API int r_flag_unset_i(RFlag *f, ut64 addr) {
 	return 0;
 }
 
-R_API int r_flag_unset(RFlag *f, const char *name) {
+R_API int r_flag_unset(RFlag *f, const char *name, RFlagItem *p) {
 	RFlagItem *item;
 	RListIter *iter;
 
 	if (name[0] == '*') {
-		r_list_foreach (f->flags, iter, item) {
-			r_list_unlink (f->flags, item);
-		}
+		r_list_destroy (f->flags);
 	} else {
 		item = r_flag_get (f, name);
+		// XXX: This is slow.. because get+unlink is traversing the linked list twice
+		// XXX: we must use a hashtable here
 		/* MARK: entrypoint to remove flags */
 		if (item) {
 #if USE_BTREE
@@ -233,6 +211,9 @@ R_API int r_flag_set(RFlag *fo, const char *name, ut64 addr, ut32 size, int dup)
 #else
 	RFlagItem *f; // Move to !BTREE section?
 	ut64 hash = r_str_hash64 (name);
+
+// THIS IS ULTRASLOW!
+// XXX: use hashtable here or gtfo
 	r_list_foreach (fo->flags, iter, f) {
 		//if (!strcmp(f->name, name)) {
 		if (hash == f->namehash) {
@@ -255,7 +236,7 @@ R_API int r_flag_set(RFlag *fo, const char *name, ut64 addr, ut32 size, int dup)
 		flag = R_NEW (RFlagItem);
 		memset (flag,'\0', sizeof (RFlagItem));
 		flag->offset = addr;
-		r_flag_item_rename (flag, name);
+		r_flag_item_set_name (flag, name);
 #if USE_BTREE
 		btree_add (&fo->tree, flag, cmp);
 		btree_add (&fo->ntree, flag, ncmp);
@@ -274,7 +255,9 @@ R_API int r_flag_set(RFlag *fo, const char *name, ut64 addr, ut32 size, int dup)
 	return R_FALSE;
 }
 
-R_API void r_flag_item_rename(RFlagItem *item, const char *name) {
+//R_API void r_flag_item_rename(RFlagItem *item, const char *name) {
+//}
+R_API void r_flag_item_set_name(RFlagItem *item, const char *name) {
 	int len;
 	strncpy (item->name, name, R_FLAG_NAME_SIZE);
 	len = R_MIN (R_FLAG_NAME_SIZE, strlen (r_str_chop (item->name)) + 1);

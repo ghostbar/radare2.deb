@@ -1,4 +1,4 @@
-/* radare - GPL3 - Copyright 2009 nibble<.ds@gmail.com> */
+/* radare - LGPL - Copyright 2009 nibble<.ds@gmail.com> */
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -44,7 +44,7 @@ static int buf_fprintf(void *stream, const char *format, ...) {
 	if (buf_global == NULL || format == NULL)
 		return R_FALSE;
 	va_start (ap, format);
- 	tmp = malloc (strlen(format)+strlen(buf_global)+2);
+ 	tmp = malloc (strlen (format)+strlen (buf_global)+2);
 	if (tmp == NULL)
 		return R_FALSE;
 	sprintf (tmp, "%s%s", buf_global, format);
@@ -54,15 +54,15 @@ static int buf_fprintf(void *stream, const char *format, ...) {
 	return R_TRUE;
 }
 
-static int disassemble(struct r_asm_t *a, struct r_asm_op_t *op, ut8 *buf, ut64 len) {
+static int disassemble(struct r_asm_t *a, struct r_asm_op_t *op, const ut8 *buf, ut64 len) {
 	static struct disassemble_info disasm_obj;
-
+	if (len<4) return -1;
 	buf_global = op->buf_asm;
 	Offset = a->pc;
 	memcpy (bytes, buf, 4); // TODO handle thumb
 
 	/* prepare disassembler */
-	memset(&disasm_obj,'\0', sizeof(struct disassemble_info));
+	memset (&disasm_obj,'\0', sizeof(struct disassemble_info));
 	mips_mode = a->bits;
 	disasm_obj.arch = CPU_LOONGSON_2F;
 	disasm_obj.buffer = bytes;

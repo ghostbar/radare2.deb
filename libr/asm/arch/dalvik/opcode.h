@@ -1,4 +1,4 @@
-/* radare - GPL3 - Copyright 2009-2010 */
+/* radare - LGPL - Copyright 2009-2010 */
 
 enum fmt_inst {
 	fmt00 = 0,					// None
@@ -42,7 +42,7 @@ struct dalvik_opcodes_t {
 	int fmt;
 };
 
-const struct dalvik_opcodes_t dalvik_opcodes[256] = {
+static const struct dalvik_opcodes_t dalvik_opcodes[256] = {
 	{"nop", 2, fmtop}, /* 0x00 */
 	{"move", 2, fmtopvAvB},
 	{"move/from16", 4, fmtopvAAvBBBB},

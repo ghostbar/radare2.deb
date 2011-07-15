@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2010 */
+/* radare - LGPL - Copyright 2007-2011 */
 /*   pancake<nopcode.org> */
 
 #include <string.h>
@@ -271,11 +271,13 @@ static int set_reg_profile(RAnal *anal) {
 
 struct r_anal_plugin_t r_anal_plugin_arm = {
 	.name = "arm",
+	.arch = R_SYS_ARCH_ARM,
+	.bits = 32,
 	.desc = "ARM code analysis plugin",
 	.init = NULL,
 	.fini = NULL,
 	.op = &arm_op,
-	.set_reg_profile = NULL,
+	.set_reg_profile = set_reg_profile,
 	.fingerprint_bb = NULL,
 	.fingerprint_fcn = NULL,
 	.diff_bb = NULL,

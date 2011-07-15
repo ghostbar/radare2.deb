@@ -3,6 +3,7 @@
 
 #include <r_types.h>
 #include <r_util.h>
+#include <r_socket.h>
 #include <list.h>
 
 #define R_IO_READ  4
@@ -47,6 +48,12 @@ typedef struct r_io_desc_t {
 	void *data;
 	struct r_io_plugin_t *plugin;
 } RIODesc;
+
+typedef struct {
+	RSocket *fd;
+	RSocket *client;
+	int listener;
+} RIORap;
 
 // enum?
 #define R_IO_DESC_TYPE_OPENED 1
@@ -95,7 +102,8 @@ typedef struct r_io_t {
 	struct r_io_plugin_t *plugin;
 	struct r_io_undo_t undo;
 	struct list_head io_list;
-	struct list_head sections;
+	RList *sections;
+	int next_section_id;
 	/* maps */
 	RList *maps; /*<RIOMap>*/
 	RList *desc;
@@ -141,7 +149,7 @@ typedef int (*RIOWriteAt)(RIO *io, ut64 addr, const ut8 *buf, int size);
 typedef struct r_io_bind_t {
 	int init;
 	RIO *io;
-	RIOSetFd set_fd;
+	RIOSetFd set_fd; // XXX : this is conceptually broken with the new RIODesc foo
 	RIOReadAt read_at;
 	RIOWriteAt write_at;
 } RIOBind;
@@ -154,7 +162,7 @@ typedef struct r_io_section_t {
 	ut64 size;
 	ut64 vsize;
 	int rwx;
-	struct list_head list;
+	int id;
 } RIOSection;
 
 typedef struct r_io_cache_t {
@@ -164,6 +172,26 @@ typedef struct r_io_cache_t {
 	ut8 *data;
 	struct list_head list;
 } RIOCache;
+
+// XXX: HACK this must be io->desc_new() maybe?
+#define RETURN_IO_DESC_NEW(fplugin,ffd,fname,fflags,mode,fdata) { \
+	RIODesc *desc = R_NEW (RIODesc); \
+	if (desc != NULL) { \
+		desc->state = R_IO_DESC_TYPE_OPENED; \
+		desc->name = strdup (fname); \
+		if (desc->name != NULL) { \
+			desc->plugin = fplugin; \
+			desc->flags = fflags; \
+			if (ffd == -1) desc->fd = (int) (((size_t) desc) & 0xffffff); \
+			else desc->fd = ffd; \
+			desc->data = fdata; \
+		} else { \
+			free (desc); \
+			desc = NULL; \
+		} \
+	} \
+	return desc; \
+}
 
 #ifdef R_API
 #define r_io_bind_init(x) memset(&x,0,sizeof(x))
@@ -205,6 +233,7 @@ R_API int r_io_accept(RIO *io, int fd);
 R_API int r_io_shift(RIO *io, ut64 start, ut64 end, st64 move);
 
 /* io/cache.c */
+R_API int r_io_cache_invalidate(RIO *io, ut64 from, ut64 to);
 R_API void r_io_cache_commit(RIO *io);
 R_API void r_io_cache_enable(RIO *io, int read, int write);
 R_API void r_io_cache_init(RIO *io);

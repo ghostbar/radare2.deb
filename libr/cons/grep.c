@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2010 pancake<nopcode.org> nibble<develsec.org> */
+/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> nibble<develsec.org> */
 
 #include <r_cons.h>
 #include <r_util.h>
@@ -32,10 +32,10 @@ R_API void r_cons_grep(const char *str) {
 	ptr3 = strchr (ptr, '['); // column number
 	if (ptr3) {
 		ptr3[0]='\0';
-		cons->grep.tokenfrom = atoi (ptr3+1);
+		cons->grep.tokenfrom = r_num_get (cons->num, ptr3+1);
 		ptr3 = strchr (ptr3+1, '-');
 		if (ptr3) {
-			cons->grep.tokento = atoi (ptr3+1);
+			cons->grep.tokento = r_num_get (cons->num, ptr3+1);
 			if (cons->grep.tokento == 0)
 				cons->grep.tokento = ST32_MAX;
 		} else cons->grep.tokento = cons->grep.tokenfrom;
@@ -46,8 +46,8 @@ R_API void r_cons_grep(const char *str) {
 	}
 	ptr2 = strchr (ptr, ':'); // line number
 	if (ptr2) {
-		ptr2[0]='\0';
-		cons->grep.line = atoi (ptr2+1);
+		*ptr2 = '\0';
+		cons->grep.line = r_num_get (cons->num, ptr2+1);
 		if (cons->grep.line<0)
 			cons->grep.line = -1;
 	}
@@ -116,7 +116,7 @@ R_API int r_cons_grepbuf(char *buf, int len) {
 	free (tbuf);
 	free (tline);
 	if (cons->grep.counter) {
-		sprintf (cons->buffer, "%d\n", cons->lines);
+		snprintf (cons->buffer, cons->buffer_len, "%d\n", cons->lines);
 		cons->buffer_len = strlen (cons->buffer);;
 	}
 	return cons->lines;
@@ -127,7 +127,7 @@ R_API int r_cons_grep_line(char *buf, int len) {
 	const char delims[6][2] = { "|", "/", "\\", ",", ";", "\t" };
 	char *in, *out, *tok = NULL;
 	int hit = cons->grep.neg;
-	int i, j;
+	int i, j, outlen = 0;
 
 	in = calloc (1, len+1);
 	out = calloc (1, len+2);
@@ -148,22 +148,30 @@ R_API int r_cons_grep_line(char *buf, int len) {
 				if (in[i] == delims[j][0])
 					in[i] = ' ';
 			for (i=0; i <= cons->grep.tokento; i++) {
-				if (i==0) tok = (char *)strtok (in, " ");
-				else tok = (char *)strtok (NULL, " ");
-				if (tok == NULL) {
+				tok = (char *) strtok (i?NULL:in, " ");
+				if (tok) {
+					if (i >= cons->grep.tokenfrom) {
+						int toklen = strlen (tok);
+						memcpy (out+outlen, tok, toklen);
+						memcpy (out+outlen+toklen, " ", 2);
+						outlen += toklen+1;
+					}
+				} else {
 					if (strlen (out) == 0) {
 						free (in);
 						free (out);
 						return -1;
 					} else break;
 				}
-				if (i >= cons->grep.tokenfrom) {
-					strcat (out, tok);
-					strcat (out, " ");
-				}
 			}
-			len = strlen (out) - 1;
+			outlen = outlen>0? outlen - 1: 0;
+			if (outlen>len) { // should never happen
+				eprintf ("r_cons_grep_line: wtf, how you reach this?\n");
+				return -1;
+			}
 			memcpy (buf, out, len);
+			len = outlen;
+			
 		}
 	} else len = 0;
 
@@ -173,10 +181,25 @@ R_API int r_cons_grep_line(char *buf, int len) {
 	return len;
 }
 
+static const char *gethtmlcolor(const char ptrch, const char *def) {
+	switch (ptrch) {
+	case '0': return "#000"; // BLACK
+	case '1': return "#f00"; // RED
+	case '2': return "#0f0"; // GREEN
+	case '3': return "#ff0"; // YELLOW
+	case '4': return "#00f"; // BLUE
+	case '5': return "#f0f"; // MAGENTA
+	case '6': return "#aaf"; // TURQOISE
+	case '7': return "#fff"; // WHITE
+	case '8': return "#777"; // GREY
+	case '9': break; // ???
+	}
+	return def;
+}
+
 // XXX: rename char *r_cons_filter_html(const char *ptr)
 R_API int r_cons_html_print(const char *ptr) {
 	const char *str = ptr;
-	int color = 0;
 	int esc = 0;
 	int len = 0;
 	int inv = 0;
@@ -208,106 +231,45 @@ R_API int r_cons_html_print(const char *ptr) {
 		} else 
 		if (esc == 2) {
 			if (ptr[0]=='2'&&ptr[1]=='J') {
-				ptr = ptr +1;
 				printf ("<hr />\n"); fflush(stdout);
+				ptr++;
 				esc = 0;
 				str = ptr;
 				continue;
 			} else
 			if (ptr[0]=='0'&&ptr[1]==';'&&ptr[2]=='0') {
-				ptr = ptr + 4;
 				r_cons_gotoxy (0,0);
+				ptr += 4;
 				esc = 0;
 				str = ptr;
 				continue;
 			} else
 			if (ptr[0]=='0'&&ptr[1]=='m') {
-				ptr = ptr + 1;
-				str = ptr + 1;
-				inv = 0;
-				esc = 0;
+				str = (++ptr) +1;
+				esc = inv = 0;
 				continue;
 				// reset color
 			} else
 			if (ptr[0]=='7'&&ptr[1]=='m') {
+				str = (++ptr) +1;
 				inv = 128;
-				ptr = ptr + 1;
-				str = ptr + 1;
 				esc = 0;
 				continue;
 				// reset color
 			} else
 			if (ptr[0]=='3' && ptr[2]=='m') {
-				color = 1;
-				switch(ptr[1]) {
-				case '0': // BLACK
-					printf ("<font color=black>"); fflush(stdout);
-					break;
-				case '1': // RED
-					printf ("<font color=red>"); fflush(stdout);
-					break;
-				case '2': // GREEN
-					printf ("<font color=green>"); fflush(stdout);
-					break;
-				case '3': // YELLOW
-					printf ("<font color=yellow>"); fflush(stdout);
-					break;
-				case '4': // BLUE
-					printf ("<font color=blue>"); fflush(stdout);
-					break;
-				case '5': // MAGENTA
-					printf ("<font color=magenta>"); fflush(stdout);
-					break;
-				case '6': // TURQOISE
-					printf ("<font color=#0ae>"); fflush(stdout);
-					break;
-				case '7': // WHITE
-					printf ("<font color=white>"); fflush(stdout);
-					break;
-				case '8': // GRAY
-					printf ("<font color=#777>"); fflush(stdout);
-					break;
-				case '9': // ???
-					break;
-				}
+				// TODO: honor inv here
+				printf ("<font color='%s'>", gethtmlcolor (ptr[1], "#000"));
+				fflush(stdout);
 				ptr = ptr + 1;
 				str = ptr + 2;
 				esc = 0;
 				continue;
 			} else
 			if (ptr[0]=='4' && ptr[2]=='m') {
-				/* background color */
-				switch (ptr[1]) {
-				case '0': // BLACK
-					printf ("<font style='background-color:#000'>"); fflush(stdout);
-					break;
-				case '1': // RED
-					printf ("<font style='background-color:#f00'>"); fflush(stdout);
-					break;
-				case '2': // GREEN
-					printf ("<font style='background-color:#0f0'>"); fflush(stdout);
-					break;
-				case '3': // YELLOW
-					printf ("<font style='background-color:#ff0'>"); fflush(stdout);
-					break;
-				case '4': // BLUE
-					printf ("<font style='background-color:#00f'>"); fflush(stdout);
-					break;
-				case '5': // MAGENTA
-					printf ("<font style='background-color:#f0f'>"); fflush(stdout);
-					break;
-				case '6': // TURQOISE
-					printf ("<font style='background-color:#aaf'>"); fflush(stdout);
-					break;
-				case '7': // WHITE
-					printf ("<font style='background-color:#fff'>"); fflush(stdout);
-					break;
-				case '8': // GRAY
-					printf ("<font style='background-color:#777'>"); fflush(stdout);
-					break;
-				case '9': // ???
-					break;
-				}
+				// TODO: USE INV HERE
+				printf ("<font style='background-color:%s'>", gethtmlcolor (ptr[1], "#fff"));
+				fflush(stdout);
 			}
 		} 
 		len++;

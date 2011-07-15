@@ -598,6 +598,7 @@ grub_hfsplus_btree_iterate_node (struct grub_hfsplus_btree *btree,
 {
   int rec;
 
+  if (hook)
   for (;;)
     {
       char *cnode = (char *) first_node;
@@ -810,7 +811,10 @@ list_nodes (void *record, void *closure)
       node->size = grub_be_to_cpu64 (fileinfo->data.size);
       node->fileid = grub_be_to_cpu32 (fileinfo->fileid);
 
-      c->ret = c->hook (filename, type, node, c->closure);
+      if (c->hook == NULL)
+        c->ret = 0;
+      else
+        c->ret = c->hook (filename, type, node, c->closure);
     }
 
   grub_free (filename);

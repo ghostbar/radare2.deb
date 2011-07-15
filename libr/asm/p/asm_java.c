@@ -1,4 +1,4 @@
-/* radare - GPL3 - Copyright 2009-2010 nibble<.ds@gmail.com> */
+/* radare - LGPL - Copyright 2009-2010 nibble<.ds@gmail.com> */
 
 #include <r_types.h>
 #include <r_util.h>
@@ -9,7 +9,7 @@
 
 #include <r_core.h>
 static const char *lastfile = NULL;
-static int disassemble(RAsm *a, RAsmOp *op, ut8 *buf, ut64 len) {
+static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, ut64 len) {
 	// XXX: crossmodule dependency
 	RCore *core = (RCore*)a->user;
 	if (core && core->file && lastfile != core->file->filename) {

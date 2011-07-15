@@ -36,9 +36,8 @@ static const char *testregs[] = {
 
 // NOTE: buf should be at least 16 bytes!
 // XXX addr should be off_t for 64 love
-static int myop(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len) {
-	ut8 *buf = (ut8*)data;
-	if (data == NULL)
+static int myop(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *buf, int len) {
+	if (buf == NULL)
 		return 0;
 	memset (op, 0, sizeof (RAnalOp));
 	op->type = R_ANAL_OP_TYPE_UNK;
@@ -137,7 +136,7 @@ static int myop(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len) {
 		break;
 	case 0x85:
 		op->type = R_ANAL_OP_TYPE_CMP;
-		if (buf[1]>=0xc0 && buf[1]<=0xff) { // test eax, eax
+		if (buf[1]>=0xc0) {
 			int src = buf[1]&7;
 			int dst = (buf[1]&0x38)>>3;
 			op->src[0] = r_anal_value_new ();
@@ -313,7 +312,7 @@ static int myop(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len) {
 		break;
 	case 0x2e: // 2e64796e jns 0xb770a4ab !!
 		if (buf[1]>=0x64 && buf[1]<=0x67) {
-			int ret = myop (anal, op, addr, data+1, len-1);
+			int ret = myop (anal, op, addr, buf+1, len-1);
 			op->jump++;
 			op->length++;
 			return ret;
@@ -515,6 +514,8 @@ static int myop(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len) {
 struct r_anal_plugin_t r_anal_plugin_x86_simple = {
 	.name = "x86.simple",
 	.desc = "X86 analysis plugin",
+	.arch = R_SYS_ARCH_X86,
+	.bits = 32,
 	.init = NULL,
 	.fini = NULL,
 	.op = &myop,

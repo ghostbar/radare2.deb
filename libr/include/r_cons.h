@@ -3,7 +3,9 @@
 
 #define HAVE_DIETLINE 0
 
-#include "r_types.h"
+#include <r_types.h>
+#include <r_util.h>
+
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -17,6 +19,7 @@
 #endif
 #if __WINDOWS__
 #include <windows.h>
+#include <wincon.h>
 #endif
 
 /* constants */
@@ -67,6 +70,7 @@ typedef struct r_cons_t {
 #elif __WINDOWS__
 	LPDWORD term_raw, term_buf;
 #endif
+	RNum *num;
 } RCons;
 
 // XXX THIS MUST BE A SINGLETON AND WRAPPED INTO RCons */
@@ -79,6 +83,21 @@ typedef struct r_cons_t {
 //extern char *r_cons_teefile;
 // not needed anymoar
 //extern int (*r_cons_user_fgets)(char *buf, int len);
+
+#define R_CONS_KEY_F1 0xf1
+#define R_CONS_KEY_F2 0xf2
+#define R_CONS_KEY_F3 0xf3
+#define R_CONS_KEY_F4 0xf4
+#define R_CONS_KEY_F5 0xf5
+#define R_CONS_KEY_F6 0xf6
+#define R_CONS_KEY_F7 0xf7
+#define R_CONS_KEY_F8 0xf8
+#define R_CONS_KEY_F9 0xf9
+#define R_CONS_KEY_F10 0xfa
+#define R_CONS_KEY_F11 0xfb
+#define R_CONS_KEY_F12 0xfc
+
+#define R_CONS_KEY_ESC 0x1b
 
 /* plain colors */
 #define Color_BLACK    "\x1b[30m"
@@ -167,10 +186,12 @@ R_API void r_cons_set_raw(int b);
 /* output */
 R_API void r_cons_printf(const char *format, ...);
 R_API void r_cons_strcat(const char *str);
+R_API void r_cons_strcat_justify (const char *str, int j, char c);
 R_API void r_cons_memcat(const char *str, int len);
 R_API void r_cons_newline();
 R_API void r_cons_filter();
 R_API void r_cons_flush();
+R_API void r_cons_memset(char ch, int len);
 R_API void r_cons_visual_flush();
 R_API void r_cons_visual_write (char *buffer);
 
@@ -195,6 +216,8 @@ R_API int r_cons_grepbuf(char *buf, int len);
 
 R_API void r_cons_invert(int set, int color);
 R_API int r_cons_yesno(int def, const char *fmt, ...);
+R_API void r_cons_set_cup(int enable);
+R_API void r_cons_column(int c);
 #endif
 
 #endif

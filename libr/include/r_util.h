@@ -11,14 +11,38 @@
 #ifdef HAVE_LIB_GMP
 #include <gmp.h>
 #endif
-#ifdef HAVE_LIB_OPENSSL
+#if HAVE_LIB_SSL
 #include <openssl/bn.h>
 #endif
 
+// TODO: use lowercase here?
+#define R_REFCTR_CLASS int refctr;void (*ref_free)(x)
+#define R_REFCTR_INIT(x,y) x->refctr=0;x->ref_free=y
+#define R_REFCTR_REF(x) x->refctr++
+#define R_REFCTR_UNREF(x) if (--x->refctr<=0) x->ref_free(x)
+
+#if 0
+typedef struct {
+	R_REFCTR_CLASS;
+} Foo;
+
+Foo *r_foo_new () {
+	Foo *f = R_NEW(Foo)
+	R_REFCTR_INIT (f, r_foo_free);
+	...
+	return f;
+}
+Foo *foo = r_foo_new (Foo)
+R_REFCTR_REF (foo)
+R_REFCTR_UNREF (foo)
+#endif
+
+
 /* empty classes */
 typedef struct { } RSystem;
-typedef struct { } RStr;
+//typedef struct { } RStr;
 typedef struct { } RLog;
+#define RStr char*
 
 typedef struct r_mem_pool_t {
 	ut8 **nodes;
@@ -97,59 +121,60 @@ enum {
 	R_SYS_BITS_64 = 8,
 };
 
+
+/** hashtable **/
+typedef struct r_hashtable_entry_t {
+	ut32 hash;
+	void *data;
+} RHashTableEntry;
+
+typedef struct r_hashtable_t {
+	RHashTableEntry *table;
+	ut32 size;
+	ut32 rehash;
+	ut32 max_entries;
+	ut32 size_index;
+	ut32 entries;
+	ut32 deleted_entries;
+} RHashTable;
+
+typedef struct r_hashtable64_entry_t {
+	ut64 hash;
+	void *data;
+} RHashTable64Entry;
+
+typedef struct r_hashtable64_t {
+	RHashTable64Entry *table;
+	ut64 size;
+	ut64 rehash;
+	ut64 max_entries;
+	ut64 size_index;
+	ut64 entries;
+	ut64 deleted_entries;
+} RHashTable64;
+
+/* r_mixed */
+
+#define RMIXED_MAXKEYS 256
+typedef struct r_mixed_data_t {
+	int size;
+	union {
+		RHashTable *ht;
+		RHashTable64 *ht64;
+	} hash;
+} RMixedData;
+
+typedef struct r_mixed_t {
+	RList *list;
+	RMixedData *keys[RMIXED_MAXKEYS];
+	ut64 state[RMIXED_MAXKEYS]; // used by change_(begin|end)
+} RMixed;
+
+
 #ifdef R_API
 
 R_API RMmap *r_file_mmap (const char *file, boolt rw);
 R_API void r_file_mmap_free (RMmap *m);
-
-/* arch */
-// TODO: This must deprecate DEFAULT_ARCH??
-#if __i386__
-#define R_SYS_ARCH "x86"
-#define R_SYS_BITS R_SYS_BITS_32
-#elif __x86_64__
-#define R_SYS_ARCH "x86"
-#define R_SYS_BITS (R_SYS_BITS_32 | R_SYS_BITS_64)
-#elif __POWERPC__
-#define R_SYS_ARCH "ppc"
-#define R_SYS_BITS R_SYS_BITS_32
-#elif __arm__
-#define R_SYS_ARCH "arm"
-#define R_SYS_BITS R_SYS_BITS_32
-#elif __sparc__
-#define R_SYS_ARCH "sparc"
-#define R_SYS_BITS R_SYS_BITS_32
-#elif __mips__
-#define R_SYS_ARCH "mips"
-#define R_SYS_BITS R_SYS_BITS_32
-#else
-#define R_SYS_ARCH "unknown"
-#define R_SYS_BITS R_SYS_BITS_32
-#endif
-
-/* os */
-#if __APPLE__
-#define R_SYS_OS "darwin"
-#elif __linux__
-#define R_SYS_OS "linux"
-#elif __WIN32__ || __CYGWIN__ || MINGW32
-#define R_SYS_OS "windows"
-#elif __NetBSD__ 
-#define R_SYS_OS "netbsd"
-#elif __OpenBSD__
-#define R_SYS_OS "openbsd"
-#elif __FreeBSD__
-#define R_SYS_OS "freebsd"
-#else
-#define R_SYS_OS "unknown"
-#endif
-
-/* endian */
-#if LIL_ENDIAN
-#define R_SYS_ENDIAN "little"
-#else
-#define R_SYS_ENDIAN "big"
-#endif
 
 // TODO: find better names and write vapis 
 #define ut8p_b(x) ((x)[0])
@@ -175,6 +200,7 @@ R_API int r_buf_write_at(RBuffer *b, ut64 addr, const ut8 *buf, int len);
 R_API int r_buf_fwrite_at (RBuffer *b, ut64 addr, ut8 *buf, const char *fmt, int n);
 R_API void r_buf_free(RBuffer *b);
 
+R_API ut64 r_mem_get_num(ut8 *b, int size, int endian);
 R_API struct r_mem_pool_t* r_mem_pool_deinit(struct r_mem_pool_t *pool);
 R_API struct r_mem_pool_t *r_mem_pool_new(int nodesize, int poolsize, int poolcount);
 R_API struct r_mem_pool_t *r_mem_pool_free(struct r_mem_pool_t *pool);
@@ -204,21 +230,28 @@ R_API void r_num_minmax_swap_i(int *a, int *b); // XXX this can be a cpp macro :
 R_API ut64 r_num_math(struct r_num_t *num, const char *str);
 R_API ut64 r_num_get(struct r_num_t *num, const char *str);
 R_API int r_num_to_bits(char *out, ut64 num);
+R_API int r_num_rand(int max);
+R_API void r_num_irand();
 
 /* TODO ..use as uppercase maybe? they are macros! */
 #define R_BETWEEN(x,y,z) (((x)>=(y)) && ((x)<=(z)))
 #define r_offsetof(type, member) ((unsigned long) &((type*)0)->member)
 #define strnull(x) (!x||!*x)
-#define iswhitechar(x) (x==' '||x=='\t'||x=='\n'||x=='\r')
-#define iswhitespace(x) (x==' '||x=='\t')
-#define isseparator(x) (x==' '||x=='\t'||x=='\n'||x=='\r'||x==' '|| \
-	x==','||x==';'||x==':'||x=='['||x==']'||x=='('||x==')'||x=='{'||x=='}')
+#define iswhitechar(x) ((x)==' '||(x)=='\t'||(x)=='\n'||(x)=='\r')
+#define iswhitespace(x) ((x)==' '||(x)=='\t')
+#define isseparator(x) ((x)==' '||(x)=='\t'||(x)=='\n'||(x)=='\r'||(x)==' '|| \
+		(x)==','||(x)==';'||(x)==':'||(x)=='['||(x)==']'|| \
+		(x)=='('||(x)==')'||(x)=='{'||(x)=='}')
 #define ishexchar(x) ((x>='0'&&x<='9') ||  (x>='a'&&x<='f') ||  (x>='A'&&x<='F')) {
+
+R_API int r_name_check(const char *name);
+R_API int r_name_filter(char *name, int len);
 
 R_API void r_base64_encode(ut8 *bout, const ut8 *bin, int len);
 R_API int r_base64_decode(ut8 *bout, const ut8 *bin, int len);
 /* strings */
 #define r_str_write(x,y) write (x, y, strlen(y))
+R_API void r_str_cpy(char *dst, const char *src);
 R_API int r_str_bits (char *strout, const ut8 *buf, int len, const char *bitz);
 R_API int r_str_rwx(const char *str);
 R_API void r_str_subchr (char *s, int a, int b);
@@ -243,7 +276,7 @@ R_API char *r_str_trim(char *str);
 R_API char *r_str_trim_head(char *str);
 R_API char *r_str_trim_tail(char *str);
 R_API char *r_str_trim_head_tail(char *str);
-R_API int r_str_hash(const char *str);
+R_API ut32 r_str_hash(const char *str);
 R_API ut64 r_str_hash64(const char *str);
 R_API char *r_str_clean(char *str);
 R_API int r_str_nstr(char *from, char *to, int size);
@@ -267,12 +300,15 @@ R_API char *r_str_sub(char *string, char *pat, char *rep, int global);
 R_API int r_str_escape(char *buf);
 R_API char *r_str_unscape(char *buf);
 R_API char *r_str_home(const char *str);
+R_API int r_str_nlen (const char *s, int n);
 R_API char *r_str_concat(char *ptr, const char *string);
 R_API char *r_str_concatf(char *ptr, const char *fmt, ...);
 R_API char *r_str_concatch(char *x, char y);
 R_API void r_str_case(char *str, int up);
 R_API void r_str_chop_path (char *s);
 
+R_API int r_str_glob (const char *str, const char *glob);
+R_API int r_str_binstr2bin(const char *str, ut8 *out, int outlen);
 R_API int r_hex_pair2bin(const char *arg);
 R_API int r_hex_str2binmask(const char *in, ut8 *out, ut8 *mask);
 R_API int r_hex_str2bin(const char *in, ut8 *out);
@@ -281,6 +317,7 @@ R_API char *r_hex_bin2strdup(const ut8 *in, int len);
 R_API int r_hex_to_byte(ut8 *val, ut8 c);
 R_API st64 r_hex_bin_truncate (ut64 in, int n);
 
+R_API char *r_file_temp (const char *prefix);
 R_API char *r_file_path(const char *bin);
 R_API const char *r_file_basename (const char *path);
 R_API char *r_file_abspath(const char *file);
@@ -293,8 +330,13 @@ R_API boolt r_file_dump(const char *file, const ut8 *buf, int len);
 R_API boolt r_file_rm(const char *file);
 R_API boolt r_file_exist(const char *str);
 R_API char *r_file_slurp_line(const char *file, int line, int context);
+R_API int r_file_mkstemp(const char *prefix, char **oname);
+R_API const char *r_file_tmpdir();
 
 R_API ut64 r_sys_now();
+R_API int r_sys_crash_handler(const char *cmd);
+R_API const char *r_sys_arch_str(int arch);
+R_API int r_sys_arch_id(const char *arch);
 R_API RList *r_sys_dir(const char *path);
 R_API void r_sys_perror(const char *fun);
 #if __WINDOWS__
@@ -349,11 +391,11 @@ R_API int r_range_get_n(RRange *rgs, int n, ut64 *from, ut64 *to);
 R_API RRange *r_range_inverse(RRange *rgs, ut64 from, ut64 to, int flags);
 R_API int r_range_overlap(ut64 a0, ut64 a1, ut64 b0, ut64 b1, int *d);
 
+#if 0
 /* big */
-#ifdef HAVE_LIB_GMP
+#if HAVE_LIB_GMP
 #define RNumBig mpz_t
-#else
-#ifdef HAVE_LIB_OPENSSL
+#elif HAVE_LIB_SSL
 #define RNumBig BIGNUM
 #else
 #define	R_BIG_SIZE 10000
@@ -361,7 +403,6 @@ typedef struct r_num_big_t {
 	char dgts[R_BIG_SIZE];
 	int sign, last;
 } RNumBig;
-#endif
 #endif
 
 R_API RNumBig *r_big_new(RNumBig *b);
@@ -383,6 +424,20 @@ R_API void r_big_div(RNumBig *c, RNumBig *a, RNumBig *b);
 R_API void r_big_div_ut(RNumBig *a, RNumBig *b, ut32 c);
 R_API int r_big_divisible_ut(RNumBig *n, ut32 v);
 R_API void r_big_mod(RNumBig *c, RNumBig *a, RNumBig *b);
+#endif
+
+
+R_API RHashTable* r_hashtable_new(void);
+R_API void r_hashtable_free(RHashTable *ht);
+R_API void *r_hashtable_lookup(RHashTable *ht, ut32 hash);
+R_API boolt r_hashtable_insert(RHashTable *ht, ut32 hash, void *data);
+R_API void r_hashtable_remove(RHashTable *ht, ut32 hash);
+
+R_API RHashTable64* r_hashtable64_new(void);
+R_API void r_hashtable64_free(RHashTable64 *ht);
+R_API void *r_hashtable64_lookup(RHashTable64 *ht, ut64 hash);
+R_API boolt r_hashtable64_insert(RHashTable64 *ht, ut64 hash, void *data);
+R_API void r_hashtable64_remove(RHashTable64 *ht, ut64 hash);
 #endif
 
 #endif

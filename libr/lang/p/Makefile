@@ -9,18 +9,19 @@ endif
 
 BINDEPS=
 
-LANGS=lang_python.${EXT_SO} lang_perl.${EXT_SO}
+LANGS=$(shell ./getlangs.sh ${EXT_SO})
+#LANGS=lang_python.${EXT_SO} lang_perl.${EXT_SO}
+
 #LANGS+=lang_ruby.so
 ifeq ($(HAVE_LIB_TCC),1)
 LANGS+=lang_tcc.${EXT_SO}
 endif
-
 ifeq ($(HAVE_LIB_LUA5_1),1)
 LANGS+=lang_lua.${EXT_SO}
 endif
 
 all: ${LANGS}
-	@true
+	@echo r_lang_plugins: ${LANGS}
 
 ifeq ($(OSTYPE),windows)
 lang_python.${EXT_SO}:
@@ -28,10 +29,9 @@ lang_python.${EXT_SO}:
 	-L${HOME}/.wine/drive_c/Python27/libs -L../../core/ -lr_core \
 	${LDFLAGS_LIB} -shared -o lang_python.${EXT_SO} python.c -lpython27
 else
-PYCFLAGS=`python-config --cflags 2>/dev/null | sed -e 's/-arch [^\s]*//g' | sed s,-Wstrict-prototypes,,g`
-PYCFLAGS+=`python2-config --cflags 2>/dev/null | sed -e 's/-arch [^\s]*//g' | sed s,-Wstrict-prototypes,,g`
-PYLDFLAGS=`python-config --cflags 2>/dev/null | sed -e 's/-arch [^\s]*//g' | sed s,-Wstrict-prototypes,,g`
-PYLDFLAGS+=`python2-config --cflags 2>/dev/null | sed -e 's/-arch [^\s]*//g' | sed s,-Wstrict-prototypes,,g`
+PYCFG=../../../r2-bindings/python-config-wrapper
+PYCFLAGS=$(shell ${PYCFG} --cflags)
+PYLDFLAGS=$(shell ${PYCFG} --libs) -L$(shell ${PYCFG} --prefix)/lib
 
 lang_python.${EXT_SO}:
 	${CC} ${CFLAGS} ${PYCFLAGS} ${PYLDFLAGS} \
@@ -59,3 +59,4 @@ lang_perl.${EXT_SO}:
 
 clean:
 	-rm -f *.${EXT_SO} *.${EXT_AR} *.o
+	-rm -rf *.dSYM

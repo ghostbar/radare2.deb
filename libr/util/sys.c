@@ -57,7 +57,7 @@ R_API char *r_sys_cmd_strf(const char *fmt, ...) {
 }
 
 R_API void r_sys_backtrace(void) {
-#if __linux__
+#if __linux__ && __GNU_LIBRARY__
         void *array[10];
         size_t size;
         char **strings;
@@ -68,6 +68,22 @@ R_API void r_sys_backtrace(void) {
         for (i = 0; i < size; i++)
                 printf ("%s\n", strings[i]);
         free (strings);
+#elif __APPLE__
+	void **fp = (void **) __builtin_frame_address (0);
+	void *saved_pc = __builtin_return_address (0);
+	void *saved_fp = __builtin_frame_address (1);
+	int depth = 0;
+
+	printf ("[%d] pc == %p fp == %p\n", depth++, saved_pc, saved_fp);
+	fp = saved_fp;
+	while (fp != NULL) {
+		saved_fp = *fp;
+		fp = saved_fp;
+		if (*fp == NULL)
+			break;
+		saved_pc = *(fp + 2);
+		printf ("[%d] pc == %p fp == %p\n", depth++, saved_pc, saved_fp);
+	}
 #else
 #warning TODO: r_sys_bt : unimplemented
 #endif
@@ -107,6 +123,64 @@ R_API int r_sys_setenv(const char *key, const char *value) {
 #endif
 }
 
+static char *crash_handler_cmd = NULL;
+
+static void signal_handler(int signum) {
+	int len;
+	char *cmd;
+	if (!crash_handler_cmd)
+		return;
+	len = strlen (crash_handler_cmd)+32;
+	cmd = malloc (len);
+	snprintf (cmd, len, crash_handler_cmd, getpid ());
+	r_sys_backtrace ();
+	system (cmd);
+	exit (1);
+}
+
+static int checkcmd(const char *c) {
+	char oc = 0;
+	for (;*c;c++) {
+		if (oc == '%')
+			if (*c!='d' && *c!='%')
+				return 0;
+		oc = *c;
+	}
+	return 1;
+}
+
+R_API int r_sys_crash_handler(const char *cmd) {
+#if __UNIX__
+	struct sigaction sigact;
+	if (!checkcmd (cmd))
+		return R_FALSE;
+	free (crash_handler_cmd);
+	crash_handler_cmd = strdup (cmd);
+	sigact.sa_handler = signal_handler;
+	sigemptyset (&sigact.sa_mask);
+	sigact.sa_flags = 0;
+	sigaction (SIGINT, &sigact, (struct sigaction *)NULL);
+
+	sigaddset (&sigact.sa_mask, SIGSEGV);
+	sigaction (SIGSEGV, &sigact, (struct sigaction *)NULL);
+
+	sigaddset (&sigact.sa_mask, SIGBUS);
+	sigaction (SIGBUS, &sigact, (struct sigaction *)NULL);
+
+	sigaddset (&sigact.sa_mask, SIGQUIT);
+	sigaction (SIGQUIT, &sigact, (struct sigaction *)NULL);
+
+	sigaddset (&sigact.sa_mask, SIGHUP);
+	sigaction (SIGHUP, &sigact, (struct sigaction *)NULL);
+
+	sigaddset (&sigact.sa_mask, SIGKILL);
+	sigaction (SIGKILL, &sigact, (struct sigaction *)NULL);
+	return R_TRUE;
+#else
+	return R_FALSE;
+#endif
+}
+
 #if __WINDOWS__
 R_API const char *r_sys_getenv(const char *key) {
 	static char envbuf[1024];
@@ -134,7 +208,7 @@ R_API char *r_sys_getcwd(void) {
 R_API char *r_sys_cmd_str_full(const char *cmd, const char *input, int *len, char **sterr) {
 	char *output, buffer[1024];
 	char *inputptr = (char *)input;
-	int pid, bytes = 0;
+	int pid, bytes = 0, status;
 	int sh_in[2], sh_out[2], sh_err[2];
 
 	if (len) *len = 0;
@@ -161,10 +235,9 @@ R_API char *r_sys_cmd_str_full(const char *cmd, const char *input, int *len, cha
 		dup2 (sh_out[1], 1); close (sh_out[0]); close (sh_out[1]);
 		if (sterr) dup2 (sh_err[1], 2); else close (2);
 		close (sh_err[0]); close (sh_err[1]); 
-		execl ("/bin/sh", "sh", "-c", cmd, NULL);
+		execl ("/bin/sh", "sh", "-c", cmd, (char*)NULL);
 		exit (1);
 	default:
-		{
 		output = calloc (1, 1024); // TODO: use malloc
 		if (!output)
 			return NULL;
@@ -212,11 +285,15 @@ R_API char *r_sys_cmd_str_full(const char *cmd, const char *input, int *len, cha
 		close (sh_out[0]);
 		close (sh_err[0]);
 		close (sh_in[1]);
+		waitpid(pid, &status, 0);
+		if (status != 0) {
+			eprintf("%s: command returned !0\n", __func__);
+			return (NULL);
+		}
 
 		if (*output)
 			return output;
 		free (output);
-		}
 	}
 	return NULL;
 }
@@ -250,7 +327,7 @@ R_API int r_sys_cmd (const char *str) {
 	/* freebsd system() is broken */
 	int fds[2];
 	int st,pid;
-	char *argv[] = { "/bin/sh", "-c", input, NULL};
+	char *argv[] = { "/bin/sh", "-c", str, NULL};
 	pipe (fds);
 	/* not working ?? */
 	//pid = rfork(RFPROC|RFCFDG);
@@ -318,4 +395,38 @@ R_API void r_sys_perror(const char *fun) {
 	LocalFree (lpMsgBuf);
 	LocalFree (lpDisplayBuf);
 #endif
+}
+
+R_API int r_sys_arch_id(const char *arch) {
+	if (!strcmp (arch, "x86")) return R_SYS_ARCH_X86;
+	if (!strcmp (arch, "arm")) return R_SYS_ARCH_ARM;
+	if (!strcmp (arch, "ppc")) return R_SYS_ARCH_PPC;
+	if (!strcmp (arch, "m68k")) return R_SYS_ARCH_M68K;
+	if (!strcmp (arch, "java")) return R_SYS_ARCH_JAVA;
+	if (!strcmp (arch, "mips")) return R_SYS_ARCH_MIPS;
+	if (!strcmp (arch, "sparc")) return R_SYS_ARCH_SPARC;
+	if (!strcmp (arch, "csr")) return R_SYS_ARCH_CSR;
+	if (!strcmp (arch, "msil")) return R_SYS_ARCH_MSIL;
+	if (!strcmp (arch, "objd")) return R_SYS_ARCH_OBJD;
+	if (!strcmp (arch, "bf")) return R_SYS_ARCH_BF;
+	if (!strcmp (arch, "sh")) return R_SYS_ARCH_SH;
+	if (!strcmp (arch, "avr")) return R_SYS_ARCH_AVR;
+	return 0;
+}
+
+R_API const char *r_sys_arch_str(int arch) {
+	if (arch & R_SYS_ARCH_X86) return "x86";
+	if (arch & R_SYS_ARCH_ARM) return "arm";
+	if (arch & R_SYS_ARCH_PPC) return "ppc";
+	if (arch & R_SYS_ARCH_M68K) return "m68k";
+	if (arch & R_SYS_ARCH_JAVA) return "java";
+	if (arch & R_SYS_ARCH_MIPS) return "mips";
+	if (arch & R_SYS_ARCH_SPARC) return "sparc";
+	if (arch & R_SYS_ARCH_CSR) return "csr";
+	if (arch & R_SYS_ARCH_MSIL) return "msil";
+	if (arch & R_SYS_ARCH_OBJD) return "objd";
+	if (arch & R_SYS_ARCH_BF) return "bf";
+	if (arch & R_SYS_ARCH_SH) return "sh";
+	if (arch & R_SYS_ARCH_AVR) return "avr";
+	return "none";
 }

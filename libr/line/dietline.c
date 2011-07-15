@@ -64,7 +64,7 @@ static int r_line_readchar() {
 R_API int r_line_hist_add(const char *line) {
 	if (I.history.top>=I.history.size)
 		I.history.top = I.history.index = 0; // workaround
-	if (*line) { // && I.history.index < I.history.size) {
+	if (line && *line) { // && I.history.index < I.history.size) {
 		I.history.data[I.history.top++] = strdup (line);
 		I.history.index = I.history.top;
 		return R_TRUE;
@@ -97,13 +97,10 @@ static int r_line_hist_down() {
 }
 
 R_API int r_line_hist_list() {
-	int i = 0;
+	int i;
 	if (I.history.data != NULL)
-	for (i=0; i<I.history.size; i++) {
-		if (I.history.data[i] == NULL)
-			break;
+	for (i=0; i<I.history.size && I.history.data[i]; i++)
 		printf ("%.3d  %s\n", i, I.history.data[i]);
-	}
 	return i;
 }
 
@@ -126,8 +123,7 @@ R_API int r_line_hist_load(const char *file) {
 
 	// XXX dupped shitty code.. see hist_save ()
 	snprintf (buf, sizeof (buf)-1, "%s/%s", r_sys_getenv ("HOME"), file);
-	fd = fopen (buf, "r");
-	if (fd == NULL)
+	if (!(fd = fopen (buf, "r")))
 		return R_FALSE;
 
 	fgets (buf, sizeof (buf)-1, fd);
@@ -168,7 +164,7 @@ R_API void r_line_autocomplete() {
 	int argc = 0;
 	char *p;
 	const char **argv = NULL;
-	int i, j, opt, len = 0;
+	int i, j, opt, plen, len = 0;
 	int cols = r_cons_get_size (NULL)*0.82;
 
 	/* prepare argc and argv */
@@ -179,16 +175,26 @@ R_API void r_line_autocomplete() {
 	} else opt = 0;
 
 	p = r_str_lchr (I.buffer.data, ' ');
-	p = p? p+1: I.buffer.data; //+I.buffer.length;
+	if (p) {
+		p++;
+		plen = sizeof (I.buffer.data)-(int)(size_t)(p-I.buffer.data);
+	} else {
+		p = I.buffer.data;
+		plen = sizeof (I.buffer.data);
+	}
 	/* autocomplete */
 	if (argc==1) {
-		strcpy (p, argv[0]);
-		I.buffer.index = I.buffer.length = strlen (I.buffer.data) + 1;
-		strcat (p, " ");
-		I.buffer.length = strlen (I.buffer.data); // XXX: already calculated ?? wtf
+		int largv0 = strlen (argv[0]);
+		if (largv0+3 < plen) {
+			memcpy (p, argv[0], largv0);
+			memcpy (p+largv0, " ", 2);
+			I.buffer.length = I.buffer.index = strlen (I.buffer.data);
+		}
 	} else
 	if (argc>0) {
 		if (*p) {
+			// TODO: do not use strdup here
+			// TODO: avoid overflow
 			char *root = strdup (argv[0]);
 			// try to autocomplete argument
 			for (i=0; i<argc; i++) {
@@ -515,7 +521,8 @@ _end:
 		fflush (stdout);
 	}
 
-	if (I.buffer.data[0]=='!' && I.buffer.data[1]=='\0') {
+	if (!memcmp (I.buffer.data, "!history", 8)) {
+	//if (I.buffer.data[0]=='!' && I.buffer.data[1]=='\0') {
 		r_line_hist_list ();
 		return r_line_nullstr;
 	}

@@ -112,7 +112,6 @@ struct grub_minix_data
   int filename_size;
 };
 
-static grub_dl_t my_mod;
 
 static grub_err_t grub_minix_find_file (struct grub_minix_data *data,
 					const char *path);
@@ -468,7 +467,6 @@ grub_minix_dir (grub_device_t device, const char *path,
 		void *closure)
 {
   struct grub_minix_data *data = 0;
-  struct grub_minix_sblock *sblock;
   unsigned int pos = 0;
 
   data = grub_minix_mount (device->disk);
@@ -478,8 +476,6 @@ grub_minix_dir (grub_device_t device, const char *path,
   grub_minix_read_inode (data, GRUB_MINIX_ROOT_INODE);
   if (grub_errno)
     goto fail;
-
-  sblock = &data->sblock;
 
   grub_minix_find_file (data, path);
   if (grub_errno)
@@ -491,6 +487,7 @@ grub_minix_dir (grub_device_t device, const char *path,
       goto fail;
     }
 
+  if (hook)
   while (pos < GRUB_MINIX_INODE_SIZE (data))
     {
       grub_uint16_t ino;

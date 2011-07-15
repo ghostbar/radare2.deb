@@ -78,14 +78,13 @@ R_API RRange *r_range_new_from_string(const char *string) {
 R_API int r_range_add_from_string(RRange *rgs, const char *string) {
 	ut64 addr, addr2;
 	int i, len = strlen (string)+1;
-	char *str = alloca (len);
-	char *p = str;
+	char *str, *ostr = malloc (len);
+	char *p = str = ostr;
 	char *p2 = NULL;
-	RRangeItem *r;
 
 	memcpy (str, string, len);
 
-	for (i=0;i<len;i++) {
+	for (i=0; i<len; i++) {
 		switch (str[i]) {
 		case '-':
 			str[i]='\0';
@@ -95,28 +94,30 @@ R_API int r_range_add_from_string(RRange *rgs, const char *string) {
 		case ',':
 			str[i]='\0';
 			if (p2) {
-				addr = r_num_get(NULL, p);
-				addr2 = r_num_get(NULL, p2);
-				r = r_range_add(rgs, addr, addr2, 1);
+				addr = r_num_get (NULL, p);
+				addr2 = r_num_get (NULL, p2);
+				r_range_add(rgs, addr, addr2, 1);
 				p2 = NULL;
 			} else {
-				addr = r_num_get(NULL, p);
-				r = r_range_add(rgs, addr, addr+1, 1);
+				addr = r_num_get (NULL, p);
+				r_range_add (rgs, addr, addr+1, 1);
 			}
 			p = str+i+1;
-			str[i]=',';
+			str[i] = ',';
 			break;
 		}
 	}
 	if (p2) {
 		addr = r_num_get (NULL, p);
 		addr2 = r_num_get (NULL, p2);
-		r = r_range_add (rgs, addr, addr2, 1);
+		r_range_add (rgs, addr, addr2, 1);
 	} else 
 	if (p) {
 		addr = r_num_get (NULL, p);
-		r = r_range_add (rgs, addr, addr+1, 1);
+		r_range_add (rgs, addr, addr+1, 1);
 	}
+	free (ostr);
+	// check r != NULL?
 	return rgs->changed;
 }
 

@@ -2,6 +2,15 @@
 
 #include <r_core.h>
 
+static int config_scrfkey_callback(void *user, void *data) {
+	RConfigNode *node = (RConfigNode*) data;
+	if (!strcmp (node->value, "help") || *node->value == '?') {
+		r_cons_printf ("scr.fkey = fun, hit, flag\n");
+		return R_FALSE;
+	}
+	return R_TRUE;
+}
+
 static int config_scrcols_callback(void *user, void *data) {
 	int c = R_MIN (128, R_MAX (((RConfigNode*)data)->i_value, 0));
 	((RCore *)user)->print->cols = c & ~1;
@@ -44,6 +53,26 @@ static int config_iova_callback(void *user, void *data) {
 	return R_TRUE;
 }
 
+static int config_zoombyte_callback(void *user, void *data) {
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	switch (*node->value) {
+	case 'p':
+	case 'f':
+	case 's':
+	case '0':
+	case 'F':
+	case 'e':
+	case 'h':
+		core->print->zoom->mode = *node->value;
+		break;
+	default:
+		eprintf ("Invalid zoom.byte value. See pZ? for help\n");
+		return R_FALSE;
+	}
+	return R_TRUE;
+}
+
 static int config_iocache_callback(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
@@ -77,8 +106,7 @@ static int config_analplugin_callback(void *user, void *data) {
 	if (node->value[0] == '?') {
 		r_anal_list (core->anal);
 		return R_FALSE;
-	}
-	else if (!r_anal_use (core->anal, node->value)) {
+	} else if (!r_anal_use (core->anal, node->value)) {
 		eprintf ("Cannot use '%s' anal plugin.\n", node->value);
 		return R_FALSE;
 	}
@@ -114,8 +142,8 @@ static int config_asmsyntax_callback(void *user, void *data) {
 
 static int asm_profile(RConfig *cfg, const char *profile) {
 	// TODO: Do a cleanup on those configurations
-	if (!strcmp(profile, "help")) {
-		eprintf("Available asm.profile:\n"
+	if (!strcmp (profile, "help") || *profile == '?') {
+		r_cons_printf ("Available asm.profile:\n"
 			" default, gas, smart, graph, debug, full, simple\n");
 		return R_FALSE;
 	} else if (!strcmp (profile, "default")) {
@@ -222,6 +250,24 @@ static int config_tracetag_callback(void *user, void *data) {
 	return R_TRUE;
 }
 
+static int config_fsview_callback(void *user, void *data) {
+	int type = R_FS_VIEW_NORMAL;
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	if (!strcmp (node->value, "?")) {
+		eprintf ("Values: all|deleted|special\n");
+		return R_FALSE;
+	}
+	if (!strcmp (node->value, "all"))
+		type = R_FS_VIEW_ALL;
+	if (!strstr (node->value, "del"))
+		type |= R_FS_VIEW_DELETED;
+	if (!strstr (node->value, "spe"))
+		type |= R_FS_VIEW_SPECIAL;
+	r_fs_view (core->fs, type);
+	return R_TRUE;
+}
+
 static int config_scrprompt_callback(void *user, void *data) {
 	RConfigNode *node = (RConfigNode *) data;
 	r_line_singleton()->echo = node->i_value;
@@ -300,16 +346,20 @@ static int config_color_callback(void *user, void *data) {
 	return R_TRUE;
 }
 
+#define SLURP_LIMIT (10*1024*1024)
 R_API int r_core_config_init(RCore *core) {
 	RConfig *cfg = cfg = core->config = r_config_new (core);
+	const char *p;
 	cfg->printf = r_cons_printf;
 
+	r_config_set (cfg, "dir.source", "");
 	r_config_set (cfg, "dir.plugins", LIBDIR"/radare2/"R2_VERSION"/");
 	/* anal */
-	r_config_set_i (cfg, "anal.depth", 100);
+	r_config_set (cfg, "anal.prelude", "");
+	r_config_set_i (cfg, "anal.depth", 50); // XXX: warn if depth is > 50 .. can be problematic
 	r_config_set_i (cfg, "anal.ptrdepth", 3);
 	r_config_set_cb (cfg, "anal.split", "true", &config_analsplit_callback);
-	r_config_set_cb (cfg, "anal.plugin", "x86", &config_analplugin_callback);
+	r_config_set_cb (cfg, "anal.plugin", R_SYS_ARCH, &config_analplugin_callback);
 	/* asm */
 	r_config_set_cb (cfg, "asm.arch", R_SYS_ARCH, &config_asmarch_callback);
 	// XXX: not portable
@@ -349,15 +399,25 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_set_cb (cfg, "cfg.debug", "false", &config_cfgdebug_callback);
 	r_config_set_cb (cfg, "cfg.datefmt", "%d:%m:%Y %H:%M:%S %z", &config_cfgdatefmt_callback);
 	r_config_set (cfg, "cfg.fortunes", "true");
+	r_config_set_i (cfg, "cfg.maxbsize", 524288);
+	r_config_set (cfg, "cfg.wseek", "false");
+	r_config_set_i (cfg, "cfg.hashlimit", SLURP_LIMIT);
+
+	r_config_set_i (cfg, "dbg.follow", 32);
 	r_config_set (cfg, "dbg.backend", "native");
 	r_config_set (cfg, "dbg.bep", "loader"); // loader, entry, constructor, main
 	r_config_set_cb (cfg, "dbg.stopthreads", "true", &config_stopthreads_callback);
 	r_config_set_cb (cfg, "dbg.swstep", "false", &config_swstep_callback);
 	r_config_set_cb (cfg, "dbg.trace", "true", &config_trace_callback);
 	r_config_set_cb (cfg, "dbg.trace.tag", "0xff", &config_tracetag_callback);
+	r_config_set_cb (cfg, "fs.view", "normal", &config_fsview_callback);
+	r_config_set (cfg, "bin.strings", "true"); 
+	p = r_sys_getenv ("EDITOR");
+	r_config_set (cfg, "cfg.editor", p? p: "vi");
 	r_config_set (cfg, "cmd.hit", "");
 	r_config_set (cfg, "cmd.open", "");
 	r_config_set (cfg, "cmd.prompt", "");
+	r_config_set (cfg, "cmd.cprompt", "");
 	r_config_set (cfg, "cmd.vprompt", "");
 	r_config_set (cfg, "cmd.bp", "");
 	r_config_set_cb (cfg, "scr.tee", "", config_teefile_callback);
@@ -365,12 +425,14 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_set_cb (cfg, "scr.color",
 		(core->print->flags&R_PRINT_FLAGS_COLOR)?"true":"false",
 		&config_color_callback);
-	r_config_set (cfg, "scr.fkey", "function");
+	r_config_set_cb (cfg, "scr.fkey", "function", &config_scrfkey_callback);
 	r_config_set (cfg, "scr.seek", "");
 	r_config_set_i_cb (cfg, "scr.cols", 16, &config_scrcols_callback);
+	r_config_set_i (cfg, "search.kwidx", 0);
+	r_config_set_i (cfg, "search.count", 0);
 	r_config_set (cfg, "search.prefix", "hit");
-	r_config_set_i (cfg, "search.from", 0);
-	r_config_set_i (cfg, "search.to", 0);
+	r_config_set_i (cfg, "search.from", UT64_MAX);
+	r_config_set_i (cfg, "search.to", UT64_MAX);
 	r_config_set_i (cfg, "search.distance", 0); // TODO: use i_cb here and remove code in cmd.c
 	r_config_set_i_cb (cfg, "search.align", 0, &config_searchalign_callback);
 	r_config_set (cfg, "search.asmstr", "true");
@@ -386,10 +448,24 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_set (cfg, "file.type", "");
 	r_config_set_i (cfg, "magic.depth", 100);
 	r_config_set (cfg, "rap.loop", "true");
+	/* fkeys */
+	r_config_set (cfg, "key.f1", ""); 
+	r_config_set (cfg, "key.f2", ""); 
+	r_config_set (cfg, "key.f3", ""); 
+	r_config_set (cfg, "key.f4", ""); 
+	r_config_set (cfg, "key.f5", ""); 
+	r_config_set (cfg, "key.f6", ""); 
+	r_config_set (cfg, "key.f7", ""); 
+	r_config_set (cfg, "key.f8", ""); 
+	r_config_set (cfg, "key.f9", ""); 
+	r_config_set (cfg, "key.f10", ""); 
+	r_config_set (cfg, "key.f11", ""); 
+	r_config_set (cfg, "key.f12", ""); 
 	/* zoom */
+	r_config_set_i (cfg, "zoom.maxsz", 512);
 	r_config_set_i (cfg, "zoom.from", 0);
 	r_config_set_i (cfg, "zoom.to", 0);
-	r_config_set (cfg, "zoom.byte", "h");
+	r_config_set_cb (cfg, "zoom.byte", "h", &config_zoombyte_callback);
 	/* TODO cmd */
 #if 0
 
@@ -566,6 +642,7 @@ R_API int r_core_config_init(RCore *core) {
 	snprintf(buf, 1023, "%s/.radare/rdb/", getenv("HOME"));
 	config_set("dir.project", buf); // ~/.radare/rdb/
 	config_set("dir.tmp", get_tmp_dir());
+	config_set_cb ("fs.view", "normal");
 	config_set("graph.color", "magic");
 	config_set("graph.split", "false"); // split blocks // SHOULD BE TRUE, but true algo is buggy
 	config_set("graph.jmpblocks", "true");

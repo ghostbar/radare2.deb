@@ -100,8 +100,8 @@ static int       nresult;              // Current length of disassembly
 static int       addcomment;           // Comment value of operand
 
 // Copy of input parameters of function Disasm()
-static unsigned char      *cmd;                 // Pointer to binary data
-static unsigned char      *pfixup;              // Pointer to possible fixups or NULL
+static const unsigned char *cmd;                // Pointer to binary data
+static const unsigned char *pfixup;             // Pointer to possible fixups or NULL
 static ulong              size;                 // Remaining size of the command buffer
 static t_disasm           *da;                  // Pointer to disassembly results
 static int                mode;                 // Disassembly mode (DISASM_xxx)
@@ -221,7 +221,7 @@ static void Memadr(int defseg,const char *descr,slong offset,int dsize) {
 // Disassemble memory/register from the ModRM/SIB bytes and, if available, dump
 // address and contents of memory.
 static void DecodeMR(int type) {
-  int j,memonly,inmemory,seg;
+  int j,memonly,inmemory,seg = -1;
   int c,sib;
   ulong dsize,regsize,addr;
   char s[TEXTLEN];
@@ -448,7 +448,8 @@ static void DecodeMR(int type) {
           strcat(s,"*8");
         };
       };
-      Memadr(seg,s,addr,dsize);
+      if (seg!=-1)
+        Memadr(seg,s,addr,dsize);
     };
   }
   // Last possibility: 32-bit address without SIB byte.
@@ -793,7 +794,7 @@ int Checkcondition(int code,ulong flags) {
   else return (cond==0);               // Invert condition
 };
 
-ulong Disasm(unsigned char *src,ulong srcsize,ulong srcip,
+ulong Disasm(const unsigned char *src,ulong srcsize,ulong srcip,
   t_disasm *disasm,int disasmmode) {
   int i,j,isprefix,is3dnow,repeated,operand,mnemosize,arg;
   ulong u,code;

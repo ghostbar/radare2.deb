@@ -140,10 +140,10 @@ enum {
 	R_ANAL_STACK_SET,
 };
 
-typedef enum {
+enum {
 	R_ANAL_REFLINE_TYPE_STYLE = 1,
 	R_ANAL_REFLINE_TYPE_WIDE = 2,
-} _RAnalReflineType;
+};
 
 enum {
 	R_ANAL_RET_ERROR = -1,
@@ -164,6 +164,7 @@ typedef struct r_anal_t {
 	RMeta *meta;
 	RReg *reg;
 	RSyscall *syscall;
+	struct r_anal_op_t *queued;
 	RIOBind iob;
 	struct r_anal_ctx_t *ctx;
 	struct r_anal_plugin_t *cur;
@@ -193,6 +194,8 @@ typedef struct r_anal_op_t {
 	int nopcode;    /* number of bytes representing the opcode (not the arguments) */
 	int family;     /* family of opcode */
 	int eob;        /* end of block (boolean) */
+	/* Run N instructions before executing the current one */
+	int delay;      /* delay N slots (mips, ..)*/
 	ut64 jump;      /* true jmp */
 	ut64 fail;      /* false jmp */
 	ut32 selector;  /* segment selector */
@@ -202,6 +205,7 @@ typedef struct r_anal_op_t {
 	RAnalValue *src[3];
 	RAnalValue *dst;
 	int refptr;
+	struct r_anal_op_t *next;
 } RAnalOp;
 
 #define R_ANAL_COND_SINGLE(x) (!x->arg[1] || x->arg[0]==x->arg[1])
@@ -326,7 +330,7 @@ typedef struct r_anal_var_type_t {
 	ut32 size;
 } RAnalVarType;
 
-enum {
+typedef enum {
 	R_ANAL_REF_TYPE_NULL = 0,
 	R_ANAL_REF_TYPE_CODE = 'c', // code ref
 	R_ANAL_REF_TYPE_CALL = 'C', // code ref (call)
@@ -357,6 +361,8 @@ typedef int (*RAnalDiffEvalCallback)(RAnal *anal);
 typedef struct r_anal_plugin_t {
 	char *name;
 	char *desc;
+	int arch;
+	int bits;
 	int (*init)(void *user);
 	int (*fini)(void *user);
 	RAnalOpCallback op;
@@ -463,6 +469,7 @@ R_API int r_anal_diff_eval(RAnal *anal);
 
 /* value.c */
 R_API RAnalValue *r_anal_value_new();
+R_API RAnalValue *r_anal_value_copy (RAnalValue *ov);
 R_API RAnalValue *r_anal_value_new_from_string(const char *str);
 R_API st64 r_anal_value_eval(RAnalValue *value);
 R_API char *r_anal_value_to_string (RAnalValue *value);
@@ -503,6 +510,7 @@ R_API RMeta *r_meta_new();
 R_API void r_meta_free(RMeta *m);
 R_API int r_meta_count(RMeta *m, int type, ut64 from, ut64 to);
 R_API char *r_meta_get_string(RMeta *m, int type, ut64 addr);
+R_API int r_meta_set_string(RMeta *m, int type, ut64 addr, const char *s);
 R_API int r_meta_del(RMeta *m, int type, ut64 from, ut64 size, const char *str);
 R_API int r_meta_add(RMeta *m, int type, ut64 from, ut64 size, const char *str);
 R_API struct r_meta_item_t *r_meta_find(RMeta *m, ut64 off, int type, int where);
@@ -522,6 +530,7 @@ extern RAnalPlugin r_anal_plugin_ppc;
 extern RAnalPlugin r_anal_plugin_java;
 extern RAnalPlugin r_anal_plugin_mips;
 extern RAnalPlugin r_anal_plugin_dalvik;
+extern RAnalPlugin r_anal_plugin_sh;
 
 #endif
 #endif

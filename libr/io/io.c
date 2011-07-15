@@ -8,20 +8,20 @@
 //  --- check for EXEC perms in section (use cached read to accelerate)
 
 R_API struct r_io_t *r_io_new() {
-	RIO *io = R_NEW (struct r_io_t);
-	if (io) {
-		io->fd = NULL;
-		io->write_mask_fd = -1;
-		io->redirect = NULL;
-		io->printf = (void*) printf;
-		io->plugin = NULL;
-		r_io_cache_init (io);
-		r_io_map_init (io);
-		r_io_section_init (io);
-		r_io_plugin_init (io);
-		r_io_desc_init (io);
-		r_io_undo_init (io);
-	}
+	RIO *io = R_NEW (RIO);
+	if (!io) return NULL;
+	io->fd = NULL;
+	io->write_mask_fd = -1;
+	io->redirect = NULL;
+	io->printf = (void*) printf;
+	io->plugin = NULL;
+	io->raised = -1;
+	r_io_cache_init (io);
+	r_io_map_init (io);
+	r_io_section_init (io);
+	r_io_plugin_init (io);
+	r_io_desc_init (io);
+	r_io_undo_init (io);
 	return io;
 }
 
@@ -63,14 +63,13 @@ R_API int r_io_redirect(struct r_io_t *io, const char *file) {
 R_API RIODesc *r_io_open_as(struct r_io_t *io, const char *urihandler, const char *file, int flags, int mode) {
 	RIODesc *ret;
 	char *uri;
-	int urilen = strlen (urihandler);
-	uri = malloc (strlen (urihandler)+strlen (file)+5);
+	int urilen, hlen = strlen (urihandler);
+	urilen = hlen + strlen (file)+5;
+	uri = malloc (urilen);
 	if (uri == NULL)
 		return NULL;
-	if (urilen>0)
-		sprintf (uri, "%s://", urihandler);
-	else *uri = '\0';
-	strcpy (uri+urilen, file);
+	if (hlen>0) snprintf (uri, urilen, "%s://%s", urihandler, file);
+	else strncpy (uri, file, urilen);
 	ret = r_io_open (io, uri, flags, mode);
 	free (uri);
 	return ret;
@@ -148,18 +147,26 @@ R_API int r_io_set_fdn(RIO *io, int fd) {
 }
 
 R_API int r_io_read(RIO *io, ut8 *buf, int len) {
-	ut64 off;
 	int ret;
 	if (io==NULL || io->fd == NULL)
 		return -1;
 	/* check section permissions */
 	if (io->enforce_rwx && !(r_io_section_get_rwx (io, io->off) & R_IO_READ))
 		return -1;
-#if 0
+
+	ret = -1;
+	if (io->plugin && io->plugin->read) {
+		if (io->plugin->read != NULL)
+			ret = io->plugin->read (io, io->fd, buf, len);
+		else eprintf ("IO plugin for fd=%d has no read()\n", io->fd->fd);
+	} else ret = read (io->fd->fd, buf, len);
+	if (ret>0 && ret<len)
+		memset (buf+ret, 0xff, len-ret);
 	if (io->cached) {
 		ret = r_io_cache_read (io, io->off, buf, len);
-		if (ret == len)
+		if (ret == len) {
 			return len;
+		}
 		if (ret > 0) {
 			len -= ret;
 			buf += ret;
@@ -168,25 +175,17 @@ R_API int r_io_read(RIO *io, ut8 *buf, int len) {
 		if (ret == len)
 			return len;
 	}
-#endif
-	off = io->off;
-	if (r_io_map_select (io, io->off)) {
-		if (io->plugin && io->plugin->read) {
-			if (io->plugin->read != NULL)
-				ret = io->plugin->read (io, io->fd, buf, len);
-			else eprintf ("IO plugin for fd=%d has no read()\n", io->fd->fd);
-		} else ret = read (io->fd->fd, buf, len);
-		if (ret>0 && ret<len)
-			memset (buf+ret, 0xff, len-ret);
-	}
 	// this must be before?? r_io_cache_read (io, io->off, buf, len);
-	r_io_seek (io, off, R_IO_SEEK_SET);
+//	eprintf ("--RET-- %llx\n", r_io_seek (io, off, R_IO_SEEK_SET));
+
 	return ret;
 }
 
 R_API int r_io_read_at(struct r_io_t *io, ut64 addr, ut8 *buf, int len) {
-	if (r_io_seek (io, addr, R_IO_SEEK_SET)==-1)
+	if (r_io_seek (io, addr, R_IO_SEEK_SET)==UT64_MAX) {
+		memset (buf, 0xff, len);
 		return -1;
+	}
 	return r_io_read (io, buf, len);
 }
 
@@ -253,16 +252,19 @@ R_API int r_io_write(struct r_io_t *io, const ut8 *buf, int len) {
 				io->write_mask_buf[i%io->write_mask_len];
 		buf = data;
 	}
+	
 
-	if (r_io_map_select (io, io->off)) {
-		if (io->plugin) {
-			if (io->plugin->write)
-				ret = io->plugin->write (io, io->fd, buf, len);
-			else eprintf ("r_io_write: io handler with no write callback\n");
-		} else ret = write (io->fd->fd, buf, len);
-		if (ret == -1)
-			eprintf ("r_io_write: cannot write on fd %d\n", io->fd->fd);
-	} else ret = len;
+	r_io_map_select(io,io->off);
+
+	if (io->plugin) {
+		if (io->plugin->write)
+			ret = io->plugin->write (io, io->fd, buf, len);
+		else eprintf ("r_io_write: io handler with no write callback\n");
+	} else ret = write (io->fd->fd, buf, len);
+
+	if (ret == -1)
+		eprintf ("r_io_write: cannot write on fd %d\n", io->fd->fd);
+
 	if (data)
 		free (data);
 	return ret;
@@ -276,11 +278,11 @@ R_API int r_io_write_at(struct r_io_t *io, ut64 addr, const ut8 *buf, int len) {
 
 R_API ut64 r_io_seek(struct r_io_t *io, ut64 offset, int whence) {
 	int posix_whence = SEEK_SET;
-	ut64 ret = -1;
+	ut64 ret = UT64_MAX;
 	switch (whence) {
 	case R_IO_SEEK_SET:
 		posix_whence = SEEK_SET;
-		ret=offset;
+		ret = offset;
 		break;
 	case R_IO_SEEK_CUR:
 //		offset += io->off;
@@ -296,19 +298,22 @@ R_API ut64 r_io_seek(struct r_io_t *io, ut64 offset, int whence) {
 	if (io == NULL)
 		return ret;
 	// XXX: list_empty trick must be done in r_io_set_va();
-	offset = (!io->debug && io->va && !list_empty (&io->sections))? 
+	offset = (!io->debug && io->va && !r_list_empty (io->sections))?
 		r_io_section_vaddr_to_offset (io, offset) : offset;
+	// if resolution fails... just return as invalid address
+	if (offset==UT64_MAX)
+		return UT64_MAX;
 	// TODO: implement io->enforce_seek here!
 	if (io->fd != NULL) {
 		if (io->plugin && io->plugin->lseek)
 			ret = io->plugin->lseek (io, io->fd, offset, whence);
 		// XXX can be problematic on w32..so no 64 bit offset?
-		else ret = lseek (io->fd->fd, offset, posix_whence);
-		if (ret != -1) {
+		else ret = (ut64)lseek (io->fd->fd, offset, posix_whence);
+		if (ret != UT64_MAX) {
 			io->off = ret;
-			// XXX this can be tricky.. better not to use this .. must be deprecated 
+			// XXX this can be tricky.. better not to use this .. must be deprecated
 			// r_io_sundo_push (io);
-			ret = (!io->debug && io->va && !list_empty (&io->sections))?
+			ret = (!io->debug && io->va && !r_list_empty (io->sections))?
 				r_io_section_offset_to_vaddr (io, io->off) : io->off;
 		} //else eprintf ("r_io_seek: cannot seek to %"PFMT64x"\n", offset);
 	} //else { eprintf ("r_io_seek: null fd\n"); }

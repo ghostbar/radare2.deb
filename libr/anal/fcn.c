@@ -51,6 +51,7 @@ R_API int r_anal_fcn(RAnal *anal, RAnalFcn *fcn, ut64 addr, ut8 *buf, ut64 len, 
 		fcn->addr = addr;
 	fcn->type = (reftype==R_ANAL_REF_TYPE_CODE)?
 		R_ANAL_FCN_TYPE_LOC: R_ANAL_FCN_TYPE_FCN;
+	len -= 16; // XXX: hack to avoid buffer overflow by reading >64 bytes..
 	while (idx < len) {
 		if ((oplen = r_anal_op (anal, &op, addr+idx, buf+idx, len-idx)) == 0) {
 			if (idx == 0) {
@@ -146,14 +147,20 @@ R_API int r_anal_fcn_add(RAnal *anal, ut64 addr, ut64 size, const char *name, in
 
 R_API int r_anal_fcn_del(RAnal *anal, ut64 addr) {
 	RAnalFcn *fcni;
-	RListIter *iter;
+	RListIter it, *iter;
 	if (addr == 0) {
 		r_list_free (anal->fcns);
 		if (!(anal->fcns = r_anal_fcn_list_new ()))
 			return R_FALSE;
-	} else r_list_foreach (anal->fcns, iter, fcni)
-		if (addr >= fcni->addr && addr < fcni->addr+fcni->size)
-			r_list_unlink (anal->fcns, fcni);
+	} else {
+		r_list_foreach (anal->fcns, iter, fcni) {
+			if (addr >= fcni->addr && addr < fcni->addr+fcni->size) {
+				it.n = iter->n;
+				r_list_delete (anal->fcns, iter);
+				iter = &it;
+			}
+		}
+	}
 	return R_TRUE;
 }
 
@@ -248,6 +255,7 @@ R_API int r_anal_fcn_split_bb(RAnalFcn *fcn, RAnalBlock *bb, ut64 addr) {
 
 R_API int r_anal_fcn_overlap_bb(RAnalFcn *fcn, RAnalBlock *bb) {
 	RAnalBlock *bbi;
+	RListIter nit; // hack to make r_list_unlink not fail that hard
 	RAnalOp *opi;
 	RListIter *iter;
 
@@ -261,9 +269,15 @@ R_API int r_anal_fcn_overlap_bb(RAnalFcn *fcn, RAnalBlock *bb) {
 				bb->type = R_ANAL_BB_TYPE_HEAD;
 				bbi->type = bbi->type^R_ANAL_BB_TYPE_HEAD;
 			} else bb->type = R_ANAL_BB_TYPE_BODY;
-			r_list_foreach (bb->ops, iter, opi)
-				if (opi->addr >= bbi->addr)
-					r_list_unlink (bb->ops, opi);
+			r_list_foreach (bb->ops, iter, opi) {
+				if (opi->addr >= bbi->addr) {
+					nit.n = iter->n;
+			//		eprintf ("Must delete opi %p\n", iter);
+					r_list_delete (bb->ops, iter);
+					iter = &nit;
+				}
+			}
+					//r_list_unlink (bb->ops, opi);
 			r_list_append (fcn->bbs, bb);
 			return R_ANAL_RET_END;
 		}

@@ -24,13 +24,22 @@ R_API int r_meta_count(RMeta *m, int type, ut64 from, ut64 to) {
 	int count = 0;
 
 	r_list_foreach (m->data, iter, d) {
-		if (d->type == type || type == R_META_TYPE_ANY) {
-			if (from >= d->from && d->to < to) {
+		if (d->type == type || type == R_META_TYPE_ANY)
+			if (from >= d->from && d->to < to)
 				count++;
-			}
-		}
 	}
 	return count;
+}
+
+R_API int r_meta_set_string(RMeta *m, int type, ut64 addr, const char *s) {
+	RMetaItem *mi = r_meta_find (m, addr, type, R_META_WHERE_HERE);
+	if (mi) {
+		free (mi->str);
+		mi->str = strdup (s);
+		return R_TRUE;
+	}
+	r_meta_add (m, type, addr, addr+1, s);
+	return R_FALSE;
 }
 
 R_API char *r_meta_get_string(RMeta *m, int type, ut64 addr) {
@@ -58,7 +67,7 @@ R_API char *r_meta_get_string(RMeta *m, int type, ut64 addr) {
 			if (d->from == addr)
 			switch (d->type) {
 			case R_META_TYPE_COMMENT:
-				str = r_str_concatf (str, "; %s\n", d->str);
+				str = r_str_concatf (str, "%s\n", d->str);
 				break;
 			}
 		}
@@ -67,18 +76,20 @@ R_API char *r_meta_get_string(RMeta *m, int type, ut64 addr) {
 }
 
 R_API int r_meta_del(RMeta *m, int type, ut64 from, ut64 size, const char *str) {
-	int ret = R_FALSE;
-	RListIter *iter;
+	int ret = 0;
+	RListIter it, *iter;
 	RMetaItem *d;
 
 	r_list_foreach (m->data, iter, d) {
 		if (d->type == type || type == R_META_TYPE_ANY) {
-			if (str != NULL && !strstr(d->str, str))
+			if (str != NULL && !strstr (d->str, str))
 				continue;
-			if (from >= d->from && from <= d->to) {
+			if (size==UT64_MAX || (from+size >= d->from && from <= d->to+size)) {
 				free (d->str);
+				it.n = iter->n;
 				r_list_delete (m->data, iter);
-				ret = R_TRUE;
+				iter = &it;
+				ret++;
 			}
 		}
 	}
@@ -114,16 +125,16 @@ R_API int r_meta_cleanup(RMeta *m, ut64 from, ut64 to) {
 			} else
 			if (from>d->from && from<d->to &&to>d->to) {
 				d->to = from;
-				ret= R_TRUE;
+				ret = R_TRUE;
 			} else
 			if (from>d->from&&from<d->to&&to<d->to) {
 				// XXX split!
 				d->to = from;
-				ret= R_TRUE;
+				ret = R_TRUE;
 			} else
 			if (from>d->from&&to<d->to) {
 				r_list_delete (m->data, iter);
-				ret= R_TRUE;
+				ret = R_TRUE;
 			}
 			break;
 		}
@@ -143,8 +154,23 @@ R_API RMetaItem *r_meta_item_new(int type) {
 	return mi;
 }
 
+// TODO: This is ultraslow. must accelerate with hashtables
+R_API int r_meta_comment_check (RMeta *m, const char *s) {
+	RMetaItem *d;
+	RListIter *iter;
+
+	r_list_foreach (m->data, iter, d) {
+		if (d->type == R_META_TYPE_COMMENT && (!strcmp (s, d->str)))
+			return R_TRUE;
+	}
+	
+	return R_FALSE;
+}
+
 R_API int r_meta_add(RMeta *m, int type, ut64 from, ut64 to, const char *str) {
-	RMetaItem *mi = r_meta_item_new (type);
+	RMetaItem *mi;
+	if (to<from)
+		to = from+to;
 	switch (type) {
 	case R_META_TYPE_CODE:
 	case R_META_TYPE_DATA:
@@ -153,12 +179,15 @@ R_API int r_meta_add(RMeta *m, int type, ut64 from, ut64 to, const char *str) {
 		/* we should remove overlapped types and so on.. */
 		r_meta_cleanup (m, from, to);
 	case R_META_TYPE_COMMENT:
+		if (type == R_META_TYPE_COMMENT)
+			if (r_meta_comment_check (m, str))
+				return R_FALSE;
+		mi = r_meta_item_new (type);
 		mi->size = R_ABS (to-from);//size;
 		mi->type = type;
 		mi->from = from;
 		mi->to = to;
-		if (str) mi->str = strdup (str);
-		else mi->str = NULL;
+		mi->str = str? strdup (str): NULL;
 		r_list_append (m->data, mi);
 		break;
 	default:
@@ -172,7 +201,6 @@ R_API int r_meta_add(RMeta *m, int type, ut64 from, ut64 to, const char *str) {
 R_API RMetaItem *r_meta_find(RMeta *m, ut64 off, int type, int where) {
 	RMetaItem *d, *it = NULL;
 	RListIter *iter;
-	if (off)
 	r_list_foreach (m->data, iter, d) {
 		if (d->type == type || type == R_META_TYPE_ANY) {
 			switch (where) {
@@ -181,7 +209,7 @@ R_API RMetaItem *r_meta_find(RMeta *m, ut64 off, int type, int where) {
 					it = d;
 				break;
 			case R_META_WHERE_HERE:
-				if (off>=d->from && off <d->to)
+				if (off>=d->from && (!off || (off<d->to)))
 					it = d;
 				break;
 			case R_META_WHERE_NEXT:
@@ -254,10 +282,14 @@ struct r_range_t *r_meta_ranges(RMeta *m)
 
 static void printmetaitem(RMeta *m, RMetaItem *d) {
 	char *str = r_str_unscape (d->str);
-	m->printf ("%s %d \"%s\" @ 0x%08"PFMT64x"\n",
-		r_meta_type_to_string (d->type),
-		(int)(d->to-d->from), str, d->from);
-	free (str);
+	if (str) {
+		if (d->type=='s' && !*str)
+			return;
+		m->printf ("%s %d %s @ 0x%08"PFMT64x"\n",
+			r_meta_type_to_string (d->type),
+			(int)(d->to-d->from), str, d->from);
+		free (str);
+	}
 }
 
 // TODO: Deprecate

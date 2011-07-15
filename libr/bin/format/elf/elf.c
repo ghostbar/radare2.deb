@@ -1,5 +1,5 @@
-/* radare - LGPL - Copyright 2008-2010 nibble<.ds@gmail.com> */
-
+/* radare - LGPL - Copyright 2008-2011 nibble<.ds@gmail.com>, pancake<nopcode.org> */
+// TODO: review the rest of strtab index out of range
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -92,17 +92,15 @@ static int Elf_(r_bin_elf_init_shdr)(struct Elf_(r_bin_elf_obj_t) *bin) {
 }
 
 static int Elf_(r_bin_elf_init_strtab)(struct Elf_(r_bin_elf_obj_t) *bin) {
-	Elf_(Shdr) *strtab_section;
-
 	if (!bin->shdr)
 		return  R_FALSE;
-	strtab_section = &bin->shdr[bin->ehdr.e_shstrndx];
-	if ((bin->strtab = (char *)malloc (strtab_section->sh_size)) == NULL) {
+	bin->strtab_section = &bin->shdr[bin->ehdr.e_shstrndx];
+	if ((bin->strtab = (char *)malloc (bin->strtab_section->sh_size)) == NULL) {
 		perror ("malloc");
 		return R_FALSE;
 	}
-	if (r_buf_read_at (bin->b, strtab_section->sh_offset, (ut8*)bin->strtab,
-				strtab_section->sh_size) == -1) {
+	if (r_buf_read_at (bin->b, bin->strtab_section->sh_offset, (ut8*)bin->strtab,
+				bin->strtab_section->sh_size) == -1) {
 		eprintf ("Error: read (strtab)\n");
 		R_FREE (bin->strtab);
 		return R_FALSE;
@@ -114,6 +112,7 @@ static int Elf_(r_bin_elf_init)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	bin->phdr = NULL;
 	bin->shdr = NULL;
 	bin->strtab = NULL;
+	bin->strtab_section = NULL;
 	if (!Elf_(r_bin_elf_init_ehdr) (bin)) {
 		eprintf ("Warning: File is not ELF\n");
 		return R_FALSE;
@@ -133,9 +132,12 @@ static ut64 Elf_(r_bin_elf_get_section_offset)(struct Elf_(r_bin_elf_obj_t) *bin
 	int i;
 	if (!bin->shdr || !bin->strtab)
 		return -1;
-	for (i = 0; i < bin->ehdr.e_shnum; i++)
+	for (i = 0; i < bin->ehdr.e_shnum; i++) {
+		if (bin->shdr[i].sh_name > bin->strtab_section->sh_size)
+			continue;
 		if (!strcmp (&bin->strtab[bin->shdr[i].sh_name], section_name))
 			return (ut64)bin->shdr[i].sh_offset;
+	}
 	return -1;
 }
 
@@ -226,6 +228,8 @@ ut64 Elf_(r_bin_elf_get_main_offset)(struct Elf_(r_bin_elf_obj_t) *bin) {
 		eprintf ("Error: read (entry)\n");
 		return 0;
 	}
+	// TODO: Use arch to identify arch before memcmp's
+
 	// MIPS
 	/* get .got, calculate offset of main symbol */
 	if (!memcmp (buf, "\x21\x00\xe0\x03\x01\x00\x11\x04\x00\x00\x00\x00", 12)) {
@@ -242,7 +246,11 @@ ut64 Elf_(r_bin_elf_get_main_offset)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	}
 	// X86
 #if R_BIN_ELF64
-	if (!memcmp (buf+29, "\x48\xc7\xc7", 3))
+	if (!memcmp (buf, "\x49\x89\xd9", 3) && buf[156] == 0xe8) {// openbsd
+		return (ut64)((int)(buf[157+0]+(buf[157+1]<<8)+
+		(buf[157+2]<<16)+(buf[157+3]<<24)))+ entry + 156 + 5;
+	}
+	if (!memcmp (buf+29, "\x48\xc7\xc7", 3)) // linux
 		return (ut64)((int)(buf[29+3]+(buf[29+4]<<8)+
 		(buf[29+5]<<16)+(buf[29+6]<<24)))-bin->baddr;
 #else
@@ -301,6 +309,8 @@ char* Elf_(r_bin_elf_get_arch)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	case EM_PPC:
 	case EM_PPC64:
 		return strdup ("ppc");
+	case EM_SH:
+		return strdup ("sh");
 	default:
 		return strdup ("x86");
 	}
@@ -456,7 +466,7 @@ char *Elf_(r_bin_elf_get_rpath)(struct Elf_(r_bin_elf_obj_t) *bin) {
 		return NULL;
 	for (i = 0; i < bin->ehdr.e_phnum; i++)
 		if (bin->phdr[i].p_type == PT_DYNAMIC) {
-			if (!(dyn = malloc (bin->phdr[i].p_filesz))) {
+			if (!(dyn = malloc (1+bin->phdr[i].p_filesz))) {
 				perror ("malloc (dyn)");
 				return NULL;
 			}
@@ -502,7 +512,6 @@ char *Elf_(r_bin_elf_get_rpath)(struct Elf_(r_bin_elf_obj_t) *bin) {
 
 struct r_bin_elf_reloc_t* Elf_(r_bin_elf_get_relocs)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	struct r_bin_elf_reloc_t *ret = NULL;
-	Elf_(Shdr) *strtab_section;
 	Elf_(Sym) *sym = NULL;
 	Elf_(Rel) *rel;
 	ut64 got_addr, got_offset;
@@ -519,12 +528,12 @@ struct r_bin_elf_reloc_t* Elf_(r_bin_elf_get_relocs)(struct Elf_(r_bin_elf_obj_t
 		return NULL;
 	for (i = 0, nsym = 0; i < bin->ehdr.e_shnum; i++)
 		if (bin->shdr[i].sh_type == (bin->ehdr.e_type == ET_REL ? SHT_SYMTAB : SHT_DYNSYM)) {
-			strtab_section = &bin->shdr[bin->shdr[i].sh_link];
-			if ((strtab = (char *)malloc (8+strtab_section->sh_size)) == NULL) {
+			bin->strtab_section = &bin->shdr[bin->shdr[i].sh_link];
+			if ((strtab = (char *)malloc (8+bin->strtab_section->sh_size)) == NULL) {
 				perror ("malloc (syms strtab)");
 				return NULL;
 			}
-			if (r_buf_read_at (bin->b, strtab_section->sh_offset, (ut8*)strtab, strtab_section->sh_size) == -1) {
+			if (r_buf_read_at (bin->b, bin->strtab_section->sh_offset, (ut8*)strtab, bin->strtab_section->sh_size) == -1) {
 				eprintf ("Error: read (syms strtab)\n");
 				return NULL;
 			}
@@ -545,11 +554,18 @@ struct r_bin_elf_reloc_t* Elf_(r_bin_elf_get_relocs)(struct Elf_(r_bin_elf_obj_t
 			}
 		}
 	for (i = 0; i < bin->ehdr.e_shnum; i++) {
+		if (bin->shdr[i].sh_name > bin->strtab_section->sh_size) {
+			eprintf ("Invalid shdr index in strtab %d/%"PFMT64d"\n",
+				bin->shdr[i].sh_name, (ut64) bin->strtab_section->sh_size);
+			continue;
+		}
 		if (!strcmp (&bin->strtab[bin->shdr[i].sh_name], ".rel.plt"))
 			tsize = sizeof (Elf_(Rel));
 		else if (!strcmp (&bin->strtab[bin->shdr[i].sh_name], ".rela.plt"))
 			tsize = sizeof (Elf_(Rela));
 		else continue;
+		if (tsize <1)
+			return ret; // -1 ?
 		if ((rel = (Elf_(Rel) *)malloc ((int)(bin->shdr[i].sh_size / tsize) * sizeof (Elf_(Rel)))) == NULL) {
 			perror ("malloc (rel)");
 			return NULL;
@@ -574,6 +590,11 @@ struct r_bin_elf_reloc_t* Elf_(r_bin_elf_get_relocs)(struct Elf_(r_bin_elf_obj_t
 		for (j =  0; j < nrel; j++) {
 			idx = ELF_R_SYM (rel[j].r_info);
 			if (idx < nsym) {
+				if (sym[idx].st_name > bin->strtab_section->sh_size) {
+					eprintf ("Invalid symbol index in strtab %d/%"PFMT64d"\n",
+							bin->shdr[i].sh_name, (ut64) bin->strtab_section->sh_size);
+					continue;
+				}
 				len = __strnlen (&strtab[sym[idx].st_name], ELF_STRING_LENGTH-1);
 				memcpy (ret[j].name, &strtab[sym[idx].st_name], len);
 			} else strncpy (ret[j].name, "unknown", ELF_STRING_LENGTH);
@@ -741,6 +762,10 @@ struct r_bin_elf_symbol_t* Elf_(r_bin_elf_get_symbols)(struct Elf_(r_bin_elf_obj
 				}
 				ret[ret_ctr].offset = (toffset >= bin->baddr ? toffset -= bin->baddr : toffset);
 				ret[ret_ctr].size = tsize;
+				if (sym[k].st_name > strtab_section->sh_size) {
+					perror ("index out of strtab range\n");
+					return NULL;
+				}
 				len = __strnlen (&strtab[sym[k].st_name], ELF_STRING_LENGTH-1);
 				memcpy (ret[ret_ctr].name, &strtab[sym[k].st_name], len);
 				ret[ret_ctr].ordinal = k;
@@ -811,14 +836,11 @@ struct r_bin_elf_field_t* Elf_(r_bin_elf_get_fields)(struct Elf_(r_bin_elf_obj_t
 void* Elf_(r_bin_elf_free)(struct Elf_(r_bin_elf_obj_t)* bin) {
 	if (!bin)
 		return NULL;
-	if (bin->phdr)
-		free (bin->phdr);
-	if (bin->shdr)
-		free (bin->shdr);
-	if (bin->strtab)
-		free (bin->strtab);
-	if (bin->b)
-		r_buf_free (bin->b);
+	free (bin->phdr);
+	free (bin->shdr);
+	free (bin->strtab);
+	//free (bin->strtab_section);
+	r_buf_free (bin->b);
 	free (bin);
 	return NULL;
 }

@@ -9,7 +9,7 @@ Crosscompilation
 
   ArchLinux
   ---------
-  ./configure --without-gmp --with-compiler=i486-mingw32-gcc --with-ostype=windows --host=i486-unknown-windows --without-magic
+  ./configure --without-gmp --with-compiler=i486-mingw32-gcc --with-ostype=windows --host=i486-unknown-windows --without-magic --without-ssl
   make
   make w32dist
 
@@ -30,6 +30,20 @@ Crosscompilation
   make
   make w32dist
 
+
+Windows x86-64
+==============
+  Setup toolchain
+ ----------------
+  open http://mingw-w64.sourceforge.net/
+  wget http://switch.dl.sourceforge.net/project/mingw-w64/Toolchains%20targetting%20Win64/Automated%20Builds/mingw-w64-bin_i686-linux_20110627.tar.bz2
+  mkdir -p mingw64
+  tar xjvf mingw-w64*.bz2 -C mingw64
+  export PATH=$PWD/mingw64/bin:$PATH
+  
+  Build radare2
+ --------------
+  ./configure --without-gmp --with-compiler=x86_64-w64-mingw32-gcc --with-ostype=windows --host=x86_64-unknown-windows --without-magic --without-ssl
 
 
 Python bindings:

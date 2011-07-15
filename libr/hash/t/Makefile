@@ -3,6 +3,10 @@ include ../../config.mk
 # already appended in rules.mk ${EXT_EXE}
 BINDEPS=r_io r_hash r_util r_socket
 LIBS=-lm
+ifeq (${HAVE_LIB_SSL},1)
+CFLAGS+=${SSL_CFLAGS}
+LDFLAGS+=${SSL_LDFLAGS}
+endif
 
 all: hello${EXT_EXE}
 

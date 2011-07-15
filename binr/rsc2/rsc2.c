@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006-2010
+ * Copyright (C) 2006-2011
  *       pancake <youterm.com>
  *
  * radare is free software; you can redistribute it and/or modify
@@ -25,12 +25,14 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <r_util.h>
 
 //#define DATADIR "/usr/share/"
 #define RSCDATADIR LIBDIR"/radare/bin"
 
 static void rsc_help() {
 	printf ("Usage: rsc [-l] [script] [-h]\n");
+	printf ("RSCDATADIR="RSCDATADIR"\n");
 }
 
 static void rsc_show_at(const char *dir) {
@@ -56,7 +58,7 @@ static const char *get_home_dir() {
 	const char *home = getenv("HOME");
 	gbuf[0]='\0';
 	if (home != NULL)
-		snprintf (gbuf, 1023, "%s/.radare/rsc", home);
+		snprintf (gbuf, sizeof (gbuf), "%s/.radare/rsc", home);
 	return gbuf;
 }
 
@@ -69,25 +71,45 @@ static const char *get_path_for(const char *name) {
 	struct stat st;
 	char path[1024];
 	char pathfile[1024];
+#if __UNIX__
+	char lpath[1024];
+#endif
 
-	sprintf (path, "%s", get_home_dir ());
-	sprintf (pathfile, "%s/%s", path, name);
+	snprintf (path, sizeof (path), "%s", get_home_dir ());
+	snprintf (pathfile, sizeof (pathfile), "%s/%s", path, name);
 	if (!stat (pathfile, &st)) {
-		strcpy (gbuf, path);
+		strncpy (gbuf, path, sizeof (gbuf));
 		return gbuf;
 	}
 
-	sprintf(pathfile, RSCDATADIR"/%s", name);
-	if (stat(pathfile, &st) == 0) {
-		strcpy(gbuf, RSCDATADIR);
+	snprintf (pathfile, sizeof (pathfile), RSCDATADIR"/%s", name);
+#if __WINDOWS__
+	if (stat (pathfile, &st)!=-1) {
+		strncpy (gbuf, path, sizeof (gbuf));
 		return gbuf;
 	}
-
+#else
+	if (readlink (pathfile, lpath, sizeof (lpath) == -1)) {
+		strncpy (gbuf, lpath, sizeof (gbuf));
+		return gbuf;
+	} else {
+		if (stat (pathfile, &st) == 0) {
+			strcpy (gbuf, RSCDATADIR);
+			return gbuf;
+		}
+	}
+	// is file
+	// is symlink
+	if (lstat (pathfile, &st) == 0) {
+		strcpy (gbuf, RSCDATADIR);
+		return gbuf;
+	}
+#endif
 	return NULL;
 }
 
 static int rsc_run(int argc, const char **argv) {
-	const char *path = get_path_for(argv[1]);
+	const char *path = get_path_for (argv[1]);
 	char buf[4096]; // TODO: use strfoo functions
 	int i;
 
@@ -99,9 +121,9 @@ static int rsc_run(int argc, const char **argv) {
 	snprintf (buf, sizeof (buf), "\"%s/%s\" ", path, argv[1]);
 
 	for (i=2;i<argc;i++) {
-		strcat (buf, "\"");
-		strcat (buf, argv[i]);
-		strcat (buf, "\" ");
+		strncat (buf, "\"", sizeof (buf));
+		strncat (buf, argv[i], sizeof (buf));
+		strncat (buf, "\" ", sizeof (buf));
 	}
 	// printf("system('%s')\n", buf);
 	return system (buf);

@@ -20,11 +20,10 @@ typedef struct {
 
 #undef R_IO_NFDS
 #define R_IO_NFDS 2
-extern int errno;
 
 static int debug_os_read_at(RIOW32Dbg *dbg, void *buf, int len, ut64 addr) {
-	DWORD ret;
-        ReadProcessMemory (dbg->pi.hProcess, (PCVOID)(ULONG)addr, buf, len, &ret);
+	size_t ret;
+        ReadProcessMemory (dbg->pi.hProcess, (void*)(size_t)addr, buf, len, &ret);
 //	if (len != ret)
 //		eprintf ("Cannot read 0x%08llx\n", addr);
 	return len; // XXX: Handle read correctly and not break r2 shell
@@ -37,10 +36,9 @@ static int __read(struct r_io_t *io, RIODesc *fd, ut8 *buf, int len) {
 }
 
 static int w32dbg_write_at(RIODesc *fd, const ut8 *buf, int len, ut64 addr) {
-	DWORD ret;
+	size_t ret;
 	RIOW32Dbg *dbg = fd->data;
-        WriteProcessMemory (dbg->pi.hProcess, (LPVOID)(ULONG)addr, buf, len, &ret);
-	return (int)ret;
+        return 0 != WriteProcessMemory (dbg->pi.hProcess, (void *)(size_t)addr, buf, len, &ret)? len: 0;
 }
 
 static int __write(struct r_io_t *io, RIODesc *fd, const ut8 *buf, int len) {
@@ -71,7 +69,7 @@ static RIODesc *__open(struct r_io_t *io, const char *file, int rw, int mode) {
 			free (dbg);
 			return NULL;
 		}
-		return r_io_desc_new (&r_io_plugin_w32dbg, -1, file, R_TRUE, 0, dbg);
+		RETURN_IO_DESC_NEW (&r_io_plugin_w32dbg, -1, file, R_TRUE, 0, dbg);
 	}
 	return NULL;
 }
@@ -96,7 +94,7 @@ static int __system(RIO *io, RIODesc *fd, const char *cmd) {
 		io->printf ("\n");
 		//printf("PID=%d\n", io->fd);
 		return pid;
-	} else eprintf ("Try: '|pid'\n");
+	} else eprintf ("Try: '=!pid'\n");
 	return R_TRUE;
 }
 
