@@ -2,6 +2,8 @@
 
 #include <r_fs.h>
 #include "../config.h"
+#include <errno.h>
+#include "p/grub/include/grub/msdos_partition.h"
 
 static RFSPlugin *fs_static_plugins[] = { R_FS_STATIC_PLUGINS };
 
@@ -10,6 +12,7 @@ R_API RFS *r_fs_new () {
 	RFSPlugin *static_plugin;
 	RFS *fs = R_NEW (RFS);
 	if (fs) {
+		fs->view = R_FS_VIEW_NORMAL;
 		fs->roots = r_list_new ();
 		fs->roots->free = (RListFree)r_fs_root_free;
 		fs->plugins = r_list_new ();
@@ -55,82 +58,132 @@ R_API void r_fs_del (RFS *fs, RFSPlugin *p) {
 R_API RFSRoot *r_fs_mount (RFS* fs, const char *fstype, const char *path, ut64 delta) {
 	RFSPlugin *p;
 	RFSRoot *root;
+	RFSFile *file;
+	RList *list;
+	RListIter *iter;
 	char *str;
+	int len, lenstr;
 
 	if (path[0] != '/') {
 		eprintf ("r_fs_mount: invalid mountpoint\n");
 		return NULL;
 	}
-	p = r_fs_plugin_get (fs, fstype);
-	if (p != NULL) {
-		str = strdup (path);
-		r_str_chop_path (str);
-		root = r_fs_root_new (str, delta);
-		root->p = p;
-		//memcpy (&root->iob, &fs->iob, sizeof (root->iob));
-		root->iob = fs->iob;
-		p->mount (root);
-		r_list_append (fs->roots, root);
-		eprintf ("Mounted %s on %s at 0x%llx\n", fstype, str, 0LL);
+	if (!(p = r_fs_plugin_get (fs, fstype))) {
+		eprintf ("r_fs_mount: Invalid filesystem type\n");
+		return NULL;
+	}
+	str = strdup (path);
+	r_str_chop_path (str);
+	/* Check if path exists */
+	r_list_foreach (fs->roots, iter, root) {
+		len = strlen (root->path);
+		lenstr = strlen (str);
+		if (!strncmp (str, root->path, len)) {
+			if (len < lenstr && str[len] != '/')
+				continue;
+			else if (len > lenstr && root->path[lenstr] == '/')
+				continue;
+			eprintf ("r_fs_mount: Invalid mount point\n");
+			return NULL;
+		}
+	}
+	file = r_fs_open (fs, str);
+	if (file) {
+		r_fs_close (fs, file);
+		eprintf ("r_fs_mount: Invalid mount point\n");
+		return NULL;
+	} else {
+		list = r_fs_dir (fs, str);
+		if (!r_list_empty (list)) {
+			//XXX: list need free ??
+			eprintf ("r_fs_mount: Invalid mount point\n");
+			return NULL;
+		}
+	}
+	root = r_fs_root_new (str, delta);
+	root->p = p;
+	//memcpy (&root->iob, &fs->iob, sizeof (root->iob));
+	root->iob = fs->iob;
+	if (!p->mount (root)) {
+		eprintf ("r_fs_mount: Cannot mount partition\n");
 		free (str);
-	} else eprintf ("r_fs_mount: Invalid filesystem type\n");
+		r_fs_root_free (root);
+		return NULL;
+	}
+	r_list_append (fs->roots, root);
+	eprintf ("Mounted %s on %s at 0x%llx\n", fstype, str, delta);
+	free (str);
 	return root;
 }
 
-static inline int r_fs_match (const char *root, const char *path, int len, int olen) {
-	return ((len>olen) && (!strncmp (path, root, len)));
+static inline int r_fs_match (const char *root, const char *path, int len) {
+	return (!strncmp (path, root, len));
 }
 
 R_API int r_fs_umount (RFS* fs, const char *path) {
-	int olen = 0;
-        RFSRoot *root;
+	int len;
+	RFSRoot *root;
 	RListIter *iter, *riter = NULL;
-        r_list_foreach (fs->roots, iter, root) {
-		int len = strlen (root->path);
-		if (r_fs_match (path, root->path, len, olen)) {
-			olen = len;
+	r_list_foreach (fs->roots, iter, root) {
+		len = strlen (root->path);
+		if (r_fs_match (path, root->path, len)) {
 			riter = iter;
 		}
-        }
+	}
 	if (riter) {
 		r_list_delete (fs->roots, riter);
 		return R_TRUE;
 	}
-        return R_FALSE;
+	return R_FALSE;
 }
 
-R_API RFSRoot *r_fs_root (RFS *fs, const char *p) {
-	int olen = 0;
-	char *path;
-
+R_API RList *r_fs_root (RFS *fs, const char *p) {
+	RList *roots = r_list_new ();
+	RFSRoot *root;
 	RListIter *iter;
-	RFSRoot *root, *oroot = NULL;
-	path = strdup (p);
+	int len, olen;
+	char *path = strdup (p);
 	r_str_chop_path (path);
 	r_list_foreach (fs->roots, iter, root) {
-		int len = strlen (root->path);
-		if (r_fs_match (path, root->path, len, olen)) {
-			olen = len;
-			oroot = root;
+		len = strlen (root->path);
+		if (r_fs_match (path, root->path, len)) {
+			olen = strlen (path);
+			if (len == 1 || olen == len)
+				r_list_append (roots, root);
+			else if ( olen > len && path[len] == '/')
+				r_list_append (roots, root);
 		}
 	}
 	free (path);
-	return oroot;
+	return roots;
 }
 
 /* filez */
 R_API RFSFile *r_fs_open (RFS* fs, const char *p) {
 	RFSRoot *root;
+	RList *roots;
+	RListIter *iter;
+	RFSFile *f = NULL;
+	const char *dir;
 	char *path = strdup (p);
 	//r_str_chop_path (path);
-	root = r_fs_root (fs, path);
-	if (root && root->p && root->p->open) {
-		RFSFile *f = root->p->open (root, path+strlen (root->path));
-		free (path);
-		return f;
-	} else eprintf ("r_fs_open: null root->p->open\n");
+	roots = r_fs_root (fs, path);
+	if (!r_list_empty (roots)) {
+		r_list_foreach (roots, iter, root) {
+			if (root && root->p && root->p->open) {
+				if (strlen (root->path) == 1)
+					dir = path;
+				else
+					dir = path + strlen (root->path);
+				f = root->p->open (root, dir);
+				if (f)
+					break;
+			}
+		}
+	}
+	free (roots);
 	free (path);
-        return NULL;
+	return f;
 }
 
 // TODO: close or free?
@@ -156,38 +209,178 @@ R_API int r_fs_read (RFS* fs, RFSFile *file, ut64 addr, int len) {
 }
 
 R_API RList *r_fs_dir(RFS* fs, const char *p) {
-	if (fs) {
-		char *path = strdup (p);
-		r_str_chop_path (path);
-		RFSRoot *root = r_fs_root (fs, path);
+	RList *roots, *ret = NULL;
+	RFSRoot *root;
+	RListIter *iter;
+	const char *dir;
+	char *path = strdup (p);
+	r_str_chop_path (path);
+	roots = r_fs_root (fs, path);
+	r_list_foreach (roots, iter, root) {
 		if (root) {
-			const char *dir = path + strlen (root->path);
+			if (strlen (root->path) == 1)
+				dir = path;
+			else
+				dir = path + strlen (root->path);
 			if (!*dir) dir = "/";
-			if (root) {
-				RList *ret = root->p->dir (root, dir);
-				free (path);
-				return ret;
+			ret = root->p->dir (root, dir, fs->view);
+			if (ret)
+				break;
+		}
+	}
+	free (roots);
+	free (path);
+	return ret;
+}
+
+R_API int r_fs_dir_dump (RFS* fs, const char *path, const char *name) {
+	RList *list;
+	RListIter *iter;
+	RFSFile *file, *item;
+	char *str, *npath;
+
+	list = r_fs_dir (fs, path);
+	if (!list)
+		return R_FALSE;
+	if (!r_sys_mkdir (name)) {
+		if (r_sys_mkdir_failed ()) {
+			eprintf ("Cannot create \"%s\"\n", name);
+			return R_FALSE;
+		}
+	}
+	r_list_foreach (list, iter, file) {
+		if (!strcmp (file->name, ".") || !strcmp (file->name, ".."))
+			continue;
+		str = (char *) malloc (strlen (name) + strlen (file->name) + 2);
+		if (!str)
+			return R_FALSE;
+		strcpy (str, name);
+		strcat (str, "/");
+		strcat (str, file->name);
+		npath = malloc (strlen (path) + strlen (file->name) + 2);
+		if (!npath)
+			return R_FALSE;
+		strcpy (npath, path);
+		strcat (npath, "/");
+		strcat (npath, file->name);
+		if (file->type != R_FS_FILE_TYPE_DIRECTORY) {
+			item = r_fs_open (fs, npath);
+			if (item) {
+				r_fs_read (fs, item, 0, item->size);
+				r_file_dump (str, item->data, item->size);
+				r_fs_close (fs, item);
+			}
+		} else {
+			r_fs_dir_dump (fs, npath, str);
+			free (npath);
+		}
+		free (str);
+	}
+	return R_TRUE;
+}
+
+static void r_fs_find_off_aux (RFS* fs, const char *name, ut64 offset, RList *list) {
+	RList *dirs;
+	RListIter *iter;
+	RFSFile *item, *file;
+	char *found;
+
+	dirs = r_fs_dir (fs, name);
+	r_list_foreach (dirs, iter, item) {
+		if (!strcmp (item->name, ".") || !strcmp (item->name, ".."))
+			continue;
+		if (item->type == R_FS_FILE_TYPE_DIRECTORY) {
+			found = (char *) malloc (strlen (name) + strlen (item->name) + 2);
+			if (!found)
+				break;
+			strcpy (found, name);
+			strcat (found, "/");
+			strcat (found, item->name);
+			r_fs_find_off_aux (fs, found, offset, list);
+			free (found);
+		} else {
+			found = (char *) malloc (strlen (name) + strlen (item->name) + 2);
+			if (!found)
+				break;
+			strcpy (found, name);
+			strcat (found, "/");
+			strcat (found, item->name);
+			file = r_fs_open (fs, found);
+			if (file) {
+				r_fs_read (fs, file, 0, file->size);
+				if (file->off == offset)
+					r_list_append (list, found);
+				r_fs_close (fs, file);
 			}
 		}
-		eprintf ("r_fs_dir: not mounted '%s'\n", path);
-		free (path);
 	}
-	return NULL;
+}
+
+R_API RList *r_fs_find_off (RFS* fs, const char *name, ut64 off) {
+	RList *list =  r_list_new ();
+	list->free = free;
+	r_fs_find_off_aux (fs, name, off, list);
+	return list;
+}
+
+static void r_fs_find_name_aux (RFS* fs, const char *name, const char *glob, RList *list) {
+	RList *dirs;
+	RListIter *iter;
+	RFSFile *item;
+	char *found;
+
+	dirs = r_fs_dir (fs, name);
+	r_list_foreach (dirs, iter, item) {
+		if (r_str_glob (item->name, glob)) {
+			found = (char *) malloc (strlen (name) + strlen (item->name) + 2);
+			if (!found)
+				break;
+			strcpy (found, name);
+			strcat (found, "/");
+			strcat (found, item->name);
+			r_list_append (list, found);
+		}
+		if (!strcmp (item->name, ".") || !strcmp (item->name, ".."))
+			continue;
+		if (item->type == R_FS_FILE_TYPE_DIRECTORY) {
+			found = (char *) malloc (strlen (name) + strlen (item->name) + 2);
+			if (!found)
+				break;
+			strcpy (found, name);
+			strcat (found, "/");
+			strcat (found, item->name);
+			r_fs_find_name_aux (fs, found, glob, list);
+			free (found);
+		}
+	}
+}
+
+R_API RList *r_fs_find_name (RFS* fs, const char *name, const char *glob) {
+	RList *list = r_list_new ();
+	list->free = free;
+	r_fs_find_name_aux (fs, name, glob, list);
+	return list;
 }
 
 R_API RFSFile *r_fs_slurp(RFS* fs, const char *path) {
 	RFSFile *file = NULL;
-	RFSRoot *root = r_fs_root (fs, path);
-	if (root && root->p) {
+	RFSRoot *root;
+	RList * roots = r_fs_root (fs, path);
+	RListIter *iter;
+	r_list_foreach (roots, iter, root) {
+		if (!root || !root->p)
+			continue;
 		if (root->p->open && root->p->read && root->p->close) {
 			file = root->p->open (root, path);
 			if (file) root->p->read (file, 0, file->size); //file->data
 			else eprintf ("r_fs_slurp: cannot open file\n");
 		} else {
-			if (root->p->slurp) return root->p->slurp (root, path);
-			else eprintf ("r_fs_slurp: null root->p->slurp\n");
+			if (root->p->slurp)
+				return root->p->slurp (root, path);
+			eprintf ("r_fs_slurp: null root->p->slurp\n");
 		}
 	}
+	free (roots);
 	return file;
 }
 
@@ -201,42 +394,91 @@ static int parhook (struct grub_disk *disk, struct grub_partition *par, void *cl
 	return 0;
 }
 
-R_API RList *r_fs_partitions (RFS *fs, const char *ptype, ut64 delta) {
-	struct grub_partition_map *gpm = NULL;
-	if (!strcmp (ptype, "msdos"))
-		gpm = &grub_msdos_partition_map;
-	else if (!strcmp (ptype, "apple"))
-		gpm = &grub_apple_partition_map;
-	else if (!strcmp (ptype, "sun"))
-		gpm = &grub_sun_partition_map;
-	else if (!strcmp (ptype, "sunpc"))
-		gpm = &grub_sun_pc_partition_map;
-	else if (!strcmp (ptype, "amiga"))
-		gpm = &grub_amiga_partition_map;
-	else if (!strcmp (ptype, "bsdlabel"))
-		gpm = &grub_bsdlabel_partition_map;
+static RFSPartitionType partitions[] = {
+	{ "msdos", &grub_msdos_partition_map },
+	{ "apple", &grub_apple_partition_map },
+	{ "sun", &grub_sun_partition_map },
+	{ "sunpc", &grub_sun_pc_partition_map },
+	{ "amiga", &grub_amiga_partition_map },
+	{ "bsdlabel", &grub_bsdlabel_partition_map },
+	{ "gpt", &grub_gpt_partition_map },
 // XXX: In BURG all bsd partition map are in bsdlabel
-//	else if (!strcmp (ptype, "openbsdlabel"))
-//		gpm = &grub_openbsdlabel_partition_map;
-//	else if (!strcmp (ptype, "netbsdlabel"))
-//		gpm = &grub_netbsdlabel_partition_map;
-//	else if (!strcmp (ptype, "acorn"))
-//		gpm = &grub_acorn_partition_map;
-	else if (!strcmp (ptype, "gpt"))
-		gpm = &grub_gpt_partition_map;
+	//{ "openbsdlabel", &grub_openbsd_partition_map },
+	//{ "netbsdlabel", &grub_netbsd_partition_map },
+	//{ "acorn", &grub_acorn_partition_map },
+	{ NULL }
+};
 
+R_API const char *r_fs_partition_type_get (int n) {
+	if (n<0 || n>=R_FS_PARTITIONS_LENGTH)
+		return NULL;
+	return partitions[n].name;
+}
+
+R_API int r_fs_partition_get_size () {
+	return R_FS_PARTITIONS_LENGTH;
+}
+
+R_API RList *r_fs_partitions (RFS *fs, const char *ptype, ut64 delta) {
+	int i;
+	struct grub_partition_map *gpm = NULL;
+	for (i=0; partitions[i].name; i++) {
+		if (!strcmp (ptype, partitions[i].name)) {
+			gpm = partitions[i].ptr;
+			break;
+		}
+	}
 	if (gpm) {
 		list = r_list_new ();
 		list->free = (RListFree)r_fs_partition_free;
+		grubfs_bind_io (NULL, 0);
 		struct grub_disk *disk = grubfs_disk (&fs->iob);
 		gpm->iterate (disk, parhook, 0);
 		return list;
 	}
-	if (ptype&&*ptype)
+	if (ptype && *ptype)
 		eprintf ("Unknown partition type '%s'.\n", ptype);
-	eprintf ("Supported types:\n"
-		"  msdos, apple, sun, sunpc, amiga, bsdlabel, acorn, gpt\n");
+	eprintf ("Supported types:\n");
+	for (i=0; partitions[i].name; i++)
+		eprintf (" %s", partitions[i].name);
+	eprintf ("\n");
 	return NULL;
+}
+
+//TODO: Complete!!
+R_API const char *r_fs_partition_type (const char *part, int type) {
+	switch (type) {
+		case GRUB_PC_PARTITION_TYPE_FAT12:
+		case GRUB_PC_PARTITION_TYPE_FAT16_GT32M:
+		case GRUB_PC_PARTITION_TYPE_FAT16_LT32M:
+		case GRUB_PC_PARTITION_TYPE_FAT32:
+		case GRUB_PC_PARTITION_TYPE_FAT32_LBA:
+		case GRUB_PC_PARTITION_TYPE_FAT16_LBA:
+			return strdup ("fat");
+		case GRUB_PC_PARTITION_TYPE_EXT2FS:
+			return strdup ("ext2");
+		case GRUB_PC_PARTITION_TYPE_MINIX:
+		case GRUB_PC_PARTITION_TYPE_LINUX_MINIX:
+			return strdup ("minix");
+		case GRUB_PC_PARTITION_TYPE_NTFS:
+			return strdup ("ntfs");
+		case GRUB_PC_PARTITION_TYPE_EXTENDED:
+		case GRUB_PC_PARTITION_TYPE_LINUX_EXTENDED:
+			return strdup ("ext3");
+		case GRUB_PC_PARTITION_TYPE_HFS:
+			return strdup ("hfs");
+		case GRUB_PC_PARTITION_TYPE_WIN95_EXTENDED:
+		case GRUB_PC_PARTITION_TYPE_EZD:
+		case GRUB_PC_PARTITION_TYPE_VSTAFS:
+		case GRUB_PC_PARTITION_TYPE_FREEBSD:
+		case GRUB_PC_PARTITION_TYPE_OPENBSD:
+		case GRUB_PC_PARTITION_TYPE_NETBSD:
+		case GRUB_PC_PARTITION_TYPE_GPT_DISK:
+		case GRUB_PC_PARTITION_TYPE_LINUX_RAID:
+		case GRUB_PC_PARTITION_TYPE_NONE:
+		default:
+			return NULL;
+	}
 }
 
 R_API int r_fs_prompt (RFS *fs, char *root) {
@@ -250,7 +492,8 @@ R_API int r_fs_prompt (RFS *fs, char *root) {
 
 	if (root && *root) {
 		r_str_chop_path (root);
-		if (!r_fs_root (fs, root)) {
+		list = r_fs_root (fs, root);
+		if (r_list_empty (list)) {
 			printf ("Unknown root\n");
 			return R_FALSE;
 		}
@@ -358,4 +601,8 @@ R_API int r_fs_prompt (RFS *fs, char *root) {
 	clearerr (stdin);
 	printf ("\n");
 	return R_TRUE;
+}
+
+R_API void r_fs_view (RFS *fs, int view) {
+	fs->view = view;
 }

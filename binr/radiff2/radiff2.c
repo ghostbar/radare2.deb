@@ -1,13 +1,11 @@
-/* radare - LGPL - Copyright 2009-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
 
 #include <r_diff.h>
 #include <r_core.h>
 
 static ut32 count = 0;
 
-static int cb(struct r_diff_t *d, void *user,
-	struct r_diff_op_t *op)
-{
+static int cb(RDiff *d, void *user, RDiffOp *op) {
 	int i, rad = (int)(size_t)user;
 	if (count) {
 		count++;
@@ -27,17 +25,75 @@ static int cb(struct r_diff_t *d, void *user,
 	return 1;
 }
 
+
+static void diffrow(ut64 addr, const char *name, ut64 addr2, const char *name2, const char *match) {
+	printf ("%30s  0x%"PFMT64x" |%8s  | 0x%"PFMT64x"  %s\n",
+		name, addr, match, addr2, name2);
+}
+
+static RCore* opencore(const char *f) {
+	RCore *c = r_core_new ();
+	r_config_set_i (c->config, "io.va", R_TRUE);
+	r_config_set_i (c->config, "anal.split", R_TRUE);
+	if (r_core_file_open (c, f, 0, 0) == NULL) {
+		r_core_free (c);
+		return NULL;
+	}
+	r_core_bin_load (c, NULL);
+	// TODO: must enable io.va here if wanted .. r_config_set_i (c->config, "io.va", va);
+	return c;
+}
+
+static void diff_graph(RCore *c, RCore *c2, const char *arg) {
+	r_core_cmdf (c, "agd %s", arg);
+}
+
+static void diff_bins(RCore *c, RCore *c2) {
+	const char *match;
+	RListIter *iter;
+	RAnalFcn *f;
+	RList *fcns = r_anal_get_fcns (c->anal);
+	r_list_foreach (fcns, iter, f) {
+		switch (f->type) {
+		case R_ANAL_FCN_TYPE_FCN:
+		case R_ANAL_FCN_TYPE_SYM:
+			switch (f->diff->type) {
+			case R_ANAL_DIFF_TYPE_MATCH:
+				match = "MATCH";
+				break;
+			case R_ANAL_DIFF_TYPE_UNMATCH:
+				match = "UNMATCH";
+				break;
+			default:
+				match = "NEW";
+			}
+			diffrow (f->addr, f->name, f->diff->addr, f->diff->name, match);
+			break;
+		}
+	}
+	fcns = r_anal_get_fcns (c2->anal);
+	r_list_foreach (fcns, iter, f) {
+		switch (f->type) {
+		case R_ANAL_FCN_TYPE_FCN:
+		case R_ANAL_FCN_TYPE_SYM:
+			if (f->diff->type == R_ANAL_DIFF_TYPE_NULL)
+				diffrow (f->addr, f->name, f->diff->addr, f->diff->name, "NEW");
+		}
+	}
+}
+
 static int show_help(int line) {
 	printf ("Usage: radiff2 [-nsdl] [file] [file]\n");
 	if (!line) printf (
-//		"  -l     diff lines of text\n"
-		"  -s     calculate text distance\n"
-		"  -c     count of changes\n"
-		"  -r     radare commands\n"
-		"  -d     use delta diffing\n"
-		"  -g     graph diff\n"
-		"  -v     Use vaddr\n"
-		"  -V     show version information\n");
+//		"  -l        diff lines of text\n"
+		"  -c        count of changes\n"
+		"  -C        graphdiff code\n"
+		"  -d        use delta diffing\n"
+		"  -g [sym]  graph diff\n"
+		"  -r        radare commands\n"
+		"  -s        calculate text distance\n"
+		"  -v        use vaddr\n"
+		"  -V        show version information\n");
 	return 1;
 }
 
@@ -45,21 +101,22 @@ enum {
 	MODE_DIFF,
 	MODE_DIST,
 	MODE_LOCS,
+	MODE_CODE,
 	MODE_GRAPH,
 };
 
 int main(int argc, char **argv) {
+	const char *addr = NULL;
+	RCore *c, *c2;
 	RDiff *d;
-	int c, delta = 0;
 	char *file, *file2;
 	ut8 *bufa, *bufb;
-	int sza, szb, rad = 0, va = 0;
-	int mode = MODE_DIFF;
-	int showcount = 0;
+	int o, sza, szb, rad = 0, va = 0, delta = 0;
+	int showcount = 0, mode = MODE_DIFF;
 	double sim;
 
-	while ((c = getopt (argc, argv, "vgrhcdlsV")) != -1) {
-		switch(c) {
+	while ((o = getopt (argc, argv, "Cvg:rhcdsV")) != -1) {
+		switch (o) {
 		case 'v':
 			va = 1;
 			break;
@@ -68,9 +125,13 @@ int main(int argc, char **argv) {
 			break;
 		case 'g':
 			mode = MODE_GRAPH;
+			addr = optarg;
 			break;
 		case 'c':
 			showcount = 1;
+			break;
+		case 'C':
+			mode = MODE_CODE;
 			break;
 		case 'd':
 			delta = 1;
@@ -93,11 +154,27 @@ int main(int argc, char **argv) {
 		}
 	}
 	
-	if (argc<3 || optind+2<argc)
+	if (argc<3 || optind+2>argc)
 		return show_help (R_FALSE);
 
 	file = argv[optind];
 	file2 = argv[optind+1];
+
+	switch (mode) {
+	case MODE_GRAPH:
+	case MODE_CODE:
+		c = opencore (file);
+		c2 = opencore (file2);
+		if (c==NULL || c2==NULL) {
+			eprintf ("Cannot open file\n");
+			return 1;
+		}
+		r_core_gdiff (c, c2);
+		if (mode == MODE_GRAPH)
+			diff_graph (c, c2, addr);
+		else diff_bins (c, c2);
+		return 0;
+	}
 
 	bufa = (ut8*)r_file_slurp (file, &sza);
 	bufb = (ut8*)r_file_slurp (file2, &szb);
@@ -106,7 +183,7 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	switch(mode) {
+	switch (mode) {
 	case MODE_DIFF:
 		d = r_diff_new (0LL, 0LL);
 		r_diff_set_delta (d, delta);

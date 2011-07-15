@@ -30,6 +30,7 @@ typedef struct r_search_keyword_t {
 	void *data;
 	int count;
 	int kwidx;
+	int icase; // ignore case
 	RList *list;
 } RSearchKeyword;
 
@@ -50,8 +51,10 @@ typedef struct r_search_t {
 	void *user; /* user data */
 	RSearchCallback callback;
 	RList *hits;
+	int nhits;
 	RMemoryPool *pool;
 	int distance;
+	int inverse;
 	int align;
 	RSearchUpdate update;
 	RList *kws; // TODO: Use r_search_kw_new ()
@@ -72,7 +75,7 @@ R_API int r_search_update(RSearch *s, ut64 *from, const ut8 *buf, long len);
 R_API int r_search_update_i(RSearch *s, ut64 from, const ut8 *buf, long len);
 
 R_API RSearchKeyword* r_search_keyword_new(const ut8 *kw, int kwlen, const ut8 *bm, int bmlen, const char *data);
-R_API RSearchKeyword* r_search_keyword_new_str(const char *kw, const char *bm, const char *data);
+R_API RSearchKeyword* r_search_keyword_new_str(const char *kw, const char *bm, const char *data, int icase);
 R_API RSearchKeyword* r_search_keyword_new_hex(const char *kwstr, const char *bmstr, const char *data);
 R_API RSearchKeyword* r_search_keyword_new_hexmask(const char *kwstr, const char *data);
 

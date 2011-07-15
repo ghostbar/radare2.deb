@@ -19,8 +19,8 @@
 #define DEBUGMSG(_command)				
 #endif
 
-#define     CONSTSTRDEC(_name, _value)  const char * const  _name = _value
-#define     CONSTCHRDEC(_name, _value)  const char          _name = _value
+#define     CONSTSTRDEC(_name, _value)  static const char * const  _name = _value
+#define     CONSTCHRDEC(_name, _value)  static const char          _name = _value
 #define     CTRL_C                  0x3
 CONSTSTRDEC(GDBWRAP_BEGIN_PACKET,    "$");
 CONSTSTRDEC(GDBWRAP_END_PACKET,      "#");
@@ -36,6 +36,8 @@ CONSTSTRDEC(GDBWRAP_MEMWRITE,        "X");
 CONSTSTRDEC(GDBWRAP_MEMWRITE2,       "M");
 CONSTSTRDEC(GDBWRAP_INSERTBP,        "Z0");
 CONSTSTRDEC(GDBWRAP_REMOVEBP,        "z0");
+CONSTSTRDEC(GDBWRAP_INSERTHWBP,	     "Z1");
+CONSTSTRDEC(GDBWRAP_REMOVEHWBP,	     "z1");
 CONSTSTRDEC(GDBWRAP_STEPI,           "s");
 CONSTSTRDEC(GDBWRAP_WRITEREG,        "P");
 CONSTSTRDEC(GDBWRAP_ERROR,           "E");

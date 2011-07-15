@@ -18,19 +18,16 @@ DisasMSIL is a free/open disasm engine for the Microsoft Intermediate Language (
 #define ut32 unsigned int
 #endif
 
-static ut32 hi_dword(ut64 Q)
-{
+static ut32 hi_dword(ut64 Q) {
 	ut64 qwBuf = Q >> 32;
 	return (ut32) qwBuf;
 }
 
-static ut32 lo_dword(ut64 Q)
-{
+static ut32 lo_dword(ut64 Q) {
 	return (ut32) Q;
 }
 
-int GetSingleMSILInstr(const u8 *pMemory, ut32 MemorySize, DISASMSIL_OFFSET CodeBase, ILOPCODE_STRUCT *ilop)
-{
+int GetSingleMSILInstr(const u8 *pMemory, ut32 MemorySize, DISASMSIL_OFFSET CodeBase, ILOPCODE_STRUCT *ilop) {
 	u8 *pCurInstr = (u8 *) pMemory;
 	DISASMSIL_OFFSET Base = CodeBase;
 	ut32 CurInstr;
@@ -79,38 +76,48 @@ int GetSingleMSILInstr(const u8 *pMemory, ut32 MemorySize, DISASMSIL_OFFSET Code
 		else snprintf(szNumber, 100, "0x%08X", (ut32) (Base + 5) - (0 - (int) n));
 #endif
 
+#if __WINDOWS__
+#define PFMT64x "I64x"
+#define PFMT64d "I64d"
+#define PFMT64o "I64o"
+#else
+#define PFMT64x "llx"
+#define PFMT64d "lld"
+#define PFMT64o "llo"
+#endif
+
 #define demsil_add_number(n, nt) {\
-		char szNumber[100];\
-		switch (nt) {	\
-		case NUMBER_TYPE_TOKEN: snprintf(szNumber, 100, "0x%08X", (ut32) n); break;	\
-		case NUMBER_TYPE_SMALL_BRANCH:								\
-			if (((u8) n) <= 127)								\
-				snprintf(szNumber, 100, "0x%08X", (ut32) ((Base + 2) + n));	\
-			else										\
-				snprintf(szNumber, 100, "0x%08X", (ut32) ((Base + 2) - (0 - (char) n)));	\
-			break;									\
-		case NUMBER_TYPE_BRANCH:							\
-			snprintf(szNumber, 100, "0x%08X", (ut32)( (Base + 5) + n));\
-			break;\
-		case NUMBER_TYPE_U8: snprintf(szNumber, 100, "0x%02X", (u8) n); break;	\
-		case NUMBER_TYPE_WORD: snprintf(szNumber, 100, "0x%04X", (ut16) n); break;\
-		case NUMBER_TYPE_DWORD: snprintf(szNumber, 100, "0x%08X", (ut32) n); break;\
-		case NUMBER_TYPE_QWORD: snprintf(szNumber, 100, "0x%08X%08X",		\
-			hi_dword(n), lo_dword(n)); break;						\
-		case NUMBER_TYPE_CHAR:	snprintf(szNumber, 100, "%d", (int) (u8) n); break;		\
-		case NUMBER_TYPE_SHORT:	snprintf(szNumber, 100, "%hd", (short) n); break;		\
-		case NUMBER_TYPE_INT: snprintf(szNumber, 100, "%d", (int) n); break;			\
-		case NUMBER_TYPE_INT64: snprintf(szNumber, 100, "%lld", (ut64) n); break;\
-		case NUMBER_TYPE_UCHAR: snprintf(szNumber, 100, "%hu", (unsigned short) n); break;	\
-		case NUMBER_TYPE_USHORT:	snprintf(szNumber, 100, "%hu", (short) n); break;	\
-		case NUMBER_TYPE_UINT: snprintf(szNumber, 100, "%u", (int) n); break;		\
-		case NUMBER_TYPE_FLOAT: snprintf(szNumber, 100, "%f", (float) n); break;		\
-		case NUMBER_TYPE_DOUBLE: snprintf(szNumber, 100, "%g", (double) n); break;		\
-		}											\
-		if (ilop->Mnemonic[0] == 0)								\
-			snprintf(ilop->Mnemonic, MAX_DISASMMSIL_MNEMONIC, "%s", szNumber);		\
-		else snprintf(ilop->Mnemonic, MAX_DISASMMSIL_MNEMONIC, "%s %s", ilop->Mnemonic, szNumber); \
-	}
+	char szNumber[100];\
+	switch (nt) {	\
+	case NUMBER_TYPE_TOKEN: snprintf(szNumber, 100, "0x%08X", (ut32) n); break;	\
+	case NUMBER_TYPE_SMALL_BRANCH:								\
+		if (((u8) n) <= 127)								\
+			snprintf(szNumber, 100, "0x%08X", (ut32) ((Base + 2) + n));	\
+		else										\
+			snprintf(szNumber, 100, "0x%08X", (ut32) ((Base + 2) - (0 - (char) n)));	\
+		break;									\
+	case NUMBER_TYPE_BRANCH:							\
+		snprintf(szNumber, 100, "0x%08X", (ut32)( (Base + 5) + n));\
+		break;\
+	case NUMBER_TYPE_U8: snprintf(szNumber, 100, "0x%02X", (u8) n); break;	\
+	case NUMBER_TYPE_WORD: snprintf(szNumber, 100, "0x%04X", (ut16) n); break;\
+	case NUMBER_TYPE_DWORD: snprintf(szNumber, 100, "0x%08X", (ut32) n); break;\
+	case NUMBER_TYPE_QWORD: snprintf(szNumber, 100, "0x%08X%08X",		\
+		hi_dword(n), lo_dword(n)); break;						\
+	case NUMBER_TYPE_CHAR:	snprintf(szNumber, 100, "%d", (int) (u8) n); break;		\
+	case NUMBER_TYPE_SHORT:	snprintf(szNumber, 100, "%hd", (short) n); break;		\
+	case NUMBER_TYPE_INT: snprintf(szNumber, 100, "%d", (int) n); break;			\
+	case NUMBER_TYPE_INT64: snprintf(szNumber, 100, "%"PFMT64d, (ut64) n); break;\
+	case NUMBER_TYPE_UCHAR: snprintf(szNumber, 100, "%hu", (unsigned short) n); break;	\
+	case NUMBER_TYPE_USHORT:	snprintf(szNumber, 100, "%hu", (short) n); break;	\
+	case NUMBER_TYPE_UINT: snprintf(szNumber, 100, "%u", (int) n); break;		\
+	case NUMBER_TYPE_FLOAT: snprintf(szNumber, 100, "%f", (float) n); break;		\
+	case NUMBER_TYPE_DOUBLE: snprintf(szNumber, 100, "%g", (double) n); break;		\
+	}											\
+	if (ilop->Mnemonic[0] == 0)								\
+		snprintf(ilop->Mnemonic, MAX_DISASMMSIL_MNEMONIC, "%s", szNumber);		\
+	else snprintf(ilop->Mnemonic, MAX_DISASMMSIL_MNEMONIC, "%s %s", ilop->Mnemonic, szNumber); \
+}
 
 	//
 	// This macro adds an instruction and a token to the
@@ -1075,8 +1082,7 @@ getinstr:
 	return 1;
 }
 
-int DisasMSIL(const u8 *pMemory, ut32 MemorySize, DISASMSIL_OFFSET CodeBase, ILOPCODE_STRUCT *iloparray, ut32 nOpcodeStructs, ut32 *nDisassembledInstr)
-{
+int DisasMSIL(const u8 *pMemory, ut32 MemorySize, DISASMSIL_OFFSET CodeBase, ILOPCODE_STRUCT *iloparray, ut32 nOpcodeStructs, ut32 *nDisassembledInstr) {
 	const u8 *pCurMem = pMemory;
 	ut32 x, RemSize = MemorySize;
 	DISASMSIL_OFFSET CurBase = CodeBase;
@@ -1101,4 +1107,3 @@ int DisasMSIL(const u8 *pMemory, ut32 MemorySize, DISASMSIL_OFFSET CodeBase, ILO
 
 	return 1;
 }
-

@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
 
 #include <r_userconf.h>
 #include <r_debug.h>
@@ -7,11 +7,11 @@
 #include <r_lib.h>
 #include <signal.h>
 
-static int r_debug_native_continue(int pid, int tid, int sig);
+#if DEBUGGER
+static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig);
 static int r_debug_native_reg_read(RDebug *dbg, int type, ut8 *buf, int size);
 static int r_debug_native_reg_write(int pid, int tid, int type, const ut8* buf, int size);
 
-#define DEBUGGER 1
 #define MAXBT 128
 
 #if __WINDOWS__
@@ -115,6 +115,10 @@ typedef unsigned long mips64_regs_t [4096];
 #define DEBUGGER 0
 #endif // ARCH
 
+#endif /* IF DEBUGGER */
+
+
+/* begin of debugger code */
 #if DEBUGGER
 
 #if __APPLE__
@@ -130,7 +134,7 @@ task_t pid_to_task(int pid) {
 		return old_task;
 
 	err = task_for_pid (mach_task_self(), (pid_t)pid, &task);
-	if ((err != KERN_SUCCESS) || !MACH_PORT_VALID(task)) {
+	if ((err != KERN_SUCCESS) || !MACH_PORT_VALID (task)) {
 		eprintf ("Failed to get task %d for pid %d.\n", (int)task, (int)pid);
 		eprintf ("Reason: 0x%x: %s\n", err, (char *)MACH_ERROR_STRING (err));
 		eprintf ("You probably need to add user to procmod group.\n"
@@ -168,18 +172,18 @@ static int r_debug_native_step(RDebug *dbg) {
 	int ret = R_FALSE;
 	int pid = dbg->pid;
 #if __WINDOWS__
-	CONTEXT regs __attribute__((aligned (16)));
+	CONTEXT regs __attribute__ ((aligned (16)));
 	/* set TRAP flag */
 /*
 	r_debug_native_reg_read (dbg, R_REG_TYPE_GPR, &regs, sizeof (regs));
 	regs.EFlags |= 0x100;
 	r_debug_native_reg_write (pid, dbg->tid, R_REG_TYPE_GPR, &regs, sizeof (regs));
 */
-	r_debug_native_continue (pid, dbg->tid, -1);
+	r_debug_native_continue (dbg, pid, dbg->tid, -1);
 #elif __APPLE__
-	debug_arch_x86_trap_set (dbg, 1);
+	//debug_arch_x86_trap_set (dbg, 1);
 	// TODO: not supported in all platforms. need dbg.swstep=
-	#if __arm__
+	#if 0 && __arm__
 	if (!dbg->swstep)
 		eprintf ("XXX hardware stepping is not supported in arm. set e dbg.swstep=true\n");
 	else eprintf ("XXX: software step is not implemented??\n");
@@ -187,7 +191,7 @@ static int r_debug_native_step(RDebug *dbg) {
 	#endif
 	//eprintf ("stepping from pc = %08x\n", (ut32)get_offset("eip"));
 	//ret = ptrace (PT_STEP, ps.tid, (caddr_t)get_offset("eip"), SIGSTOP);
-	ret = ptrace (PT_STEP, pid, (caddr_t)1, SIGTRAP); //SIGINT);
+	ret = ptrace (PT_STEP, pid, (caddr_t)1, 0); //SIGINT);
 	if (ret != 0) {
 		perror ("ptrace-step");
 		eprintf ("mach-error: %d, %s\n", ret, MACH_ERROR_STRING (ret));
@@ -197,6 +201,7 @@ static int r_debug_native_step(RDebug *dbg) {
 	ut32 addr = 0; /* should be eip */
 	//ut32 data = 0;
 	//printf("NATIVE STEP over PID=%d\n", pid);
+	addr = r_debug_reg_get (dbg, "pc");
 	ret = ptrace (PTRACE_SINGLESTEP, pid, addr, 0); //addr, data);
 	if (ret == -1) {
 		perror ("native-singlestep");
@@ -207,7 +212,7 @@ static int r_debug_native_step(RDebug *dbg) {
 }
 
 // return thread id
-static int r_debug_native_attach(int pid) {
+static int r_debug_native_attach(RDebug *dbg, int pid) {
 	int ret = -1;
 #if __WINDOWS__
 	HANDLE hProcess = OpenProcess (PROCESS_ALL_ACCESS, FALSE, pid);
@@ -216,7 +221,6 @@ static int r_debug_native_attach(int pid) {
 	} else ret = -1;
 	ret = w32_first_thread (pid);
 #elif __APPLE__
-	// XXX: not necessary in X86??
 	ret = ptrace (PT_ATTACH, pid, 0, 0);
 	if (ret!=-1) {
 		perror ("ptrace(PT_ATTACH)");
@@ -241,11 +245,11 @@ static int r_debug_native_detach(int pid) {
 #endif
 }
 
-static int r_debug_native_continue_syscall(int pid, int num) {
+static int r_debug_native_continue_syscall(RDebug *dbg, int pid, int num) {
 #if __linux__
 	return ptrace (PTRACE_SYSCALL, pid, 0, 0);
 #elif __BSD__
-	ut64 pc = 0LL; // XXX
+	ut64 pc = r_debug_reg_get (dbg, "pc");
 	return ptrace (PTRACE_SYSCALL, pid, pc, 0);
 #else
 	eprintf ("TODO: continue syscall not implemented yet\n");
@@ -255,7 +259,7 @@ static int r_debug_native_continue_syscall(int pid, int num) {
 
 /* TODO: specify thread? */
 /* TODO: must return true/false */
-static int r_debug_native_continue(int pid, int tid, int sig) {
+static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig) {
 	void *data = NULL;
 	if (sig != -1)
 		data = (void*)(size_t)sig;
@@ -267,39 +271,41 @@ static int r_debug_native_continue(int pid, int tid, int sig) {
 	}
 	return 0;
 #elif __APPLE__
-        eprintf ("debug_contp: program is now running...\n");
- 
-	/* XXX */
-	/* only stopped with ptrace the first time */
-	//ptrace(PT_CONTINUE, pid, 0, 0);
-	ptrace (PT_DETACH, pid, 0, 0);
-	#if 0
-	task_resume (inferior_task); // ???
-	thread_resume (inferior_threads[0]);
-	#endif
+	ut64 rip = r_debug_reg_get (dbg, "pc");
+	ptrace (PT_CONTINUE, pid, (void*)(size_t)rip, 0); // 0 = send no signal TODO !! implement somewhere else
         return 0;
+#elif __BSD__
+	ut64 pc = r_debug_reg_get (dbg, "pc");
+	return ptrace (PTRACE_CONT, pid, (void*)(size_t)pc, data);
 #else
-	void *addr = NULL; // eip for BSD
-	return ptrace (PTRACE_CONT, pid, addr, data);
+	return ptrace (PTRACE_CONT, pid, NULL, data);
 #endif
 }
 
-static int r_debug_native_wait(int pid) {
+static int r_debug_native_wait(RDebug *dbg, int pid) {
 #if __WINDOWS__
-	return w32_dbg_wait (pid);
+	return w32_dbg_wait (dbg, pid);
 #else
 	int ret, status = -1;
 	//printf ("prewait\n");
+	if (pid==-1)
+		return R_DBG_REASON_UNKNOWN;
 	ret = waitpid (pid, &status, 0);
 	//printf ("status=%d (return=%d)\n", status, ret);
 	// TODO: switch status and handle reasons here
-	status = R_DBG_REASON_UNKNOWN;
+	if (status == 0 || ret == -1) {
+		status = R_DBG_REASON_DEAD;
+	} else {
+		if (ret != pid)
+			status = R_DBG_REASON_NEW_PID;
+		else status = R_DBG_REASON_UNKNOWN;
+	}
 	return status;
 #endif
 }
 
 // TODO: why strdup here?
-static const char *r_debug_native_reg_profile() {
+static const char *r_debug_native_reg_profile(RDebug *dbg) {
 #if __WINDOWS__
 	return strdup (
 	"=pc	eip\n"
@@ -393,6 +399,35 @@ static const char *r_debug_native_reg_profile() {
 	"gpr	mq	.32	152	0\n"
 	"gpr	vrsave	.32	156	0\n"
 	);
+#elif __i386__ && __OpenBSD__
+	return strdup (
+	"=pc	eip\n"
+	"=sp	esp\n"
+	"=bp	ebp\n"
+	"=a0	eax\n"
+	"=a1	ebx\n"
+	"=a2	ecx\n"
+	"=a3	edi\n"
+// TODO: add ax, al, ah, ...
+	"gpr	eax	.32	0	0\n"
+	"gpr	ecx	.32	4	0\n"
+	"gpr	edx	.32	8	0\n"
+	"gpr	ebx	.32	12	0\n"
+	"gpr	esp	.32	16	0\n"
+	"gpr	ebp	.32	20	0\n"
+	"gpr	esi	.32	24	0\n"
+	"gpr	edi	.32	28	0\n"
+	"gpr	eip	.32	32	0\n"
+	"gpr	eflags	.32	36	0	c1p.a.zstido.n.rv\n"
+	"seg	cs	.32	40	0\n"
+	"seg	ss	.32	44	0\n"
+	"seg	ds	.32	48	0\n"
+	"seg	es	.32	52	0\n"
+	"seg	fs	.32	56	0\n"
+	"seg	gs	.32	60	0\n"
+// TODO: implement flags like in linux --those flags are wrong
+
+	);
 #elif __i386__
 	return strdup (
 	"=pc	eip\n"
@@ -464,25 +499,24 @@ static const char *r_debug_native_reg_profile() {
 	"=a1	rbx\n"
 	"=a2	rcx\n"
 	"=a3	rdx\n"
-	"# no profile defined for x86-64\n"
-	"gpr	rax	.64	0	0\n"
-	"gpr	rbx	.64	8	0\n"
-	"gpr	rcx	.64	16	0\n"
-	"gpr	rdx	.64	24	0\n"
-	"gpr	rdi	.64	32	0\n"
-	"gpr	rsi	.64	40	0\n"
-	"gpr	rbp	.64	48	0\n"
-	"gpr	rsp	.64	56	0\n"
-	"gpr	r8	.64	64	0\n"
-	"gpr	r9	.64	72	0\n"
-	"gpr	r10	.64	80	0\n"
-	"gpr	r11	.64	88	0\n"
-	"gpr	r12	.64	96	0\n"
-	"gpr	r13	.64	104	0\n"
-	"gpr	r14	.64	112	0\n"
-	"gpr	r15	.64	120	0\n"
-	"gpr	rip	.64	128	0\n"
-	"gpr	rflags	.64	136	0	c1p.a.zstido.n.rv\n"
+	"gpr	rax	.64	8	0\n"
+	"gpr	rbx	.64	16	0\n"
+	"gpr	rcx	.64	24	0\n"
+	"gpr	rdx	.64	32	0\n"
+	"gpr	rdi	.64	40	0\n"
+	"gpr	rsi	.64	48	0\n"
+	"gpr	rbp	.64	56	0\n"
+	"gpr	rsp	.64	64	0\n"
+	"gpr	r8	.64	72	0\n"
+	"gpr	r9	.64	80	0\n"
+	"gpr	r10	.64	88	0\n"
+	"gpr	r11	.64	96	0\n"
+	"gpr	r12	.64	104	0\n"
+	"gpr	r13	.64	112	0\n"
+	"gpr	r14	.64	120	0\n"
+	"gpr	r15	.64	128	0\n"
+	"gpr	rip	.64	136	0\n"
+	"gpr	rflags	.64	144	0	c1p.a.zstido.n.rv\n"
 	"seg	cs	.64	144	0\n"
 	"seg	fs	.64	152	0\n"
 	"seg	gs	.64	160	0\n"
@@ -495,7 +529,48 @@ static const char *r_debug_native_reg_profile() {
 	"drx	dr7	.32	28	0\n"
 #endif
 	);
-#elif __x86_64__
+#elif __x86_64__  && __OpenBSD__
+	return strdup (
+	"=pc	rip\n"
+	"=sp	rsp\n"
+	"=bp	rbp\n"
+	"=a0	rax\n"
+	"=a1	rbx\n"
+	"=a2	rcx\n"
+	"=a3	rdx\n"
+	"# no profile defined for x86-64\n"
+	"gpr	rdi	.64	0	0\n"
+	"gpr	rsi	.64	8	0\n"
+	"gpr	rdx	.64	16	0\n"
+	"gpr	rcx	.64	24	0\n"
+	"gpr	r8	.64	32	0\n"
+	"gpr	r9	.64	40	0\n"
+	"gpr	r10	.64	48	0\n"
+	"gpr	r11	.64	56	0\n"
+	"gpr	r12	.64	64	0\n"
+	"gpr	r13	.64	72	0\n"
+	"gpr	r14	.64	80	0\n"
+	"gpr	r15	.64	88	0\n"
+	"gpr	rbp	.64	96	0\n"
+	"gpr	rbx	.64	104	0\n"
+	"gpr	rax	.64	112	0\n"
+	"gpr	rsp	.64	120	0\n"
+	"gpr	rip	.64	128	0\n"
+	"gpr	rflags	.64	136	0	c1p.a.zstido.n.rv\n"
+	"seg	cs	.64	144	0\n"
+	"seg	ss	.64	152	0\n"
+	"seg	ds	.64	160	0\n"
+	"seg	es	.64	168	0\n"
+	"seg	fs	.64	176	0\n"
+	"seg	gs	.64	184	0\n"
+	"drx	dr0	.32	0	0\n"
+	"drx	dr1	.32	4	0\n"
+	"drx	dr2	.32	8	0\n"
+	"drx	dr3	.32	12	0\n"
+	"drx	dr6	.32	24	0\n"
+	"drx	dr7	.32	28	0\n"
+	);
+#elif __x86_64__ && __linux__
 	return strdup (
 	"=pc	rip\n"
 	"=sp	rsp\n"
@@ -588,7 +663,7 @@ static const char *r_debug_native_reg_profile() {
 #if __APPLE__
 // XXX
 static RDebugPid *darwin_get_pid(int pid) {
-	int foo, nargs, mib[3];
+	int psnamelen, foo, nargs, mib[3];
 	size_t size, argmax = 2048;
 	char *curr_arg, *start_args, *iter_args, *end_args;
 	char *procargs = NULL;
@@ -660,16 +735,18 @@ static RDebugPid *darwin_get_pid(int pid) {
 	curr_arg = iter_args;
 	start_args = iter_args; //reset start position to beginning of cmdline
 	foo = 1;
-	psname[0] = 0;
+	*psname = 0;
 	while (iter_args < end_args && nargs > 0) {
 		if (*iter_args++ == '\0') {
+			int alen = strlen (curr_arg);
 			if (foo) {
-				strcpy (psname, curr_arg);
+				memcpy (psname, curr_arg, alen+1);
 				foo = 0;
 			} else {
-				strcat (psname, " ");
-				strcat (psname, curr_arg);
+				psname[psnamelen] = ' ';
+				memcpy (psname+psnamelen+1, curr_arg, alen+1);
 			}
+			psnamelen += alen;
 			//printf("arg[%i]: %s\n", iter_args, curr_arg);
 			/* Fetch next argument */
 			curr_arg = iter_args;
@@ -696,6 +773,12 @@ static RDebugPid *darwin_get_pid(int pid) {
 
 #undef MAXPID
 #define MAXPID 69999
+
+static RList *r_debug_native_tids(int pid) {
+	printf ("TODO: Threads: \n");
+	// T
+	return NULL;
+}
 
 static RList *r_debug_native_pids(int pid) {
 	RList *list = r_list_new ();
@@ -789,8 +872,8 @@ static RList *r_debug_native_threads(int pid) {
 #else
 	#define OSX_PC state.__eip
 #endif
-        int i, tid, err;
-	unsigned int gp_count;
+        int i, tid; //, err;
+	//unsigned int gp_count;
 	static thread_array_t inferior_threads = NULL;
 	static unsigned int inferior_thread_count = 0;
         R_DEBUG_REG_T state;
@@ -850,9 +933,9 @@ static RList *r_debug_native_threads(int pid) {
 				int tgid = atoi (ptr+5);
 				if (tgid != pid)
 					continue;
-				read (fd, cmdline, sizeof(cmdline)-1);
-				sprintf (cmdline, "thread_%d", thid++);
-				cmdline[sizeof(cmdline)-1] = '\0';
+				read (fd, cmdline, sizeof (cmdline)-1);
+				snprintf (cmdline, sizeof (cmdline), "thread_%d", thid++);
+				cmdline[sizeof (cmdline)-1] = '\0';
 				r_list_append (list, r_debug_pid_new (cmdline, i, 's', 0));
 			}
 		}
@@ -870,7 +953,7 @@ static int r_debug_native_reg_read(RDebug *dbg, int type, ut8 *buf, int size) {
 	CONTEXT ctx __attribute__ ((aligned (16)));
 	ctx.ContextFlags = CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS;
 	if (!GetThreadContext (tid2handler (dbg->pid, dbg->tid), &ctx)) {
-		eprintf ("GetThreadContext: %x\n", (int)GetLastError());
+		eprintf ("GetThreadContext: %x\n", (int)GetLastError ());
 		return R_FALSE;
 	}
 	if (sizeof (CONTEXT) < size)
@@ -904,20 +987,22 @@ eprintf ("++ EFL = 0x%08x  %d\n", ctx.EFlags, r_offsetof (CONTEXT, EFlags));
 	R_DEBUG_REG_T *regs = (R_DEBUG_REG_T*)buf;
         unsigned int gp_count = R_DEBUG_STATE_SZ; //sizeof (R_DEBUG_REG_T);
 
-	if (size<sizeof(R_DEBUG_REG_T)) {
+	if (size<sizeof (R_DEBUG_REG_T)) {
 		eprintf ("Small buffer passed to r_debug_read\n");
 		return R_FALSE;
 	}
         ret = task_threads (pid_to_task (pid), &inferior_threads, &inferior_thread_count);
         if (ret != KERN_SUCCESS) {
-                eprintf ("debug_getregs\n");
                 return R_FALSE;
         }
 
+	int tid = dbg->tid;
+	if (tid == dbg->pid)
+		tid = 0;
         if (inferior_thread_count>0) {
                 /* TODO: allow to choose the thread */
 		gp_count = R_DEBUG_STATE_SZ;
-                if (thread_get_state (inferior_threads[0], R_DEBUG_STATE_T,
+                if (thread_get_state (inferior_threads[tid], R_DEBUG_STATE_T,
 				(thread_state_t) regs, &gp_count) != KERN_SUCCESS) {
                         eprintf ("debug_getregs: Failed to get thread %d %d.error (%x). (%s)\n",
 				(int)pid, pid_to_task (pid), (int)ret, MACH_ERROR_STRING (ret));
@@ -927,14 +1012,14 @@ eprintf ("++ EFL = 0x%08x  %d\n", ctx.EFlags, r_offsetof (CONTEXT, EFlags));
         } else eprintf ("There are no threads!\n");
         return sizeof (R_DEBUG_REG_T);
 #elif __linux__ || __sun || __NetBSD__ || __FreeBSD__ || __OpenBSD__
-	int ret; 
+	int ret;
 	switch (type) {
 	case R_REG_TYPE_DRX:
 #ifdef __FreeBSD__
 	{
 		// TODO
 		struct dbreg dbr;
-		ret = ptrace (PTRACE_GETDBREGS, pid, &dbr, sizeof (dbr));
+		ret = ptrace (PT_GETDBREGS, pid, &dbr, sizeof (dbr));
 		if (ret != 0)
 			return R_FALSE;
 		// XXX: maybe the register map is not correct, must review
@@ -989,7 +1074,7 @@ static int r_debug_native_reg_write(int pid, int tid, int type, const ut8* buf, 
 	// XXX use switch or so
 	if (type == R_REG_TYPE_DRX) {
 #ifdef __FreeBSD__
-		return (0 == ptrace (PTRACE_SETDBREGS, dbg->pid, buf, sizeof (struct dbreg)));
+		return (0 == ptrace (PT_SETDBREGS, dbg->pid, buf, sizeof (struct dbreg)));
 #elif __linux__
 		{
 		int i;
@@ -1008,13 +1093,18 @@ static int r_debug_native_reg_write(int pid, int tid, int type, const ut8* buf, 
 	} else
 	if (type == R_REG_TYPE_GPR) {
 #if __WINDOWS__
-		CONTEXT ctx __attribute__((aligned(16)));
+		CONTEXT ctx __attribute__((aligned (16)));
 		memcpy (&ctx, buf, sizeof (CONTEXT));
 		ctx.ContextFlags = CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS;
 	//	eprintf ("EFLAGS =%x\n", ctx.EFlags);
 		return SetThreadContext (tid2handler (pid, tid), &ctx)? R_TRUE: R_FALSE;
-#elif __linux__ || __sun || __NetBSD__ || __FreeBSD__ || __OpenBSD__
+#elif __linux__
 		int ret = ptrace (PTRACE_SETREGS, pid, 0, buf);
+		if (sizeof (R_DEBUG_REG_T) < size)
+			size = sizeof (R_DEBUG_REG_T);
+		return (ret != 0) ? R_FALSE: R_TRUE;
+#elif __sun || __NetBSD__ || __FreeBSD__ || __OpenBSD__
+		int ret = ptrace (PTRACE_SETREGS, pid, buf, sizeof (R_DEBUG_REG_T));
 		if (sizeof (R_DEBUG_REG_T) < size)
 			size = sizeof (R_DEBUG_REG_T);
 		return (ret != 0) ? R_FALSE: R_TRUE;
@@ -1064,8 +1154,6 @@ static const char * unparse_inheritance (vm_inherit_t i) {
 // TODO: this loop MUST be cleaned up
 static RList *darwin_dbg_maps (RDebug *dbg) {
 	RDebugMap *mr;
-	RList *list = r_list_new ();
-
 	char buf[128];
 	int i, print;
 	kern_return_t kret;
@@ -1076,9 +1164,10 @@ static RList *darwin_dbg_maps (RDebug *dbg) {
 	mach_msg_type_number_t count;
 	int nsubregions = 0;
 	int num_printed = 0;
-	// XXX: wrong for 64bits
 	size_t address = 0;
 	task_t task = pid_to_task (dbg->pid);
+	RList *list = r_list_new ();
+	// XXX: wrong for 64bits
 /*
 	count = VM_REGION_BASIC_INFO_COUNT_64;
 	kret = mach_vm_region (pid_to_task (dbg->pid), &address, &size, VM_REGION_BASIC_INFO_64,
@@ -1129,7 +1218,7 @@ static RList *darwin_dbg_maps (RDebug *dbg) {
 
 		#define xwr2rwx(x) ((x&1)<<2) && (x&2) && ((x&4)>>2)
 		if (print) {
-			sprintf (buf, "%s %02x %s/%s/%s",
+			snprintf (buf, sizeof (buf), "%s %02x %s/%s/%s",
 					r_str_rwx_i (xwr2rwx (prev_info.max_protection)), i,
 					unparse_inheritance (prev_info.inheritance),
 					prev_info.shared ? "shar" : "priv",
@@ -1190,6 +1279,10 @@ static RList *darwin_dbg_maps (RDebug *dbg) {
 
 static RList *r_debug_native_map_get(RDebug *dbg) {
 	RList *list = NULL;
+#if __FreeBSD__
+	int ign;
+	char unkstr[128];
+#endif 
 #if __APPLE__
 	list = darwin_dbg_maps (dbg);
 #elif __WINDOWS__
@@ -1198,7 +1291,7 @@ static RList *r_debug_native_map_get(RDebug *dbg) {
 #if __sun
 	char path[1024];
 	/* TODO: On solaris parse /proc/%d/map */
-	sprintf (path, "pmap %d > /dev/stderr", ps.tid);
+	snprintf (path, sizeof (path)-1, "pmap %d > /dev/stderr", ps.tid);
 	system (path);
 #else
 	RDebugMap *map;
@@ -1213,9 +1306,9 @@ static RList *r_debug_native_map_get(RDebug *dbg) {
 	}
 
 #if __FreeBSD__
-	sprintf (path, "/proc/%d/map", dbg->pid);
+	snprintf (path, sizeof (path), "/proc/%d/map", dbg->pid);
 #else
-	sprintf (path, "/proc/%d/maps", dbg->pid);
+	snprintf (path, sizeof (path), "/proc/%d/maps", dbg->pid);
 #endif
 	fd = fopen (path, "r");
 	if (!fd) {
@@ -1238,7 +1331,7 @@ static RList *r_debug_native_map_get(RDebug *dbg) {
 			&region[2], &region2[2], &ign, &ign,
 			unkstr, perms, &ign, &ign);
 		pos_c = strchr (line, '/');
-		if (pos_c) strcpy (path, pos_c);
+		if (pos_c) strncpy (path, pos_c, sizeof (path)-1);
 		else path[0]='\0';
 #else
 		sscanf (line, "%s %s %s %s %s %s",
@@ -1250,13 +1343,13 @@ static RList *r_debug_native_map_get(RDebug *dbg) {
 
 		pos_c[-1] = (char)'0';
 		pos_c[ 0] = (char)'x';
-		strcpy (region2, pos_c-1);
+		strncpy (region2, pos_c-1, sizeof (region2));
 #endif // __FreeBSD__
 		region[0] = region2[0] = '0';
 		region[1] = region2[1] = 'x';
 
 		if (!*path)
-			sprintf (path, "unk%d", unk++);
+			snprintf (path, sizeof (path), "unk%d", unk++);
 
 		perm = 0;
 		for(i = 0; perms[i] && i < 4; i++)
@@ -1451,12 +1544,12 @@ static int r_debug_native_init(RDebug *dbg) {
 }
 
 #if __i386__ || __x86_64__
-int drx_add(RDebug *dbg, ut64 addr, int rwx) {
+static int drx_add(RDebug *dbg, ut64 addr, int rwx) {
 	// TODO
 	return R_FALSE;
 }
 
-int drx_del(RDebug *dbg, ut64 addr, int rwx) {
+static int drx_del(RDebug *dbg, ut64 addr, int rwx) {
 	// TODO
 	return R_FALSE;
 }
@@ -1500,11 +1593,12 @@ struct r_debug_plugin_t r_debug_plugin_native = {
 	.attach = &r_debug_native_attach,
 	.detach = &r_debug_native_detach,
 	.pids = &r_debug_native_pids,
+	.tids = &r_debug_native_tids,
 	.threads = &r_debug_native_threads,
 	.wait = &r_debug_native_wait,
 	.kill = &r_debug_native_kill,
-	.frames = &r_debug_native_frames,
-	.reg_profile = (void *)&r_debug_native_reg_profile,
+	.frames = &r_debug_native_frames, // rename to backtrace ?
+	.reg_profile = (void *)r_debug_native_reg_profile,
 	.reg_read = &r_debug_native_reg_read,
 	.reg_write = (void *)&r_debug_native_reg_write,
 	.map_get = (void *)&r_debug_native_map_get,

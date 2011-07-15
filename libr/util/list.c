@@ -1,3 +1,5 @@
+/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
+
 #include "r_util.h"
 
 R_API void r_list_init(RList *list) {
@@ -42,14 +44,33 @@ R_API void r_list_split (RList *list, void *ptr) {
 }
 
 R_API void r_list_split_iter (RList *list, RListIter *iter) {
-	if (list->head == iter)
-		list->head = iter->n;
-	if (list->tail == iter)
-		list->tail = iter->p;
-	if (iter->p)
-		iter->p->n = iter->n;
-	if (iter->n)
-		iter->n->p = iter->p;
+	if (list->head == iter) list->head = iter->n;
+	if (list->tail == iter) list->tail = iter->p;
+	if (iter->p) iter->p->n = iter->n;
+	if (iter->n) iter->n->p = iter->p;
+}
+
+//Warning: free functions must be compatible
+R_API void r_list_join (RList *list1, RList *list2) {
+	if (list1->tail == NULL) {
+		list1->tail = list2->head;
+	} else if (list2->head != NULL) {
+		list1->tail->n = list2->head;
+		list2->head->p = list1->tail;
+	}
+}
+
+// XXX r_list_delete_data == r_list_unlink !!!! this is conceptually wrong
+R_API boolt r_list_delete_data (RList *list, void *ptr) {
+	void *p;
+	RListIter *iter;
+	r_list_foreach (list, iter, p) {
+		if (ptr == p) {
+			r_list_delete (list, iter);
+			return R_TRUE;
+		}
+	}
+	return R_FALSE;
 }
 
 R_API void r_list_delete (RList *list, RListIter *iter) {
@@ -75,14 +96,19 @@ R_API void r_list_destroy (RList *list) {
 			RListIter *next = it->n;
 			r_list_delete (list, it);
 			it = next;
+		//	free (it);
 		}
 		list->head = list->tail = NULL;
 	}
+	//free (list);
 }
 
 R_API void r_list_free (RList *list) {
-	r_list_destroy (list);
-	free (list);
+	if (list) {
+		list->free = NULL;
+		r_list_destroy (list);
+		free (list);
+	}
 }
 
 R_API RListIter *r_list_item_new (void *data) {
@@ -118,6 +144,83 @@ R_API RListIter *r_list_prepend(RList *list, void *data) {
 	if (list->tail == NULL)
 		list->tail = new;
 	return new;
+}
+
+R_API void *r_list_pop(RList *list) {
+	void *data = NULL;
+	RListIter *iter;
+	if (list->tail) {
+		iter = list->tail;
+		if (list->head == list->tail) {
+			list->head = list->tail = NULL;
+		} else {
+			list->tail = iter->p;
+			list->tail->n = NULL;
+		}
+		data = iter->data;
+		free (iter);
+	}
+	return data;
+}
+
+R_API int r_list_del_n(RList *list, int n) {
+	RListIter *it;
+	int i;
+
+	if (!list)
+		return R_FALSE;
+	for (it = list->head, i = 0; it && it->data; it = it->n, i++)
+		if (i == n) {
+			if (it->p == NULL && it->n == NULL) {
+				list->head = list->tail = NULL;
+			} else if (it->p == NULL) {
+				it->n->p = NULL;
+				list->head = it->n;
+			} else if (it->n == NULL) {
+				it->p->n = NULL;
+				list->tail = it->p;
+			} else {
+				it->p->n = it->n;
+				it->n->p = it->p;
+			}
+			free (it);
+			return R_TRUE;
+		}
+	return R_FALSE;
+}
+
+R_API void *r_list_get_top(RList *list) {
+	if (list && list->tail)
+		return list->tail->data;
+	return NULL;
+}
+
+R_API void r_list_reverse(RList *list) {
+	RListIter *it, *tmp;
+	if (list) {
+		for (it = list->head; it && it->data; it = it->p) {
+			tmp = it->p;
+			it->p = it->n;
+			it->n = tmp;
+		}
+		tmp = list->head;
+		list->head = list->tail;
+		list->tail = tmp;
+	}
+}
+
+R_API RList *r_list_clone (RList *list) {
+	RList *l = NULL;
+	RListIter *iter;
+	void *data;
+
+	if (list) {
+		l = r_list_new ();
+		l->free = NULL;
+		r_list_foreach (list, iter, data)
+			r_list_append (l, data);
+	}
+	return l;
 }
 
 R_API void r_list_sort(RList *list, RListComparator cmp) {
@@ -179,6 +282,16 @@ R_API void *r_list_get_by_string(RList *list, int off, const char *str) {
 			return p;
 	}
 	return NULL;
+}
+
+R_API boolt r_list_contains (RList *list, void *p) {
+	void *q;
+	RListIter *iter;
+	r_list_foreach (list, iter, q) {
+		if (p == q)
+			return R_TRUE;
+	}
+	return R_FALSE;
 }
 
 #if TEST
@@ -260,6 +373,33 @@ int main () {
 	}
 
 	r_list_free (l);
+
+	l = r_list_new ();
+	l->free = free;
+
+	r_list_append (l, strdup ("one"));
+	r_list_append (l, strdup ("two"));
+	r_list_append (l, strdup ("tri"));
+
+	{
+		char *str;
+		r_list_foreach (l, it, str)
+			printf (" - %s\n", str);
+
+		RList *list;
+		list = r_list_clone (l);
+
+		r_list_foreach (list, it, str)
+			printf (" - %s\n", str);
+
+		r_list_reverse (l);
+
+		r_list_foreach (l, it, str)
+			printf (" * %s\n", str);
+	}
+
+	r_list_free (l);
+	//r_list_free (l);
 
 	return 0;
 }

@@ -612,7 +612,6 @@ grub_jfs_find_file (struct grub_jfs_data *data, const char *path)
   char fpath[grub_strlen (path)];
   char *name = fpath;
   char *next;
-  unsigned int pos = 0;
   struct grub_jfs_diropen *diro;
 
   grub_strncpy (fpath, path, grub_strlen (path) + 1);
@@ -674,8 +673,6 @@ grub_jfs_find_file (struct grub_jfs_data *data, const char *path)
 
 	  if (!next)
 	    return 0;
-
-	  pos = 0;
 
 	  name = next;
 	  next = grub_strchr (name, '/');
@@ -756,6 +753,7 @@ grub_jfs_dir (grub_device_t device, const char *path,
     goto fail;
 
   /* Iterate over the dirents in the directory that was found.  */
+  if (hook)
   while (grub_jfs_getent (diro) != GRUB_ERR_OUT_OF_RANGE)
     {
       struct grub_jfs_inode inode;

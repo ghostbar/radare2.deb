@@ -1,7 +1,7 @@
 /* radare - LGPL - Copyright 2009-2011 nibble<.ds@gmail.com> */
 
 /* TODO:
- * -L [lib]  dlopen library and show address
+ * -L [lib]  dlopen library and show addr
  */
 
 #include <stdio.h>
@@ -91,7 +91,7 @@ static int rabin_show_entrypoints() {
 		if (rad) {
 			printf ("f entry%i @ 0x%08"PFMT64x"\n", i, va?baddr+entry->rva:entry->offset);
 			printf ("s entry%i\n", i);
-		} else printf ("address=0x%08"PFMT64x" offset=0x%08"PFMT64x" baddr=0x%08"PFMT64x"\n",
+		} else printf ("addr=0x%08"PFMT64x" off=0x%08"PFMT64x" baddr=0x%08"PFMT64x"\n",
 				baddr+entry->rva, entry->offset, baddr);
 		i++;
 	}
@@ -112,7 +112,7 @@ static int rabin_show_main() {
 		printf ("f main @ 0x%08"PFMT64x"\n", va?baddr+binmain->rva:binmain->offset);
 	} else {
 		eprintf ("[Main]\n");
-		printf ("address=0x%08"PFMT64x" offset=0x%08"PFMT64x"\n",
+		printf ("addr=0x%08"PFMT64x" off=0x%08"PFMT64x"\n",
 			baddr+binmain->rva, binmain->offset);
 	}
 	return R_TRUE;
@@ -202,7 +202,7 @@ static int rabin_show_relocs() {
 
 	r_list_foreach (relocs, iter, reloc) {
 		if (rad) printf ("f reloc.%s @ 0x%08"PFMT64x"\n", reloc->name, va?baddr+reloc->rva:reloc->offset);
-		else printf ("sym=%02i address=0x%08"PFMT64x" offset=0x%08"PFMT64x" type=0x%08x %s\n",
+		else printf ("sym=%02i addr=0x%08"PFMT64x" off=0x%08"PFMT64x" type=0x%08x %s\n",
 				reloc->sym, baddr+reloc->rva, reloc->offset, reloc->type, reloc->name);
 		i++;
 	}
@@ -237,13 +237,13 @@ static int rabin_show_imports() {
 				printf ("%s\n", import->name);
 		} else {
 			if (rad) {
-				r_flag_name_filter (import->name);
+				r_name_filter (import->name, sizeof (import->name));
 				if (import->size) 
 					printf ("af+ 0x%08"PFMT64x" %"PFMT64d" imp.%s i\n",
 							va?baddr+import->rva:import->offset, import->size, import->name);
 				printf ("f imp.%s @ 0x%08"PFMT64x"\n",
 						import->name, va?baddr+import->rva:import->offset);
-			} else printf ("address=0x%08"PFMT64x" offset=0x%08"PFMT64x" ordinal=%03"PFMT64d" "
+			} else printf ("addr=0x%08"PFMT64x" off=0x%08"PFMT64x" ordinal=%03"PFMT64d" "
 						   "hint=%03"PFMT64d" bind=%s type=%s name=%s\n",
 						   baddr+import->rva, import->offset,
 						   import->ordinal, import->hint,  import->bind,
@@ -290,15 +290,15 @@ static int rabin_show_symbols() {
 					printf ("s 0x%08"PFMT64x"\n\"CC %s\"\n", symbol->offset, mn);
 					free (mn);
 				}
-				r_flag_name_filter (symbol->name);
+				r_name_filter (symbol->name, sizeof (symbol->name));
 				if (!strncmp (symbol->type,"OBJECT", 6))
 					printf ("Cd %"PFMT64d" @ 0x%08"PFMT64x"\n",
 							symbol->size, va?baddr+symbol->rva:symbol->offset);
 				printf ("f sym.%s %"PFMT64d" 0x%08"PFMT64x"\n",
 						symbol->name, symbol->size,
 						va?baddr+symbol->rva:symbol->offset);
-			} else printf ("address=0x%08"PFMT64x" offset=0x%08"PFMT64x" ordinal=%03"PFMT64d" "
-						   "forwarder=%s size=%"PFMT64d" bind=%s type=%s name=%s\n",
+			} else printf ("addr=0x%08"PFMT64x" off=0x%08"PFMT64x" ordinal=%03"PFMT64d" "
+						   "forwarder=%s sz=%"PFMT64d" bind=%s type=%s name=%s\n",
 						   baddr+symbol->rva, symbol->offset,
 						   symbol->ordinal, symbol->forwarder,
 						   symbol->size, symbol->bind, symbol->type, 
@@ -329,13 +329,13 @@ static int rabin_show_strings() {
 	r_list_foreach (strings, iter, string) {
 		section = r_bin_get_section_at (bin, string->offset, 0);
 		if (rad) {
-			r_flag_name_filter (string->string);
+			r_name_filter (string->string, sizeof (string->string));
 			printf ("f str.%s %"PFMT64d" @ 0x%08"PFMT64x"\n"
 				"Cs %"PFMT64d" @ 0x%08"PFMT64x"\n",
 				string->string, string->size, va?baddr+string->rva:string->offset,
 				string->size, va?baddr+string->rva:string->offset);
-		} else printf ("address=0x%08"PFMT64x" offset=0x%08"PFMT64x" ordinal=%03"PFMT64d" "
-			"size=%"PFMT64d" section=%s string=%s\n",
+		} else printf ("addr=0x%08"PFMT64x" off=0x%08"PFMT64x" ordinal=%03"PFMT64d" "
+			"sz=%"PFMT64d" section=%s string=%s\n",
 			baddr+string->rva, string->offset,
 			string->ordinal, string->size,
 			section?section->name:"unknown", string->string);
@@ -375,7 +375,7 @@ static int rabin_show_sections() {
 				printf ("%s\n", section->name);
 		} else {
 			if (rad) {
-				r_flag_name_filter (section->name);
+				r_name_filter (section->name, sizeof (section->name));
 				printf ("S 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" %s %d\n",
 					section->offset, baddr+section->rva,
 					section->size, section->vsize, section->name, (int)section->srwx);
@@ -389,8 +389,8 @@ static int rabin_show_sections() {
 					R_BIN_SCN_WRITABLE (section->srwx)?'w':'-',
 					R_BIN_SCN_EXECUTABLE (section->srwx)?'x':'-',
 					section->name,va?baddr+section->rva:section->offset);
-			} else printf ("idx=%02i address=0x%08"PFMT64x" offset=0x%08"PFMT64x" size=%"PFMT64d" vsize=%"PFMT64d" "
-				"privileges=%c%c%c%c name=%s\n",
+			} else printf ("idx=%02i addr=0x%08"PFMT64x" off=0x%08"PFMT64x" sz=%"PFMT64d" vsz=%"PFMT64d" "
+				"perm=%c%c%c%c name=%s\n",
 				i, baddr+section->rva, section->offset, section->size, section->vsize,
 				R_BIN_SCN_SHAREABLE (section->srwx)?'s':'-',
 				R_BIN_SCN_READABLE (section->srwx)?'r':'-',
@@ -413,18 +413,24 @@ static int rabin_show_info() {
 		return R_FALSE;
 
 	if (rad) {
-		printf ("e file.type=%s\n"
-				"e cfg.bigendian=%s\n"
-				"e asm.os=%s\n"
-				"e asm.arch=%s\n"
-				"e anal.plugin=%s\n"
-				"e asm.bits=%i\n"
-				"e vm.arch=%s\n"
-				"e asm.dwarf=%s\n",
+		if (!strcmp (info->type, "fs")) {
+			printf ("e file.type=fs\n");
+			printf ("m %s /root 0\n", info->arch);
+		} else {
+			printf (
+			"e file.type=%s\n"
+			"e cfg.bigendian=%s\n"
+			"e asm.os=%s\n"
+			"e asm.arch=%s\n"
+			"e anal.plugin=%s\n"
+			"e asm.bits=%i\n"
+			"e asm.dwarf=%s\n",
 				info->rclass, info->big_endian?"true":"false", info->os,
-				info->arch, info->arch, info->bits, info->arch,
+				info->arch, info->arch, info->bits,
 				R_BIN_DBG_STRIPPED (info->dbg_info)?"false":"true");
+		}
 	} else {
+		// if type is 'fs' show something different?
 		eprintf ("[File info]\n");
 		printf ("File=%s\n"
 				"Type=%s\n"
@@ -471,12 +477,12 @@ static int rabin_show_fields() {
 
 	r_list_foreach (fields, iter, field) {
 		if (rad) {
-			r_flag_name_filter (field->name);
+			r_name_filter (field->name, sizeof (field->name));
 			printf ("f header.%s @ 0x%08"PFMT64x"\n",
 					field->name, va?baddr+field->rva:field->offset);
-			printf ("[%02i] address=0x%08"PFMT64x" offset=0x%08"PFMT64x" name=%s\n",
+			printf ("[%02i] addr=0x%08"PFMT64x" off=0x%08"PFMT64x" name=%s\n",
 					i, baddr+field->rva, field->offset, field->name);
-		} else printf ("idx=%02i address=0x%08"PFMT64x" offset=0x%08"PFMT64x" name=%s\n",
+		} else printf ("idx=%02i addr=0x%08"PFMT64x" off=0x%08"PFMT64x" name=%s\n",
 					   i, baddr+field->rva, field->offset, field->name);
 		i++;
 	}
@@ -574,8 +580,7 @@ static int rabin_do_operation(const char *op) {
 			if (ptr2) {
 				if (!rabin_dump_symbols (r_num_math(NULL, ptr2)))
 					return R_FALSE;
-			} else 
-				if (!rabin_dump_symbols (0))
+			} else if (!rabin_dump_symbols (0))
 					return R_FALSE;
 		} else if (ptr[0]=='S') {
 			if (!ptr2)
@@ -745,8 +750,7 @@ int main(int argc, char **argv) {
 	if (action == ACTION_HELP || action == ACTION_UNK || file == NULL)
 		return rabin_show_help ();
 
-	if (!r_bin_load (bin, file, R_FALSE) &&
-		!r_bin_load (bin, file, R_TRUE)) {
+	if (!r_bin_load (bin, file, R_FALSE) && !r_bin_load (bin, file, R_TRUE)) {
 		eprintf ("r_bin: Cannot open '%s'\n", file);
 		return 1;
 	}
@@ -758,13 +762,13 @@ int main(int argc, char **argv) {
 			bits = r_num_math (NULL, ptr+1);
 		}
 	}
-	if (action&ACTION_LISTARCHS ||
-		((arch || bits || arch_name) &&
-		 !r_bin_set_arch (bin, arch, bits, arch_name))) {
-		r_bin_list_archs (bin);
-		free (arch);
-		r_bin_free (bin);
-		return 1;
+	if (action & ACTION_LISTARCHS && (arch || bits || arch_name)) {
+		if (!r_bin_set_arch (bin, arch, bits, arch_name)) {
+			r_bin_list_archs (bin);
+			free (arch);
+			r_bin_free (bin);
+			return 1;
+		}
 	}
 
 	if (action&ACTION_SECTIONS)
@@ -790,7 +794,7 @@ int main(int argc, char **argv) {
 	if (action&ACTION_SRCLINE)
 		rabin_show_srcline(at);
 	if (action&ACTION_EXTRACT)
-		rabin_extract ((arch==NULL&&arch_name==NULL&&bits==0));
+		rabin_extract ((arch==NULL && arch_name==NULL && bits==0));
 	if (op != NULL && action&ACTION_OPERATION)
 		rabin_do_operation (op);
 

@@ -2,6 +2,7 @@ RELEASE=1
 DESTDIR=
 
 COMPILER?=gcc
+#COMPILER=maemo
 #COMPILER=mingw32-gcc
 #tcc
 
@@ -16,6 +17,9 @@ else
 PREFIX=${PWD}/prefix
 VERSION=`date '+%Y%m%d'`
 endif
+
+PFX=${DESTDIR}${PREFIX}
+MDR=${DESTDIR}${MANDIR}
 
 LIBDIR=${PREFIX}/lib
 

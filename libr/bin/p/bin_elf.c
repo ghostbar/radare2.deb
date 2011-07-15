@@ -1,4 +1,4 @@
-/* radare - LGPL3 - Copyright 2009-2011 nibble<.ds@gmail.com> */
+/* radare - LGPL - Copyright 2009-2011 nibble<.ds@gmail.com> */
 
 #include <r_types.h>
 #include <r_util.h>
@@ -78,6 +78,17 @@ static RList* sections(RBinArch *arch) {
 		r_list_append (ret, ptr);
 	}
 	free (section);
+	if (r_list_empty (ret)) {
+		if (!(ptr = R_NEW (RBinSection)))
+			return ret;
+		strncpy (ptr->name, "undefined", R_BIN_SIZEOF_STRINGS);
+		ptr->size = arch->size;
+		ptr->vsize = arch->size;
+		ptr->offset = 0;
+		ptr->rva = 0;
+		ptr->srwx = 7;
+		r_list_append (ret, ptr);
+	}
 	return ret;
 }
 

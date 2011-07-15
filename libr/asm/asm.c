@@ -89,6 +89,7 @@ R_API RAsm *r_asm_new() {
 	if (a) {
 		a->user = NULL;
 		a->cur = NULL;
+		a->binb.bin = NULL;
 		a->bits = 32;
 		a->big_endian = 0;
 		a->pc = 0;
@@ -187,7 +188,7 @@ R_API int r_asm_set_pc(RAsm *a, ut64 pc) {
 	return R_TRUE;
 }
 
-R_API int r_asm_disassemble(RAsm *a, struct r_asm_op_t *op, ut8 *buf, ut64 len) {
+R_API int r_asm_disassemble(RAsm *a, struct r_asm_op_t *op, const ut8 *buf, ut64 len) {
 	int ret = 0;
 	if (a->cur && a->cur->disassemble)
 		ret = a->cur->disassemble(a, op, buf, len);
@@ -206,9 +207,10 @@ R_API int r_asm_assemble(RAsm *a, struct r_asm_op_t *op, const char *buf) {
 		if (!a->cur->assemble) {
 			/* find callback if no assembler support in current plugin */
 			r_list_foreach (a->plugins, iter, h) {
-				if (h->arch && h->assemble && has_bits(h, a->bits)
-				&& !strcmp(a->cur->arch, h->arch)) {
-					ret = h->assemble(a, op, buf);
+				if (h->arch && h->assemble
+				&& has_bits (h, a->bits)
+				&& !strcmp (a->cur->arch, h->arch)) {
+					ret = h->assemble (a, op, buf);
 					break;
 				}
 			}
@@ -231,20 +233,20 @@ R_API RAsmCode* r_asm_mdisassemble(RAsm *a, ut8 *buf, ut64 len) {
 
 	if (!(acode = r_asm_code_new()))
 		return NULL;
-	if (!(acode->buf = malloc (len)))
+	if (!(acode->buf = malloc (1+len)))
 		return r_asm_code_free (acode);
 	memcpy (acode->buf, buf, len);
-	if (!(acode->buf_hex = malloc(2*len+1)))
+	if (!(acode->buf_hex = malloc (2*len+1)))
 		return r_asm_code_free(acode);
 	r_hex_bin2str(buf, len, acode->buf_hex);
-	if (!(acode->buf_asm = malloc(2)))
-		return r_asm_code_free(acode);
+	if (!(acode->buf_asm = malloc (2)))
+		return r_asm_code_free (acode);
 	
 	for (idx = ret = slen = 0, acode->buf_asm[0] = '\0'; idx < len; idx+=ret) {
 		r_asm_set_pc(a, a->pc + ret);
 		ret = r_asm_disassemble (a, &op, buf+idx, len-idx);
 		if (ret<1) {
-			eprintf ("error disassemble at offset %"PFMT64d"\n", idx);
+			eprintf ("disassemble error at offset %"PFMT64d"\n", idx);
 			return r_asm_code_free (acode);
 		}
 		slen += strlen (op.buf_asm) + 2;
@@ -262,12 +264,21 @@ R_API RAsmCode* r_asm_mdisassemble_hexstr(RAsm *a, const char *hexstr) {
 	ut8 *buf;
 	int len;
 
-	if (!(buf = malloc (strlen (hexstr))))
+	if (!(buf = malloc (1+strlen (hexstr))))
 		return NULL;
 	len = r_hex_str2bin (hexstr, buf);
 	ret = r_asm_mdisassemble (a, buf, len);
 	free (buf);
 	return ret;
+}
+
+R_API RAsmCode* r_asm_assemble_file(RAsm *a, const char *file) {
+	RAsmCode *ac;
+	char *f = r_file_slurp (file, NULL);
+	if (!f) return NULL;
+	ac = r_asm_massemble (a, f);
+	free (f);
+	return ac;
 }
 
 R_API RAsmCode* r_asm_massemble(RAsm *a, const char *buf) {
@@ -284,10 +295,10 @@ R_API RAsmCode* r_asm_massemble(RAsm *a, const char *buf) {
 		return NULL;
 	if (!(acode->buf_asm = malloc (strlen (buf)+16)))
 		return r_asm_code_free (acode);
-	strcpy (acode->buf_asm, buf);
+	strncpy (acode->buf_asm, buf, sizeof (acode->buf_asm)-1);
 	if (!(acode->buf_hex = malloc (64)))
 		return r_asm_code_free (acode);
-	acode->buf_hex[0]=0;
+	*acode->buf_hex = 0;
 	if (!(acode->buf = malloc (64)))
 		return r_asm_code_free (acode);
 	lbuf = strdup (buf);
@@ -418,4 +429,10 @@ R_API char *r_asm_op_get_hex(RAsmOp *op) {
 
 R_API char *r_asm_op_get_asm(RAsmOp *op) {
 	return strdup (op->buf_asm);
+}
+
+R_API int r_asm_get_offset(RAsm *a, int type, int idx) { // link to rbin
+	if (a && a->binb.bin && a->binb.get_offset)
+		return a->binb.get_offset (a->binb.bin, type, idx);
+	return -1;
 }

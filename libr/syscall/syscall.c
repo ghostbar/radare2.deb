@@ -7,6 +7,8 @@
 #include <string.h>
 #include "fastcall.h"
 
+extern RSyscallItem syscalls_openbsd_x86[];
+extern RSyscallItem syscalls_linux_sh[];
 extern RSyscallItem syscalls_netbsd_x86[];
 extern RSyscallItem syscalls_linux_x86[];
 extern RSyscallItem syscalls_linux_mips[];
@@ -80,8 +82,8 @@ R_API int r_syscall_setup(RSyscall *ctx, const char *arch, const char *os) {
 			ctx->sysptr = syscalls_netbsd_x86;
 		else if (!strcmp (os, "freebsd"))
 			ctx->sysptr = syscalls_freebsd_x86;
-		//else if (!strcmp (os, "openbsd"))
-		//	ctx->sysptr = syscalls_openbsd_x86;
+		else if (!strcmp (os, "openbsd"))
+			ctx->sysptr = syscalls_openbsd_x86;
 		else if ((!strcmp (os, "darwin")) || (!strcmp (os, "macos")))
 			ctx->sysptr = syscalls_darwin_x86;
 		else if (!strcmp (os, "windows")) //win7
@@ -90,6 +92,16 @@ R_API int r_syscall_setup(RSyscall *ctx, const char *arch, const char *os) {
 			eprintf ("r_syscall_setup: Unknown os '%s'\n", os);
 			return R_FALSE;
 		}
+	} else
+	if (!strcmp (arch,"sh")){
+		ctx->regs = fastcall_sh;
+		if (!strcmp (os, "linux"))
+			ctx->sysptr = syscalls_linux_sh;
+		else {
+			eprintf ("r_syscall_setup: Unknown os '%s'\n",os);
+			return R_FALSE;
+		}
+	
 	} else {
 		eprintf ("r_syscall_setup: Unknown os/arch '%s'/'%s'\n", os, arch);
 		return R_FALSE;
@@ -122,7 +134,7 @@ R_API RSyscallItem *r_syscall_get(RSyscall *ctx, int num, int swi) {
 
 R_API int r_syscall_get_num(RSyscall *ctx, const char *str) {
 	int i;
-	for (i=0; ctx->sysptr[i].num;i++)
+	for (i=0; ctx->sysptr[i].name; i++)
 		if (!strcmp (str, ctx->sysptr[i].name))
 			return ctx->sysptr[i].num;
 	return 0;
@@ -132,14 +144,14 @@ R_API int r_syscall_get_num(RSyscall *ctx, const char *str) {
 /* XXX: ugly iterator implementation */
 R_API RSyscallItem *r_syscall_get_n(RSyscall *ctx, int n) {
 	int i;
-	for (i=0; ctx->sysptr[i].num && i!=n; i++)
+	for (i=0; ctx->sysptr[i].name && i!=n; i++)
 		return &ctx->sysptr[i];
 	return NULL;
 }
 
 R_API const char *r_syscall_get_i(RSyscall *ctx, int num, int swi) {
 	int i;
-	for (i=0; ctx->sysptr[i].num; i++) {
+	for (i=0; ctx->sysptr[i].name; i++) {
 		if (num == ctx->sysptr[i].num && \
 				(swi == -1 || swi == ctx->sysptr[i].swi))
 			return ctx->sysptr[i].name;
@@ -158,7 +170,7 @@ R_API const char *r_syscall_get_io(RSyscall *ctx, int ioport) {
 
 R_API void r_syscall_list(RSyscall *ctx) {
 	int i;
-	for (i=0; ctx->sysptr[i].num; i++) {
+	for (i=0; ctx->sysptr[i].name; i++) {
 		ctx->printf ("%02x: %d = %s\n",
 			ctx->sysptr[i].swi, ctx->sysptr[i].num, ctx->sysptr[i].name);
 	}

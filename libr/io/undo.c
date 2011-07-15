@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
 
 #include <r_io.h>
 
@@ -31,6 +31,8 @@ R_API ut64 r_io_sundo_last(struct r_io_t *io) {
 }
 
 R_API int r_io_sundo(struct r_io_t *io) {
+	if (io->undo.idx == io->undo.limit)
+		r_io_sundo_push (io);
 	io->undo.idx--;
 	if (io->undo.idx<0)
 		return io->undo.idx = 0;
@@ -40,11 +42,11 @@ R_API int r_io_sundo(struct r_io_t *io) {
 
 R_API int r_io_sundo_redo(struct r_io_t *io) {
 	if (io->undo.idx<io->undo.limit) {
-		io->undo.idx += 2;
+		io->undo.idx += 1;
 		if (io->undo.idx>=R_IO_UNDOS) {
-			io->undo.idx -= 2;
+			io->undo.idx -= 1;
 			return R_FALSE;
-		} else io->off = io->undo.seek[io->undo.idx];
+		} else io->off = io->undo.seek[io->undo.idx-1];
 		r_io_sundo(io);
 		return R_TRUE;
 	}
@@ -52,16 +54,21 @@ R_API int r_io_sundo_redo(struct r_io_t *io) {
 }
 
 R_API void r_io_sundo_push(RIO *io) {
-	ut64 off = (io->va && !list_empty (&io->sections))? 
+	ut64 off = (io->va && !r_list_empty (io->sections))?
 		r_io_section_offset_to_vaddr (io, io->off) : io->off;
 	if (!io->undo.s_enable)
 		return;
+#if 0
 	if (io->undo.seek[io->undo.idx-1] == off)
 		return;
+#endif
 	io->undo.seek[io->undo.idx] = off;
-	if (++io->undo.idx==R_IO_UNDOS-1)
+	io->undo.idx++;
+	if (io->undo.idx==R_IO_UNDOS-1) {
 		io->undo.idx--;
-	if (io->undo.limit<io->undo.idx)
+		//eprintf ("undo limit reached\n");
+	}
+	//if (io->undo.limit<io->undo.idx)
 		io->undo.limit = io->undo.idx;
 }
 
@@ -73,9 +80,9 @@ R_API void r_io_sundo_list(struct r_io_t *io) {
 	int i;
 	if (io->undo.idx>0) {
 		io->printf ("f undo_idx @ %d\n", io->undo.idx);
-		for(i=io->undo.idx-1;i!=0;i--)
+		for (i=io->undo.idx;i!=0;i--)
 			io->printf ("f undo_%d @ 0x%"PFMT64x"\n",
-				io->undo.idx-1-i, io->undo.seek[i-1]);
+				io->undo.idx-i, io->undo.seek[i-1]);
 	} else eprintf("-no seeks done-\n");
 }
 
@@ -83,12 +90,11 @@ R_API void r_io_sundo_list(struct r_io_t *io) {
 
 R_API void r_io_wundo_new(struct r_io_t *io, ut64 off, const ut8 *data, int len) {
 	struct r_io_undo_w_t *uw;
-
 	if (!io->undo.w_enable)
 		return;
-
 	/* undo write changes */
 	uw = R_NEW(struct r_io_undo_w_t);
+	if (!uw) return;
 	uw->set = R_TRUE;
 	uw->off = off;
 	uw->len = len;

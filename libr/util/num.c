@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
 
 #include "r_util.h"
 
@@ -15,9 +15,13 @@
 R_API ut64 r_num_htonq(ut64 value) {
         ut64 ret  = value;
 #if LIL_ENDIAN
-        r_mem_copyendian((ut8*)&ret, (ut8*)&value, 8, 0);
+        r_mem_copyendian ((ut8*)&ret, (ut8*)&value, 8, 0);
 #endif
         return ret;
+}
+
+R_API void r_num_irand() {
+	srand (rand () % r_sys_now ());
 }
 
 R_API int r_num_rand(int max) {
@@ -54,10 +58,10 @@ R_API RNum *r_num_new(RNumCallback cb, void *ptr) {
 /* old get_offset */
 R_API ut64 r_num_get(RNum *num, const char *str) {
 	int i, j;
-	char lch;
+	char lch, len;
 	ut64 ret = 0LL;
 
-	for (;str[0]==' ';) str = str+1;
+	for (; *str==' '; ) str++;
 
 	/* resolve string with an external callback */
 	if (num && num->callback) {
@@ -70,36 +74,37 @@ R_API ut64 r_num_get(RNum *num, const char *str) {
 		return (ut64)str[1];
 
 	if (str[0]=='0' && str[1]=='x') {
-		sscanf(str, "0x%"PFMT64x"", &ret);
+		sscanf (str, "0x%"PFMT64x"", &ret);
 	} else {
-		lch = str[strlen(str)-1];
+		len = strlen (str);
+		lch = str[len>0?len-1:0];
 		switch (lch) {
 		case 'h': // hexa
-			sscanf(str, "%"PFMT64x"", &ret);
+			sscanf (str, "%"PFMT64x"", &ret);
 			break;
 		case 'o': // octal
 			sscanf (str, "%"PFMT64o"", &ret);
 			break;
 		case 'b': // binary
 			ret = 0;
-			for(j=0,i=strlen(str)-2;i>=0;i--,j++) {
+			for (j=0, i=strlen (str)-2; i>=0; i--, j++) {
 				if (str[i]=='1') ret|=1<<j;
 				else if (str[i]!='0') break;
 			}
 			break;
 		default:
-			sscanf(str, "%"PFMT64d"", &ret);
+			sscanf (str, "%"PFMT64d"", &ret);
 			break;
 		case 'K': case 'k':
-			sscanf(str, "%"PFMT64d"", &ret);
+			sscanf (str, "%"PFMT64d"", &ret);
 			ret *= 1024;
 			break;
 		case 'M': case 'm':
-			sscanf(str, "%"PFMT64d"", &ret);
+			sscanf (str, "%"PFMT64d"", &ret);
 			ret *= 1024*1024;
 			break;
 		case 'G': case 'g':
-			sscanf(str, "%"PFMT64d"", &ret);
+			sscanf (str, "%"PFMT64d"", &ret);
 			ret *= 1024*1024*1024;
 			break;
 		}
@@ -152,9 +157,10 @@ R_API ut64 r_num_math(RNum *num, const char *str) {
 	ut64 ret = 0LL;
 	char op = '+';
 	int len = strlen (str)+1;
-	char *p, *s = alloca (len);
+	char *p, *s, *os = malloc (len+1);
 	char *group;
 
+	s = os;
 	memcpy (s, str, len);
 	for (; *s==' '; s++);
 	p = s;
@@ -162,7 +168,7 @@ R_API ut64 r_num_math(RNum *num, const char *str) {
 	do {
 		group = strchr (p, '(');
 		if (group) {
-			group[0]='\0';
+			group[0] = '\0';
 			ret = r_num_op (op, ret, r_num_math_internal (num, p));
 			for (; p<group; p+=1) {
 				switch (*p) {
@@ -177,7 +183,7 @@ R_API ut64 r_num_math(RNum *num, const char *str) {
 					break;
 				}
 			}
-			group[0]='(';
+			group[0] = '(';
 			p = group+1;
 			if (r_str_delta (p, '(', ')')<0) {
 				char *p2 = strchr (p, '(');
@@ -194,7 +200,7 @@ R_API ut64 r_num_math(RNum *num, const char *str) {
 
 	if (num != NULL)
 		num->value = ret;
-
+	free (os);
 	return ret;
 }
 
@@ -217,9 +223,10 @@ R_API int r_num_to_bits (char *out, ut64 num) {
 	else if (num&0xff00) size = 16;
 	else if (num&0xff) size = 8;
 	if (out) {
-		for (i=0;i<size;i++)
-			out[size-1-i]=(num>>i&1)?'1':'0';
+		for (i=0; i<size; i++)
+			out[size-1-i] = (num>>i&1)? '1': '0';
 		out[size]='\0'; //Maybe not nesesary?
 	}
 	return size;
 }
+

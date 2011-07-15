@@ -43,13 +43,13 @@ R_API void r_core_sysenv_end(RCore *core, const char *cmd) {
 R_API char *r_core_sysenv_begin(RCore *core, const char *cmd) {
 	char buf[64], *ret;
 #if DISCUSS
-// EDITOR      cfg.editor (vim or so)
- CURSOR      cursor position (offset from curseek)
- COLOR       scr.color?1:0
- VERBOSE     cfg.verbose
-// only if cmd matches BYTES or BLOCK ?
- BYTES       hexpairs of current block
- BLOCK       temporally file with contents of current block
+	// EDITOR      cfg.editor (vim or so)
+	CURSOR      cursor position (offset from curseek)
+	COLOR       scr.color?1:0
+	VERBOSE     cfg.verbose
+	// only if cmd matches BYTES or BLOCK ?
+	BYTES       hexpairs of current block
+	BLOCK       temporally file with contents of current block
 #endif
 	if (!core->file)
 		return NULL;
@@ -75,21 +75,21 @@ R_API char *r_core_sysenv_begin(RCore *core, const char *cmd) {
 }
 
 R_API int r_core_bin_load(RCore *r, const char *file) {
-	RBinInfo *info;
-	RBinAddr *binmain;
-	RBinObj *obj;
-	RList *list;
-	RListIter *iter;
-	RBinAddr *entry;
+	int va = r->io->va || r->io->debug;
+	char str[R_FLAG_NAME_SIZE];
+	RBinSection *section;
 	RBinSymbol *symbol;
-	RBinReloc *reloc;
 	RBinString *string;
 	RBinImport *import;
-	RBinSection *section;
+	RBinAddr *binmain;
+	RBinReloc *reloc;
+	RListIter *iter;
+	RBinAddr *entry;
+	RBinInfo *info;
+	RBinObj *obj;
+	RList *list;
 	ut64 baddr;
-	int va = r->io->va || r->io->debug;
 	int i = 0;
-	char str[R_FLAG_NAME_SIZE];
 
 	if (file == NULL)
 		file = r->file->filename;
@@ -102,12 +102,17 @@ R_API int r_core_bin_load(RCore *r, const char *file) {
 	if ((info = r_bin_get_info (r->bin)) != NULL) {
 		r_config_set (r->config, "file.type", info->rclass);
 		r_config_set (r->config, "cfg.bigendian", info->big_endian?"true":"false");
-		r_config_set (r->config, "asm.os", info->os);
-		r_config_set (r->config, "asm.arch", info->arch);
-		r_config_set (r->config, "anal.plugin", info->arch);
-		snprintf (str, R_FLAG_NAME_SIZE, "%i", info->bits);
-		r_config_set (r->config, "asm.bits", str);
-		r_config_set (r->config, "asm.dwarf", R_BIN_DBG_STRIPPED (info->dbg_info)?"false":"true");
+		if (!strcmp (info->rclass, "fs")) {
+			r_config_set (r->config, "asm.arch", info->arch);
+			r_core_cmdf (r, "m %s /root 0", info->arch);
+		} else {
+			r_config_set (r->config, "asm.os", info->os);
+			r_config_set (r->config, "asm.arch", info->arch);
+			r_config_set (r->config, "anal.plugin", info->arch);
+			snprintf (str, R_FLAG_NAME_SIZE, "%i", info->bits);
+			r_config_set (r->config, "asm.bits", str);
+			r_config_set (r->config, "asm.dwarf", R_BIN_DBG_STRIPPED (info->dbg_info)?"false":"true");
+		}
 	}
 
 	// M -> Main
@@ -125,7 +130,8 @@ R_API int r_core_bin_load(RCore *r, const char *file) {
 					r->blocksize, 0);
 		}
 		/* Seek to the last entry point */
-		r_core_seek (r, va?baddr+entry->rva:entry->offset, 0);
+		if (entry)
+			r_core_seek (r, va?baddr+entry->rva:entry->offset, 0);
 	}
 
 	// s -> Symbols
@@ -134,7 +140,7 @@ R_API int r_core_bin_load(RCore *r, const char *file) {
 		r_flag_space_set (r->flags, "symbols");
 		r_list_foreach (list, iter, symbol) {
 			name = strdup (symbol->name);
-			r_flag_name_filter (name);
+			r_name_filter (name, 80);
 			snprintf (str, R_FLAG_NAME_SIZE, "sym.%s", name);
 			if (!strncmp (symbol->type,"OBJECT", 6))
 				r_meta_add (r->anal->meta, R_META_TYPE_DATA, va?baddr+symbol->rva:symbol->offset,
@@ -162,29 +168,33 @@ R_API int r_core_bin_load(RCore *r, const char *file) {
 	}
 
 	// z -> Strings
+	if (r_config_get_i (r->config, "bin.strings"))
 	if ((list = r_bin_get_strings (r->bin)) != NULL) {
-		if (r_list_length (list) > 1024) {
+/*
+// load all strings ALWAYS!! rhashtable is fast
+		if (r_list_length (list) > 102400) {
 			eprintf ("rabin2: too many strings. not importing string info\n");
 		} else {
+*/
 			r_flag_space_set (r->flags, "strings");
 			r_list_foreach (list, iter, string) {
 				/* Jump the withespaces before the string */
 				for (i=0;*(string->string+i)==' ';i++);
 				r_meta_add (r->anal->meta, R_META_TYPE_STRING, va?baddr+string->rva:string->offset,
 					(va?baddr+string->rva:string->offset)+string->size, string->string+i);
-				r_flag_name_filter (string->string);
+				r_name_filter (string->string, 128);
 				snprintf (str, R_FLAG_NAME_SIZE, "str.%s", string->string);
 				r_flag_set (r->flags, str, va?baddr+string->rva:string->offset,
 						string->size, 0);
 			}
-		}
+		//}
 	}
 
 	// i -> Imports
 	if ((list = r_bin_get_imports (r->bin)) != NULL) {
 		r_flag_space_set (r->flags, "imports");
 		r_list_foreach (list, iter, import) {
-			r_flag_name_filter (import->name);
+			r_name_filter (import->name, 128);
 			snprintf (str, R_FLAG_NAME_SIZE, "imp.%s", import->name);
 			if (import->size)
 				if (!r_anal_fcn_add (r->anal, va?baddr+import->rva:import->offset,
@@ -200,7 +210,7 @@ R_API int r_core_bin_load(RCore *r, const char *file) {
 	if ((list = r_bin_get_sections (r->bin)) != NULL) {
 		r_flag_space_set (r->flags, "sections");
 		r_list_foreach (list, iter, section) {
-			r_flag_name_filter (section->name);
+			r_name_filter (section->name, 128);
 			snprintf (str, R_FLAG_NAME_SIZE, "section.%s", section->name);
 			r_flag_set (r->flags, str, va?baddr+section->rva:section->offset,
 					section->size, 0);
@@ -230,7 +240,7 @@ R_API RCoreFile *r_core_file_open(RCore *r, const char *file, int mode, ut64 loa
 	if (fd == NULL)
 		return NULL;
 	if (r_io_is_listener (r->io)) {
-		r_core_serve (r, r->io->fd);
+		r_core_serve (r, fd);
 		return NULL;
 	}
 
@@ -314,4 +324,41 @@ R_API int r_core_file_close_fd(RCore *core, int fd) {
 		}
 	}
 	return R_FALSE;
+}
+
+R_API int r_core_hash_load(RCore *r, const char *file) {
+	const ut8 *buf = NULL;
+	int i, buf_len = 0;
+	const ut8 *md5, *sha1;
+	char hash[128], *p;
+	RHash *ctx;
+	ut64 limit;
+
+	limit = r_config_get_i (r->config, "cfg.hashlimit");
+	if (r->file->size > limit)
+		return R_FALSE;
+	buf = (const ut8*)r_file_slurp (file, &buf_len);
+	if (buf==NULL)
+		return R_FALSE;
+	ctx = r_hash_new (R_TRUE, R_HASH_MD5);
+	md5 = r_hash_do_md5 (ctx, buf, buf_len);
+	p = hash;
+	for (i=0; i<R_HASH_SIZE_MD5; i++) {
+		sprintf (p, "%02x", md5[i]);
+		p+=2;
+	}
+	*p=0;
+	r_config_set (r->config, "file.md5", hash);
+	r_hash_free (ctx);
+	ctx = r_hash_new (R_TRUE, R_HASH_SHA1);
+	sha1 = r_hash_do_sha1 (ctx, buf, buf_len);
+	p = hash;
+	for (i=0; i<R_HASH_SIZE_SHA1;i++) {
+		sprintf (p, "%02x", sha1[i]);
+		p+=2;
+	}
+	*p=0;
+	r_config_set (r->config, "file.sha1", hash);
+	r_hash_free (ctx);
+	return R_TRUE;
 }

@@ -15,11 +15,16 @@
 #include <stdarg.h>
 #include <sys/time.h>
 
+// TODO: FS or R_SYS_DIR ??
 #undef FS
 #if __WINDOWS__
 #define FS "\\"
+#define R_SYS_DIR "\\"
+#define R_SYS_HOME "USERPROFILE"
 #else
 #define FS "/"
+#define R_SYS_DIR "/"
+#define R_SYS_HOME "HOME"
 #endif
 
 /* provide a per-module debug-enabled feature */
@@ -57,6 +62,7 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #define ZERO_FILL(x) memset (x, 0, sizeof (x))
 #define R_NEWS(x,y) (x*)malloc(sizeof(x)*y)
 #define R_NEW(x) (x*)malloc(sizeof(x))
+#define R_NEW0(x) (x*)calloc(1,sizeof(x))
 // TODO: Make R_NEW_COPY be 1 arg, not two
 #define R_NEW_COPY(x,y) x=(y*)malloc(sizeof(y));memcpy(x,y,sizeof(y))
 #define IS_PRINTABLE(x) (x>=' '&&x<='~')
@@ -71,13 +77,13 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #undef __UNIX__
 #undef __WINDOWS__
 
-#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
-  #define __BSD__ 1
+#if defined(__linux__) || defined(__APPLE__) || defined(__GNU__)
+  #define __BSD__ 0
   #define __UNIX__ 1
 #endif
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__FreeBSD_kernel__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+  #define __BSD__ 1
   #define __UNIX__ 1
-  #undef __BSD__
 #endif
 #if __WIN32__ || __CYGWIN__ || MINGW32
   #define __addr_t_defined
@@ -99,7 +105,7 @@ typedef void (*PrintfCallback)(const char *str, ...);
 
 /* TODO: Move outside */
 #define _perror(str,file,line) \
-  { char buf[128];sprintf(buf, "%s:%d %s", file,line,str);perror(buf); }
+  { char buf[128];snprintf(buf,sizeof(buf),"%s:%d %s",file,line,str);perror(buf); }
 #define perror(x) _perror(x,__FILE__,__LINE__)
 
 #define eprintf(x,y...) fprintf(stderr,x,##y)
@@ -107,6 +113,7 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #define R_MAX(x,y) (x>y)?x:y
 #define R_MIN(x,y) (x>y)?y:x
 #define R_ABS(x) (((x)<0)?-(x):(x))
+#define R_BTW(x,y,z) (((x)>=(y))&&((y)<=(z)))?y:x
 
 #define R_FREE(x) { free(x); x = NULL; }
 
@@ -124,6 +131,72 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #define PFMT64x "llx"
 #define PFMT64d "lld"
 #define PFMT64o "llo"
+#endif
+
+/* arch */
+#if __i386__
+#define R_SYS_ARCH "x86"
+#define R_SYS_BITS R_SYS_BITS_32
+#elif __x86_64__
+#define R_SYS_ARCH "x86"
+#define R_SYS_BITS (R_SYS_BITS_32 | R_SYS_BITS_64)
+#elif __POWERPC__
+#define R_SYS_ARCH "ppc"
+#define R_SYS_BITS R_SYS_BITS_32
+#elif __arm__
+#define R_SYS_ARCH "arm"
+#define R_SYS_BITS R_SYS_BITS_32
+#elif __sparc__
+#define R_SYS_ARCH "sparc"
+#define R_SYS_BITS R_SYS_BITS_32
+#elif __mips__
+#define R_SYS_ARCH "mips"
+#define R_SYS_BITS R_SYS_BITS_32
+#else
+#define R_SYS_ARCH "unknown"
+#define R_SYS_BITS R_SYS_BITS_32
+#endif
+
+enum {
+	R_SYS_ARCH_NONE = 0,
+	R_SYS_ARCH_X86 = 0x1,
+	R_SYS_ARCH_ARM = 0x2,
+	R_SYS_ARCH_PPC = 0x4,
+	R_SYS_ARCH_M68K = 0x8,
+	R_SYS_ARCH_JAVA = 0x10,
+	R_SYS_ARCH_MIPS = 0x20,
+	R_SYS_ARCH_SPARC = 0x40,
+	R_SYS_ARCH_CSR = 0x80,
+	R_SYS_ARCH_MSIL = 0x100,
+	R_SYS_ARCH_OBJD = 0x200,
+	R_SYS_ARCH_BF = 0x400,
+	R_SYS_ARCH_SH = 0x800,
+	R_SYS_ARCH_AVR = 0x1000,
+	R_SYS_ARCH_DALVIK = 0x2000
+};
+
+/* os */
+#if __APPLE__
+#define R_SYS_OS "darwin"
+#elif __linux__
+#define R_SYS_OS "linux"
+#elif __WIN32__ || __CYGWIN__ || MINGW32
+#define R_SYS_OS "windows"
+#elif __NetBSD__ 
+#define R_SYS_OS "netbsd"
+#elif __OpenBSD__
+#define R_SYS_OS "openbsd"
+#elif __FreeBSD__ || __FreeBSD_kernel__
+#define R_SYS_OS "freebsd"
+#else
+#define R_SYS_OS "unknown"
+#endif
+
+/* endian */
+#if LIL_ENDIAN
+#define R_SYS_ENDIAN "little"
+#else
+#define R_SYS_ENDIAN "big"
 #endif
 
 #endif

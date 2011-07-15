@@ -8,7 +8,7 @@
 #include <r_asm.h>
 #include "msil/demsil.c"
 
-static int arch_msil_disasm(char *str, unsigned char *buf, ut64 seek) {
+static int arch_msil_disasm(char *str, const ut8 *buf, ut64 seek) {
     ut32 n;
 
     DISASMSIL_OFFSET CodeBase = seek;
@@ -20,7 +20,7 @@ static int arch_msil_disasm(char *str, unsigned char *buf, ut64 seek) {
     return 0;
 }
 
-static int disassemble(struct r_asm_t *a, struct r_asm_op_t *op, ut8 *buf, ut64 len) {
+static int disassemble(struct r_asm_t *a, struct r_asm_op_t *op, const ut8 *buf, ut64 len) {
 	arch_msil_disasm (op->buf_asm, buf, a->pc);
 	return (op->inst_len=2);
 }

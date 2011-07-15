@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
 
 #include "r_types.h"
 #include "r_util.h"
@@ -8,6 +8,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <fcntl.h>
 #if __UNIX__
 #include <sys/mman.h>
 #endif
@@ -78,7 +79,7 @@ R_API char *r_file_slurp(const char *str, int *usz) {
 	if (rsz != sz)
 		eprintf ("r_file_slurp: fread: error\n");
 	fclose (fd);
-	ret[rsz]='\0';
+	ret[sz]='\0';
 	if (usz)
 		*usz = (ut32)sz;
 	return ret;
@@ -175,7 +176,7 @@ R_API char *r_file_slurp_line(const char *file, int line, int context) {
 			return NULL;
 		}
 		lines = line;
-		for (i=0;str[i]&&lines;i++)
+		for (i=0; str[i]&&lines; i++)
 			if (str[i]=='\n')
 				lines--;
 		ptr = str+i;
@@ -206,9 +207,9 @@ R_API boolt r_file_dump(const char *file, const ut8 *buf, int len) {
 
 R_API boolt r_file_rm(const char *file) {
 #if __WINDOWS__
-	return (DeleteFile (file)==0)? R_TRUE:R_FALSE;
+	return (DeleteFile (file)==0)? R_TRUE: R_FALSE;
 #else
-	return (unlink (file)==0)? R_TRUE:R_FALSE;
+	return (unlink (file)==0)? R_TRUE: R_FALSE;
 #endif
 }
 
@@ -281,4 +282,45 @@ R_API void r_file_mmap_free (RMmap *m) {
 #endif
 	close (m->fd);
 	free (m);
+}
+
+R_API char *r_file_temp (const char *prefix) {
+	int namesz;
+	char *name;
+	const char *path = r_file_tmpdir ();
+	namesz = strlen (prefix) + strlen (path) + 32;
+	name = malloc (namesz);
+	snprintf (name, namesz, "%s/%s.%"PFMT64x, path, prefix, r_sys_now ());
+	return name;
+}
+
+R_API int r_file_mkstemp (const char *prefix, char **oname) {
+	int h;
+	const char *path = r_file_tmpdir ();
+	char *name = malloc (1024);
+#if __WINDOWS__
+	if (GetTempFileName (path, prefix, 0, name))
+		h = open (name, O_RDWR|O_EXCL);
+	else h = -1;
+#else
+	h = snprintf (name, 1024, "%s/%sXXXXXX", path, prefix);
+	if (h<1024)
+		h = mkstemp (name);
+	else h = -1;
+#endif
+	if (oname && h!=-1) *oname = name;
+	else free (name);
+	return h;
+}
+
+R_API const char *r_file_tmpdir() {
+	const char *path;
+#if __WINDOWS__
+	path = r_sys_getenv ("TEMP");
+	if (!path) path = "C:\\WINDOWS\\Temp\\";
+#else
+	path = r_sys_getenv ("TMPDIR");
+	if (!path) path = "/tmp";
+#endif
+	return path;
 }

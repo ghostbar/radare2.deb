@@ -70,13 +70,13 @@ R_API int r_debug_reg_list(struct r_debug_t *dbg, int type, int size, int rad) {
 		} else if (rad==3) {
 			if (diff) {
 				char woot[32];
-				snprintf (woot, sizeof(woot), " was 0x%08"PFMT64x"\n", diff);
+				snprintf (woot, sizeof (woot), " was 0x%08"PFMT64x"\n", diff);
 				dbg->printf (fmt, item->name, value, woot);
 			}
 		} else dbg->printf (fmt, item->name, value, "\n");
 		n++;
 	}
-	if (n>0 && rad==2 && (!((n+1)%cols)))
+	if (n>0 && rad==2 && ((n%cols)))
 		dbg->printf ("\n");
 	return n;
 }
@@ -100,12 +100,13 @@ R_API ut64 r_debug_reg_get(struct r_debug_t *dbg, const char *name) {
 	RRegItem *ri = NULL;
 	ut64 ret = 0LL;
 	int role = r_reg_get_name_idx (name);
+	const char *pname = name;
 	if (!dbg || !dbg->reg)
 		return R_FALSE;
 	if (role != -1) {
 		name = r_reg_get_name (dbg->reg, role);
 		if (name == NULL || *name == '\0') {
-			eprintf ("Cannot resolve name for register role '%s'.\n", name);
+			eprintf ("No debug register profile defined for '%s'.\n", pname);
 			return 0LL;
 		}
 	}

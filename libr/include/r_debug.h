@@ -10,6 +10,24 @@
 #include <r_syscall.h>
 #include "list.h"
 
+/* hack to fix compilation of debugger on BSD systems */
+/* This needs some testing (netbsd, freebsd, openbsd, kfreebsd) */
+#if __BSD__
+#include <machine/reg.h>
+
+#define PTRACE_PEEKTEXT PT_READ_I
+#define PTRACE_POKETEXT PT_WRITE_I
+#define PTRACE_PEEKDATA PT_READ_D
+#define PTRACE_POKEDATA PT_WRITE_D
+#define PTRACE_ATTACH PT_ATTACH
+#define PTRACE_DETACH PT_DETACH
+#define PTRACE_SINGLESTEP PT_STEP
+#define PTRACE_CONT PT_CONTINUE
+#define PTRACE_GETREGS PT_GETREGS
+#define PTRACE_SETREGS PT_SETREGS
+#define PTRACE_SYSCALL PT_STEP
+#endif
+
 enum {
 	R_DBG_PROC_STOP = 's',
 	R_DBG_PROC_RUN = 'r',
@@ -29,6 +47,7 @@ enum {
 };
 
 enum { // TODO: not yet used by r_debug
+	R_DBG_REASON_DEAD = -1,
 	R_DBG_REASON_UNKNOWN,
 	R_DBG_REASON_NEW_PID,
 	R_DBG_REASON_NEW_TID,
@@ -42,7 +61,6 @@ enum { // TODO: not yet used by r_debug
 	R_DBG_REASON_SIGNAL,
 	R_DBG_REASON_FPU,
 	R_DBG_REASON_BP,
-	R_DBG_REASON_DEAD
 };
 
 /* TODO: move to r_anal */
@@ -83,6 +101,8 @@ typedef struct r_debug_tracepoint_t {
 } RDebugTracepoint;
 
 typedef struct r_debug_t {
+	int arch;
+	int bits; /// XXX: MUST SET ///
 	int pid;    /* selected process id */
 	int tid;    /* selected thread id */
 	int swstep; /* steps with software traps */
@@ -91,7 +111,6 @@ typedef struct r_debug_t {
 	int reason; /* stop reason */
 	RDebugTrace *trace;
 	int stop_all_threads;
-	char *reg_profile;
 	struct r_reg_t *reg;
 	RBreakpoint *bp;
 	void *user;
@@ -123,29 +142,30 @@ typedef struct r_debug_desc_plugin_t {
 /* TODO: pass dbg and user data pointer everywhere */
 typedef struct r_debug_plugin_t {
 	const char *name;
-	const char **archs; // MUST BE DEPREACTED!!!!
+	//const char **archs; // MUST BE DEPREACTED!!!!
 	ut32 bits;
-	ut32 arch;
+	ut64 arch;
 	/* life */
 	int (*startv)(int argc, char **argv);
-	int (*attach)(int pid);
+	int (*attach)(RDebug *dbg, int pid);
 	int (*detach)(int pid);
 	int (*select)(int pid, int tid);
 	RList *(*threads)(int pid);
 	RList *(*pids)(int pid);
+	RList *(*tids)(int pid);
 	RFList (*backtrace)(int count);
 	/* flow */
 	int (*step)(RDebug *dbg);
-	int (*cont)(int pid, int tid, int sig);
-	int (*wait)(int pid);
+	int (*cont)(RDebug *dbg, int pid, int tid, int sig);
+	int (*wait)(RDebug *dbg, int pid);
 	int (*kill)(RDebug *dbg, boolt thread, int sig);
-	int (*contsc)(int pid, int sc);
+	int (*contsc)(RDebug *dbg, int pid, int sc);
 	RList* (*frames)(RDebug *dbg);
 	RBreakpointCallback breakpoint;
 // XXX: specify, pid, tid, or RDebug ?
 	int (*reg_read)(struct r_debug_t *dbg, int type, ut8 *buf, int size);
 	int (*reg_write)(int pid, int tid, int type, const ut8 *buf, int size); //XXX struct r_regset_t regs);
-	char* (*reg_profile)();
+	char* (*reg_profile)(RDebug *dbg);
 	/* memory */
 	RList *(*map_get)(RDebug *dbg);
 	ut64 (*map_alloc)(RDebug *dbg, RDebugMap *map);
@@ -186,6 +206,7 @@ R_API RDebugPid *r_debug_pid_new(const char *path, int pid, char status, ut64 pc
 R_API RDebugPid *r_debug_pid_free(RDebugPid *pid);
 R_API RList *r_debug_pids(RDebug *dbg, int pid);
 
+R_API int r_debug_set_arch(RDebug *dbg, int arch, int bits);
 R_API int r_debug_use(struct r_debug_t *dbg, const char *str);
 R_API int r_debug_plugin_add(struct r_debug_t *dbg, struct r_debug_plugin_t *foo);
 R_API int r_debug_plugin_init(struct r_debug_t *dbg);
@@ -241,6 +262,7 @@ R_API int r_debug_map_sync(RDebug *dbg);
 /* backtrace */
 R_API RList *r_debug_frames (RDebug *dbg);
 
+R_API int r_debug_is_dead (RDebug *dbg);
 /* args XXX: weird food */
 R_API ut64 r_debug_arg_get (RDebug *dbg, int fast, int num);
 R_API int r_debug_arg_set (RDebug *dbg, int fast, int num, ut64 value);

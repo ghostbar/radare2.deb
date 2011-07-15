@@ -3,11 +3,13 @@ include config.mk
 
 PREFIX?=${PWD}/../prefix
 PFX=${DESTDIR}${PREFIX}
+PWD=`pwd`
 #PREFIX=${PFX}
 
 # Libraries
 LIBLIST=util socket cons line lib io lang flags bin hash config syscall cmd
-LIBLIST+=reg asm diff anal print parse search bp sign th db crypto debug fs core
+LIBLIST+=reg asm diff anal print parse search bp sign debug fs core
+#DEPRECATED APIS : LIBLIST+=th crypto
 # sysproxy ... common wat du?
 
 all: libs
@@ -29,14 +31,14 @@ install-pkgconfig:
 
 install-includes:
 	@${INSTALL_DIR} ${PFX}/include/libr
-	(cd include && ${INSTALL_DATA} * ${PFX}/include/libr)
+	(cd include && for a in *.h ; do ${INSTALL_DATA} $$a ${PFX}/include/libr ; done)
 
 install-symlink:
 	mkdir -p ${PFX}/bin
 	mkdir -p ${PFX}/include
 	mkdir -p ${PFX}/lib/pkgconfig
 	mkdir -p ${PFX}/lib/radare2/${VERSION}
-	rm -f ${PFX}/include/libr && ln -fs ${PWD}/include ${PFX}/include/libr
+	rm -rf ${PFX}/include/libr && ln -fs ${PWD}/include ${PFX}/include/libr
 	cd ../pkgcfg && for a in *.pc ; do \
 		if [ -e ${PWD}/../pkgcfg/$${a} ] ; then \
 			ln -fs ${PWD}/../pkgcfg/$${a} ${PFX}/lib/pkgconfig/$${a} ; \
@@ -44,7 +46,7 @@ install-symlink:
 	done
 	for a in ${LIBLIST} ; do \
 		ln -fs ${PWD}/$${a}/libr_$${a}.${EXT_SO} ${PFX}/lib/libr_$${a}.${EXT_SO} ; \
-		ln -fs ${PWD}/$${a}/libr_$${a}.${EXT_SO} ${PFX}/lib/libr_$${a}.${EXT_SO}.${VERSION} ; \
+		ln -fs ${PWD}/$${a}/libr_$${a}.${EXT_SO} ${PFX}/lib/libr_$${a}.${EXT_SO}.${LIBVERSION} ; \
 		ln -fs ${PWD}/$${a}/libr_$${a}.${EXT_AR} ${PFX}/lib/libr_$${a}.${EXT_AR} ; \
 		for b in $${a}/p/*.${EXT_SO} ; do \
 			if [ -e ${PWD}/$${b} ] ; then \
@@ -59,9 +61,9 @@ install: install-includes install-pkgconfig
 	@${INSTALL_DIR} ${PFX}/lib
 	@for a in `find * -type f | grep -e '\.${EXT_SO}$$' | grep -v lib/t | grep lib | grep -v /p/` ; do \
 	  b=`echo $$a|cut -d / -f 2`; \
-	  echo " ${PFX}/lib/$$b.${VERSION}"; \
-	  ${INSTALL_LIB} $$a ${PFX}/lib/$$b.${VERSION} ; \
-	  ( cd ${PFX}/lib ; ln -fs $$b.${VERSION} $$b.0 ; ln -fs $$b.0 $$b ); \
+	  echo " ${PFX}/lib/$$b.${LIBVERSION}"; \
+	  ${INSTALL_LIB} $$a ${PFX}/lib/$$b.${LIBVERSION} ; \
+	  ( cd ${PFX}/lib ; ln -fs $$b.${LIBVERSION} $$b.0 ; ln -fs $$b.0 $$b ); \
 	done
 	# object archives
 	@for a in `find * -type f | grep -e '\.a$$' | grep -v fs/p` ; do \
@@ -100,7 +102,7 @@ deinstall uninstall:
 	rm -rf ${PFX}/bin/libr-test
 	# TODO: use for a in LIBLIST (like in binr/Makefile)
 	rm -rf ${PFX}/include/libr
-	rm -rf ${PFX}/lib/libr_*.so.${VERSION}
+	rm -rf ${PFX}/lib/libr_*.so.${LIBVERSION}
 	rm -rf ${PFX}/lib/libr_*.so.0
 	rm -rf ${PFX}/lib/libr_*.so
 	rm -rf ${PFX}/lib/libr_*.a

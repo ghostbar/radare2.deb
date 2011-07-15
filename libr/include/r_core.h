@@ -19,6 +19,8 @@
 #include "r_flags.h"
 #include "r_config.h"
 #include "r_bin.h"
+#include "r_hash.h"
+#include "r_socket.h"
 
 #define R_CORE_CMD_EXIT -2
 #define R_CORE_BLOCKSIZE 64
@@ -44,7 +46,7 @@ typedef struct r_core_rtr_host_t {
 	char host[512];
 	int port;
 	char file[1024];
-	int fd;
+	RSocket *fd;
 } RCoreRtrHost;
 /* rtr */
 
@@ -75,6 +77,7 @@ typedef struct r_core_t {
 	int oobi_len;
 	ut8 *yank;
 	int yank_len;
+	boolt visual;
 	ut64 yank_off;
 	int interrupted; // XXX IS THIS DUPPED SOMEWHERE?
 	/* files */
@@ -106,6 +109,8 @@ typedef struct r_core_t {
 	int curasmstep;
 	RCoreAsmsteps asmsteps[R_CORE_ASMSTEPS];
 	ut64 asmqjmps[10];
+	// visual
+	int printidx;
 } RCore;
 
 typedef int (*RCoreSearchCallback)(RCore *core, ut64 from, ut8 *buf, int len);
@@ -120,6 +125,7 @@ R_API int r_core_config_init(struct r_core_t *core);
 R_API int r_core_prompt(RCore *r, int sync);
 R_API int r_core_prompt_exec(RCore *r);
 R_API int r_core_cmd(struct r_core_t *r, const char *cmd, int log);
+R_API char *r_core_editor (RCore *core, const char *str);
 // XXX void*?? must be RCore !
 R_API int r_core_cmdf(void *user, const char *fmt, ...);
 R_API int r_core_cmd0(void *user, const char *cmd);
@@ -128,6 +134,8 @@ R_API char *r_core_cmd_str(struct r_core_t *core, const char *cmd);
 R_API int r_core_cmd_file(struct r_core_t *core, const char *file);
 R_API int r_core_cmd_command(struct r_core_t *core, const char *command);
 R_API boolt r_core_seek(struct r_core_t *core, ut64 addr, boolt rb);
+R_API void r_core_seek_previous (RCore *core, const char *type);
+R_API void r_core_seek_next (RCore *core, const char *type);
 R_API int r_core_seek_align(struct r_core_t *core, ut64 align, int count);
 R_API int r_core_block_read(struct r_core_t *core, int next);
 R_API int r_core_block_size(struct r_core_t *core, ut32 bsize);
@@ -186,8 +194,10 @@ R_API void r_core_asm_hit_free(void *_hit);
 R_API char* r_core_asm_search(RCore *core, const char *input, ut64 from, ut64 to);
 R_API RList *r_core_asm_strsearch(RCore *core, const char *input, ut64 from, ut64 to);
 R_API RList *r_core_asm_bwdisassemble (RCore *core, ut64 addr, int n, int len);
+R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int len, int l);
 
 R_API int r_core_bin_load(RCore *r, const char *file);
+R_API int r_core_hash_load(RCore *r, const char *file);
 
 /* gdiff.c */
 R_API int r_core_gdiff(RCore *c, RCore *c2);
@@ -207,6 +217,19 @@ R_API void r_core_rtr_add(RCore *core, const char *input);
 R_API void r_core_rtr_remove(RCore *core, const char *input);
 R_API void r_core_rtr_session(RCore *core, const char *input);
 R_API void r_core_rtr_cmd(RCore *core, const char *input);
+
+R_API void r_core_visual_define (RCore *core);
+R_API void r_core_visual_config (RCore *core);
+R_API void r_core_visual_mounts (RCore *core);
+R_API void r_core_visual_anal (RCore *core);
+R_API void r_core_seek_next (RCore *core, const char *type);
+R_API void r_core_seek_previous (RCore *core, const char *type);
+R_API void r_core_visual_define (RCore *core);
+R_API int r_core_visual_trackflags (RCore *core);
+R_API void r_core_visual_prompt (RCore *core);
+R_API int r_core_search_preludes(RCore *core);
+R_API int r_core_search_prelude(RCore *core, ut64 from, ut64 to, const ut8 *buf, int blen, const ut8 *mask, int mlen);
+
 #endif
 
 #endif

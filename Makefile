@@ -1,6 +1,7 @@
 include config-user.mk
 include global.mk
 
+PWD=$(shell pwd)
 REMOTE=radare.org:/srv/http/radareorg/get/beta
 
 all: plugins.cfg
@@ -8,7 +9,12 @@ all: plugins.cfg
 	${MAKE} binr
 
 plugins.cfg:
+	@if [ ! -e config-user.mk ]; then echo ; \
+	echo "  Please, run ./configure first" ; echo ; exit 1 ; fi
 	./configure-plugins
+
+gitpush:
+	sh mk/gitpush.sh
 
 libr:
 	cd libr && ${MAKE} all
@@ -32,8 +38,8 @@ w32dist:
 
 w32beta: w32dist
 	scp radare2-w32-${VERSION}.zip ${REMOTE}
-	cd swig ; $(MAKE) w32dist
-	scp radare2-swig-w32-${VERSION}.zip ${REMOTE}
+	cd r2-bindings ; $(MAKE) w32dist
+	scp radare2-bindings-w32-${VERSION}.zip ${REMOTE}
 
 clean:
 	cd libr && ${MAKE} clean
@@ -52,22 +58,22 @@ pkgcfg:
 	cd libr && ${MAKE} pkgcfg
 
 install-man:
-	mkdir -p ${DESTDIR}/${PREFIX}/share/man/man1
-	for a in man/*.1 ; do ${INSTALL_MAN} $$a ${DESTDIR}/${PREFIX}/share/man/man1 ; done
-	cd ${DESTDIR}/${PREFIX}/share/man/man1 && ln -fs radare2.1 r2.1
+	mkdir -p ${MDR}/man1
+	for a in man/*.1 ; do ${INSTALL_MAN} $$a ${MDR}/man1 ; done
+	cd ${MDR}/man1 && ln -fs radare2.1 r2.1
 
 install-man-symlink:
-	mkdir -p ${DESTDIR}/${PREFIX}/share/man/man1
-	cd man && for a in *.1 ; do ln -fs `pwd`/$$a ${DESTDIR}/${PREFIX}/share/man/man1/$$a ; done
-	cd ${DESTDIR}/${PREFIX}/share/man/man1 && ln -fs radare2.1 r2.1
+	mkdir -p ${MDR}/man1
+	cd man && for a in *.1 ; do ln -fs ${PWD}/man/$$a ${MDR}/man1/$$a ; done
+	cd ${MDR}/man1 && ln -fs radare2.1 r2.1
 
 install-doc:
-	${INSTALL_DIR} ${DESTDIR}${PREFIX}/share/doc/radare2
-	for a in doc/* ; do ${INSTALL_DATA} $$a ${DESTDIR}/${PREFIX}/share/doc/radare2 ; done
+	${INSTALL_DIR} ${PFX}/share/doc/radare2
+	for a in doc/* ; do ${INSTALL_DATA} $$a ${PFX}/share/doc/radare2 ; done
 
 install-doc-symlink:
-	${INSTALL_DIR} ${DESTDIR}${PREFIX}/share/doc/radare2
-	cd doc ; for a in * ; do ln -fs `pwd`/$$a ${DESTDIR}/${PREFIX}/share/doc/radare2 ; done
+	${INSTALL_DIR} ${PFX}/share/doc/radare2
+	cd doc ; for a in * ; do ln -fs ${PWD}/$$a ${PFX}/share/doc/radare2 ; done
 
 install: install-doc install-man
 	cd libr && ${MAKE} install PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR}
@@ -75,29 +81,36 @@ install: install-doc install-man
 
 install-pkgconfig-symlink:
 	@${INSTALL_DIR} ${PFX}/lib/pkgconfig
-	cd pkgcfg ; for a in *.pc ; do ln -fs $${PWD}/$$a ${DESTDIR}/${PREFIX}/lib/pkgconfig/$$a ; done
+	cd pkgcfg ; for a in *.pc ; do ln -fs $${PWD}/$$a ${PFX}/lib/pkgconfig/$$a ; done
 
 symstall install-symlink: install-man-symlink install-doc-symlink install-pkgconfig-symlink
 	cd libr && ${MAKE} install-symlink PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	cd binr && ${MAKE} install-symlink PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 
-uninstall:
-	rm -rf prefix
-
-deinstall: uninstall
+deinstall uninstall:
 	cd libr && ${MAKE} uninstall PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	cd binr && ${MAKE} uninstall PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR}
+	@echo
+	@echo "Run 'make purge' to also remove installed files from previous versions of r2"
+	@echo
 
-beta: dist swig-dist
+purge:
+	rm -rf ${DESTDIR}/${PREFIX}/lib/libr_*
+	rm -rf ${DESTDIR}/${PREFIX}/lib/radare2
+	rm -rf ${DESTDIR}/${PREFIX}/include/libr
+	cd man ; for a in *.1 ; do rm -f ${MDR}/man1/$$a ; done
+	rm -f ${MDR}/man1/r2.1
+
+beta: dist r2-bindings-dist
 	scp ../radare2-${VERSION}.tar.gz ${REMOTE}
-	scp radare2-swig-${VERSION}.tar.gz ${REMOTE}
+	scp radare2-bindings-${VERSION}.tar.gz ${REMOTE}
 
-swig-dist:
-	cd swig && ${MAKE} dist
+r2-bindings-dist:
+	cd r2-bindings && ${MAKE} dist
 
 dist:
 	VERSION=${VERSION} ; \
-	FILES=`hg st -mc .| cut -c 3-|sed -e s,^,radare2-${VERSION}/, | grep -v swig | grep -v '/\.'` ; \
+	FILES=`hg st -mc .| cut -c 3-|sed -e s,^,radare2-${VERSION}/, | grep -v r2-bindings | grep -v '/\.'` ; \
 	cd .. && mv radare2 radare2-${VERSION} && \
 	tar czvf radare2-${VERSION}.tar.gz $${FILES} ;\
 	mv radare2-${VERSION} radare2
@@ -115,4 +128,4 @@ shot:
 
 include ${MKPLUGINS}
 
-.PHONY: all clean mrproper install symstall uninstall deinstall dist shot pkgcfg swig libr binr install-man
+.PHONY: all clean mrproper install symstall uninstall deinstall dist shot pkgcfg r2-bindings r2-bindings-dist libr binr install-man

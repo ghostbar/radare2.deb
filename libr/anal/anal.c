@@ -25,6 +25,7 @@ R_API RAnal *r_anal_new() {
 	if (!anal)
 		return NULL;
 	memset (anal, 0, sizeof (RAnal));
+	anal->queued = NULL;
 	anal->meta = r_meta_new ();
 	anal->syscall = r_syscall_new ();
 	r_io_bind_init (anal->iob);
@@ -125,7 +126,7 @@ R_API char *r_anal_strmask (RAnal *anal, const char *data) {
 	int oplen, len, idx = 0;
 
 	ret = strdup (data);
-	buf = malloc (strlen (data));
+	buf = malloc (1+strlen (data));
 	op = r_anal_op_new ();
 	if (op == NULL || ret == NULL || buf == NULL) {
 		free (op);

@@ -40,7 +40,7 @@ R_API void r_anal_cc_reset (RAnalCC *cc) {
 R_API char *r_anal_cc_to_string (RAnal *anal, RAnalCC* cc) {
 	RSyscallItem *si;
 	RAnalFcn *fcn;
-	char str[1024], buf[32];
+	char str[1024], buf[64];
 	int i, eax = 0; // eax = arg0
 
 	str[0] = 0;
@@ -63,11 +63,11 @@ R_API char *r_anal_cc_to_string (RAnal *anal, RAnalCC* cc) {
 				const char *reg = r_syscall_reg (anal->syscall, i+1, si->args);
 				item = r_reg_get (anal->reg, reg, R_REG_TYPE_GPR);
 				if (item) {
-					sprintf (buf, "0x%"PFMT64x, r_reg_get_value (anal->reg, item));
-					strcat (str, buf);
+					snprintf (buf, sizeof (buf), "0x%"PFMT64x, r_reg_get_value (anal->reg, item));
+					strcat (str, buf); // XXX: do not use strcat
 				} else eprintf ("Unknown reg '%s'\n", reg);
 				if (i<si->args-1)
-					strcat (str, ",");
+					strcat (str, ","); // XXX: do not use strcat
 			}
 			strcat (str, ")");
 		} else snprintf (str, sizeof (str), "syscall[0x%x][%d]=?", (int)cc->jump, eax);
@@ -96,6 +96,7 @@ R_API char *r_anal_cc_to_string (RAnal *anal, RAnalCC* cc) {
 }
 
 R_API boolt r_anal_cc_update (RAnal *anal, RAnalCC *cc, RAnalOp *op) {
+	RRegItem *it;
 	cc->off = op->addr;
 	switch (op->type) {
 	case R_ANAL_OP_TYPE_CALL:
@@ -109,16 +110,25 @@ R_API boolt r_anal_cc_update (RAnal *anal, RAnalCC *cc, RAnalOp *op) {
 		cc->off = op->jump;
 		cc->jump = op->value; // syscall number
 		return R_FALSE;
+	case R_ANAL_OP_TYPE_XOR:
+		if (op->src[0] && op->src[0]->reg && op->dst && op->dst->reg && op->dst->reg->name) {
+			char *n1 = op->dst->reg->name;
+			char *n2 = op->src[0]->reg->name;
+			// XXX: must handle XOR operation properly
+			// if n1 == n2 then set to 0
+			if (!strcmp (n1, n2)) {
+				it = r_reg_get (anal->reg, n1, R_REG_TYPE_GPR);
+				r_reg_set_value (anal->reg, it, 0);
+			}
+		}
+		return R_TRUE;
 	case R_ANAL_OP_TYPE_MOV:
-		{
-		RRegItem *it;
 		if (op->dst && op->dst->reg) {
 			it = r_reg_get (anal->reg, op->dst->reg->name, R_REG_TYPE_GPR);
 			if (it && op->src[0])
-				r_reg_set_value (anal-> reg, it, op->src[0]->imm);
+				r_reg_set_value (anal->reg, it, op->src[0]->imm);
 		}
 		return R_TRUE;
-		}
 	case R_ANAL_OP_TYPE_PUSH:
 	case R_ANAL_OP_TYPE_UPUSH: // add argument
 		cc->nargs ++;

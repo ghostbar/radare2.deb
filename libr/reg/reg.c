@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
 
 #include <r_reg.h>
 #include <r_util.h>
@@ -35,7 +35,6 @@ R_API int r_reg_get_name_idx(const char *type) {
 	return -1;
 }
 
-
 R_API int r_reg_set_name(RReg *reg, int role, const char *name) {
 	if (role>=0 && role<R_REG_NAME_LAST) {
 		reg->name[role] = r_str_dup (reg->name[role], name);
@@ -68,27 +67,27 @@ R_API RReg *r_reg_free(RReg *reg) {
 }
 
 R_API RReg *r_reg_new() {
-	RReg *reg = R_NEW (RReg);
 	int i;
+	RRegArena *arena;
+	RReg *reg = R_NEW (RReg);
 	reg->iters = 0;
 	reg->profile = NULL;
+	reg->reg_profile_str = NULL;
 	for (i=0; i<R_REG_NAME_LAST; i++)
 		reg->name[i] = NULL;
 	for (i=0; i<R_REG_TYPE_LAST; i++) {
-		reg->regset[i].pool = r_list_new ();
-		reg->regset[i].pool->free = (RListFree)r_reg_arena_free;
-		reg->regset[i].regs = r_list_new ();
-		reg->regset[i].regs->free = (RListFree)r_reg_item_free;
-		if (!(reg->regset[i].arena = r_reg_arena_new (0)))
-			return NULL;
+		arena = r_reg_arena_new (0);
+		if (!arena) return NULL;
+		reg->regset[i].arena = arena;
+		R_LIST_NEW (reg->regset[i].pool, r_reg_arena_free);
+		R_LIST_NEW (reg->regset[i].regs, r_reg_item_free);
 		r_list_append (reg->regset[i].pool, reg->regset[i].arena);
 	}
 	return reg;
 }
 
 static RRegItem *r_reg_item_new() {
-	RRegItem *item = R_NEW (RRegItem);
-	memset (item, 0, sizeof (RRegItem));
+	RRegItem *item = R_NEW0 (RRegItem);
 	return item;
 }
 
@@ -106,7 +105,7 @@ R_API int r_reg_type_by_name(const char *str) {
 /* TODO: make this parser better and cleaner */
 static int r_reg_set_word(RRegItem *item, int idx, char *word) {
 	int ret = R_TRUE;
-	switch(idx) {
+	switch (idx) {
 	case 0:
 		item->type = r_reg_type_by_name (word);
 		break;
@@ -147,11 +146,13 @@ R_API int r_reg_set_profile_string(RReg *reg, const char *str) {
 	int lastchar = 0;
 	int chidx = 0;
 	int word = 0;
-	char buf[256];
+	char buf[512];
 
 	if (!str||!reg)
 		return R_FALSE;
-	buf[0] = '\0';
+	// XXX double free // free (reg->reg_profile_str);
+	reg->reg_profile_str = strdup (str);
+	*buf = '\0';
 	/* format file is: 'type name size offset packedsize' */
 	r_reg_free_internal (reg);
 	item = r_reg_item_new ();
@@ -183,15 +184,18 @@ R_API int r_reg_set_profile_string(RReg *reg, const char *str) {
 				r_reg_set_word (item, word, buf);
 				if (item->name != NULL) {
 					r_list_append (reg->regset[item->type].regs, item);
-					item = r_reg_item_new();
+					item = r_reg_item_new ();
 				}
 			}
 			chidx = word = 0;
+			*buf = 0;
 			setname = -1;
 			break;
 		default:
-			if (chidx>128) // WTF!!
+			if (chidx>128) {// WTF!!
+				eprintf ("PARSE FAILED\n");
 				return R_FALSE;
+			}
 			buf[chidx++] = *str;
 			buf[chidx] = 0;
 			break;
@@ -258,6 +262,9 @@ R_API ut64 r_reg_cmp(RReg *reg, RRegItem *item) {
 	int off = BITS2BYTES (item->offset);
 	RRegArena *src = r_list_head (reg->regset[item->type].pool)->data;
 	RRegArena *dst = r_list_head (reg->regset[item->type].pool)->n->data;
+	if (off+len>src->size) len = src->size-off;
+	if (off+len>dst->size) len = src->size-off;
+	if (len>0)
 	if (memcmp (dst->bytes+off, src->bytes+off, len)) {
 		ut64 ret;
 		int ptr = !(reg->iters%2);

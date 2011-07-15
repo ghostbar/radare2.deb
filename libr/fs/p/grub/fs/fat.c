@@ -17,7 +17,9 @@
  *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <r_fs.h>
 #include <grub/fs.h>
+#include <grub/fshelp.h>
 #include <grub/disk.h>
 #include <grub/file.h>
 #include <grub/types.h>
@@ -497,7 +499,7 @@ grub_fat_iterate_dir (grub_disk_t disk, struct grub_fat_data *data,
     }
 
   //while (1)
-for (offset = 0;;offset+= sizeof (dir)) {
+    for (offset = 0; ; offset += sizeof (dir)) {
       unsigned i;
 
       /* Adjust the offset.  */
@@ -536,6 +538,7 @@ for (offset = 0;;offset+= sizeof (dir)) {
 	}
 
       /* Check if this entry is valid.  */
+if (!(grub_fshelp_view & R_FS_VIEW_DELETED))
       if (dir.name[0] == 0xe5 || (dir.attr & ~GRUB_FAT_ATTR_VALID))
 	continue;
 
@@ -560,7 +563,7 @@ for (offset = 0;;offset+= sizeof (dir)) {
 	      *grub_utf16_to_utf8 ((grub_uint8_t *) filename, unibuf,
 				   slots * 13) = '\0';
 
-	      if (hook (filename, &dir, closure))
+	      if (hook && hook (filename, &dir, closure))
 		break;
 
 	      checksum = -1;
@@ -730,7 +733,7 @@ grub_fat_dir (grub_device_t device, const char *path,
     goto fail;
   grub_memcpy (dirname, path, len);
   p = dirname + len;
-  if (path[len - 1] != '/')
+  if (len>0 && path[len - 1] != '/')
     *p++ = '/';
   *p = '\0';
   p = dirname;

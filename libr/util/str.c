@@ -25,15 +25,20 @@ R_API void r_str_chop_path (char *s) {
 							dst = p+1;
 							i = 0;
 							break;
-						} i++;
+						}
+						i = 1;
 					}
 					p--;
 				}
+				if (s == p && *p == '/')
+					dst = p+1;
 				src = src+2;
 			} else {
 				*dst = *src;
 				dst++;
 			}
+		} else if (*src == '/' && *(src+1) == '.' && (*(src+2) == '/' || *(src+2) == '\0')) {
+			src++;
 		} else if (*src != '/' || *(src-1) != '/') {
 			*dst = *src;
 			dst++;
@@ -68,7 +73,7 @@ R_API void r_str_subchr (char *s, int a, int b) {
 	while (*s) {
 		if (*s==a) {
 			if (b) *s = b;
-			else strcpy (s, s+1);
+			else memmove (s, s+1, strlen (s+1)+1);
 		}
 		s++;
 	}
@@ -79,11 +84,12 @@ R_API void r_str_subchr (char *s, int a, int b) {
 R_API int r_str_bits (char *strout, const ut8 *buf, int len, const char *bitz) {
 	int i, j;
 	if (bitz) {
-		for (i=j=0; i<len && (!bitz||bitz[i]); i++)
+		for (i=j=0; i<len && (!bitz||bitz[i]); i++) {
 			if (i>0 && (i%8)==0)
 				buf++;
-	                if (*buf&(1<<i))
+	                if (*buf&(1<<(i%8)))
 				strout[j++] = toupper (bitz[i]);
+		}
 	} else {
 		for (i=j=0; i<len; i++) {
 			if (i>0 && (i%8)==0)
@@ -102,6 +108,32 @@ static int hex2int (ut8 *val, ut8 c) {
 	else if (c >= 'a' && c <= 'f') *val = (ut8)(*val) * 16 + ( c - 'a' + 10);
 	else return 1;
 	return 0;
+}
+
+R_API int r_str_binstr2bin(const char *str, ut8 *out, int outlen) {
+	int n, i, j, k, ret, len;
+	len = strlen (str);
+	for (n=i=0; i<len; i+=8) {
+		ret = 0;
+		while (str[i]==' ')
+			str++;
+		if (i+7<len)
+		for (k=0, j=i+7; j>=i; j--, k++) {
+		// INVERSE for (k=0,j=i; j<i+8; j++,k++) {
+			if (str[j]==' ') {
+				//k--;
+				continue;
+			}
+	//		printf ("---> j=%d (%c) (%02x)\n", j, str[j], str[j]);
+			if (str[j]=='1') ret|=1<<k;
+			else if (str[j]!='0') return n;
+		}
+	//	printf ("-======> %02x\n", ret);
+		out[n++] = ret;
+		if (n==outlen)
+			return n;
+	}
+	return n;
 }
 
 R_API int r_str_rwx(const char *str) {
@@ -130,38 +162,32 @@ R_API const char *r_str_rwx_i(int rwx) {
 }
 
 R_API const char *r_str_bool(int b) {
-	if (b) return "true";
-	return "false";
+	return b? "true": "false";
 }
 
 R_API void r_str_case(char *str, int up) {
 	if (up) {
-		while(*str)
+		while (*str)
 			*str = tolower (*str);
 	} else {
-		while(*str)
+		while (*str)
 			*str = toupper (*str);
 	}
 }
 
-#if __WINDOWS__
-#define __ENV_HOME "USERPROFILE"
-#define __ENV_DIR "\\"
-#else
-#define __ENV_HOME "HOME"
-#define __ENV_DIR "/"
-#endif
-
 R_API char *r_str_home(const char *str) {
+	int lhome, lstr;
 	char *dst;
-	const char *home = r_sys_getenv (__ENV_HOME);
+	const char *home = r_sys_getenv (R_SYS_HOME);
 	if (home == NULL)
 		return NULL;
-	dst = (char *)malloc (strlen (home) + strlen (str)+2);
-	strcpy (dst, home);
+	lhome = strlen (home);
+	lstr = strlen (str);
+	dst = (char *)malloc (lhome + lstr + 2);
+	memcpy (dst, home, lhome+1);
 	if (str && *str) {
-		strcat (dst, __ENV_DIR);
-		strcat (dst, str);
+		memcpy (dst+lhome, R_SYS_DIR, strlen (R_SYS_DIR));
+		memcpy (dst+lhome+strlen (R_SYS_DIR), str, lstr+1);
 	}
 	return dst;
 }
@@ -169,14 +195,14 @@ R_API char *r_str_home(const char *str) {
 /* XXX Fix new hash algo*/
 R_API ut64 r_str_hash64(const char *str) {
 	ut64 ret = 0;
-	for (;*str; str++)
+	for (; *str; str++)
 		ret ^= (ret<<7 | *str);
 	return ret;
 }
 
-R_API int r_str_hash(const char *str) {
-	int ret = 0;
-	for (;*str; str++)
+R_API ut32 r_str_hash(const char *str) {
+	ut32 ret = 0;
+	for (; *str; str++)
 		ret ^= (ret<<7 | *str);
 	return ret;
 }
@@ -291,11 +317,11 @@ R_API char *r_str_chop(char *str) {
 	while (*str && iswhitechar (*str))
 		str = str + 1;
 		
-	len = strlen(str);
+	len = strlen (str);
 	
 	if (len>0)
-	for (ptr = str+len-1;ptr!=str;ptr = ptr - 1) {
-		if (iswhitechar (ptr[0])) 
+	for (ptr = str+len-1; ptr!=str; ptr--) {
+		if (iswhitechar (*ptr)) 
 			*ptr = '\0';
 		else break;
 	}	       
@@ -304,25 +330,23 @@ R_API char *r_str_chop(char *str) {
 
 R_API char *r_str_trim_head(char *str) {
 	if (str)
-		while (*str && iswhitechar(*str)) 
+		while (*str && iswhitechar (*str)) 
 			str++;
 	return str;
 }
 
 R_API char *r_str_trim_tail(char *str) {
 	char *ptr = str;
-	if (str == NULL)
-		return NULL;
-	ptr += strlen(str)-1;
-	while ((ptr > str) && iswhitechar(*ptr)) {
+	if (str == NULL) return NULL;
+	if (!*str) return str;
+	ptr += strlen (str);
+	for (ptr--; (ptr > str) && iswhitechar (*ptr); ptr--)
 		*ptr = '\0';
-		ptr--;
-	}
 	return str;
 }
 
 R_API char *r_str_trim_head_tail(char *str) {
-	return r_str_trim_tail(r_str_trim_head(str));
+	return r_str_trim_tail (r_str_trim_head (str));
 }
 
 R_API char *r_str_trim(char *str) {
@@ -330,11 +354,19 @@ R_API char *r_str_trim(char *str) {
 	char *ptr;
 	if (str == NULL)
 		return NULL;
-	for (ptr=str, i=0;str[i];i++)
+	for (ptr=str, i=0;str[i]; i++)
 		if (!iswhitechar (str[i]))
 			*ptr++ = str[i];
 	*ptr='\0';
 	return str;
+}
+
+
+R_API void r_str_cpy(char *dst, const char *src) {
+	int i;
+	for (i=0; src[i]; i++)
+		dst[i] = src[i];
+	dst[i] = 0;
 }
 
 /* memccmp("foo.bar", "foo.cow, '.') == 0 */
@@ -391,8 +423,7 @@ R_API const char *r_str_get(const char *str) {
 }
 
 R_API char *r_str_dup(char *ptr, const char *string) {
-	if (ptr)
-		free (ptr);
+	if (ptr) free (ptr);
 	ptr = strdup (string);
 	return ptr;
 }
@@ -425,12 +456,15 @@ R_API void r_str_writef(int fd, const char *fmt, ...) {
  * return: the pointer ptr resized to string size.
  */
 R_API char *r_str_concat(char *ptr, const char *string) {
+	int slen, plen;
 	if (ptr == NULL)
 		return strdup (string);
-	ptr = realloc (ptr, strlen (string)+strlen (ptr)+1);
+	plen = strlen (ptr);
+	slen = strlen (string);
+	ptr = realloc (ptr, slen + plen + 1);
 	if (ptr == NULL)
 		return NULL;
-	strcat (ptr, string);
+	memcpy (ptr+plen, string, slen+1);
 	return ptr;
 }
 
@@ -454,18 +488,22 @@ R_API void *r_str_free(void *ptr) {
 	return NULL;
 }
 
+#if 0
+// XXX: unused
 R_API int r_str_inject(char *begin, char *end, char *str, int maxlen) {
+	int slen = strlen (str);
 	int len = strlen (end)+1;
 	char *tmp;
-	if (maxlen > 0 && ((strlen (begin)-(end-begin)+strlen (str)) > maxlen))
+	if (maxlen > 0 && ((strlen (begin)-(end-begin)+slen) > maxlen))
 		return 0;
 	tmp = malloc (len);
 	memcpy (tmp, end, len);
-	strcpy (begin, str);
-	strcat (begin, tmp);
+	memcpy (begin, str, slen);
+	memcpy (begin+slen, tmp, len);
 	free (tmp);
 	return 1;
 }
+#endif
 
 /* unstable code (taken from GNU) */
 /*------------------------------------------------*/
@@ -544,13 +582,13 @@ R_API int r_str_escape(char *buf) {
 			continue;
 		if (buf[i+1]=='e') {
 			buf[i] = 0x1b;
-			strcpy (buf+i+1, buf+i+2);
+			memmove (buf+i+1, buf+i+2, strlen (buf+i+2)+1);
 		} else if (buf[i+1]=='r') {
 			buf[i] = 0x0d;
-			strcpy (buf+i+1, buf+i+2);
+			memmove (buf+i+1, buf+i+2, strlen (buf+i+2)+1);
 		} else if (buf[i+1]=='n') {
 			buf[i] = 0x0a;
-			strcpy (buf+i+1, buf+i+2);
+			memmove (buf+i+1, buf+i+2, strlen (buf+i+2)+1);
 		} else if (buf[i+1]=='x') {
 			err = ch2 = ch = 0;
 			if (!buf[i+2] || !buf[i+3]) {
@@ -564,7 +602,7 @@ R_API int r_str_escape(char *buf) {
 				return 0;
 			}
 			buf[i] = (ch<<4)+ch2;
-			strcpy (buf+i+1, buf+i+4);
+			memmove (buf+i+1, buf+i+4, strlen (buf+i+4)+1);
 		} else {
 			eprintf ("'\\x' expected.\n");
 			return 0;
@@ -573,13 +611,15 @@ R_API int r_str_escape(char *buf) {
 
 	//char *p = buf; while(*p) { eprintf("%d %c\n", *p, *p); p++; }
 	//eprintf("OLEN=%d (%s)\n", strlen(buf), buf);
-	return strlen(buf);
+	return i; //strlen (buf);
 }
 
 R_API char *r_str_unscape(char *buf) {
 	char *ptr, *ret;
 	int len = strlen (buf);
-	ptr = ret = malloc (len*2);
+	ptr = ret = malloc (1+len*2);
+	if (ptr == NULL)
+		return NULL;
 	for (;*buf;buf++,ptr++) {
 		if (*buf=='\n') {
 			*ptr = '\\';
@@ -591,7 +631,7 @@ R_API char *r_str_unscape(char *buf) {
 			ptr++;
 			*ptr = 't';
 		} else
-		if (IS_PRINTABLE(*buf)) {
+		if (IS_PRINTABLE (*buf)) {
 			*ptr = *buf;
 		} else break;
 	}
@@ -611,14 +651,25 @@ R_API int r_str_ansi_len(const char *str) {
 	return len;
 }
 
+// TODO: support wide char strings
+R_API int r_str_nlen(const char *str, int n) {
+	int len = 0;
+	while (*str++ && n--)
+		len++;
+	return len;
+}
+
 R_API const char *r_str_ansi_chrn(const char *str, int n) {
-	int len, i;
-	for (i=len=0; str[i] && (n!=len); i++) {
-		if (str[i]==0x1b && str[i+1]=='[')
+	int len, i, li;
+	for (li=i=len=0; str[i] && (n!=len); i++) {
+		if (str[i]==0x1b && str[i+1]=='[') {
 			for (++i;str[i]&&str[i]!='J'&&str[i]!='m'&&str[i]!='H';i++);
-		else len++;
+		} else {
+			len++;
+			li = i;
+		}
 	}
-	return str+i;
+	return str+li;
 }
 
 R_API int r_str_ansi_filter(char *str, int len) {
@@ -643,6 +694,41 @@ R_API void r_str_filter(char *str, int len) {
 			str[i] = '.';
 }
 
+R_API int r_str_glob (const char *str, const char *glob) {
+	const char *p;
+	int slen, glen;
+	if (!*str) return R_TRUE;
+	glen = strlen (glob);
+	slen = strlen (str);
+	if (*glob == '*') {
+		if (glob[1] == '\0')
+			return R_TRUE;
+		if (glob[glen-1] == '*') {
+			return r_mem_mem ((const ut8*)str, slen, (const ut8*)glob+1, glen-2) != 0;
+		}
+		if (slen<glen-2)
+			return R_FALSE;
+		p = str + slen - (glen-1);
+		return memcmp (p, glob+1, glen-1) == 0;
+	} else {
+		if (glob[glen-1] == '*') {
+			if (slen<glen-1)
+				return R_FALSE;
+			return memcmp (str, glob, glen-1) == 0;
+		} else {
+			char *p = strchr (glob, '*');
+			if (p) {
+				int a = (int)(size_t)(p-glob);
+				return ((!memcmp (str, glob, a)) && ( !memcmp (str+slen-a, glob+a+1, glen-a-1)))? 1: 0;
+			} else {
+				return !strcmp (str, glob);
+			}
+		}
+	}
+	return R_FALSE; // statement never reached
+}
+
+// XXX: remove this limit .. use realloc
 #define MAXARG 128
 R_API char **r_str_argv(const char *_str, int *_argc) {
 	int argc = 0;
@@ -658,7 +744,7 @@ R_API char **r_str_argv(const char *_str, int *_argc) {
 		case '"':
 			if (escape) {
 				escape = 0;
-				strcpy (ptr, ptr+1);
+				memmove (ptr, ptr+1, strlen (ptr+1)+1);
 			} else {
 				if (quote) {
 					*ptr = '\0';

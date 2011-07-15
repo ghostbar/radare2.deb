@@ -1,7 +1,7 @@
 /* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
 
 #include <r_core.h>
-#include <r_th.h>
+//#include <r_th.h>
 #include <r_io.h>
 #include <stdio.h>
 #include <getopt.h>
@@ -9,23 +9,27 @@
 static struct r_core_t r;
 
 static int main_help(int line) {
-	printf ("Usage: radare2 [-dwnLuvV] [-p prj] [-s addr] [-b bsz] [-e k=v] [file]\n");
+	printf ("Usage: radare2 [-dwnLqv] [-p prj] [-s addr] [-b bsz] [-e k=v] [file]\n");
 	if (!line) printf (
-		" -d          use 'file' as a program to debug\n"
-		" -w          open file in write mode\n"
-		" -n          do not run ~/.radare2rc\n"
-		" -v          nonverbose mode (no prompt)\n"
-		" -f          block size = file size\n"
-		" -p [prj]    set project file\n"
-		" -s [addr]   initial seek\n"
-		" -b [size]   initial block size\n"
-		" -i [file]   run script file\n"
-		" -V          show radare2 version\n"
-		" -l [lib]    load plugin file\n"
-		//" -t        load rabin2 info in thread\n"
-		" -L          list supported IO plugins\n"
-		" -u          unknown file size\n"
-		" -e k=v      evaluate config var\n");
+		" -d           use 'file' as a program to debug\n"
+		" -w           open file in write mode\n"
+		" -n           do not run ~/.radare2rc\n"
+		" -q           quite mode (no prompt)\n"
+		" -f           block size = file size\n"
+		" -p [prj]     set project file\n"
+		" -s [addr]    initial seek\n"
+		" -b [size]    initial block size\n"
+		" -i [file]    run script file\n"
+		" -v           show radare2 version\n"
+		" -l [lib]     load plugin file\n"
+		//" -t         load rabin2 info in thread\n"
+		" -L           list supported IO plugins\n"
+		" -e k=v       evaluate config var\n"
+		"Environment:\n"
+		" R_DEBUG      if defined, show error messages and crash signal\n"
+		" LIBR_PLUGINS path to plugins directory\n"
+		" VAPIDIR      path to extra vapi directory\n"
+		);
 	return 0;
 }
 
@@ -70,8 +74,10 @@ static int rabin_delegate(RThread *th) {
 #endif
 
 int main(int argc, char **argv) {
+/*
 	RThreadLock *lock = NULL;
 	RThread *rabin_th = NULL;
+*/
 	RCoreFile *fh = NULL;
 	//int threaded = R_FALSE;
 	int has_project = R_FALSE;
@@ -81,21 +87,25 @@ int main(int argc, char **argv) {
 	int fullfile = 0;
 	ut32 bsize = 0;
 	ut64 seek = 0;
-	char file[1024];
+	char file[4096];
 	char *cmdfile = NULL;
+	int is_gdb = R_FALSE;
+
+	if (r_sys_getenv ("R_DEBUG"))
+		r_sys_crash_handler ("gdb --pid %d");
 
 	if (argc<2)
 		return main_help (1);
 	r_core_init (&r);
 
-	while ((c = getopt (argc, argv, "wfhe:ndvVs:p:b:Lui:l:"))!=-1) {
+	while ((c = getopt (argc, argv, "wfhe:ndqvs:p:b:Lui:l:"))!=-1) {
 		switch (c) {
 #if 0
 		case 't':
 			threaded = R_TRUE;
 			break;
 #endif
-		case 'v':
+		case 'q':
 			r_config_set (r.config, "scr.prompt", "false");
 			break;
 		case 'p':
@@ -121,7 +131,7 @@ int main(int argc, char **argv) {
 		case 'n':
 			run_rc = 0;
 			break;
-		case 'V':
+		case 'v':
 			return main_version ();
 		case 'w':
 			perms = R_IO_READ | R_IO_WRITE;
@@ -135,18 +145,18 @@ int main(int argc, char **argv) {
 		case 'L':
 			list_io_plugins (r.io);
 			return 0;
-		case 'u':
-			eprintf ("TODO\n");
-			break;
 		default:
 			return 1;
 		}
 	}
 
 	if (debug) {
+		int filelen = 0;
 		r_config_set (r.config, "io.va", "false"); // implicit?
 		r_config_set (r.config, "cfg.debug", "true");
-		strcpy (file, "dbg://");
+		is_gdb = (!memcmp (argv[optind], "gdb://", 6));
+		if (is_gdb) *file = 0;
+		else memcpy (file, "dbg://", 7);
 		if (optind < argc) {
 			char *ptr = r_file_path (argv[optind]);
 			if (ptr) {
@@ -156,15 +166,32 @@ int main(int argc, char **argv) {
 			}
 		}
 		while (optind < argc) {
-			strcat (file, argv[optind]);
-			strcat (file, " ");
-			if (++optind != argc)
-				strcat (file, " ");
+			int largv = strlen (argv[optind]);
+			if (filelen+largv+1>=sizeof (file)) {
+				eprintf ("Too long arguments\n");
+				return 1;
+			}
+			memcpy (file+filelen, argv[optind], largv);
+			filelen += largv;
+			if (filelen+6>=sizeof (file)) {
+				eprintf ("Too long arguments\n");
+				return 1;
+			}
+			memcpy (file+filelen, " ", 2);
+			filelen += 2;
+			if (++optind != argc) {
+				memcpy (file+filelen, " ", 2);
+				filelen += 2;
+			}
 		}
 
 		fh = r_core_file_open (&r, file, perms, 0LL);
-		// TODO: move into if (debug) ..
-		r_debug_use (r.dbg, "native");
+		if (fh != NULL) {
+			//const char *arch = r_config_get (r.config, "asm.arch");
+			// TODO: move into if (debug) ..
+			if (is_gdb) r_debug_use (r.dbg, "gdb");
+			else r_debug_use (r.dbg, "native");
+		}
 	} else {
 		if (optind<argc) {
 			while (optind < argc)
@@ -198,6 +225,7 @@ int main(int argc, char **argv) {
 	} else eprintf ("Metadata loaded from 'file.project'\n");
 #endif
 
+	has_project = r_core_project_open (&r, r_config_get (r.config, "file.project"));
 	if (run_rc) {
 		char *homerc = r_str_home (".radare2rc");
 		r_core_bin_load (&r, NULL);
@@ -211,7 +239,8 @@ int main(int argc, char **argv) {
 		int *p = r.file->fd->data;
 		int pid = *p; // 1st element in debugger's struct must be int
 		r_core_cmd (&r, "e io.ffio=true", 0);
-		r_core_cmd (&r, "dh native", 0);
+		if (is_gdb) r_core_cmd (&r, "dh gdb", 0);
+		else r_core_cmd (&r, "dh native", 0);
 		r_core_cmdf (&r, "dpa %d", pid);
 		r_core_cmdf (&r, "dp=%d", pid);
 		r_core_cmd (&r, ".dr*", 0);
@@ -249,24 +278,22 @@ int main(int argc, char **argv) {
 	}
 	r_core_seek (&r, r.offset, 1); // read current block
 
-	/* XXX: find better solution.. files > 10MB does not hash */
-	#define SLURP_LIMIT (10*1024*1024)
 	/* check if file.sha1 has changed */
-	if (r.file->size < SLURP_LIMIT) // TODO: configure this in cfg.hashlimit // 
 	if (!strstr (r.file->uri, "://")) {
 		const char *npath, *nsha1;
 		char *path = strdup (r_config_get (r.config, "file.path"));
 		char *sha1 = strdup (r_config_get (r.config, "file.sha1"));
-		char *cmd = r_str_dup_printf (".!rahash2 -r %s", r.file->filename);
 		has_project = r_core_project_open (&r, r_config_get (r.config, "file.project"));
-		r_core_cmd (&r, cmd, 0);
+		if (has_project)
+			r_config_set (r.config, "bin.strings", "false");
+		if (r_core_hash_load (&r, r.file->filename) == R_FALSE)
+			eprintf ("ERROR: Cannot generate hashes\n");
 		nsha1 = r_config_get (r.config, "file.sha1");
 		npath = r_config_get (r.config, "file.path");
 		if (sha1 && *sha1 && strcmp (sha1, nsha1))
 			eprintf ("WARNING: file.sha1 change: %s => %s\n", sha1, nsha1);
 		if (path && *path && strcmp (path, npath))
 			eprintf ("WARNING: file.path change: %s => %s\n", path, npath);
-		r_str_free (cmd);
 		free (sha1);
 		free (path);
 	}
@@ -278,10 +305,10 @@ int main(int argc, char **argv) {
 		do { 
 			if (r_core_prompt (&r, R_FALSE)<1)
 				break;
-			if (lock) r_th_lock_enter (lock);
+//			if (lock) r_th_lock_enter (lock);
 			if ((ret = r_core_prompt_exec (&r))==-1)
 				eprintf ("Invalid command\n");
-			if (lock) r_th_lock_leave (lock);
+/*			if (lock) r_th_lock_leave (lock);
 			if (rabin_th && !r_th_wait_async (rabin_th)) {
 				eprintf ("rabin thread end \n");
 				r_th_free (rabin_th);
@@ -289,6 +316,7 @@ int main(int argc, char **argv) {
 				lock = NULL;
 				rabin_th = NULL;
 			}
+*/
 		} while (ret != R_CORE_CMD_EXIT);
 
 		if (debug) {

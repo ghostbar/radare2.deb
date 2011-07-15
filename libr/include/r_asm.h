@@ -4,25 +4,30 @@
 #define _INCLUDE_R_ASM_H_
 
 #include <r_types.h>
+#include <r_bin.h> // only for binding, no hard dep required 
 #include <list.h>
 #include <r_util.h>
 
 #define R_ASM_BUFSIZE 1024
 
-enum {
-	R_ASM_ARCH_NONE = 0,
-	R_ASM_ARCH_X86,
-	R_ASM_ARCH_ARM,
-	R_ASM_ARCH_PPC,
-	R_ASM_ARCH_M68K,
-	R_ASM_ARCH_JAVA,
-	R_ASM_ARCH_MIPS,
-	R_ASM_ARCH_SPARC,
-	R_ASM_ARCH_CSR,
-	R_ASM_ARCH_MSIL,
-	R_ASM_ARCH_OBJD,
-	R_ASM_ARCH_BF
-};
+/* backward compatibility */
+#define R_ASM_ARCH_NONE R_SYS_ARCH_NONE
+#define R_ASM_ARCH_X86 R_SYS_ARCH_X86
+#define R_ASM_ARCH_ARM R_SYS_ARCH_ARM
+#define R_ASM_ARCH_PPC R_SYS_ARCH_PPC
+#define R_ASM_ARCH_M68K R_SYS_ARCH_M68K
+#define R_ASM_ARCH_JAVA R_SYS_ARCH_JAVA
+#define R_ASM_ARCH_MIPS R_SYS_ARCH_MIPS
+#define R_ASM_ARCH_SPARC R_SYS_ARCH_SPARC
+#define R_ASM_ARCH_CSR R_SYS_ARCH_CSR
+#define R_ASM_ARCH_MSIL R_SYS_ARCH_MSIL
+#define R_ASM_ARCH_OBJD R_SYS_ARCH_OBJD
+#define R_ASM_ARCH_BF R_SYS_ARCH_BF
+#define R_ASM_ARCH_SH R_SYS_ARCH_SH
+
+#define R_ASM_GET_OFFSET(x,y,z) \
+	(x && x->binb.bin && x->binb.get_offset)? \
+		x->binb.get_offset (x->binb.bin, y, z): -1
 
 enum {
 	R_ASM_SYNTAX_NONE = 0,
@@ -70,6 +75,7 @@ typedef struct r_asm_t {
 	void *user;
 	struct r_asm_plugin_t *cur;
 	RList *plugins;
+	RBinBind binb;
 } RAsm;
 
 typedef int (*RAsmModifyCallback)(RAsm *a, ut8 *buf, int field, ut64 val);
@@ -83,7 +89,7 @@ typedef struct r_asm_plugin_t {
 	int *bits;
 	int (*init)(void *user);
 	int (*fini)(void *user);
-	int (*disassemble)(RAsm *a, struct r_asm_op_t *op, ut8 *buf, ut64 len);
+	int (*disassemble)(RAsm *a, struct r_asm_op_t *op, const ut8 *buf, ut64 len);
 	int (*assemble)(RAsm *a, struct r_asm_op_t *op, const char *buf);
 	RAsmModifyCallback modify;
 	int (*set_subarch)(RAsm *a, const char *buf);
@@ -102,11 +108,12 @@ R_API int r_asm_set_bits(RAsm *a, int bits);
 R_API int r_asm_set_big_endian(RAsm *a, int boolean);
 R_API int r_asm_set_syntax(RAsm *a, int syntax);
 R_API int r_asm_set_pc(RAsm *a, ut64 pc);
-R_API int r_asm_disassemble(RAsm *a, struct r_asm_op_t *op, ut8 *buf, ut64 len);
+R_API int r_asm_disassemble(RAsm *a, struct r_asm_op_t *op, const ut8 *buf, ut64 len);
 R_API int r_asm_assemble(RAsm *a, struct r_asm_op_t *op, const char *buf);
 R_API struct r_asm_code_t* r_asm_mdisassemble(RAsm *a, ut8 *buf, ut64 len);
 R_API RAsmCode* r_asm_mdisassemble_hexstr(RAsm *a, const char *hexstr);
 R_API struct r_asm_code_t* r_asm_massemble(RAsm *a, const char *buf);
+R_API struct r_asm_code_t* r_asm_assemble_file(RAsm *a, const char *file);
 
 /* code.c */
 R_API RAsmCode *r_asm_code_new();
@@ -135,6 +142,7 @@ extern RAsmPlugin r_asm_plugin_psosvm;
 extern RAsmPlugin r_asm_plugin_avr;
 extern RAsmPlugin r_asm_plugin_dalvik;
 extern RAsmPlugin r_asm_plugin_msil;
+extern RAsmPlugin r_asm_plugin_sh;
 #endif
 
 #endif

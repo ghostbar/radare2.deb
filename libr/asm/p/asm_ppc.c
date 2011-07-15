@@ -1,4 +1,4 @@
-/* radare - GPL3 - Copyright 2009-2010 nibble<.ds@gmail.com> */
+/* radare - LGPL - Copyright 2009-2010 nibble<.ds@gmail.com> */
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -16,8 +16,7 @@ static unsigned long Offset = 0;
 static char *buf_global = NULL;
 static unsigned char bytes[4];
 
-static int ppc_buffer_read_memory (bfd_vma memaddr, bfd_byte *myaddr, unsigned int length, struct disassemble_info *info)
-{
+static int ppc_buffer_read_memory (bfd_vma memaddr, bfd_byte *myaddr, ut32 length, struct disassemble_info *info) {
 	memcpy (myaddr, bytes, length);
 	return 0;
 }
@@ -51,9 +50,10 @@ static int buf_fprintf(void *stream, const char *format, ...) {
 	return 0;
 }
 
-static int disassemble(struct r_asm_t *a, struct r_asm_op_t *op, ut8 *buf, ut64 len) {
+static int disassemble(struct r_asm_t *a, struct r_asm_op_t *op, const ut8 *buf, ut64 len) {
 	static struct disassemble_info disasm_obj;
-
+	if (len<4)
+		return -1;
 	buf_global = op->buf_asm;
 	Offset = a->pc;
 	memcpy (bytes, buf, 4); // TODO handle thumb

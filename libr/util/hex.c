@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2009 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
 
 #include "r_types.h"
 #include "r_util.h"
@@ -16,17 +16,15 @@ R_API int r_hex_to_byte(ut8 *val, ut8 c) {
 /* int byte = hexpair2bin("A0"); */
 // (0A) => 10 || -1 (on error)
 R_API int r_hex_pair2bin(const char *arg) {
-	unsigned char *ptr;
-	unsigned char c = '\0';
-	unsigned char d = '\0';
-	unsigned int  j = 0;
+	ut8 *ptr, c = 0, d = 0;
+	ut32 j = 0;
 
-	for (ptr = (unsigned char *)arg; ;ptr = ptr + 1) {
-		if (!*ptr || ptr[0]==' ' || j==2)
+	for (ptr = (ut8*)arg; ;ptr = ptr + 1) {
+		if (!*ptr || *ptr==' ' || j==2)
 			break;
 		d = c;
-		if (r_hex_to_byte (&c, ptr[0])) {
-			eprintf ("Invalid hexa string at char '%c'.\n", ptr[0]);
+		if (r_hex_to_byte (&c, *ptr)) {
+			eprintf ("Invalid hexa string at char '%c'.\n", *ptr);
 			return -1;
 		}
 		c |= d;
@@ -36,38 +34,37 @@ R_API int r_hex_pair2bin(const char *arg) {
 }
 
 R_API int r_hex_bin2str(const ut8 *in, int len, char *out) {
-	int i;
+	int i, idx;
 	char tmp[5];
-	out[0]='\0';
-	for (i=0;i<len;i++)  {
-		sprintf (tmp, "%02x", in[i]);
-		strcat (out, tmp);
+	for (idx=i=0; i<len; i++,idx+=2)  {
+		snprintf (tmp, sizeof (tmp), "%02x", in[i]);
+		memcpy (out+idx, tmp, 2);
 	}
+	out[idx] = 0;
 	return len;
 }
 
 R_API char *r_hex_bin2strdup(const ut8 *in, int len) {
-	int i;
+	int i, idx;
 	char tmp[5], *out = malloc ((len+1)*2);
-	out[0]='\0';
-	for (i=0;i<len;i++)  {
-		sprintf (tmp, "%02x", in[i]);
-		strcat (out, tmp);
+	for (i=idx=0; i<len; i++, idx+=2)  {
+		snprintf (tmp, sizeof (tmp), "%02x", in[i]);
+		memcpy (out+idx, tmp, 2);
 	}
+	out[idx] = 0;
 	return out;
 }
-/* char buf[1024]; int len = hexstr2binstr("0a 33 45", buf); */
-// XXX control out bytes
-// 0A 3B 4E A0
+
 R_API int r_hex_str2bin(const char *in, ut8 *out) {
 	unsigned int len = 0, j = 0;
 	const char *ptr;
-	ut8 c, d;
-	c = d = '\0';
+	ut8 c = 0, d = 0;
 
-	for (ptr = in; ;ptr = ptr + 1) {
+	if (!memcmp (in, "0x", 2))
+		in += 2;
+	for (ptr = in; ; ptr++) {
 		/* ignored chars */
-		if (ptr[0]==':' || ptr[0]=='\n' || ptr[0]=='\t' || ptr[0]=='\r' || ptr[0]==' ')
+		if (*ptr==':' || *ptr=='\n' || *ptr=='\t' || *ptr=='\r' || *ptr==' ')
 			continue;
 
 		if (j==2) {
@@ -114,12 +111,12 @@ R_API int r_hex_str2bin(const char *in, ut8 *out) {
 
 R_API int r_hex_str2binmask(const char *in, ut8 *out, ut8 *mask) {
 	ut8 *ptr;
-	int len;
-	strcpy ((char*)out, in);
+	int len, ilen = strlen (in)+1;
+	memcpy (out, in, ilen);
 	for (ptr=out; *ptr; ptr++) if (*ptr=='.') *ptr = '0';
 	len = r_hex_str2bin ((char*)out, out);
 	if (len != -1) {
-		strcpy ((char*)mask, in);
+		memcpy (mask, in, ilen);
 		for (ptr=mask; *ptr; ptr++) *ptr = (*ptr=='.')?'0':'f';
 		len = r_hex_str2bin ((char*)mask, mask);
 	}
@@ -131,15 +128,15 @@ R_API st64 r_hex_bin_truncate (ut64 in, int n) {
 	case 1:
 		if ((in&UT8_GT0))
 			return UT64_8U|in;
-		else return in&UT8_MAX;
+		return in&UT8_MAX;
 	case 2: 
 		if ((in&UT16_GT0))
 			return UT64_16U|in;
-		else return in&UT16_MAX;
+		return in&UT16_MAX;
 	case 4: 
 		if ((in&UT32_GT0))
 			return UT64_32U|in;
-		else return in&UT32_MAX;
+		return in&UT32_MAX;
 	case 8:
 		return in&UT64_MAX;
 	}

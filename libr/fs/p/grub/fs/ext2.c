@@ -498,8 +498,7 @@ grub_ext2_read_file (grub_fshelp_node_t node,
 {
 	return grub_fshelp_read_file (node->data->disk, node, read_hook, closure,
 		flags, pos, len, buf, grub_ext2_read_block,
-		node->inode.size,
-		LOG2_EXT2_BLOCK_SIZE (node->data));
+		node->inode.size, LOG2_EXT2_BLOCK_SIZE (node->data));
 }
 
 
@@ -652,11 +651,12 @@ grub_ext2_iterate_dir (grub_fshelp_node_t dir,
     }
 
   /* Search the file.  */
+  if (hook)
   while (fpos < grub_le_to_cpu32 (diro->inode.size))
     {
       struct ext2_dirent dirent;
 
-      grub_ext2_read_file (diro, 0, 0, 0, fpos, sizeof (struct ext2_dirent),
+      grub_ext2_read_file (diro, NULL, NULL, 0, fpos, sizeof (dirent),
 			   (char *) &dirent);
       if (grub_errno)
 	return 0;
@@ -828,7 +828,7 @@ iterate (const char *filename,
 
   info.dir = ((filetype & GRUB_FSHELP_TYPE_MASK) == GRUB_FSHELP_DIR);
   grub_free (node);
-  return c->hook (filename, &info, c->closure);
+  return (c->hook != NULL)? c->hook (filename, &info, c->closure): 0;
 }
 
 static grub_err_t

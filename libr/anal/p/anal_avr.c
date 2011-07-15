@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2011 - pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2011 - pancake<nopcode.org>, Roc Vallès <vallesroc@gmail.com> */
 
 #include <string.h>
 #include <r_types.h>
@@ -7,10 +7,13 @@
 #include <r_anal.h>
 
 static int avr_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *buf, int len) {
+	short ofst;
+	ut8 kbuf[2];
+	ut16 *k = (ut16*)&kbuf;
 	ut16 *ins = (ut16*)buf;
+
 	if (op == NULL)
 		return 2;
-
 	op->length = 2;
 	if (*ins == 0) {
 		op->type = R_ANAL_OP_TYPE_NOP;
@@ -21,21 +24,48 @@ static int avr_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *buf, int len) 
 	if (buf[1]>=0x18 && buf[1]<=0x1b) { // hacky
 		op->type = R_ANAL_OP_TYPE_SUB;
 	} else
-	if ((buf[1] & 0xf0 ) == 0x80) {
+	if (((buf[1] & 0xfe) == 0x94) && ((buf[0] & 0x0e)==0x0e)) {
+		op->addr = addr;
 		op->type = R_ANAL_OP_TYPE_CALL; // call (absolute)
-		// TODO: calculate dest address
+		op->fail = (op->addr)+4;
+		anal->iob.read_at (anal->iob.io, addr+2, kbuf, 2);
+		op->jump = *k*2;
+		//eprintf("addr: %x inst: %x dest: %x fail:%x\n", op->addr, *ins, op->jump, op->fail);
 	} else
-	if ((buf[1] & 0xf0 ) == 0xd0) {
+	if ((buf[1] & 0xf0) == 0xd0) {
+		op->addr = addr;
 		op->type = R_ANAL_OP_TYPE_CALL; // rcall (relative)
-		// TODO: calculate dest address
+		op->fail = (op->addr)+2;
+		ofst = *ins<<4;
+		ofst>>=4;
+		ofst*=2;
+		op->jump = addr+ofst+2;
+		//eprintf("addr: %x inst: %x ofst: %d dest: %x fail:%x\n", op->addr, *ins, ofst, op->jump, op->fail);
 	} else
-	if ((buf[1] & 0xf0 ) == 0xf0) {
-		op->type = R_ANAL_OP_TYPE_CJMP; // breq
-		// TODO: calculate dest address
+	if (((buf[1] & 0xfe) == 0x94) && ((buf[0] & 0x0e)==0x0c)) {
+		op->addr = addr;
+		op->type = R_ANAL_OP_TYPE_CJMP; // breq, jmp (absolute)
+		op->fail = (op->addr)+4;
+		anal->iob.read_at (anal->iob.io, addr+2, kbuf, 2);
+		// TODO: check return value
+		op->jump = *k*2;
+		//eprintf("addr: %x inst: %x dest: %x fail:%x\n", op->addr, *ins, op->jump, op->fail);
 	} else
-	if ((buf[1] & 0xf0 ) == 0xc0) {
+	if ((buf[1] & 0xf0) == 0xc0) { // rjmp (relative)
+		op->addr=addr;
 		op->type = R_ANAL_OP_TYPE_JMP;
-		// TODO: calculate dest address
+		op->fail = (op->addr)+2;
+		ofst = *ins<<4;
+		ofst>>=4;
+		ofst*=2;
+		op->jump = addr+ofst+2;
+		//eprintf("addr: %x inst: %x ofst: %d dest: %x fail:%x\n", op->addr, *ins, ofst, op->jump, op->fail);
+	} else
+	if (*ins == 0x9508) { // ret
+		//eprintf("ret at addr: %x\n", addr);
+		op->type = R_ANAL_OP_TYPE_RET;
+		op->eob = R_TRUE;
+		//op->stackptr =
 	} else op->type = R_ANAL_OP_TYPE_UNK;
 	return op->length;
 }
@@ -43,6 +73,8 @@ static int avr_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *buf, int len) 
 struct r_anal_plugin_t r_anal_plugin_avr = {
 	.name = "avr",
 	.desc = "AVR code analysis plugin",
+	.arch = R_SYS_ARCH_AVR,
+	.bits = 8|32,
 	.init = NULL,
 	.fini = NULL,
 	.op = &avr_op,

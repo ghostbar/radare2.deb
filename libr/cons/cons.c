@@ -1,8 +1,6 @@
 /* radare - LGPL - Copyright 2008-2011 pancake<nopcode.org> */
 
 #include <r_cons.h>
-#include <r_types.h>
-#include <r_util.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -20,15 +18,32 @@ static void break_signal(int sig) {
 		I.event_interrupt (I.data);
 }
 
-static inline void r_cons_write (char *buf, int len) {
+static inline void r_cons_write (const char *buf, int len) {
 #if __WINDOWS__
 	r_cons_w32_print ((unsigned char *)buf);
 #else
 	if (write (I.fdout, buf, len) == -1) {
 		eprintf ("r_cons_write: write error\n");
-		exit (1);
+		//exit (1);
 	}
 #endif
+}
+
+R_API void r_cons_strcat_justify (const char *str, int j, char c) {
+	int i, o, len;
+	for (o=i=len=0; str[i]; i++, len++) {
+		if (str[i]=='\n') {
+			if (c) r_cons_memset (c, 1);
+			r_cons_memset (' ', j);
+			r_cons_memcat (str+o, len);
+			if (str[o+len] == '\n')
+				r_cons_newline ();
+			o = i+1;
+			len = 0;
+		}
+	}
+	if (len>1)
+		r_cons_memcat (str+o, len);
 }
 
 R_API RCons *r_cons_singleton () {
@@ -83,6 +98,7 @@ R_API RCons *r_cons_new () {
 	I.buffer_sz = 0;
 	I.buffer_len = 0;
 	r_cons_get_size (NULL);
+	I.num = NULL;
 #if __UNIX__
 	tcgetattr (0, &I.term_buf);
 	memcpy (&I.term_raw, &I.term_buf, sizeof (I.term_raw));
@@ -136,7 +152,7 @@ R_API void r_cons_gotoxy(int x, int y) {
                 hStdout = GetStdHandle (STD_OUTPUT_HANDLE);
         SetConsoleCursorPosition (hStdout, coord);
 #else
-	r_cons_printf ("\x1b[%d;%dH", y, x);
+	r_cons_printf ("\x1b[%d;%dH\n", y, x);
 #endif
 }
 
@@ -154,11 +170,33 @@ R_API void r_cons_clear() {
 	
 	if (!hStdout) {
 		hStdout = GetStdHandle (STD_OUTPUT_HANDLE);
-		GetConsoleScreenBufferInfo (hStdout,&csbi);
+		GetConsoleScreenBufferInfo (hStdout, &csbi);
+		//GetConsoleWindowInfo (hStdout, &csbi);
 	}
-	
 	FillConsoleOutputCharacter (hStdout, ' ',
 		csbi.dwSize.X * csbi.dwSize.Y, startCoords, &dummy);
+	// SHORT Width = Info.srWindow.Right - Info.srWindow.Left + 1 ;
+	//FillConsoleOutputAttribute (hStdout, ' ',
+	//	csbi.dwSize.X * csbi.dwSize.Y, startCoords, &dummy);
+	/*
+	for (SHORT N = Info.srWindow.Top ; N <= Info.srWindow.Bottom ; ++N) {
+		DWORD Chars ;
+		COORD Pos = { Info.srWindow.Left, N } ;
+		FillConsoleOutputCharacter(ConsoleHandle, ' ', Width, Pos, &Chars) ;
+		FillConsoleOutputAttribute(ConsoleHandle, attr, Width, Pos, &Chars) ;
+	}
+	// scroll //
+	CONSOLE_SCREEN_BUFFER_INFO Info
+	GetConsoleWindowInfo(ConsoleHandle, &Info) ;
+	CHAR_INFO space ;
+	space.Char.AsciiChar = ' ' ;
+	space.Attributes = attr ;
+	SHORT Height = Info.srWindow.Bottom - Info.srWindow.Top + 1 ;
+	COORD Origin = { Info.srWindow.Left, Info.srWindow.Top - Height } ;
+	ScrollConsoleScreenBuffer(ConsoleHandle, &Info.srWindow, NULL, Origin, &space) ;
+	COORD TopLeft = { Info.srWindow.Left, Info.srWindow.Top } ;
+	SetConsoleCursorPosition(ConsoleHandle, TopLeft) ;
+	*/
 #else
 	r_cons_strcat (Color_RESET"\x1b[2J");
 #endif
@@ -210,9 +248,8 @@ R_API void r_cons_flush() {
 	if (tee&&*tee) {
 		FILE *d = fopen (tee, "a+");
 		if (d != NULL) {
-			if (I.buffer_len != fwrite (I.buffer, 1, I.buffer_len, d)) {
+			if (I.buffer_len != fwrite (I.buffer, 1, I.buffer_len, d))
 				eprintf ("r_cons_flush: fwrite: error (%s)\n", tee);
-			}
 			fclose (d);
 		}
 	}
@@ -227,7 +264,7 @@ R_API void r_cons_visual_flush() {
 		return;
 /* TODO: this ifdef must go in the function body */
 #if __WINDOWS__
-	r_cons_w32_print (I.buffer);
+	r_cons_w32_print ((ut8*)I.buffer);
 #else
 	r_cons_visual_write (I.buffer);
 #endif
@@ -236,11 +273,37 @@ R_API void r_cons_visual_flush() {
 }
 
 R_API void r_cons_visual_write (char *buffer) {
-	int lines = I.rows-1;
+	const char *newline = "\n"Color_RESET;
+	int cols = I.columns;
+	int alen, lines = I.rows;
+	const char *endptr;
 	char *nl, *ptr = buffer;
-	while (lines && (nl = strchr (ptr, '\n'))) {
-		r_cons_write (ptr, nl-ptr+1);
+
+	while ((nl = strchr (ptr, '\n'))) {
+		int len = ((int)(size_t)(nl-ptr))+1;
+
+		*nl = 0;
+		alen = r_str_ansi_len (ptr);
+		*nl = '\n';
+
 		lines--;
+		if (alen>cols) {
+			endptr = r_str_ansi_chrn (ptr, cols);
+			endptr++;
+			len = (endptr-ptr);
+			if (lines>0) {
+				r_cons_write (ptr, len);
+				r_cons_write (newline, strlen (newline));
+			}
+		} else {
+			if (lines>0)
+				r_cons_write (ptr, len);
+		}
+		// TRICK for columns.. maybe buggy in w32
+		if (r_mem_mem ((const ut8*)ptr, len, (const ut8*)"\x1b[0;0H", 6)) {
+			lines = I.rows;
+			r_cons_write (ptr, len);
+		}
 		ptr = nl+1;
 	}
 }
@@ -264,6 +327,14 @@ R_API void r_cons_memcat(const char *str, int len) {
 	if (len>0) {
 		palloc (len+1);
 		memcpy (I.buffer+I.buffer_len, str, len+1);
+		I.buffer_len += len;
+	}
+}
+
+R_API void r_cons_memset(char ch, int len) {
+	if (len>0) {
+		palloc (len+1);
+		memset (I.buffer+I.buffer_len, ch, len+1);
 		I.buffer_len += len;
 	}
 }
@@ -327,4 +398,45 @@ R_API void r_cons_set_raw(int is_raw) {
 #warning No raw console supported for this platform
 #endif
 	fflush (stdout);
+}
+
+R_API void r_cons_invert(int set, int color) {
+	if (color) {
+		if (set) r_cons_strcat("\x1b[7m");
+		else r_cons_strcat("\x1b[27m");
+	} else {
+		if (set) r_cons_strcat("[");
+		else r_cons_strcat("]");
+	}
+}
+
+/*
+  Enable/Disable scrolling in terminal:
+    FMI: cd libr/cons/t ; make ti ; ./ti
+  smcup: disable terminal scrolling (fullscreen mode)
+  rmcup: enable terminal scrolling (normal mode)
+*/
+R_API void r_cons_set_cup(int enable) {
+#if __UNIX__
+	if (enable) {
+		printf ("\x1b[?1049h"); // xterm
+		printf ("\x1b" "7\x1b[?47h"); // xterm-color
+	} else {
+		printf ("\x1b[?1049l"); // xterm
+		printf ("\x1b[?47l""\x1b""8"); // xterm-color
+	}
+	fflush (stdout);
+#else
+	/* not supported ? */
+#endif
+}
+
+R_API void r_cons_column(int c) {
+	char *b = malloc (I.buffer_len);
+	memcpy (b, I.buffer, I.buffer_len);
+	b[I.buffer_len] = 0;
+	r_cons_reset ();
+	// align current buffer N chars right
+	r_cons_strcat_justify (b, c, 0);
+	r_cons_gotoxy (0, 0);
 }

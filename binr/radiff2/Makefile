@@ -7,7 +7,13 @@ include ../binr.mk
 
 ifeq ($(WITHNONPIC),1)
 LDFLAGS+=${DL_LIBS} -lm
+LDFLAGS+=../../libr/fs/p/grub/libgrubfs.a
 ifeq ($(HAVE_LIB_GMP),1)
 LDFLAGS+=-lgmp
 endif
+endif
+
+ifeq (${HAVE_LIB_SSL},1)
+CFLAGS+=${SSL_CFLAGS}
+LDFLAGS+=${SSL_LDFLAGS}
 endif

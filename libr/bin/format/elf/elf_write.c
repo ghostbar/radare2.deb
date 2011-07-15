@@ -17,7 +17,7 @@ ut64 Elf_(r_bin_elf_resize_section)(struct Elf_(r_bin_elf_obj_t) *bin, const cha
 	Elf_(Shdr) *shdr = bin->shdr, *shdrp;
 	const char *strtab = bin->strtab;
 	ut8 *buf;
-	ut64 off, got_offset, got_addr = 0, rsz_offset, delta = 0;
+	ut64 off, got_offset = 0, got_addr = 0, rsz_offset = 0, delta = 0;
 	ut64 rsz_osize = 0, rsz_size = size, rest_size = 0;
 	int i, j, done = 0;
 
@@ -55,9 +55,9 @@ ut64 Elf_(r_bin_elf_resize_section)(struct Elf_(r_bin_elf_obj_t) *bin, const cha
 	for (i = 0, shdrp = shdr; i < ehdr->e_shnum; i++, shdrp++) {
 		if (!strcmp(&strtab[shdrp->sh_name], ".rel.plt")) {
 			Elf_(Rel) *rel, *relp;
-			rel = (Elf_(Rel) *)malloc(shdrp->sh_size);
+			rel = (Elf_(Rel) *)malloc (1+shdrp->sh_size);
 			if (rel == NULL) {
-				perror("malloc");
+				perror ("malloc");
 				return 0;
 			}
 			if (r_buf_read_at(bin->b, shdrp->sh_offset, (ut8*)rel, shdrp->sh_size) == -1)
@@ -78,7 +78,7 @@ ut64 Elf_(r_bin_elf_resize_section)(struct Elf_(r_bin_elf_obj_t) *bin, const cha
 			break;
 		} else if (!strcmp(&strtab[shdrp->sh_name], ".rela.plt")) {
 			Elf_(Rela) *rel, *relp;
-			rel = (Elf_(Rela) *)malloc(shdrp->sh_size);
+			rel = (Elf_(Rela) *)malloc (1+shdrp->sh_size);
 			if (rel == NULL) {
 				perror("malloc");
 				return 0;
@@ -153,7 +153,7 @@ ut64 Elf_(r_bin_elf_resize_section)(struct Elf_(r_bin_elf_obj_t) *bin, const cha
 	/* XXX Check when delta is negative */
 	rest_size = bin->size - (rsz_offset + rsz_osize);
 
-	buf = (ut8 *)malloc (bin->size);
+	buf = (ut8 *)malloc (1+bin->size);
 	r_buf_read_at (bin->b, 0, (ut8*)buf, bin->size);
 	r_buf_set_bytes (bin->b, (ut8*)buf, (int)(rsz_offset+rsz_size+rest_size));
 
@@ -171,35 +171,36 @@ ut64 Elf_(r_bin_elf_resize_section)(struct Elf_(r_bin_elf_obj_t) *bin, const cha
 /* XXX Endianness? */
 int Elf_(r_bin_elf_del_rpath)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	Elf_(Dyn) *dyn = NULL;
-	ut64 stroff;
+	ut64 stroff = 0LL;
 	int ndyn, i, j;
 
 	for (i = 0; i < bin->ehdr.e_phnum; i++)
 		if (bin->phdr[i].p_type == PT_DYNAMIC) {
-			if (!(dyn = malloc (bin->phdr[i].p_filesz))) {
-				perror("malloc (dyn)");
+			if (!(dyn = malloc (1+bin->phdr[i].p_filesz))) {
+				perror ("malloc (dyn)");
 				return R_FALSE;
 			}
 			if (r_buf_read_at (bin->b, bin->phdr[i].p_offset, (ut8*)dyn, bin->phdr[i].p_filesz) == -1) {
-				eprintf("Error: read (dyn)\n");
+				eprintf ("Error: read (dyn)\n");
 				free (dyn);
 				return R_FALSE;
 			}
-			ndyn = (int)(bin->phdr[i].p_filesz / sizeof(Elf_(Dyn)));
-			for (j = 0; j < ndyn; j++)
-				if (dyn[j].d_tag == DT_STRTAB) {
-					stroff = (ut64)(dyn[j].d_un.d_ptr - bin->baddr);
-					break;
-				}
-			for (j = 0; j < ndyn; j++)
-				if (dyn[j].d_tag == DT_RPATH || dyn[j].d_tag == DT_RUNPATH) {
-					if (r_buf_write_at (bin->b, stroff + dyn[j].d_un.d_val,
-								(ut8*)"", 1) == -1) {
-						eprintf("Error: write (rpath)\n");
-						free (dyn);
-						return R_FALSE;
+			if ((ndyn = (int)(bin->phdr[i].p_filesz / sizeof(Elf_(Dyn)))) > 0) {
+				for (j = 0; j < ndyn; j++)
+					if (dyn[j].d_tag == DT_STRTAB) {
+						stroff = (ut64)(dyn[j].d_un.d_ptr - bin->baddr);
+						break;
 					}
-				}
+				for (j = 0; j < ndyn; j++)
+					if (dyn[j].d_tag == DT_RPATH || dyn[j].d_tag == DT_RUNPATH) {
+						if (r_buf_write_at (bin->b, stroff + dyn[j].d_un.d_val,
+									(ut8*)"", 1) == -1) {
+							eprintf ("Error: write (rpath)\n");
+							free (dyn);
+							return R_FALSE;
+						}
+					}
+			}
 			free (dyn);
 			break;
 		}
