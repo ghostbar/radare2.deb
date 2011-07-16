@@ -1,4 +1,4 @@
-libr_anal.so.0.7 libradare2-0.7 #MINVER#
+libr_anal.so.0.8 libradare2-0.8 #MINVER#
  RAnalRefType@Base 0.6
  cmd_fpu_tbl_00_BF@Base 0.6
  cmd_fpu_tbl_C0_FF@Base 0.6
@@ -230,7 +230,7 @@ libr_anal.so.0.7 libradare2-0.7 #MINVER#
  x86im_process_mem_op@Base 0.6
  x86im_process_reg_op@Base 0.6
  x86im_search_cmd@Base 0.6
-libr_asm.so.0.7 libradare2-0.7 #MINVER#
+libr_asm.so.0.8 libradare2-0.8 #MINVER#
  AVR_Long_Instruction@Base 0.6
  Assemble@Base 0.6
  Checkcondition@Base 0.6
@@ -379,7 +379,7 @@ libr_asm.so.0.7 libradare2-0.7 #MINVER#
  ud_translate_att@Base 0.6
  ud_translate_intel@Base 0.6
  vxdcmd@Base 0.6
-libr_bin.so.0.7 libradare2-0.7 #MINVER#
+libr_bin.so.0.8 libradare2-0.8 #MINVER#
  Elf32_r_bin_elf_del_rpath@Base 0.6
  Elf32_r_bin_elf_free@Base 0.6
  Elf32_r_bin_elf_get_arch@Base 0.6
@@ -590,7 +590,7 @@ libr_bin.so.0.7 libradare2-0.7 #MINVER#
  r_bin_xtr_add@Base 0.6
  r_bin_xtr_plugin_dyldcache@Base 0.6
  r_bin_xtr_plugin_fatmach0@Base 0.6
-libr_bp.so.0.7 libradare2-0.7 #MINVER#
+libr_bp.so.0.8 libradare2-0.8 #MINVER#
  r_bp_add_cond@Base 0.6
  r_bp_add_fault@Base 0.6
  r_bp_add_hw@Base 0.6
@@ -627,7 +627,7 @@ libr_bp.so.0.7 libradare2-0.7 #MINVER#
  r_bp_use@Base 0.6
  r_bp_watch_add@Base 0.6
  r_bp_watch_del@Base 0.6
-libr_cmd.so.0.7 libradare2-0.7 #MINVER#
+libr_cmd.so.0.8 libradare2-0.8 #MINVER#
  r_cmd_add@Base 0.6
  r_cmd_add_long@Base 0.6
  r_cmd_call@Base 0.6
@@ -648,7 +648,7 @@ libr_cmd.so.0.7 libradare2-0.7 #MINVER#
  r_cmd_plugin_dummy@Base 0.6
  r_cmd_plugin_init@Base 0.6
  r_cmd_set_data@Base 0.6
-libr_config.so.0.7 libradare2-0.7 #MINVER#
+libr_config.so.0.8 libradare2-0.8 #MINVER#
  r_config_eval@Base 0.6
  r_config_free@Base 0.6
  r_config_get@Base 0.6
@@ -668,7 +668,7 @@ libr_config.so.0.7 libradare2-0.7 #MINVER#
  r_config_set_i_cb@Base 0.6
  r_config_swap@Base 0.6
  r_config_visual_hit_i@Base 0.6
-libr_cons.so.0.7 libradare2-0.7 #MINVER#
+libr_cons.so.0.8 libradare2-0.8 #MINVER#
  pal_names@Base 0.6
  r_cons_any_key@Base 0.6
  r_cons_arrow_to_hjkl@Base 0.6
@@ -705,7 +705,7 @@ libr_cons.so.0.7 libradare2-0.7 #MINVER#
  r_cons_visual_flush@Base 0.6
  r_cons_visual_write@Base 0.6
  r_cons_yesno@Base 0.6
-libr_core.so.0.7 libradare2-0.7 #MINVER#
+libr_core.so.0.8 libradare2-0.8 #MINVER#
  RAnalRefType@Base 0.6
  r_core_anal_all@Base 0.7
  r_core_anal_bb@Base 0.6
@@ -786,7 +786,7 @@ libr_core.so.0.7 libradare2-0.7 #MINVER#
  r_core_write_op@Base 0.6
  r_core_yank@Base 0.6
  r_core_yank_paste@Base 0.6
-libr_crypto.so.0.7 libradare2-0.7 #MINVER#
+libr_crypto.so.0.8 libradare2-0.8 #MINVER#
  FT0@Base 0.6
  FT1@Base 0.6
  FT2@Base 0.6
@@ -817,7 +817,7 @@ libr_crypto.so.0.7 libradare2-0.7 #MINVER#
  r_crypto_set_key@Base 0.6
  r_crypto_update@Base 0.6
  r_crypto_use@Base 0.6
-libr_db.so.0.7 libradare2-0.7 #MINVER#
+libr_db.so.0.8 libradare2-0.8 #MINVER#
  r_db_add@Base 0.6
  r_db_add_id@Base 0.6
  r_db_add_unique@Base 0.6
@@ -840,7 +840,7 @@ libr_db.so.0.7 libradare2-0.7 #MINVER#
  r_db_table_key@Base 0.6
  r_db_table_key_i@Base 0.6
  r_db_table_new@Base 0.6
-libr_debug.so.0.7 libradare2-0.7 #MINVER#
+libr_debug.so.0.8 libradare2-0.8 #MINVER#
  RAnalRefType@Base 0.6
  r_debug_arg_get@Base 0.6
  r_debug_arg_set@Base 0.6
@@ -913,7 +913,7 @@ libr_debug.so.0.7 libradare2-0.7 #MINVER#
  r_debug_trace_tag@Base 0.6
  r_debug_use@Base 0.6
  r_debug_wait@Base 0.6
-libr_diff.so.0.7 libradare2-0.7 #MINVER#
+libr_diff.so.0.8 libradare2-0.8 #MINVER#
  r_diff_buffers@Base 0.6
  r_diff_buffers_delta@Base 0.6
  r_diff_buffers_distance@Base 0.6
@@ -923,7 +923,7 @@ libr_diff.so.0.7 libradare2-0.7 #MINVER#
  r_diff_new@Base 0.6
  r_diff_set_callback@Base 0.6
  r_diff_set_delta@Base 0.6
-libr_flags.so.0.7 libradare2-0.7 #MINVER#
+libr_flags.so.0.8 libradare2-0.8 #MINVER#
  r_flag_free@Base 0.6
  r_flag_get@Base 0.6
  r_flag_get_i@Base 0.6
@@ -940,7 +940,7 @@ libr_flags.so.0.7 libradare2-0.7 #MINVER#
  r_flag_space_set@Base 0.6
  r_flag_unset@Base 0.6
  r_flag_unset_i@Base 0.6
-libr_fs.so.0.7 libradare2-0.7 #MINVER#
+libr_fs.so.0.8 libradare2-0.8 #MINVER#
  grub_abort@Base 0.7
  grub_amiga_partition_map@Base 0.7
  grub_apple_partition_map@Base 0.7
@@ -1124,7 +1124,7 @@ libr_fs.so.0.7 libradare2-0.7 #MINVER#
  r_fs_root_new@Base 0.7
  r_fs_slurp@Base 0.7
  r_fs_umount@Base 0.7
-libr_hash.so.0.7 libradare2-0.7 #MINVER#
+libr_hash.so.0.8 libradare2-0.8 #MINVER#
  MD5Final@Base 0.6
  MD5Init@Base 0.6
  MD5Update@Base 0.6
@@ -1172,7 +1172,7 @@ libr_hash.so.0.7 libradare2-0.7 #MINVER#
  r_hash_pcprint@Base 0.6
  r_hash_xor@Base 0.6
  r_hash_xorpair@Base 0.6
-libr_io.so.0.7 libradare2-0.7 #MINVER#
+libr_io.so.0.8 libradare2-0.8 #MINVER#
  GDBWRAP_BAD_CHECKSUM@Base 0.6
  GDBWRAP_BEGIN_PACKET@Base 0.6
  GDBWRAP_CONTINUE@Base 0.6
@@ -1333,7 +1333,7 @@ libr_io.so.0.7 libradare2-0.7 #MINVER#
  r_io_wundo_new@Base 0.6
  r_io_wundo_set@Base 0.6
  r_io_wundo_size@Base 0.6
-libr_lang.so.0.7 libradare2-0.7 #MINVER#
+libr_lang.so.0.8 libradare2-0.8 #MINVER#
  RAnalRefType@Base 0.7
  r_lang_add@Base 0.6
  r_lang_def_free@Base 0.7
@@ -1353,7 +1353,7 @@ libr_lang.so.0.7 libradare2-0.7 #MINVER#
  r_lang_undef@Base 0.6
  r_lang_use@Base 0.6
  radare_plugin@Base 0.7
-libr_lib.so.0.7 libradare2-0.7 #MINVER#
+libr_lib.so.0.8 libradare2-0.8 #MINVER#
  r_lib_add_handler@Base 0.6
  r_lib_close@Base 0.6
  r_lib_del_handler@Base 0.6
@@ -1369,7 +1369,7 @@ libr_lib.so.0.7 libradare2-0.7 #MINVER#
  r_lib_opendir@Base 0.6
  r_lib_run_handler@Base 0.6
  r_lib_types_get@Base 0.6
-libr_line.so.0.7 libradare2-0.7 #MINVER#
+libr_line.so.0.8 libradare2-0.8 #MINVER#
  r_line_autocomplete@Base 0.6
  r_line_dietline_init@Base 0.6
  r_line_free@Base 0.6
@@ -1383,7 +1383,7 @@ libr_line.so.0.7 libradare2-0.7 #MINVER#
  r_line_readline@Base 0.6
  r_line_set_prompt@Base 0.7
  r_line_singleton@Base 0.6
-libr_parse.so.0.7 libradare2-0.7 #MINVER#
+libr_parse.so.0.8 libradare2-0.8 #MINVER#
  RAnalRefType@Base 0.7
  matchs@Base 0.6
  memAllocated@Base 0.6
@@ -1413,7 +1413,7 @@ libr_parse.so.0.7 libradare2-0.7 #MINVER#
  radare_plugin@Base 0.6
  sreplace@Base 0.6
  treplace@Base 0.6
-libr_print.so.0.7 libradare2-0.7 #MINVER#
+libr_print.so.0.8 libradare2-0.8 #MINVER#
  RAnalRefType@Base 0.6
  r_print_addr@Base 0.6
  r_print_byte@Base 0.6
@@ -1438,7 +1438,7 @@ libr_print.so.0.7 libradare2-0.7 #MINVER#
  r_print_string@Base 0.6
  r_print_unset_flags@Base 0.6
  r_print_zoom@Base 0.7
-libr_reg.so.0.7 libradare2-0.7 #MINVER#
+libr_reg.so.0.8 libradare2-0.8 #MINVER#
  r_reg_arena_free@Base 0.6
  r_reg_arena_new@Base 0.6
  r_reg_arena_pop@Base 0.6
@@ -1468,7 +1468,7 @@ libr_reg.so.0.7 libradare2-0.7 #MINVER#
  r_reg_set_pvalue@Base 0.6
  r_reg_set_value@Base 0.6
  r_reg_type_by_name@Base 0.6
-libr_search.so.0.7 libradare2-0.7 #MINVER#
+libr_search.so.0.8 libradare2-0.8 #MINVER#
  r_search_aes_update@Base 0.6
  r_search_begin@Base 0.6
  r_search_find@Base 0.7
@@ -1496,7 +1496,7 @@ libr_search.so.0.7 libradare2-0.7 #MINVER#
  r_search_update_i@Base 0.6
  r_search_xrefs_update@Base 0.6
  table_sbox@Base 0.6
-libr_sign.so.0.7 libradare2-0.7 #MINVER#
+libr_sign.so.0.8 libradare2-0.8 #MINVER#
  RAnalRefType@Base 0.6
  r_sign_add@Base 0.6
  r_sign_check@Base 0.6
@@ -1506,7 +1506,7 @@ libr_sign.so.0.7 libradare2-0.7 #MINVER#
  r_sign_new@Base 0.6
  r_sign_prefix@Base 0.6
  r_sign_reset@Base 0.6
-libr_socket.so.0.7 libradare2-0.7 #MINVER#
+libr_socket.so.0.8 libradare2-0.8 #MINVER#
  r_socket_accept@Base 0.6
  r_socket_block@Base 0.6
  r_socket_close@Base 0.6
@@ -1526,7 +1526,7 @@ libr_socket.so.0.7 libradare2-0.7 #MINVER#
  r_socket_unix_connect@Base 0.6
  r_socket_unix_listen@Base 0.6
  r_socket_write@Base 0.6
-libr_syscall.so.0.7 libradare2-0.7 #MINVER#
+libr_syscall.so.0.8 libradare2-0.8 #MINVER#
  r_syscall_free@Base 0.6
  r_syscall_get@Base 0.6
  r_syscall_get_i@Base 0.6
@@ -1547,7 +1547,7 @@ libr_syscall.so.0.7 libradare2-0.7 #MINVER#
  syscalls_netbsd_x86@Base 0.6
  syscalls_win7_x86@Base 0.6
  sysport_x86@Base 0.6
-libr_th.so.0.7 libradare2-0.7 #MINVER#
+libr_th.so.0.8 libradare2-0.8 #MINVER#
  r_th_break@Base 0.6
  r_th_free@Base 0.6
  r_th_kill@Base 0.6
@@ -1562,7 +1562,7 @@ libr_th.so.0.7 libradare2-0.7 #MINVER#
  r_th_start@Base 0.6
  r_th_wait@Base 0.6
  r_th_wait_async@Base 0.6
-libr_util.so.0.7 libradare2-0.7 #MINVER#
+libr_util.so.0.8 libradare2-0.8 #MINVER#
  btree_add@Base 0.6
  btree_cleartree@Base 0.6
  btree_del@Base 0.6
