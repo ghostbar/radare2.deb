@@ -4,6 +4,7 @@ radare2 (0.8-1) unstable; urgency=low
   * remove all patches (included upstream)
   * switch from cdbs to dh
   * update Debian Standards Version to 3.9.2
+  * new patch: fix install path of manpages
 
  -- Sebastian Reichel <sre@debian.org>  Sat, 16 Jul 2011 01:28:31 +0200
 
