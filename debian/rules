@@ -1,4 +1,5 @@
 #!/usr/bin/make -f
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 DEBUG_SUPPORT=0
 EXTRA_FLAGS=
 
@@ -22,10 +23,10 @@ endif
 	dh $@
 
 override_dh_auto_configure:
-	./configure --prefix=/usr ${EXTRA_FLAGS}
+	./configure --prefix=/usr --libdir=/usr/lib/$(DEB_HOST_MULTIARCH) ${EXTRA_FLAGS}
 
 override_dh_makeshlibs:
-	dh_makeshlibs --exclude=/usr/lib/radare2/
+	dh_makeshlibs --exclude=/usr/lib/$(DEB_HOST_MULTIARCH)/radare2/
 
 override_dh_strip:
 	dh_strip -pradare2 --dbg-package=radare2-dbg

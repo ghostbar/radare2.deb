@@ -4,8 +4,9 @@ radare2 (0.8-1) unstable; urgency=low
   * remove all patches (included upstream)
   * switch from cdbs to dh
   * update Debian Standards Version to 3.9.2
+  * make libradare2 multi-arch capable
 
- -- Sebastian Reichel <sre@debian.org>  Sat, 16 Jul 2011 01:28:31 +0200
+ -- Sebastian Reichel <sre@debian.org>  Tue, 19 Jul 2011 01:18:32 +0200
 
 radare2 (0.7-3) unstable; urgency=low
 

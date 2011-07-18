@@ -2,7 +2,7 @@ Source: radare2
 Section: devel
 Priority: extra
 Maintainer: Sebastian Reichel <sre@debian.org>
-Build-Depends: debhelper (>= 8),
+Build-Depends: debhelper (>= 8.1.3),
                libgmp3-dev,
                libmagic-dev,
 Standards-Version: 3.9.2
@@ -49,7 +49,9 @@ Description: free and advanced command line hexadecimal editor (debug)
 Package: libradare2-0.8
 Section: libs
 Architecture: any
+Pre-Depends: ${misc:Pre-Depends}
 Depends: ${shlibs:Depends}, ${misc:Depends}
+Multi-Arch: same
 Description: libraries from the radare2 suite
  The project aims to create a complete, portable, multi-architecture,
  unix-like toolchain for reverse engineering.
@@ -85,6 +87,7 @@ Description: devel files from the radare2 suite
  This package provides the devel files from radare2.
 
 Package: libradare2-0.8-dbg
+Multi-Arch: same
 Section: debug
 Architecture: any
 Depends: ${misc:Depends}, libradare2-0.8
