@@ -1,8 +1,6 @@
 libr_anal.so.0.8 libradare2-0.8 #MINVER#
- RAnalRefType@Base 0.6
  cmd_fpu_tbl_00_BF@Base 0.6
  cmd_fpu_tbl_C0_FF@Base 0.6
- dalvik_opcodes@Base 0.7
  dislen@Base 0.6
  itbl_1byte@Base 0.6
  itbl_1byte_grp11_op_C6@Base 0.6
@@ -122,6 +120,7 @@ libr_anal.so.0.8 libradare2-0.8 #MINVER#
  r_anal_list@Base 0.6
  r_anal_new@Base 0.6
  r_anal_op@Base 0.7
+ r_anal_op_copy@Base 0.8
  r_anal_op_execute@Base 0.7
  r_anal_op_free@Base 0.7
  r_anal_op_list_new@Base 0.7
@@ -134,6 +133,7 @@ libr_anal.so.0.8 libradare2-0.8 #MINVER#
  r_anal_plugin_java@Base 0.6
  r_anal_plugin_mips@Base 0.6
  r_anal_plugin_ppc@Base 0.6
+ r_anal_plugin_sh@Base 0.8
  r_anal_plugin_x86@Base 0.6
  r_anal_plugin_x86_simple@Base 0.7
  r_anal_ref_add@Base 0.6
@@ -151,6 +151,7 @@ libr_anal.so.0.8 libradare2-0.8 #MINVER#
  r_anal_strmask@Base 0.6
  r_anal_trace_bb@Base 0.7
  r_anal_use@Base 0.6
+ r_anal_value_copy@Base 0.8
  r_anal_value_free@Base 0.6
  r_anal_value_new@Base 0.6
  r_anal_value_new_from_string@Base 0.6
@@ -181,6 +182,7 @@ libr_anal.so.0.8 libradare2-0.8 #MINVER#
  r_anal_xref_get@Base 0.6
  r_meta_add@Base 0.6
  r_meta_cleanup@Base 0.6
+ r_meta_comment_check@Base 0.8
  r_meta_count@Base 0.6
  r_meta_del@Base 0.6
  r_meta_find@Base 0.6
@@ -190,6 +192,7 @@ libr_anal.so.0.8 libradare2-0.8 #MINVER#
  r_meta_item_new@Base 0.6
  r_meta_list@Base 0.6
  r_meta_new@Base 0.6
+ r_meta_set_string@Base 0.8
  r_meta_type_new@Base 0.7
  r_meta_type_to_string@Base 0.6
  tbl_imn@Base 0.6
@@ -245,23 +248,17 @@ libr_asm.so.0.8 libradare2-0.8 #MINVER#
  Printfloat10@Base 0.6
  Printfloat4@Base 0.6
  Printfloat8@Base 0.6
- RAnalRefType@Base 0.6
  addr16@Base 0.6
  addr32@Base 0.6
  armass_assemble@Base 0.6
  armthumb_disassemble@Base 0.6
  armthumb_length@Base 0.6
  avrdis@Base 0.6
- bfd_getb16@Base 0.6
- bfd_getb32@Base 0.6
- bfd_getl16@Base 0.6
- bfd_getl32@Base 0.6
  bfd_mips16_num_opcodes@Base 0.6
  bfd_mips_num_builtin_opcodes@Base 0.6
  bfd_mips_num_opcodes@Base 0.6
  cmddata@Base 0.6
  crname@Base 0.6
- dalvik_opcodes@Base 0.7
  dangerous@Base 0.6
  disassembleInstruction@Base 0.6
  drname@Base 0.6
@@ -307,10 +304,13 @@ libr_asm.so.0.8 libradare2-0.8 #MINVER#
  print_insn_little_mips@Base 0.6
  print_insn_little_powerpc@Base 0.6
  print_insn_rs6000@Base 0.6
+ print_insn_sh@Base 0.8
+ print_insn_shl@Base 0.8
  print_mips_disassembler_options@Base 0.6
  print_ppc_disassembler_options@Base 0.6
  r_asm_add@Base 0.6
  r_asm_assemble@Base 0.6
+ r_asm_assemble_file@Base 0.8
  r_asm_code_equ_replace@Base 0.6
  r_asm_code_free@Base 0.6
  r_asm_code_new@Base 0.6
@@ -318,6 +318,7 @@ libr_asm.so.0.8 libradare2-0.8 #MINVER#
  r_asm_del@Base 0.6
  r_asm_disassemble@Base 0.6
  r_asm_free@Base 0.6
+ r_asm_get_offset@Base 0.8
  r_asm_massemble@Base 0.6
  r_asm_mdisassemble@Base 0.6
  r_asm_mdisassemble_hexstr@Base 0.6
@@ -334,6 +335,7 @@ libr_asm.so.0.8 libradare2-0.8 #MINVER#
  r_asm_plugin_mips@Base 0.6
  r_asm_plugin_msil@Base 0.7
  r_asm_plugin_ppc@Base 0.6
+ r_asm_plugin_sh@Base 0.8
  r_asm_plugin_x86@Base 0.6
  r_asm_plugin_x86_nasm@Base 0.6
  r_asm_plugin_x86_olly@Base 0.6
@@ -348,6 +350,7 @@ libr_asm.so.0.8 libradare2-0.8 #MINVER#
  regname@Base 0.6
  segname@Base 0.6
  set_arm_regname_option@Base 0.6
+ sh_table@Base 0.8
  sizename@Base 0.6
  strlwr@Base 0.6
  strupr@Base 0.6
@@ -491,15 +494,21 @@ libr_bin.so.0.8 libradare2-0.8 #MINVER#
  cplus_demangle_type@Base 0.7
  cplus_demangle_v3@Base 0.7
  cplus_demangle_v3_callback@Base 0.7
+ dex_read_sleb128@Base 0.8
+ dex_read_uleb128@Base 0.8
+ dex_uleb128_len@Base 0.8
  is_gnu_v3_mangled_ctor@Base 0.7
  is_gnu_v3_mangled_dtor@Base 0.7
  java_demangle_v3@Base 0.7
  java_demangle_v3_callback@Base 0.7
  r_bin_add@Base 0.6
+ r_bin_bind@Base 0.8
  r_bin_demangle@Base 0.7
  r_bin_demangle_cxx@Base 0.7
  r_bin_demangle_java@Base 0.7
  r_bin_demangle_type@Base 0.7
+ r_bin_dex_get_version@Base 0.8
+ r_bin_dex_new_buf@Base 0.8
  r_bin_dyldcache_extract@Base 0.6
  r_bin_dyldcache_free@Base 0.6
  r_bin_dyldcache_new@Base 0.6
@@ -572,8 +581,10 @@ libr_bin.so.0.8 libradare2-0.8 #MINVER#
  r_bin_meta_get_source_line@Base 0.6
  r_bin_new@Base 0.6
  r_bin_object_free@Base 0.6
+ r_bin_plugin_dex@Base 0.8
  r_bin_plugin_elf64@Base 0.6
  r_bin_plugin_elf@Base 0.6
+ r_bin_plugin_fs@Base 0.8
  r_bin_plugin_java@Base 0.6
  r_bin_plugin_mach064@Base 0.6
  r_bin_plugin_mach0@Base 0.6
@@ -669,13 +680,13 @@ libr_config.so.0.8 libradare2-0.8 #MINVER#
  r_config_swap@Base 0.6
  r_config_visual_hit_i@Base 0.6
 libr_cons.so.0.8 libradare2-0.8 #MINVER#
- pal_names@Base 0.6
  r_cons_any_key@Base 0.6
  r_cons_arrow_to_hjkl@Base 0.6
  r_cons_break@Base 0.6
  r_cons_break_end@Base 0.6
  r_cons_clear00@Base 0.6
  r_cons_clear@Base 0.6
+ r_cons_column@Base 0.8
  r_cons_eof@Base 0.6
  r_cons_fgets@Base 0.6
  r_cons_filter@Base 0.6
@@ -690,23 +701,23 @@ libr_cons.so.0.8 libradare2-0.8 #MINVER#
  r_cons_html_print@Base 0.6
  r_cons_invert@Base 0.6
  r_cons_memcat@Base 0.6
+ r_cons_memset@Base 0.8
  r_cons_new@Base 0.6
  r_cons_newline@Base 0.6
- r_cons_palette_init@Base 0.6
- r_cons_palette_set@Base 0.6
  r_cons_pipe_close@Base 0.6
  r_cons_pipe_open@Base 0.6
  r_cons_printf@Base 0.6
  r_cons_readchar@Base 0.6
  r_cons_reset@Base 0.6
+ r_cons_set_cup@Base 0.8
  r_cons_set_raw@Base 0.6
  r_cons_singleton@Base 0.6
  r_cons_strcat@Base 0.6
+ r_cons_strcat_justify@Base 0.8
  r_cons_visual_flush@Base 0.6
  r_cons_visual_write@Base 0.6
  r_cons_yesno@Base 0.6
 libr_core.so.0.8 libradare2-0.8 #MINVER#
- RAnalRefType@Base 0.6
  r_core_anal_all@Base 0.7
  r_core_anal_bb@Base 0.6
  r_core_anal_bb_seek@Base 0.6
@@ -739,6 +750,7 @@ libr_core.so.0.8 libradare2-0.8 #MINVER#
  r_core_disassemble@Base 0.7
  r_core_disassemble_bytes@Base 0.6
  r_core_disassemble_instr@Base 0.6
+ r_core_editor@Base 0.8
  r_core_file_close@Base 0.6
  r_core_file_close_fd@Base 0.6
  r_core_file_free@Base 0.7
@@ -748,12 +760,14 @@ libr_core.so.0.8 libradare2-0.8 #MINVER#
  r_core_file_resize@Base 0.6
  r_core_free@Base 0.6
  r_core_gdiff@Base 0.6
+ r_core_hash_load@Base 0.8
  r_core_init@Base 0.6
  r_core_loadlibs@Base 0.6
  r_core_loadlibs_init@Base 0.6
  r_core_new@Base 0.6
  r_core_op_anal@Base 0.6
  r_core_op_str@Base 0.6
+ r_core_print_disasm@Base 0.8
  r_core_project_info@Base 0.6
  r_core_project_open@Base 0.6
  r_core_project_save@Base 0.6
@@ -768,9 +782,13 @@ libr_core.so.0.8 libradare2-0.8 #MINVER#
  r_core_rtr_remove@Base 0.6
  r_core_rtr_session@Base 0.6
  r_core_search_cb@Base 0.7
+ r_core_search_prelude@Base 0.8
+ r_core_search_preludes@Base 0.8
  r_core_seek@Base 0.6
  r_core_seek_align@Base 0.6
  r_core_seek_delta@Base 0.6
+ r_core_seek_next@Base 0.8
+ r_core_seek_previous@Base 0.8
  r_core_serve@Base 0.6
  r_core_sysenv_begin@Base 0.7
  r_core_sysenv_end@Base 0.7
@@ -780,68 +798,49 @@ libr_core.so.0.8 libradare2-0.8 #MINVER#
  r_core_visual_cmd@Base 0.6
  r_core_visual_config@Base 0.6
  r_core_visual_define@Base 0.6
+ r_core_visual_mounts@Base 0.8
  r_core_visual_prompt@Base 0.6
+ r_core_visual_title@Base 0.8
  r_core_visual_trackflags@Base 0.6
  r_core_write_at@Base 0.6
  r_core_write_op@Base 0.6
  r_core_yank@Base 0.6
  r_core_yank_paste@Base 0.6
-libr_crypto.so.0.8 libradare2-0.8 #MINVER#
- FT0@Base 0.6
- FT1@Base 0.6
- FT2@Base 0.6
- FT3@Base 0.6
- RT0@Base 0.6
- RT1@Base 0.6
- RT2@Base 0.6
- RT3@Base 0.6
- U0@Base 0.6
- U1@Base 0.6
- U2@Base 0.6
- U3@Base 0.6
- aes_decrypt@Base 0.6
- aes_encrypt@Base 0.6
- aes_expkey@Base 0.6
- r_crypto_add@Base 0.6
- r_crypto_append@Base 0.6
- r_crypto_as_new@Base 0.6
- r_crypto_del@Base 0.6
- r_crypto_final@Base 0.6
- r_crypto_free@Base 0.6
- r_crypto_get_key_size@Base 0.6
- r_crypto_get_output@Base 0.6
- r_crypto_init@Base 0.6
- r_crypto_new@Base 0.6
- r_crypto_plugin_aes@Base 0.6
- r_crypto_set_iv@Base 0.6
- r_crypto_set_key@Base 0.6
- r_crypto_update@Base 0.6
- r_crypto_use@Base 0.6
-libr_db.so.0.8 libradare2-0.8 #MINVER#
- r_db_add@Base 0.6
- r_db_add_id@Base 0.6
- r_db_add_unique@Base 0.6
- r_db_block_new@Base 0.6
- r_db_delete@Base 0.6
- r_db_free@Base 0.6
- r_db_get@Base 0.6
- r_db_get_cur@Base 0.6
- r_db_get_next@Base 0.6
- r_db_iter_cur@Base 0.6
- r_db_iter_free@Base 0.6
- r_db_iter_get@Base 0.6
- r_db_iter_new@Base 0.6
- r_db_iter_next@Base 0.6
- r_db_iter_prev@Base 0.6
- r_db_iterator@Base 0.6
- r_db_new@Base 0.6
- r_db_table_field_i@Base 0.6
- r_db_table_free@Base 0.6
- r_db_table_key@Base 0.6
- r_db_table_key_i@Base 0.6
- r_db_table_new@Base 0.6
 libr_debug.so.0.8 libradare2-0.8 #MINVER#
- RAnalRefType@Base 0.6
+ gdbwrap_atoh@Base 0.8
+ gdbwrap_bye@Base 0.8
+ gdbwrap_close@Base 0.8
+ gdbwrap_cmdnotsup@Base 0.8
+ gdbwrap_continue@Base 0.8
+ gdbwrap_ctrl_c@Base 0.8
+ gdbwrap_current_get@Base 0.8
+ gdbwrap_current_set@Base 0.8
+ gdbwrap_delbp@Base 0.8
+ gdbwrap_erroroccured@Base 0.8
+ gdbwrap_getreg@Base 0.8
+ gdbwrap_getreg_buffer@Base 0.8
+ gdbwrap_hello@Base 0.8
+ gdbwrap_init@Base 0.8
+ gdbwrap_is_active@Base 0.8
+ gdbwrap_lasterror@Base 0.8
+ gdbwrap_lastsignal@Base 0.8
+ gdbwrap_memorymap_get@Base 0.8
+ gdbwrap_readgenreg@Base 0.8
+ gdbwrap_readmem@Base 0.8
+ gdbwrap_reason_halted@Base 0.8
+ gdbwrap_remotecmd@Base 0.8
+ gdbwrap_setbp@Base 0.8
+ gdbwrap_setreg@Base 0.8
+ gdbwrap_setreg_buffer@Base 0.8
+ gdbwrap_shipallreg@Base 0.8
+ gdbwrap_signal@Base 0.8
+ gdbwrap_simpledelbp@Base 0.8
+ gdbwrap_simpledelhwbp@Base 0.8
+ gdbwrap_simplesetbp@Base 0.8
+ gdbwrap_simplesethwbp@Base 0.8
+ gdbwrap_stepi@Base 0.8
+ gdbwrap_writemem@Base 0.8
+ gdbwrap_writereg@Base 0.8
  r_debug_arg_get@Base 0.6
  r_debug_arg_set@Base 0.6
  r_debug_attach@Base 0.6
@@ -865,6 +864,7 @@ libr_debug.so.0.8 libradare2-0.8 #MINVER#
  r_debug_frames@Base 0.6
  r_debug_free@Base 0.6
  r_debug_io_bind@Base 0.6
+ r_debug_is_dead@Base 0.8
  r_debug_kill@Base 0.6
  r_debug_kill_setup@Base 0.7
  r_debug_map_alloc@Base 0.6
@@ -885,14 +885,17 @@ libr_debug.so.0.8 libradare2-0.8 #MINVER#
  r_debug_pid_set_state@Base 0.6
  r_debug_pids@Base 0.7
  r_debug_plugin_add@Base 0.6
+ r_debug_plugin_gdb@Base 0.8
  r_debug_plugin_init@Base 0.6
  r_debug_plugin_list@Base 0.6
  r_debug_plugin_native@Base 0.6
+ r_debug_plugin_rap@Base 0.8
  r_debug_reg_get@Base 0.6
  r_debug_reg_list@Base 0.6
  r_debug_reg_set@Base 0.6
  r_debug_reg_sync@Base 0.6
  r_debug_select@Base 0.6
+ r_debug_set_arch@Base 0.8
  r_debug_start@Base 0.6
  r_debug_startv@Base 0.6
  r_debug_step@Base 0.6
@@ -927,11 +930,10 @@ libr_flags.so.0.8 libradare2-0.8 #MINVER#
  r_flag_free@Base 0.6
  r_flag_get@Base 0.6
  r_flag_get_i@Base 0.6
- r_flag_item_rename@Base 0.6
+ r_flag_item_set_name@Base 0.8
  r_flag_list@Base 0.6
- r_flag_name_check@Base 0.6
- r_flag_name_filter@Base 0.6
  r_flag_new@Base 0.6
+ r_flag_rename@Base 0.8
  r_flag_set@Base 0.6
  r_flag_sort@Base 0.6
  r_flag_space_get@Base 0.6
@@ -939,6 +941,7 @@ libr_flags.so.0.8 libradare2-0.8 #MINVER#
  r_flag_space_list@Base 0.6
  r_flag_space_set@Base 0.6
  r_flag_unset@Base 0.6
+ r_flag_unset_glob@Base 0.8
  r_flag_unset_i@Base 0.6
 libr_fs.so.0.8 libradare2-0.8 #MINVER#
  grub_abort@Base 0.7
@@ -984,6 +987,7 @@ libr_fs.so.0.8 libradare2-0.8 #MINVER#
  grub_fshelp_find_file@Base 0.7
  grub_fshelp_log2blksize@Base 0.7
  grub_fshelp_read_file@Base 0.7
+ grub_fshelp_view@Base 0.8
  grub_get_time_ms@Base 0.7
  grub_getkey@Base 0.7
  grub_getkeystatus@Base 0.7
@@ -1090,14 +1094,20 @@ libr_fs.so.0.8 libradare2-0.8 #MINVER#
  r_fs_close@Base 0.7
  r_fs_del@Base 0.7
  r_fs_dir@Base 0.7
+ r_fs_dir_dump@Base 0.8
  r_fs_file_free@Base 0.7
  r_fs_file_new@Base 0.7
+ r_fs_find_name@Base 0.8
+ r_fs_find_off@Base 0.8
  r_fs_free@Base 0.7
  r_fs_mount@Base 0.7
  r_fs_new@Base 0.7
  r_fs_open@Base 0.7
  r_fs_partition_free@Base 0.7
+ r_fs_partition_get_size@Base 0.8
  r_fs_partition_new@Base 0.7
+ r_fs_partition_type@Base 0.8
+ r_fs_partition_type_get@Base 0.8
  r_fs_partitions@Base 0.7
  r_fs_plugin_cpio@Base 0.7
  r_fs_plugin_ext2@Base 0.7
@@ -1124,6 +1134,7 @@ libr_fs.so.0.8 libradare2-0.8 #MINVER#
  r_fs_root_new@Base 0.7
  r_fs_slurp@Base 0.7
  r_fs_umount@Base 0.7
+ r_fs_view@Base 0.8
 libr_hash.so.0.8 libradare2-0.8 #MINVER#
  MD5Final@Base 0.6
  MD5Init@Base 0.6
@@ -1173,76 +1184,6 @@ libr_hash.so.0.8 libradare2-0.8 #MINVER#
  r_hash_xor@Base 0.6
  r_hash_xorpair@Base 0.6
 libr_io.so.0.8 libradare2-0.8 #MINVER#
- GDBWRAP_BAD_CHECKSUM@Base 0.6
- GDBWRAP_BEGIN_PACKET@Base 0.6
- GDBWRAP_CONTINUE@Base 0.6
- GDBWRAP_CONTINUEWITH@Base 0.6
- GDBWRAP_COR_CHECKSUM@Base 0.6
- GDBWRAP_COR_CHECKSUMC@Base 0.6
- GDBWRAP_DEAD@Base 0.6
- GDBWRAP_DISCONNECT@Base 0.6
- GDBWRAP_END_PACKET@Base 0.6
- GDBWRAP_END_PACKETC@Base 0.6
- GDBWRAP_ERROR@Base 0.6
- GDBWRAP_EXIT_W_SIGNAL@Base 0.6
- GDBWRAP_EXIT_W_STATUS@Base 0.6
- GDBWRAP_GENPURPREG@Base 0.6
- GDBWRAP_INSERTBP@Base 0.6
- GDBWRAP_MEMCONTENT@Base 0.6
- GDBWRAP_MEMORYMAP_READ@Base 0.6
- GDBWRAP_MEMWRITE2@Base 0.6
- GDBWRAP_MEMWRITE@Base 0.6
- GDBWRAP_NO_SPACE@Base 0.6
- GDBWRAP_NO_TABLE@Base 0.6
- GDBWRAP_NULL_CHAR@Base 0.6
- GDBWRAP_PACKETSIZE@Base 0.6
- GDBWRAP_QSUPPORTED@Base 0.6
- GDBWRAP_RCMD@Base 0.6
- GDBWRAP_REMOVEBP@Base 0.6
- GDBWRAP_REPLAY_ERROR@Base 0.6
- GDBWRAP_REPLAY_OK@Base 0.6
- GDBWRAP_SEP_COLON@Base 0.6
- GDBWRAP_SEP_COMMA@Base 0.6
- GDBWRAP_SEP_SEMICOLON@Base 0.6
- GDBWRAP_SIGNAL@Base 0.6
- GDBWRAP_SIGNAL_RECV2@Base 0.6
- GDBWRAP_SIGNAL_RECV@Base 0.6
- GDBWRAP_START_ENCOD@Base 0.6
- GDBWRAP_START_ENCODC@Base 0.6
- GDBWRAP_STEPI@Base 0.6
- GDBWRAP_WGENPURPREG@Base 0.6
- GDBWRAP_WHY_HALTED@Base 0.6
- GDBWRAP_WRITEREG@Base 0.6
- RAnalRefType@Base 0.6
- gdbwrap_atoh@Base 0.6
- gdbwrap_bye@Base 0.6
- gdbwrap_close@Base 0.6
- gdbwrap_cmdnotsup@Base 0.6
- gdbwrap_continue@Base 0.6
- gdbwrap_ctrl_c@Base 0.6
- gdbwrap_current_get@Base 0.6
- gdbwrap_current_set@Base 0.6
- gdbwrap_delbp@Base 0.6
- gdbwrap_erroroccured@Base 0.6
- gdbwrap_hello@Base 0.6
- gdbwrap_init@Base 0.6
- gdbwrap_is_active@Base 0.6
- gdbwrap_lasterror@Base 0.6
- gdbwrap_lastsignal@Base 0.6
- gdbwrap_memorymap_get@Base 0.6
- gdbwrap_readgenreg@Base 0.6
- gdbwrap_readmem@Base 0.6
- gdbwrap_reason_halted@Base 0.6
- gdbwrap_remotecmd@Base 0.6
- gdbwrap_setbp@Base 0.6
- gdbwrap_shipallreg@Base 0.6
- gdbwrap_signal@Base 0.6
- gdbwrap_simpleconnect@Base 0.6
- gdbwrap_simpledelbp@Base 0.6
- gdbwrap_simplesetbp@Base 0.6
- gdbwrap_stepi@Base 0.6
- gdbwrap_writemem@Base 0.6
- gdbwrap_writereg@Base 0.6
  r_io_accept@Base 0.7
  r_io_bind@Base 0.6
  r_io_cache_commit@Base 0.6
@@ -1334,7 +1275,6 @@ libr_io.so.0.8 libradare2-0.8 #MINVER#
  r_io_wundo_set@Base 0.6
  r_io_wundo_size@Base 0.6
 libr_lang.so.0.8 libradare2-0.8 #MINVER#
- RAnalRefType@Base 0.7
  r_lang_add@Base 0.6
  r_lang_def_free@Base 0.7
  r_lang_define@Base 0.6
@@ -1384,7 +1324,6 @@ libr_line.so.0.8 libradare2-0.8 #MINVER#
  r_line_set_prompt@Base 0.7
  r_line_singleton@Base 0.6
 libr_parse.so.0.8 libradare2-0.8 #MINVER#
- RAnalRefType@Base 0.7
  matchs@Base 0.6
  memAllocated@Base 0.6
  memCheckState@Base 0.6
@@ -1410,11 +1349,9 @@ libr_parse.so.0.8 libradare2-0.8 #MINVER#
  r_parse_set_user_ptr@Base 0.6
  r_parse_use@Base 0.6
  r_parse_varsub@Base 0.7
- radare_plugin@Base 0.6
  sreplace@Base 0.6
  treplace@Base 0.6
 libr_print.so.0.8 libradare2-0.8 #MINVER#
- RAnalRefType@Base 0.6
  r_print_addr@Base 0.6
  r_print_byte@Base 0.6
  r_print_bytes@Base 0.6
@@ -1497,7 +1434,6 @@ libr_search.so.0.8 libradare2-0.8 #MINVER#
  r_search_xrefs_update@Base 0.6
  table_sbox@Base 0.6
 libr_sign.so.0.8 libradare2-0.8 #MINVER#
- RAnalRefType@Base 0.6
  r_sign_add@Base 0.6
  r_sign_check@Base 0.6
  r_sign_free@Base 0.6
@@ -1508,22 +1444,30 @@ libr_sign.so.0.8 libradare2-0.8 #MINVER#
  r_sign_reset@Base 0.6
 libr_socket.so.0.8 libradare2-0.8 #MINVER#
  r_socket_accept@Base 0.6
- r_socket_block@Base 0.6
+ r_socket_block_time@Base 0.8
  r_socket_close@Base 0.6
  r_socket_connect@Base 0.6
  r_socket_flush@Base 0.6
+ r_socket_free@Base 0.8
  r_socket_gets@Base 0.6
+ r_socket_http_get@Base 0.8
+ r_socket_http_post@Base 0.8
  r_socket_listen@Base 0.6
+ r_socket_new@Base 0.8
+ r_socket_new_from_fd@Base 0.8
  r_socket_printf@Base 0.6
  r_socket_proc_close@Base 0.6
+ r_socket_proc_gets@Base 0.8
  r_socket_proc_open@Base 0.6
+ r_socket_proc_printf@Base 0.8
+ r_socket_proc_read@Base 0.8
+ r_socket_proc_ready@Base 0.8
+ r_socket_proc_write@Base 0.8
  r_socket_puts@Base 0.6
  r_socket_read@Base 0.6
  r_socket_read_block@Base 0.6
  r_socket_ready@Base 0.6
  r_socket_to_string@Base 0.6
- r_socket_udp_connect@Base 0.6
- r_socket_unix_connect@Base 0.6
  r_socket_unix_listen@Base 0.6
  r_socket_write@Base 0.6
 libr_syscall.so.0.8 libradare2-0.8 #MINVER#
@@ -1543,25 +1487,12 @@ libr_syscall.so.0.8 libradare2-0.8 #MINVER#
  syscalls_freebsd_x86@Base 0.6
  syscalls_linux_arm@Base 0.6
  syscalls_linux_mips@Base 0.6
+ syscalls_linux_sh@Base 0.8
  syscalls_linux_x86@Base 0.6
  syscalls_netbsd_x86@Base 0.6
+ syscalls_openbsd_x86@Base 0.8
  syscalls_win7_x86@Base 0.6
  sysport_x86@Base 0.6
-libr_th.so.0.8 libradare2-0.8 #MINVER#
- r_th_break@Base 0.6
- r_th_free@Base 0.6
- r_th_kill@Base 0.6
- r_th_lock_check@Base 0.6
- r_th_lock_enter@Base 0.6
- r_th_lock_free@Base 0.6
- r_th_lock_leave@Base 0.6
- r_th_lock_new@Base 0.6
- r_th_lock_wait@Base 0.6
- r_th_new@Base 0.6
- r_th_push_task@Base 0.6
- r_th_start@Base 0.6
- r_th_wait@Base 0.6
- r_th_wait_async@Base 0.6
 libr_util.so.0.8 libradare2-0.8 #MINVER#
  btree_add@Base 0.6
  btree_cleartree@Base 0.6
@@ -1580,24 +1511,6 @@ libr_util.so.0.8 libradare2-0.8 #MINVER#
  r_alloca_str@Base 0.6
  r_base64_decode@Base 0.7
  r_base64_encode@Base 0.7
- r_big_add@Base 0.6
- r_big_cmp@Base 0.6
- r_big_cmp_st@Base 0.6
- r_big_div@Base 0.6
- r_big_div_ut@Base 0.6
- r_big_divisible_ut@Base 0.6
- r_big_free@Base 0.6
- r_big_mod@Base 0.6
- r_big_mul@Base 0.6
- r_big_mul_ut@Base 0.6
- r_big_new@Base 0.6
- r_big_print@Base 0.6
- r_big_set@Base 0.6
- r_big_set_st64@Base 0.6
- r_big_set_st@Base 0.6
- r_big_set_str@Base 0.6
- r_big_shift@Base 0.6
- r_big_sub@Base 0.6
  r_buf_append_bytes@Base 0.6
  r_buf_deinit@Base 0.6
  r_buf_fread_at@Base 0.6
@@ -1620,6 +1533,7 @@ libr_util.so.0.8 libradare2-0.8 #MINVER#
  r_file_basename@Base 0.6
  r_file_dump@Base 0.6
  r_file_exist@Base 0.6
+ r_file_mkstemp@Base 0.8
  r_file_mmap@Base 0.7
  r_file_mmap_free@Base 0.7
  r_file_path@Base 0.6
@@ -1629,11 +1543,23 @@ libr_util.so.0.8 libradare2-0.8 #MINVER#
  r_file_slurp_line@Base 0.6
  r_file_slurp_random_line@Base 0.6
  r_file_slurp_range@Base 0.6
+ r_file_temp@Base 0.8
+ r_file_tmpdir@Base 0.8
  r_flist_delete@Base 0.6
  r_flist_free@Base 0.6
  r_flist_new@Base 0.6
  r_flist_prev@Base 0.6
  r_flist_set@Base 0.6
+ r_hashtable64_free@Base 0.8
+ r_hashtable64_insert@Base 0.8
+ r_hashtable64_lookup@Base 0.8
+ r_hashtable64_new@Base 0.8
+ r_hashtable64_remove@Base 0.8
+ r_hashtable_free@Base 0.8
+ r_hashtable_insert@Base 0.8
+ r_hashtable_lookup@Base 0.8
+ r_hashtable_new@Base 0.8
+ r_hashtable_remove@Base 0.8
  r_hex_bin2str@Base 0.6
  r_hex_bin2strdup@Base 0.6
  r_hex_bin_truncate@Base 0.6
@@ -1643,18 +1569,26 @@ libr_util.so.0.8 libradare2-0.8 #MINVER#
  r_hex_to_byte@Base 0.6
  r_list_add_sorted@Base 0.6
  r_list_append@Base 0.6
+ r_list_clone@Base 0.8
+ r_list_contains@Base 0.8
+ r_list_del_n@Base 0.8
  r_list_delete@Base 0.6
+ r_list_delete_data@Base 0.8
  r_list_destroy@Base 0.6
  r_list_free@Base 0.6
  r_list_get_by_int64@Base 0.6
  r_list_get_by_int@Base 0.6
  r_list_get_by_string@Base 0.6
  r_list_get_n@Base 0.6
+ r_list_get_top@Base 0.8
  r_list_init@Base 0.6
  r_list_item_new@Base 0.6
+ r_list_join@Base 0.8
  r_list_length@Base 0.6
  r_list_new@Base 0.6
+ r_list_pop@Base 0.8
  r_list_prepend@Base 0.6
+ r_list_reverse@Base 0.8
  r_list_sort@Base 0.6
  r_list_split@Base 0.6
  r_list_split_iter@Base 0.6
@@ -1670,6 +1604,7 @@ libr_util.so.0.8 libradare2-0.8 #MINVER#
  r_mem_copyloop@Base 0.6
  r_mem_count@Base 0.6
  r_mem_eq@Base 0.6
+ r_mem_get_num@Base 0.8
  r_mem_mem@Base 0.6
  r_mem_pack@Base 0.6
  r_mem_pool_alloc@Base 0.6
@@ -1678,9 +1613,23 @@ libr_util.so.0.8 libradare2-0.8 #MINVER#
  r_mem_pool_new@Base 0.6
  r_mem_set_num@Base 0.7
  r_mem_unpack@Base 0.6
+ r_mixed_add@Base 0.8
+ r_mixed_change_begin@Base 0.8
+ r_mixed_change_end@Base 0.8
+ r_mixed_del@Base 0.8
+ r_mixed_free@Base 0.8
+ r_mixed_get0@Base 0.8
+ r_mixed_get@Base 0.8
+ r_mixed_get_value@Base 0.8
+ r_mixed_key@Base 0.8
+ r_mixed_key_check@Base 0.8
+ r_mixed_new@Base 0.8
+ r_name_check@Base 0.8
+ r_name_filter@Base 0.8
  r_num_get@Base 0.6
  r_num_get_float@Base 0.6
  r_num_htonq@Base 0.6
+ r_num_irand@Base 0.8
  r_num_is_float@Base 0.6
  r_num_math@Base 0.6
  r_num_minmax_swap@Base 0.6
@@ -1713,6 +1662,7 @@ libr_util.so.0.8 libradare2-0.8 #MINVER#
  r_str_ansi_len@Base 0.6
  r_str_argv@Base 0.6
  r_str_argv_free@Base 0.6
+ r_str_binstr2bin@Base 0.8
  r_str_bits@Base 0.6
  r_str_bool@Base 0.6
  r_str_case@Base 0.6
@@ -1727,6 +1677,7 @@ libr_util.so.0.8 libradare2-0.8 #MINVER#
  r_str_concat@Base 0.6
  r_str_concatch@Base 0.6
  r_str_concatf@Base 0.6
+ r_str_cpy@Base 0.8
  r_str_delta@Base 0.6
  r_str_dup@Base 0.6
  r_str_dup_printf@Base 0.6
@@ -1734,15 +1685,16 @@ libr_util.so.0.8 libradare2-0.8 #MINVER#
  r_str_filter@Base 0.6
  r_str_free@Base 0.6
  r_str_get@Base 0.6
+ r_str_glob@Base 0.8
  r_str_hash64@Base 0.6
  r_str_hash@Base 0.6
  r_str_home@Base 0.6
  r_str_ichr@Base 0.6
- r_str_inject@Base 0.6
  r_str_lchr@Base 0.6
  r_str_nchr@Base 0.6
  r_str_new@Base 0.6
  r_str_newf@Base 0.6
+ r_str_nlen@Base 0.8
  r_str_nstr@Base 0.6
  r_str_re_match@Base 0.6
  r_str_re_replace@Base 0.6
@@ -1760,12 +1712,15 @@ libr_util.so.0.8 libradare2-0.8 #MINVER#
  r_str_word_get_first@Base 0.6
  r_str_word_set0@Base 0.6
  r_str_writef@Base 0.6
+ r_sys_arch_id@Base 0.8
+ r_sys_arch_str@Base 0.8
  r_sys_backtrace@Base 0.6
  r_sys_cmd@Base 0.6
  r_sys_cmd_str@Base 0.6
  r_sys_cmd_str_full@Base 0.6
  r_sys_cmd_strf@Base 0.6
  r_sys_cmdf@Base 0.6
+ r_sys_crash_handler@Base 0.8
  r_sys_dir@Base 0.7
  r_sys_getcwd@Base 0.6
  r_sys_getenv@Base 0.6
