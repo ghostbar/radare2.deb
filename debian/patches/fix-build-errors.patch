@@ -1,0 +1,10 @@
+diff -r e24691da4829 libr/cmd/t/Makefile
+--- a/libr/cmd/t/Makefile	Tue Jul 19 13:19:09 2011 +0200
++++ b/libr/cmd/t/Makefile	Tue Jul 19 18:12:52 2011 +0200
+@@ -1,5 +1,5 @@
+ BIN=test
+ OBJ=test.o
+-BINDEPS=r_cmd r_util
++BINDEPS=r_cmd r_util r_lib
+ 
+ include ../../rules.mk
