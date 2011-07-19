@@ -63,7 +63,7 @@ pkgcfg:
 	@echo >> ../../pkgcfg/${NAME}.pc.acr
 	@echo 'Name: ${NAME}' >> ../../pkgcfg/${NAME}.pc.acr
 	@echo 'Description: radare foundation libraries' >> ../../pkgcfg/${NAME}.pc.acr
-	@echo 'Version: @VERSION' >> ../../pkgcfg/${NAME}.pc.acr
+	@echo 'Version: @VERSION@' >> ../../pkgcfg/${NAME}.pc.acr
 	@echo 'Requires:' >> ../../pkgcfg/${NAME}.pc.acr
 	@if [ "${NAME}" = "libr" ]; then NAME=''; else NAME=${NAME}; fi ;\
 	echo 'Libs: -L$${libdir} '`echo $${NAME} ${DEPS}|sed -e s,r_,-lr_,g` >> ../../pkgcfg/${NAME}.pc.acr
