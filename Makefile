@@ -1,6 +1,11 @@
 include config-user.mk
 include global.mk
 
+ifneq ($(shell tar --help 2>/dev/null|grep gnu.org),)
+TAR=tar -czv --format=posix -f
+else
+TAR=tar -czvf
+endif
 PWD=$(shell pwd)
 REMOTE=radare.org:/srv/http/radareorg/get/beta
 
@@ -80,8 +85,8 @@ install: install-doc install-man
 	cd binr && ${MAKE} install PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 
 install-pkgconfig-symlink:
-	@${INSTALL_DIR} ${PFX}/lib/pkgconfig
-	cd pkgcfg ; for a in *.pc ; do ln -fs $${PWD}/$$a ${PFX}/lib/pkgconfig/$$a ; done
+	@${INSTALL_DIR} ${DESTDIR}/${LIBDIR}/pkgconfig
+	cd pkgcfg ; for a in *.pc ; do ln -fs $${PWD}/$$a ${DESTDIR}/${LIBDIR}/pkgconfig/$$a ; done
 
 symstall install-symlink: install-man-symlink install-doc-symlink install-pkgconfig-symlink
 	cd libr && ${MAKE} install-symlink PREFIX=${PREFIX} DESTDIR=${DESTDIR}
@@ -95,15 +100,15 @@ deinstall uninstall:
 	@echo
 
 purge:
-	rm -rf ${DESTDIR}/${PREFIX}/lib/libr_*
-	rm -rf ${DESTDIR}/${PREFIX}/lib/radare2
-	rm -rf ${DESTDIR}/${PREFIX}/include/libr
+	rm -rf ${DESTDIR}/${LIBDIR}/libr_*
+	rm -rf ${DESTDIR}/${LIBDIR}/radare2
+	rm -rf ${DESTDIR}/${INCLUDEDIR}/libr
 	cd man ; for a in *.1 ; do rm -f ${MDR}/man1/$$a ; done
 	rm -f ${MDR}/man1/r2.1
 
 beta: dist r2-bindings-dist
 	scp ../radare2-${VERSION}.tar.gz ${REMOTE}
-	scp radare2-bindings-${VERSION}.tar.gz ${REMOTE}
+	scp r2-bindings-${VERSION}.tar.gz ${REMOTE}
 
 r2-bindings-dist:
 	cd r2-bindings && ${MAKE} dist
@@ -112,7 +117,7 @@ dist:
 	VERSION=${VERSION} ; \
 	FILES=`hg st -mc .| cut -c 3-|sed -e s,^,radare2-${VERSION}/, | grep -v r2-bindings | grep -v '/\.'` ; \
 	cd .. && mv radare2 radare2-${VERSION} && \
-	tar czvf radare2-${VERSION}.tar.gz $${FILES} ;\
+	${TAR} radare2-${VERSION}.tar.gz $${FILES} ;\
 	mv radare2-${VERSION} radare2
 
 pub:
@@ -122,7 +127,7 @@ shot:
 	DATE=`date '+%Y%m%d'` ; \
 	FILES=`hg status -mc|cut -c 3-|sed -e s,^,radare2-$${DATE}/,`; \
 	cd .. && mv radare2 radare2-$${DATE} && \
-	tar czvf radare2-$${DATE}.tar.gz $${FILES} ;\
+	${TAR} radare2-$${DATE}.tar.gz $${FILES} ;\
 	mv radare2-$${DATE} radare2 && \
 	scp radare2-$${DATE}.tar.gz radare.org:/srv/http/radareorg/get/shot
 
