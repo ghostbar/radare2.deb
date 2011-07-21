@@ -6,7 +6,7 @@
 #include <r_debug.h> /* only used for BSD PTRACE redefinitions */
 
 #if __linux__ ||  __APPLE__ || __WINDOWS__ || \
-	__NetBSD__ || __FreeBSD__ || __OpenBSD__
+	__NetBSD__ || __KFBSD__ || __OpenBSD__
 #define DEBUGGER_SUPPORTED 1
 #else
 #define DEBUGGER_SUPPORTED 0
@@ -189,9 +189,11 @@ static int fork_and_ptraceme(const char *cmd) {
 		perror ("fork_and_ptraceme");
 		break;
 	case 0:
+#if __APPLE__
+		signal (SIGTRAP, SIG_IGN); //NEED BY STEP 
+#endif
 #if __APPLE__ || __BSD__
 /* we can probably remove this #if..as long as PT_TRACE_ME is redefined for OSX in r_debug.h */
-		signal (SIGTRAP, SIG_IGN); // SINO NO FUNCIONA EL STEP
 		signal (SIGABRT, inferior_abort_handler);
 		if (ptrace (PT_TRACE_ME, 0, 0, 0) != 0) {
 #else

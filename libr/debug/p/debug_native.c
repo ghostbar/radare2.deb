@@ -6,6 +6,8 @@
 #include <r_reg.h>
 #include <r_lib.h>
 #include <signal.h>
+#include <sys/types.h>
+#include <sys/param.h>
 
 #if DEBUGGER
 static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig);
@@ -19,11 +21,15 @@ static int r_debug_native_reg_write(int pid, int tid, int type, const ut8* buf, 
 #define R_DEBUG_REG_T CONTEXT
 #include "native/w32.c"
 
-#elif __OpenBSD__ || __NetBSD__ || __FreeBSD__
+#elif __BSD__
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #define R_DEBUG_REG_T struct reg
+#if __KFBSD__
+#include <sys/sysctl.h>
+#include <sys/user.h>
+#endif
 
 #elif __APPLE__
 
@@ -197,6 +203,12 @@ static int r_debug_native_step(RDebug *dbg) {
 		eprintf ("mach-error: %d, %s\n", ret, MACH_ERROR_STRING (ret));
 		ret = R_FALSE; /* do not wait for events */
 	} else ret = R_TRUE;
+#elif __BSD__ 
+	ret = ptrace (PT_STEP, pid, (caddr_t)1, 0);
+	if (ret != 0) {
+		perror ("native-singlestep");
+		ret = R_FALSE;
+	} else ret = R_TRUE;
 #else // linux
 	ut32 addr = 0; /* should be eip */
 	//ut32 data = 0;
@@ -220,7 +232,7 @@ static int r_debug_native_attach(RDebug *dbg, int pid) {
 		ret = w32_first_thread (pid);
 	} else ret = -1;
 	ret = w32_first_thread (pid);
-#elif __APPLE__
+#elif __APPLE__ || __KFBSD__
 	ret = ptrace (PT_ATTACH, pid, 0, 0);
 	if (ret!=-1) {
 		perror ("ptrace(PT_ATTACH)");
@@ -238,7 +250,7 @@ static int r_debug_native_attach(RDebug *dbg, int pid) {
 static int r_debug_native_detach(int pid) {
 #if __WINDOWS__
 	return w32_detach (pid)? 0 : -1;
-#elif __APPLE__
+#elif __APPLE__ || __BSD__
 	return ptrace (PT_DETACH, pid, NULL, 0);
 #else
 	return ptrace (PTRACE_DETACH, pid, NULL, NULL);
@@ -250,7 +262,7 @@ static int r_debug_native_continue_syscall(RDebug *dbg, int pid, int num) {
 	return ptrace (PTRACE_SYSCALL, pid, 0, 0);
 #elif __BSD__
 	ut64 pc = r_debug_reg_get (dbg, "pc");
-	return ptrace (PTRACE_SYSCALL, pid, pc, 0);
+	return ptrace (PTRACE_SYSCALL, pid, (void*)(size_t)pc, 0);
 #else
 	eprintf ("TODO: continue syscall not implemented yet\n");
 	return -1;
@@ -276,7 +288,7 @@ static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig) {
         return 0;
 #elif __BSD__
 	ut64 pc = r_debug_reg_get (dbg, "pc");
-	return ptrace (PTRACE_CONT, pid, (void*)(size_t)pc, data);
+	return ptrace (PTRACE_CONT, pid, (void*)(size_t)pc, (int)data);
 #else
 	return ptrace (PTRACE_CONT, pid, NULL, data);
 #endif
@@ -343,10 +355,38 @@ static const char *r_debug_native_reg_profile(RDebug *dbg) {
 	"seg	ss	.32	200	0\n"
 	/* +512 bytes for maximum supoprted extension extended registers */
 	);
+#elif __linux__ && __MIPS__
+	return strdup (
+	"=pc	r0\n"
+	"=sp	29\n" // status register
+	"=sr	v0\n" // status register
+	"=a0	r4\n"
+	"=a1	r5\n"
+	"=a2	r6\n"
+	"=a3	r7\n"
+	"gpr	r0	.32	0	0\n"
+	"gpr	r1	.32	4	0\n"
+	"gpr	r2	.32	8	0\n"
+	"gpr	r3	.32	16	0\n"
+	"gpr	r4	.32	24	0\n"
+	"gpr	r5	.32	32	0\n"
+	"gpr	r6	.32	48	0\n"
+	"gpr	r7	.32	56	0\n"
+	"gpr	r8	.32	64	0\n"
+	"gpr	r9	.32	72	0\n"
+	"gpr	r10	.32	80	0\n"
+	"gpr	r11	.32	88	0\n"
+	"gpr	r12	.32	96	0\n"
+	"gpr	r13	.32	104	0\n"
+	"gpr	r14	.32	112	0\n"
+	"gpr	r15	.32	120	0\n"
+	"gpr	r16	.32	128	0\n"
+	);
 #elif __POWERPC__ && __APPLE__
 	return strdup (
 	"=pc	srr0\n"
-	"=sr	srr1\n" // status register
+	"=sp	srr1\n"
+	"=sr	srr1\n" // status register ??
 	"=a0	r0\n"
 	"=a1	r1\n"
 	"=a2	r2\n"
@@ -399,7 +439,7 @@ static const char *r_debug_native_reg_profile(RDebug *dbg) {
 	"gpr	mq	.32	152	0\n"
 	"gpr	vrsave	.32	156	0\n"
 	);
-#elif __i386__ && __OpenBSD__
+#elif __i386__ && (__OpenBSD__ || __NetBSD__)
 	return strdup (
 	"=pc	eip\n"
 	"=sp	esp\n"
@@ -408,16 +448,32 @@ static const char *r_debug_native_reg_profile(RDebug *dbg) {
 	"=a1	ebx\n"
 	"=a2	ecx\n"
 	"=a3	edi\n"
-// TODO: add ax, al, ah, ...
 	"gpr	eax	.32	0	0\n"
+	"gpr	ax	.16	0	0\n"
+	"gpr	ah	.8	0	0\n"
+	"gpr	al	.8	1	0\n"
 	"gpr	ecx	.32	4	0\n"
+	"gpr	cx	.16	4	0\n"
+	"gpr	ch	.8	4	0\n"
+	"gpr	cl	.8	5	0\n"
 	"gpr	edx	.32	8	0\n"
+	"gpr	dx	.16	8	0\n"
+	"gpr	dh	.8	8	0\n"
+	"gpr	dl	.8	9	0\n"
 	"gpr	ebx	.32	12	0\n"
+	"gpr	bx	.16	12	0\n"
+	"gpr	bh	.8	12	0\n"
+	"gpr	bl	.8	13	0\n"
 	"gpr	esp	.32	16	0\n"
+	"gpr	sp	.16	16	0\n"
 	"gpr	ebp	.32	20	0\n"
+	"gpr	bp	.16	20	0\n"
 	"gpr	esi	.32	24	0\n"
+	"gpr	si	.16	24	0\n"
 	"gpr	edi	.32	28	0\n"
+	"gpr	di	.16	28	0\n"
 	"gpr	eip	.32	32	0\n"
+	"gpr	ip	.16	32	0\n"
 	"gpr	eflags	.32	36	0	c1p.a.zstido.n.rv\n"
 	"seg	cs	.32	40	0\n"
 	"seg	ss	.32	44	0\n"
@@ -426,7 +482,53 @@ static const char *r_debug_native_reg_profile(RDebug *dbg) {
 	"seg	fs	.32	56	0\n"
 	"seg	gs	.32	60	0\n"
 // TODO: implement flags like in linux --those flags are wrong
-
+	);
+#elif __i386__ && __KFBSD__
+	return strdup (
+	"=pc	eip\n"
+	"=sp	esp\n"
+	"=bp	ebp\n"
+	"=a0	eax\n"
+	"=a1	ebx\n"
+	"=a2	ecx\n"
+	"=a3	edi\n"
+	"seg	fs	.32	0	0\n"
+	"seg	es	.32	4	0\n"
+	"seg	ds	.32	8	0\n"
+	"gpr	edi	.32	12	0\n"
+	"gpr	di	.16	12	0\n"
+	"gpr	esi	.32	16	0\n"
+	"gpr	si	.16	16	0\n"
+	"gpr	ebp	.32	20	0\n"
+	"gpr	bp	.16	20	0\n"
+	"gpr	isp	.32	24	0\n"
+	"gpr	ebx	.32	28	0\n"
+	"gpr	bx	.16	28	0\n"
+	"gpr	bh	.8	28	0\n"
+	"gpr	bl	.8	29	0\n"
+	"gpr	edx	.32	32	0\n"
+	"gpr	dx	.16	32	0\n"
+	"gpr	dh	.8	32	0\n"
+	"gpr	dl	.8	33	0\n"
+	"gpr	ecx	.32	36	0\n"
+	"gpr	cx	.16	36	0\n"
+	"gpr	ch	.8	36	0\n"
+	"gpr	cl	.8	37	0\n"
+	"gpr	eax	.32	40	0\n"
+	"gpr	ax	.16	40	0\n"
+	"gpr	ah	.8	40	0\n"
+	"gpr	al	.8	41	0\n"
+	"gpr	trapno	.32	44	0\n"
+	"gpr	err	.32	48	0\n"
+	"gpr	eip	.32	52	0\n"
+	"gpr	ip	.16	52	0\n"
+	"seg	cs	.32	56	0\n"
+	"gpr	eflags	.32	60	0	c1p.a.zstido.n.rv\n"
+	"gpr	esp	.32	64	0\n"
+	"gpr	sp	.16	64	0\n"
+	"seg	ss	.32	68	0\n"
+	"seg	gs	.32	72	0\n"
+// TODO: implement flags like in linux --those flags are wrong
 	);
 #elif __i386__
 	return strdup (
@@ -529,7 +631,7 @@ static const char *r_debug_native_reg_profile(RDebug *dbg) {
 	"drx	dr7	.32	28	0\n"
 #endif
 	);
-#elif __x86_64__  && __OpenBSD__
+#elif __x86_64__  && (__OpenBSD__ || __NetBSD__)
 	return strdup (
 	"=pc	rip\n"
 	"=sp	rsp\n"
@@ -569,6 +671,39 @@ static const char *r_debug_native_reg_profile(RDebug *dbg) {
 	"drx	dr3	.32	12	0\n"
 	"drx	dr6	.32	24	0\n"
 	"drx	dr7	.32	28	0\n"
+	);
+#elif __x86_64__  && __KFBSD__
+	return strdup (
+	"=pc	rip\n"
+	"=sp	rsp\n"
+	"=bp	rbp\n"
+	"=a0	rax\n"
+	"=a1	rbx\n"
+	"=a2	rcx\n"
+	"=a3	rdx\n"
+	"# no profile defined for x86-64\n"
+	"gpr	r15	.64	0	0\n"
+	"gpr	r14	.64	8	0\n"
+	"gpr	r13	.64	16	0\n"
+	"gpr	r12	.64	24	0\n"
+	"gpr	r11	.64	32	0\n"
+	"gpr	r10	.64	40	0\n"
+	"gpr	r9	.64	48	0\n"
+	"gpr	r8	.64	56	0\n"
+	"gpr	rdi	.64	64	0\n"
+	"gpr	rsi	.64	72	0\n"
+	"gpr	rbp	.64	80	0\n"
+	"gpr	rbx	.64	88	0\n"
+	"gpr	rdx	.64	96	0\n"
+	"gpr	rcx	.64	104	0\n"
+	"gpr	rax	.64	112	0\n"
+	"gpr	trapno	.64	120	0\n"
+	"gpr	err	.64	128	0\n"
+	"gpr	rip	.64	136	0\n"
+	"seg	cs	.64	144	0\n"
+	"gpr	rflags	.64	152	0	c1p.a.zstido.n.rv\n"
+	"gpr	rsp	.64	160	0\n"
+	"seg	ss	.64	168	0\n"
 	);
 #elif __x86_64__ && __linux__
 	return strdup (
@@ -1011,15 +1146,15 @@ eprintf ("++ EFL = 0x%08x  %d\n", ctx.EFlags, r_offsetof (CONTEXT, EFlags));
                 }
         } else eprintf ("There are no threads!\n");
         return sizeof (R_DEBUG_REG_T);
-#elif __linux__ || __sun || __NetBSD__ || __FreeBSD__ || __OpenBSD__
+#elif __linux__ || __sun || __NetBSD__ || __KFBSD__ || __OpenBSD__
 	int ret;
 	switch (type) {
 	case R_REG_TYPE_DRX:
-#ifdef __FreeBSD__
+#if __KFBSD__
 	{
 		// TODO
 		struct dbreg dbr;
-		ret = ptrace (PT_GETDBREGS, pid, &dbr, sizeof (dbr));
+		ret = ptrace (PT_GETDBREGS, pid, (caddr_t)&dbr, sizeof (dbr));
 		if (ret != 0)
 			return R_FALSE;
 		// XXX: maybe the register map is not correct, must review
@@ -1046,8 +1181,10 @@ eprintf ("++ EFL = 0x%08x  %d\n", ctx.EFlags, r_offsetof (CONTEXT, EFlags));
 		R_DEBUG_REG_T regs;
 		memset (&regs, 0, sizeof (regs));
 		memset (buf, 0, size);
-#if __NetBSD__ || __FreeBSD__ || __OpenBSD__
+#if __NetBSD__ || __OpenBSD__
 		ret = ptrace (PTRACE_GETREGS, pid, &regs, sizeof (regs));
+#elif __KFBSD__
+		ret = ptrace(PT_GETREGS, pid, (caddr_t)&regs, 0);
 #elif __linux__ && __powerpc__
 		ret = ptrace (PTRACE_GETREGS, pid, &regs, NULL);
 #else
@@ -1073,8 +1210,8 @@ eprintf ("++ EFL = 0x%08x  %d\n", ctx.EFlags, r_offsetof (CONTEXT, EFlags));
 static int r_debug_native_reg_write(int pid, int tid, int type, const ut8* buf, int size) {
 	// XXX use switch or so
 	if (type == R_REG_TYPE_DRX) {
-#ifdef __FreeBSD__
-		return (0 == ptrace (PT_SETDBREGS, dbg->pid, buf, sizeof (struct dbreg)));
+#if __KFBSD__
+		return (0 == ptrace (PT_SETDBREGS, pid, (caddr_t)buf, sizeof (struct dbreg)));
 #elif __linux__
 		{
 		int i;
@@ -1103,8 +1240,8 @@ static int r_debug_native_reg_write(int pid, int tid, int type, const ut8* buf, 
 		if (sizeof (R_DEBUG_REG_T) < size)
 			size = sizeof (R_DEBUG_REG_T);
 		return (ret != 0) ? R_FALSE: R_TRUE;
-#elif __sun || __NetBSD__ || __FreeBSD__ || __OpenBSD__
-		int ret = ptrace (PTRACE_SETREGS, pid, buf, sizeof (R_DEBUG_REG_T));
+#elif __sun || __NetBSD__ || __KFBSD__ || __OpenBSD__
+		int ret = ptrace (PTRACE_SETREGS, pid, (void*)(size_t)buf, sizeof (R_DEBUG_REG_T));
 		if (sizeof (R_DEBUG_REG_T) < size)
 			size = sizeof (R_DEBUG_REG_T);
 		return (ret != 0) ? R_FALSE: R_TRUE;
@@ -1277,9 +1414,51 @@ static RList *darwin_dbg_maps (RDebug *dbg) {
 }
 #endif
 
+#if __KFBSD__
+static RList *r_debug_native_sysctl_map (RDebug *dbg) {
+	int mib[4];
+	size_t len;
+	char *buf, *bp, *eb;
+	struct kinfo_vmentry *kve;
+	RList *list = NULL;
+	RDebugMap *map;
+
+	len = 0;
+	mib[0] = CTL_KERN;
+	mib[1] = KERN_PROC;
+	mib[2] = KERN_PROC_VMMAP;
+	mib[3] = dbg->pid;
+
+	if (sysctl(mib, 4, NULL, &len, NULL, 0) != 0)
+		return NULL;
+	len = len * 4 / 3;
+	buf = malloc(len);
+	if (buf == NULL)
+		return (NULL);
+	if (sysctl(mib, 4, buf, &len, NULL, 0) != 0) {
+		free (buf);
+		return NULL;
+	}
+	bp = buf;
+	eb = buf + len;
+	list = r_list_new ();
+	while (bp < eb) {
+		kve = (struct kinfo_vmentry *)(uintptr_t)bp;
+		map = r_debug_map_new (kve->kve_path, kve->kve_start,
+				kve->kve_end, kve->kve_protection, 0);
+		if (map == NULL)
+			break;
+		r_list_append (list, map);
+		bp += kve->kve_structsize;
+	}
+	free (buf);
+	return list;
+}
+#endif
+
 static RList *r_debug_native_map_get(RDebug *dbg) {
 	RList *list = NULL;
-#if __FreeBSD__
+#if __KFBSD__
 	int ign;
 	char unkstr[128];
 #endif 
@@ -1305,7 +1484,10 @@ static RList *r_debug_native_map_get(RDebug *dbg) {
 		return NULL;
 	}
 
-#if __FreeBSD__
+#if __KFBSD__
+	list = r_debug_native_sysctl_map (dbg);
+	if (list != NULL)
+		return list;
 	snprintf (path, sizeof (path), "/proc/%d/map", dbg->pid);
 #else
 	snprintf (path, sizeof (path), "/proc/%d/maps", dbg->pid);
@@ -1320,12 +1502,12 @@ static RList *r_debug_native_map_get(RDebug *dbg) {
 
 	while (!feof (fd)) {
 		line[0]='\0';
-		fgets (line, 1023, fd);
+		fgets (line, sizeof (line)-1, fd);
 		if (line[0]=='\0')
 			break;
 		path[0]='\0';
 		line[strlen (line)-1]='\0';
-#if __FreeBSD__
+#if __KFBSD__
 		// 0x8070000 0x8072000 2 0 0xc1fde948 rw- 1 0 0x2180 COW NC vnode /usr/bin/gcc
 		sscanf (line, "%s %s %d %d 0x%s %3s %d %d",
 			&region[2], &region2[2], &ign, &ign,
@@ -1344,7 +1526,7 @@ static RList *r_debug_native_map_get(RDebug *dbg) {
 		pos_c[-1] = (char)'0';
 		pos_c[ 0] = (char)'x';
 		strncpy (region2, pos_c-1, sizeof (region2));
-#endif // __FreeBSD__
+#endif // __KFBSD__
 		region[0] = region2[0] = '0';
 		region[1] = region2[1] = 'x';
 
