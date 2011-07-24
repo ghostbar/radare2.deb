@@ -1,0 +1,2 @@
+# experimental debhelper 9 support is used for multi arch support
+radare2 source: package-needs-versioned-debhelper-build-depends 9
