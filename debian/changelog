@@ -1,3 +1,9 @@
+radare2 (0.8.6-1) unstable; urgency=low
+
+  * new upstream release
+
+ -- Sebastian Reichel <sre@debian.org>  Wed, 12 Oct 2011 18:04:08 +0200
+
 radare2 (0.8.1-1) unstable; urgency=low
 
   * new upstream release
