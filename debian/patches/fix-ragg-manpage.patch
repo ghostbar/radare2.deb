@@ -1,0 +1,16 @@
+Description: Fix ragg manpage
+Author: Sebastian Reichel <sre@debian.org>
+
+diff --git a/man/ragg2.1 b/man/ragg2.1
+index a730841..96ae9f0 100644
+--- a/man/ragg2.1
++++ b/man/ragg2.1
+@@ -51,7 +51,7 @@ execute (just-in-time)
+   /* hello world in r_egg */
+   write@syscall(4);
+   exit@syscall(1);
+-  
++.Pp
+   main@global(128) {
+     .var0 = "hi!\n";
+     write(1,.var0, 4);
