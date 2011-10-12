@@ -1,11 +1,11 @@
 BINDEPS=bla
 include ../../config.mk
-#include ../../../mk/${COMPILER}.mk
+BIN=test${EXT_EXE}
 
-all: test${EXT_EXE}
+all: ${BIN}
 
-test${EXT_EXE}:
-	${CC} -g -I ../../include test.c ../*.o -lr_util -L../../util -o test${EXT_EXE}
+${BIN}: test.c
+	${CC} -g -I ../../include test.c -L.. -lr_db -lr_util -L../../util -o ${BIN}
 
 clean:
-	rm -f test
+	rm -f ${BIN}

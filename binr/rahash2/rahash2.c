@@ -1,43 +1,122 @@
+/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
+
 #include <stdio.h>
 #include <string.h>
 #include <getopt.h>
+/* r2 api */
+#include <r_io.h>
 #include <r_hash.h>
 #include <r_util.h>
+#include <r_print.h>
 
-static int do_hash(const char *algo, const ut8 *buf, int len, int bsize, int rad) {
-	struct r_hash_t *ctx;
-	const ut8 *c;
-	int i, j, dlen;
+static ut64 from = 0LL;
+static ut64 to = 0LL;
+static int incremental = 1;
+
+static void do_hash_print(RHash *ctx, int hash, int dlen, int rad) {
+	const ut8 *c = ctx->digest;
+	const char *hname = r_hash_name (hash);
+	int i;
+	if (rad) {
+		printf ("e file.%s=", hname);
+		for (i=0; i<dlen; i++)
+			printf ("%02x", c[i]);
+		printf ("\n");
+	} else {
+		printf ("0x%08"PFMT64x"-0x%08"PFMT64x" %s: ", from, to, hname);
+		for (i=0; i<dlen; i++)
+			printf ("%02x", c[i]);
+		printf ("\n");
+	}
+}
+
+static int do_hash_internal(RHash *ctx, int hash, const ut8 *buf, int len, int rad, int print) {
+	int dlen = r_hash_calculate (ctx, hash, buf, len);
+	if (!dlen || rad == 2)
+		return 0;
+	if (!print)
+		return 1;
+	if (hash == R_HASH_ENTROPY) {
+		double e = r_hash_entropy (buf, len);
+		if (rad) {
+			eprintf ("entropy: %10f\n", e);
+		} else {
+			printf ("0x%08"PFMT64x"-0x%08"PFMT64x" %10f: ", 
+					from, to, e);
+			r_print_progressbar (NULL, 12.5 * e, 60);
+			printf ("\n");
+		}
+	} else do_hash_print (ctx, hash, dlen, rad);
+
+	return 1;
+}
+
+static int do_hash(const char *algo, RIO *io, int bsize, int rad) {
+	ut8 *buf;
+	RHash *ctx;
+	ut64 j, fsize;
+	int i;
 	ut64 algobit = r_hash_name_to_bits (algo);
-
 	if (algobit == R_HASH_NONE) {
 		eprintf ("Invalid hashing algorithm specified\n");
 		return 1;
 	}
-	if (bsize>len)
-		bsize = len;
+	fsize = r_io_size (io);
+	if (bsize == 0 || bsize > fsize)
+		bsize = fsize;
+	if (to == 0LL)
+		to = fsize;
+	if (from>to) {
+		eprintf ("Invalid -f -t range\n");
+		return 1;
+	}
+	if (fsize == -1LL) {
+		eprintf ("Unknown file size\n");
+		return 1;
+	}
+	buf = malloc (bsize+1);
 	ctx = r_hash_new (R_TRUE, algobit);
-	/* iterate over all algorithm bits */
-	for (i=1; i<0x800000; i<<=1) {
-		if (algobit & i) {
-			dlen = r_hash_calculate (ctx, algobit&i, buf, len);
-			if (dlen) {
-				c = ctx->digest;
-				if (rad) {
-					printf ("e file.%s=", r_hash_name(i));
-					for (j=0;j<dlen;j++)
-						printf ("%02x", c[j]);
-					printf ("\n");
-				} else {
-					printf ("%s: ", r_hash_name (i));
-					for(j=0;j<dlen;j++)
-						printf ("%02x", c[j]);
-					printf ("\n");
+
+	if (incremental) {
+		for (i=1; i<0x800000; i<<=1) {
+			if (algobit & i) {
+				int hashbit = i & algobit;
+				int dlen = r_hash_size (hashbit);
+				r_hash_do_begin (ctx, i);
+				for (j=from; j<to; j+=bsize) {
+					r_io_read_at (io, j, buf, bsize);
+					do_hash_internal (ctx,
+						hashbit, buf, ((j+bsize)<fsize)?
+						bsize: (fsize-j), rad, 0);
 				}
+				r_hash_do_end (ctx, i);
+				do_hash_print (ctx, i, dlen, rad);
 			}
 		}
-	} 
+	} else {
+		/* iterate over all algorithm bits */
+		for (i=1; i<0x800000; i<<=1) {
+			ut64 f, t, ofrom, oto;
+			if (algobit & i) {
+				int hashbit = i & algobit;
+				ofrom = from;
+				oto = to;
+				f = from;
+				t = to;
+				for (j=f; j<t; j+=bsize) {
+					int nsize = (j+bsize<fsize)? bsize: (fsize-j);
+					r_io_read_at (io, j, buf, bsize);
+					from = j;
+					to = j+bsize;
+					do_hash_internal (ctx, hashbit, buf, nsize, rad, 1);
+				}
+				from = ofrom;
+				to = oto;
+			}
+		}
+	}
 	r_hash_free (ctx);
+	free (buf);
 	return 0;
 }
 
@@ -46,8 +125,11 @@ static int do_help(int line) {
 	if (line) return 0;
 	printf (
 	" -a algo     comma separated list of algorithms (default is 'sha1')\n"
-	" -b bsize    specify the size of the block\n"
+	" -b bsize    specify the size of the block (instead of full file)\n"
+	" -B          show per-block hash\n"
 	" -s string   hash this string instead of files\n"
+	" -f from     start hashing at given address\n"
+	" -t to       stop hashing at given address\n"
 	" -r          output radare commands\n"
 	" -V          show version information\n"
 	"Supported algorithms: md4, md5, sha1, sha256, sha384, sha512, crc16,\n"
@@ -57,12 +139,10 @@ static int do_help(int line) {
 
 int main(int argc, char **argv) {
 	const char *algo = "md5,sha1"; /* default hashing algorithm */
-	const ut8 *buf = NULL;
-	int c, buf_len = 0;
-	int bsize = 0;
-	int rad = 0;
+	int c, rad = 0, quit = 0, bsize = 0;
+	RIO *io;
 
-	while ((c = getopt (argc, argv, "rVa:s:b:h")) != -1) {
+	while ((c = getopt (argc, argv, "rVa:s:b:Bhf:t:")) != -1) {
 		switch (c) {
 		case 'r':
 			rad = 1;
@@ -70,12 +150,30 @@ int main(int argc, char **argv) {
 		case 'a':
 			algo = optarg;
 			break;
+		case 'B':
+			incremental = 0;
+			break;
 		case 'b':
 			bsize = (int)r_num_math (NULL, optarg);
 			break;
 		case 's':
-			buf = (const ut8*) optarg;
-			buf_len = strlen (optarg);
+			{
+				ut64 algobit = r_hash_name_to_bits (algo);
+				RHash *ctx = r_hash_new (R_TRUE, algobit);
+				from = 0;
+				to = strlen (optarg);
+				do_hash_internal (ctx, //0, strlen (optarg),
+					algobit, (const ut8*) optarg,
+					strlen (optarg), 0, 1);
+				r_hash_free (ctx);
+				quit = R_TRUE;
+			}
+			break;
+		case 'f':
+			from = r_num_math (NULL, optarg);
+			break;
+		case 't':
+			to = r_num_math (NULL, optarg);
 			break;
 		case 'V':
 			printf ("rahash2 v"R2_VERSION"\n");
@@ -84,9 +182,16 @@ int main(int argc, char **argv) {
 			return do_help (0);
 		}
 	}
-	if (optind<argc)
-		buf = (const ut8*)r_file_slurp (argv[optind], &buf_len);
-	if (buf == NULL)
+
+	if (quit)
+		return 0;
+	if (optind>=argc)
 		return do_help (1);
-	return do_hash (algo, buf, buf_len, bsize, rad);
+
+	io = r_io_new ();
+	if (!r_io_open (io, argv[optind], 0, 0)) {
+		eprintf ("Cannot open '%s'\n", argv[optind]);
+		return 1;
+	}
+	return do_hash (algo, io, bsize, rad);
 }

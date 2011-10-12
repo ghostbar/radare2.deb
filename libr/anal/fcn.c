@@ -5,26 +5,28 @@
 #include <r_util.h>
 #include <r_list.h>
 
-#define VERBOSE if(0)
+/* work in progress */
+#define USE_NEW_FCN_STORE 0
+/* faster retrival, slower storage */
 
 R_API RAnalFcn *r_anal_fcn_new() {
 	RAnalFcn *fcn = R_NEW (RAnalFcn);
-	if (fcn) {
-		memset (fcn, 0, sizeof (RAnalFcn));
-		fcn->addr = -1;
-		fcn->stack = 0;
-		fcn->vars = r_anal_var_list_new ();
-		fcn->refs = r_anal_ref_list_new ();
-		fcn->xrefs = r_anal_ref_list_new ();
-		fcn->bbs = r_anal_bb_list_new ();
-		fcn->fingerprint = NULL;
-		fcn->diff = r_anal_diff_new ();
-	}
+	if (!fcn) return NULL;
+	memset (fcn, 0, sizeof (RAnalFcn));
+	fcn->addr = -1;
+	fcn->stack = 0;
+	fcn->vars = r_anal_var_list_new ();
+	fcn->refs = r_anal_ref_list_new ();
+	fcn->xrefs = r_anal_ref_list_new ();
+	fcn->bbs = r_anal_bb_list_new ();
+	fcn->fingerprint = NULL;
+	fcn->diff = r_anal_diff_new ();
 	return fcn;
 }
 
 R_API RList *r_anal_fcn_list_new() {
 	RList *list = r_list_new ();
+	if (!list) return NULL;
 	list->free = &r_anal_fcn_free;
 	return list;
 }
@@ -42,9 +44,36 @@ R_API void r_anal_fcn_free(void *_fcn) {
 	free (fcn);
 }
 
+R_API int r_anal_fcn_xref_add (RAnal *anal, RAnalFcn *fcn, ut64 at, ut64 addr, int type) {
+	RAnalRef *ref;
+	if (!fcn || !anal)
+		return R_FALSE;
+	if (!(ref = r_anal_ref_new ()))
+		return R_FALSE;
+	ref->type = type;
+	ref->at = at;
+	ref->addr = addr;
+	// TODO: ensure we are not dupping xrefs
+	r_list_append (fcn->refs, ref);
+	return R_TRUE;
+}
+
+R_API int r_anal_fcn_xref_del (RAnal *anal, RAnalFcn *fcn, ut64 at, ut64 addr, int type) {
+	RAnalRef *ref;
+	RListIter *iter;
+	r_list_foreach (fcn->xrefs, iter, ref) {
+		if ((type != -1 || type == ref->type)  &&
+			(at == 0LL || at == ref->at) &&
+			(addr == 0LL || addr == ref->addr)) {
+				r_list_delete (fcn->xrefs, iter);
+				return R_TRUE;
+		}
+	}
+	return R_FALSE;
+}
+
 R_API int r_anal_fcn(RAnal *anal, RAnalFcn *fcn, ut64 addr, ut8 *buf, ut64 len, int reftype) {
 	RAnalOp op;
-	RAnalRef *ref;
 	char *varname;
 	int oplen, idx = 0;
 	if (fcn->addr == -1)
@@ -55,7 +84,7 @@ R_API int r_anal_fcn(RAnal *anal, RAnalFcn *fcn, ut64 addr, ut8 *buf, ut64 len, 
 	while (idx < len) {
 		if ((oplen = r_anal_op (anal, &op, addr+idx, buf+idx, len-idx)) == 0) {
 			if (idx == 0) {
-				VERBOSE eprintf ("Unknown opcode at 0x%08"PFMT64x"\n", addr+idx);
+				// eprintf ("Unknown opcode at 0x%08"PFMT64x"\n", addr+idx);
 				return R_ANAL_RET_END;
 			} else break;
 		}
@@ -96,17 +125,10 @@ R_API int r_anal_fcn(RAnal *anal, RAnalFcn *fcn, ut64 addr, ut8 *buf, ut64 len, 
 		case R_ANAL_OP_TYPE_JMP:
 		case R_ANAL_OP_TYPE_CJMP:
 		case R_ANAL_OP_TYPE_CALL:
-			/* TODO: loc's should end with jmp too? */
-			if (!(ref = r_anal_ref_new ())) {
-				eprintf ("Error: new (ref)\n");
+			if (!r_anal_fcn_xref_add (anal, fcn, op.addr, op.jump,
+					op.type == R_ANAL_OP_TYPE_CALL?
+					R_ANAL_REF_TYPE_CALL : R_ANAL_REF_TYPE_CODE))
 				return R_ANAL_RET_ERROR;
-			}
-			ref = R_NEW (RAnalRef);
-			ref->type = op.type == R_ANAL_OP_TYPE_CALL?
-				R_ANAL_REF_TYPE_CALL : R_ANAL_REF_TYPE_CODE;
-			ref->at = op.addr;
-			ref->addr = op.jump;
-			r_list_append (fcn->refs, ref);
 			break;
 		case R_ANAL_OP_TYPE_RET:
 			return R_ANAL_RET_END;
@@ -115,15 +137,20 @@ R_API int r_anal_fcn(RAnal *anal, RAnalFcn *fcn, ut64 addr, ut8 *buf, ut64 len, 
 	return fcn->size;
 }
 
+R_API int r_anal_fcn_insert(RAnal *anal, RAnalFcn *fcn) {
+#if USE_NEW_FCN_STORE
+	r_listrange_add (anal->fcnstore, fcn);
+	// HUH? store it here .. for backweird compatibility
+	r_list_append (anal->fcns, fcn);
+#else
+	r_list_append (anal->fcns, fcn);
+#endif
+	return R_TRUE;
+}
+
 R_API int r_anal_fcn_add(RAnal *anal, ut64 addr, ut64 size, const char *name, int type, RAnalDiff *diff) {
-	RAnalFcn *fcn = NULL, *fcni;
-	RListIter *iter;
 	int append = 0;
-	r_list_foreach (anal->fcns, iter, fcni)
-		if (addr == fcni->addr) {
-			fcn = fcni;
-			break;
-		}
+	RAnalFcn *fcn = r_anal_fcn_find (anal, addr, R_ANAL_FCN_TYPE_ROOT);
 	if (fcn == NULL) {
 		if (!(fcn = r_anal_fcn_new ()))
 			return R_FALSE;
@@ -141,18 +168,27 @@ R_API int r_anal_fcn_add(RAnal *anal, ut64 addr, ut64 size, const char *name, in
 		if (diff->name)
 			fcn->diff->name = strdup (diff->name);
 	}
-	if (append) r_list_append (anal->fcns, fcn);
-	return R_TRUE;
+	return append? r_anal_fcn_insert (anal, fcn): R_TRUE;
 }
 
 R_API int r_anal_fcn_del(RAnal *anal, ut64 addr) {
-	RAnalFcn *fcni;
-	RListIter it, *iter;
 	if (addr == 0) {
+#if USE_NEW_FCN_STORE
+		r_listrange_free (anal->fcnstore);
+		anal->fcnstore = r_listrange_new ();
+#else
 		r_list_free (anal->fcns);
 		if (!(anal->fcns = r_anal_fcn_list_new ()))
 			return R_FALSE;
+#endif
 	} else {
+#if USE_NEW_FCN_STORE
+		// XXX: must only get the function if starting at 0?
+		RAnalFcn *f = r_listrange_find_in_range (anal->fcnstore, addr);
+		if (f) r_listrange_del (anal->fcnstore, f);
+#else
+		RAnalFcn *fcni;
+		RListIter it, *iter;
 		r_list_foreach (anal->fcns, iter, fcni) {
 			if (addr >= fcni->addr && addr < fcni->addr+fcni->size) {
 				it.n = iter->n;
@@ -160,22 +196,36 @@ R_API int r_anal_fcn_del(RAnal *anal, ut64 addr) {
 				iter = &it;
 			}
 		}
+#endif
 	}
 	return R_TRUE;
 }
 
 R_API RAnalFcn *r_anal_fcn_find(RAnal *anal, ut64 addr, int type) {
+	int root = type & R_ANAL_FCN_TYPE_ROOT;
+#if USE_NEW_FCN_STORE
+	// TODO: type is ignored here? wtf.. we need more work on fcnstore
+	if (root) return r_listrange_find_root (anal->fcnstore, addr);
+	return r_listrange_find_in_range (anal->fcnstore, addr);
+#else
 	RAnalFcn *fcn, *ret = NULL;
 	RListIter *iter;
 	r_list_foreach (anal->fcns, iter, fcn) {
-		if (type == R_ANAL_FCN_TYPE_NULL || (fcn->type & type))
-		if (addr == fcn->addr ||
-			(ret == NULL && (addr > fcn->addr && addr < fcn->addr+fcn->size)))
-			ret = fcn; 
+		if (type == R_ANAL_FCN_TYPE_NULL || (fcn->type & type)) {
+			if (root) {
+				if (addr == fcn->addr)
+					ret = fcn; 
+			} else {
+				if (addr == fcn->addr || (ret == NULL && (addr > fcn->addr && addr < fcn->addr+fcn->size)))
+					ret = fcn; 
+			}
+		}
 	}
 	return ret;
+#endif
 }
 
+/* rename RAnalFcnBB.add() */
 R_API int r_anal_fcn_add_bb(RAnalFcn *fcn, ut64 addr, ut64 size, ut64 jump, ut64 fail, int type, RAnalDiff *diff) {
 	RAnalBlock *bb = NULL, *bbi;
 	RListIter *iter;
@@ -186,7 +236,8 @@ R_API int r_anal_fcn_add_bb(RAnalFcn *fcn, ut64 addr, ut64 size, ut64 jump, ut64
 			bb = bbi;
 			mid = 0;
 			break;
-		} else if (addr > bbi->addr && addr < bbi->addr+bbi->size)
+		} else
+		if (addr > bbi->addr && addr < bbi->addr+bbi->size)
 			mid = 1;
 	}
 	if (mid)
@@ -212,15 +263,16 @@ R_API int r_anal_fcn_add_bb(RAnalFcn *fcn, ut64 addr, ut64 size, ut64 jump, ut64
 	return R_TRUE;
 }
 
+// TODO: rename fcn_bb_split()
 R_API int r_anal_fcn_split_bb(RAnalFcn *fcn, RAnalBlock *bb, ut64 addr) {
 	RAnalBlock *bbi;
 	RAnalOp *opi;
 	RListIter *iter;
 
-	r_list_foreach (fcn->bbs, iter, bbi)
+	r_list_foreach (fcn->bbs, iter, bbi) {
 		if (addr == bbi->addr)
 			return R_ANAL_RET_DUP;
-		else if (addr > bbi->addr && addr < bbi->addr + bbi->size) {
+		if (addr > bbi->addr && addr < bbi->addr + bbi->size) {
 			r_list_append (fcn->bbs, bb);
 			bb->addr = addr;
 			bb->size = bbi->addr + bbi->size - addr;
@@ -250,9 +302,11 @@ R_API int r_anal_fcn_split_bb(RAnalFcn *fcn, RAnalBlock *bb, ut64 addr) {
 			}
 			return R_ANAL_RET_END;
 		}
+	}
 	return R_ANAL_RET_NEW;
 }
 
+// TODO: rename fcn_bb_overlap()
 R_API int r_anal_fcn_overlap_bb(RAnalFcn *fcn, RAnalBlock *bb) {
 	RAnalBlock *bbi;
 	RListIter nit; // hack to make r_list_unlink not fail that hard
@@ -265,7 +319,7 @@ R_API int r_anal_fcn_overlap_bb(RAnalFcn *fcn, RAnalBlock *bb) {
 			bb->jump = bbi->addr;
 			bb->fail = -1;
 			bb->conditional = R_FALSE;
-			if (bbi->type&R_ANAL_BB_TYPE_HEAD) {
+			if (bbi->type & R_ANAL_BB_TYPE_HEAD) {
 				bb->type = R_ANAL_BB_TYPE_HEAD;
 				bbi->type = bbi->type^R_ANAL_BB_TYPE_HEAD;
 			} else bb->type = R_ANAL_BB_TYPE_BODY;
@@ -290,9 +344,7 @@ R_API int r_anal_fcn_cc(RAnalFcn *fcn) {
 	int ret = 0, retbb;
 
 	r_list_foreach (fcn->bbs, iter, bbi) {
-		if ((bbi->type & R_ANAL_BB_TYPE_LAST))
-			retbb = 1;
-		else retbb = 0;
+		retbb = ((bbi->type & R_ANAL_BB_TYPE_LAST))? 1: 0;
 		ret += bbi->conditional + retbb;
 	}
 	return ret;
@@ -314,42 +366,42 @@ R_API RAnalVar *r_anal_fcn_get_var(RAnalFcn *fs, int num, int type) {
 R_API char *r_anal_fcn_to_string(RAnal *a, RAnalFcn* fs) {
 	int i;
 	char *sign;
+	RAnalVar *arg, *ret;
 	if (fs->type != R_ANAL_FCN_TYPE_FCN || fs->type != R_ANAL_FCN_TYPE_SYM)
 		return NULL;
-	RAnalVar *arg, *ret = r_anal_fcn_get_var (fs, 0, R_ANAL_VAR_TYPE_RET);
-	if (ret) sign = r_str_newf ("%s %s (", ret->name, fs->name);
-	else sign = r_str_newf ("void %s (", fs->name);
-	for (i=0;;i++) {
+	ret = r_anal_fcn_get_var (fs, 0, R_ANAL_VAR_TYPE_RET);
+	sign = ret? r_str_newf ("%s %s (", ret->name, fs->name):
+		r_str_newf ("void %s (", fs->name);
+	for (i=0; ; i++) {
 		if (!(arg = r_anal_fcn_get_var (fs, i,
-						R_ANAL_VAR_TYPE_ARG|R_ANAL_VAR_TYPE_ARGREG)))
+				R_ANAL_VAR_TYPE_ARG|R_ANAL_VAR_TYPE_ARGREG)))
 			break;
-		if (arg->array>1) {
-			if (i) sign = r_str_concatf (sign, ", %s %s:%02x[%d]", arg->vartype, arg->name, arg->delta, arg->array);
-			else sign = r_str_concatf (sign, "%s %s:%02x[%d]", arg->vartype, arg->name, arg->delta, arg->array);
-		} else {
-			if (i) sign = r_str_concatf (sign, ", %s %s:%02x", arg->vartype, arg->name, arg->delta);
-			else sign = r_str_concatf (sign, "%s %s:%02x", arg->vartype, arg->name, arg->delta);
-		}
+		if (arg->array>1)
+			sign = r_str_concatf (sign, i?", %s %s:%02x[%d]":"%s %s:%02x[%d]",
+				arg->vartype, arg->name, arg->delta, arg->array);
+		else sign = r_str_concatf (sign, i?", %s %s:%02x":"%s %s:%02x",
+				arg->vartype, arg->name, arg->delta);
 	}
 	return (sign = r_str_concatf (sign, ");"));
 }
 
 // TODO: This function is not fully implemented
-R_API int r_anal_fcn_from_string(RAnal *a, RAnalFcn *f, const char *_str) {
+/* set function signature from string */
+R_API int r_anal_fcn_from_string(RAnal *a, RAnalFcn *f, const char *sig) {
 	char *p, *q, *r, *str;
 	RAnalVar *var;
 	int i, arg;
 
-	if (!a || !f) {
+	if (!a || !f || !sig) {
 		eprintf ("r_anal_fcn_from_string: No function received\n");
 		return R_FALSE;
 	}
-	str = strdup (_str);
+	str = strdup (sig);
 	/* TODO : implement parser */
 	//r_list_destroy (fs->vars);
 	//set: fs->vars = r_list_new ();
 	//set: fs->name
-	eprintf ("ORIG=(%s)\n", _str);
+	eprintf ("ORIG=(%s)\n", sig);
 	p = strchr (str, '(');
 	if (!p) goto parsefail;
 	*p = 0;
@@ -392,6 +444,7 @@ R_API int r_anal_fcn_from_string(RAnal *a, RAnalFcn *f, const char *_str) {
 	return R_TRUE;
 
 	parsefail:
+	free (str);
 	eprintf ("Function string parse fail\n");
 	return R_FALSE;
 }

@@ -9,6 +9,11 @@
 
 static int endian = 1; // XXX HACK
 
+static int core_cmd_callback (void *user, const char *cmd) {
+	RCore *core = (RCore *)user;
+	return r_core_cmd0 (core, cmd);
+}
+
 static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 	RCore *core = (RCore *)userptr; // XXX ?
 	RFlagItem *flag;
@@ -45,7 +50,7 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 		case 'o': return core->io->off;
 		}
 	}
-	if (str[0]>'A') {
+	if (*str>'A') {
 		if ((flag = r_flag_get (core->flags, str))) {
 			ret = flag->offset;
 			*ok = R_TRUE;
@@ -71,7 +76,8 @@ static const char *radare_argv[] = {
 	"#sha1", "#crc32", "#pcprint", "#sha256", "#sha512", "#md4", "#md5", 
 	"#!python", "#!perl", "#!vala",
 	"V",
-	"aa", "ab", "af", "ar", "ag", "at", "av", "a?", 
+	"aa", "ab", "af", "ar", "ag", "at", "a?", 
+	"aga", "agc", "agd", "agl", "agfl",
 	"e", "e-", "e*", "e!",
 	"i", "ii", "iI", "is", "iS", "iz",
 	"q", 
@@ -79,7 +85,7 @@ static const char *radare_argv[] = {
 	"m", "m*", "ml", "m-", "my", "mg", "md", "mp", "m?",
 	"o", "o-",
 	"x",
-	".",
+	".", ".!", ".(", "./",
 	"r", "r+", "r-",
 	"b", "bf", "b?",
 	"/", "//", "/a", "/c", "/m", "/x", "/v",
@@ -115,33 +121,49 @@ static int autocomplete(RLine *line) {
 			line->completion.argv = tmp_argv;
 		} else
 		if ((!memcmp (line->buffer.data, "o ", 2)) ||
-		     !memcmp (line->buffer.data, ". ", 2)) {
+		     !memcmp (line->buffer.data, ". ", 2) ||
+		     !memcmp (line->buffer.data, "pm ", 3) ||
+		     !memcmp (line->buffer.data, "/m ", 3)) {
 			// XXX: SO MANY FUCKING MEMORY LEAKS
 			char *str, *p, *path;
 			RList *list;
 			int n, i = 0;
-			int sdelta = 2; //(line->buffer.data[1]==' ')?2:3;
+			int sdelta = (line->buffer.data[1]==' ')?2:3;
 			if (!line->buffer.data[sdelta]) {
-				path = r_sys_getcwd ();
+				path = r_sys_getdir ();
 			} else {
 				path = strdup (line->buffer.data+sdelta);
 			}
 			p = r_str_lchr (path, '/');
 			if (p) {
 				if (p==path) path = "/";
-				else *p = 0;
+				else if (p!=path+1)
+					*p = 0;
 				p++;
 			}
 			if (p) {
 				if (*p) n = strlen (p);
 				else p = "";
 			}
+			if (*path=='~') {
+				char *lala = r_str_home (path+1);
+				free (path);
+				path = lala;
+			} else if (*path!='.' && *path!='/') {
+				char *o = malloc (strlen (path)+4);
+				memcpy (o, "./", 3);
+				p = o+3;
+				n = strlen (path);
+				memcpy (o+3, path, strlen (path)+1);
+				free (path);
+				path = o;
+			}
 #if 0
 printf ("DIR(%s)\n", path);
 printf ("FILE(%s)\n", p);
 printf ("FILEN %d\n", n);
 #endif
- 			list = r_sys_dir (path);
+ 			list = p? r_sys_dir (path):NULL;
 			if (list) {
 				char buf[4096];
 				r_list_foreach (list, iter, str) {
@@ -155,6 +177,7 @@ printf ("FILEN %d\n", n);
 							break;
 					}
 				}
+				r_list_free (list);
 				// XXX LEAK r_list_destroy (list);
 			} else eprintf ("\nInvalid directory\n");
 			tmp_argv[i] = NULL;
@@ -163,6 +186,12 @@ printf ("FILEN %d\n", n);
 			//free (path);
 		} else
 		if ((!memcmp (line->buffer.data, "s ", 2)) ||
+		    (!memcmp (line->buffer.data, "ag ", 3)) ||
+		    (!memcmp (line->buffer.data, "aga ", 4)) ||
+		    (!memcmp (line->buffer.data, "agc ", 4)) ||
+		    (!memcmp (line->buffer.data, "agl ", 4)) ||
+		    (!memcmp (line->buffer.data, "agd ", 4)) ||
+		    (!memcmp (line->buffer.data, "agfl ", 5)) ||
 		    (!memcmp (line->buffer.data, "b ", 2)) ||
 		    (!memcmp (line->buffer.data, "dcu ", 4)) ||
 		    (!memcmp (line->buffer.data, "/v ", 3)) ||
@@ -267,7 +296,9 @@ R_API int r_core_init(RCore *core) {
 	core->oobi = NULL;
 	core->oobi_len = 0;
 	core->printidx = 0;
+	core->lastcmd = NULL;
 	core->cmdqueue = NULL;
+	core->cmdrepeat = R_TRUE;
 	core->yank = NULL;
 	core->reflines = NULL;
 	core->reflines2 = NULL;
@@ -277,6 +308,8 @@ R_API int r_core_init(RCore *core) {
 	//core->num->callback = &num_callback;
 	//core->num->userptr = core;
 	core->curasmstep = 0;
+	core->egg = r_egg_new ();
+	r_egg_setup (core->egg, R_SYS_ARCH, R_SYS_BITS, 0, R_SYS_OS);
 
 	/* initialize libraries */
 	if (singleton) {
@@ -314,6 +347,8 @@ R_API int r_core_init(RCore *core) {
 	core->bin = r_bin_new ();
 	r_bin_set_user_ptr (core->bin, core);
 	core->io = r_io_new ();
+	core->io->user = (void *)core;
+	core->io->core_cmd_cb = core_cmd_callback;
 	core->sign = r_sign_new ();
 	core->search = r_search_new (R_SEARCH_KEYWORD);
 	r_io_undo_enable (core->io, 1, 0); // TODO: configurable via eval
@@ -361,14 +396,33 @@ R_API int r_core_init(RCore *core) {
 
 R_API RCore *r_core_free(RCore *c) {
 	/* TODO: it leaks as shit */
+	r_egg_free (c->egg);
 	free (c);
 	return NULL;
 }
 
-R_API int r_core_prompt(RCore *r, int sync) {
-	static char *prevcmd = NULL;
+R_API void r_core_prompt_loop(RCore *r) {
 	int ret;
-	char *cmd;
+	do { 
+		if (r_core_prompt (r, R_FALSE)<1)
+			break;
+//			if (lock) r_th_lock_enter (lock);
+		if ((ret = r_core_prompt_exec (r))==-1)
+			eprintf ("Invalid command\n");
+/*			if (lock) r_th_lock_leave (lock);
+		if (rabin_th && !r_th_wait_async (rabin_th)) {
+			eprintf ("rabin thread end \n");
+			r_th_free (rabin_th);
+			r_th_lock_free (lock);
+			lock = NULL;
+			rabin_th = NULL;
+		}
+*/
+	} while (ret != R_CORE_CMD_EXIT);
+}
+
+R_API int r_core_prompt(RCore *r, int sync) {
+	int ret;
 	char line[1024];
 	char prompt[32];
 	const char *cmdprompt = r_config_get (r->config, "cmd.prompt");
@@ -380,28 +434,17 @@ R_API int r_core_prompt(RCore *r, int sync) {
 		*prompt = 0;
 #if __UNIX__
 	else if (r_config_get_i (r->config, "scr.color"))
-		sprintf (prompt, Color_YELLOW"[0x%08"PFMT64x"]> "Color_RESET, r->offset);
+		snprintf (prompt, sizeof (prompt),
+			Color_YELLOW"[0x%08"PFMT64x"]> "Color_RESET, r->offset);
 #endif
 	else sprintf (prompt, "[0x%08"PFMT64x"]> ", r->offset);
 	r_line_singleton()->prompt = prompt;
 	ret = r_cons_fgets (line, sizeof (line), 0, NULL);
-	if (ret == -2)
-		return R_CORE_CMD_EXIT;
-	if (ret == -1)
-		return R_FALSE;
-	if (strcmp (line, ".")) {
-		free (prevcmd);
-		prevcmd = strdup (line);
-		cmd = line;
-	} else cmd = prevcmd;
-	if (sync) {
-		ret = r_core_cmd (r, r->cmdqueue, R_TRUE);
-		r_cons_flush ();
-	} else {
-		r->cmdqueue = cmd;
-		ret = R_TRUE;
-	}
-	return ret;
+	if (ret == -2) return R_CORE_CMD_EXIT;
+	if (ret == -1) return R_FALSE;
+	if (sync) return r_core_prompt_exec (r);
+	r->cmdqueue = line;
+	return R_TRUE;
 }
 
 R_API int r_core_prompt_exec(RCore *r) {
@@ -498,10 +541,11 @@ R_API RAnalOp *r_core_op_anal(RCore *core, ut64 addr) {
 // TODO: move into core/io/rap? */
 R_API int r_core_serve(RCore *core, RIODesc *file) {
 	ut8 cmd, flg, *ptr, buf[1024];
-	int i, pipefd;
+	int i, j, pipefd;
 	ut64 x;
 	RSocket *c, *fd;
 	RIORap *rior;
+	RListIter *iter;
 
 	rior = (RIORap *)file->data;
 	if (rior == NULL|| rior->fd == NULL) {
@@ -510,7 +554,8 @@ R_API int r_core_serve(RCore *core, RIODesc *file) {
 	}
 	fd = rior->fd;
 
-	eprintf ("RAP Server started (rap.loop=%s)\n", r_config_get (core->config, "rap.loop"));
+	eprintf ("RAP Server started (rap.loop=%s)\n",
+			r_config_get (core->config, "rap.loop"));
 #if __UNIX__
 	// XXX: ugly workaround
 	signal (SIGINT, SIG_DFL);
@@ -526,10 +571,8 @@ reaccept:
 		}
 
 		eprintf ("rap: client connected\n");
-		//r_io_accept (core->io, c->fd); //FIXME: Useless ??
 		for (;;) {
-			i = r_socket_read (c, &cmd, 1);
-			if (i==0) {
+			if (!r_socket_read (c, &cmd, 1)) {
 				eprintf ("rap: connection closed\n");
 				if (r_config_get_i (core->config, "rap.loop")) {
 					eprintf ("rap: waiting for new connection\n");
@@ -554,6 +597,7 @@ reaccept:
 					ptr[cmd] = 0;
 					file = r_core_file_open (core, (const char *)ptr, R_IO_READ, 0); // XXX: write mode?
 					if (file) {
+						r_core_bin_load (core, NULL);
 						file->map = r_io_map_add (core->io, file->fd->fd, R_IO_READ, 0, 0, file->size);
 						pipefd = core->file->fd->fd;
 						eprintf ("(flags: %hhd) len: %hhd filename: '%s'\n",
@@ -567,6 +611,69 @@ reaccept:
 				buf[0] = RMT_OPEN | RMT_REPLY;
 				r_mem_copyendian (buf+1, (ut8 *)&pipefd, 4, !endian);
 				r_socket_write (c, buf, 5);
+				r_socket_flush (c);
+
+				/* Write meta info */
+				RMetaItem *d;
+				r_list_foreach (core->anal->meta->data, iter, d) {
+					if (d->type == R_META_TYPE_COMMENT)
+						snprintf ((char *)buf, sizeof (buf), "%s %s @ 0x%08"PFMT64x,
+							r_meta_type_to_string (d->type), d->str, d->from);
+					else
+						snprintf ((char *)buf, sizeof (buf),
+							"%s %d %s @ 0x%08"PFMT64x,
+							r_meta_type_to_string (d->type),
+							(int)(d->to-d->from), d->str, d->from);
+					i = strlen ((char *)buf);
+					r_mem_copyendian ((ut8 *)&j, (ut8 *)&i, 4, !endian);
+					r_socket_write (c, (ut8 *)&j, 4);
+					r_socket_write (c, buf, i);
+					r_socket_flush (c);
+				}
+#if 0
+				RIOSection *s;
+				r_list_foreach_prev (core->io->sections, iter, s) {
+					snprintf ((char *)buf, sizeof (buf),
+							"S 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" %s %d",
+							s->offset, s->vaddr, s->size, s->vsize, s->name, s->rwx);
+					i = strlen ((char *)buf);
+					r_mem_copyendian ((ut8 *)&j, (ut8 *)&i, 4, !endian);
+					r_socket_write (c, (ut8 *)&j, 4);
+					r_socket_write (c, buf, i);
+					r_socket_flush (c);
+				}
+#endif
+				int fs = -1;
+				RFlagItem *flag;
+				r_list_foreach_prev (core->flags->flags, iter, flag) {
+					if (fs == -1 || flag->space != fs) {
+						fs = flag->space;
+						snprintf ((char *)buf, sizeof (buf),
+								"fs %s", r_flag_space_get_i (core->flags, fs));
+						i = strlen ((char *)buf);
+						r_mem_copyendian ((ut8 *)&j, (ut8 *)&i, 4, !endian);
+						r_socket_write (c, (ut8 *)&j, 4);
+						r_socket_write (c, buf, i);
+					}
+					snprintf ((char *)buf, sizeof (buf),
+									"f %s %"PFMT64d" 0x%08"PFMT64x,
+									flag->name, flag->size, flag->offset);
+						i = strlen ((char *)buf);
+						r_mem_copyendian ((ut8 *)&j, (ut8 *)&i, 4, !endian);
+						r_socket_write (c, (ut8 *)&j, 4);
+						r_socket_write (c, buf, i);
+						r_socket_flush (c);
+				}
+
+				snprintf ((char *)buf, sizeof (buf), "s 0x%"PFMT64x, core->offset);
+				i = strlen ((char *)buf);
+				r_mem_copyendian ((ut8 *)&j, (ut8 *)&i, 4, !endian);
+				r_socket_write (c, (ut8 *)&j, 4);
+				r_socket_write (c, buf, i);
+
+				i = 0;
+				r_socket_write (c, (ut8 *)&i, 4);
+				r_socket_flush (c);
 				free (ptr);
 				break;
 			case RMT_READ:
@@ -582,11 +689,12 @@ reaccept:
 					ptr[0] = RMT_READ|RMT_REPLY;
 					if (i>RMT_MAX)
 						i = RMT_MAX;
-					if (i>core->blocksize) 
+					if (i>core->blocksize)
 						r_core_block_size (core, i);
 					r_mem_copyendian (ptr+1, (ut8 *)&i, 4, !endian);
 					memcpy (ptr+5, core->block, i); //core->blocksize);
 					r_socket_write (c, ptr, i+5);
+					r_socket_flush (c);
 				}
 				break;
 			case RMT_CMD:
@@ -597,7 +705,7 @@ reaccept:
 
 				/* read */
 				r_socket_read_block (c, (ut8*)&bufr, 4);
-				r_mem_copyendian ((ut8*)&i, (ut8 *)bufr, 4, endian);
+				r_mem_copyendian ((ut8*)&i, (ut8 *)bufr, 4, !endian);
 				if (i>0 && i<RMT_MAX) {
 					if ((cmd=malloc(i))) {
 						r_socket_read_block (c, (ut8*)cmd, i);
@@ -620,6 +728,7 @@ reaccept:
 				r_mem_copyendian((ut8*)bufw+1, (ut8 *)&cmd_len, 4, !endian);
 				memcpy(bufw+5, cmd_output, cmd_len);
 				r_socket_write (c, bufw, cmd_len+5);
+				r_socket_flush (c);
 				free(bufw);
 				free(cmd_output);
 				break;
@@ -642,6 +751,7 @@ reaccept:
 				buf[0] = RMT_SEEK | RMT_REPLY;
 				r_mem_copyendian (buf+1, (ut8*)&x, 8, !endian);
 				r_socket_write (c, buf, 9);
+				r_socket_flush (c);
 				break;
 			case RMT_CLOSE:
 				eprintf ("CLOSE\n");
@@ -654,6 +764,7 @@ reaccept:
 				r_mem_copyendian (buf+1, (ut8*)&ret, 4, !endian);
 				buf[0] = RMT_CLOSE | RMT_REPLY;
 				r_socket_write (c, buf, 5);
+				r_socket_flush (c);
 				}
 				break;
 			case RMT_SYSTEM:
@@ -704,9 +815,10 @@ reaccept:
 
 				// send
 				ptr[0] = (RMT_SYSTEM | RMT_REPLY);
-				r_mem_copyendian ((ut8*)ptr+1, (ut8*)&i, 4, endian);
+				r_mem_copyendian ((ut8*)ptr+1, (ut8*)&i, 4, !endian);
 				if (i<0)i=0;
 				r_socket_write (c, ptr, i+5);
+				r_socket_flush (c);
 				eprintf ("REPLY SENT (%d) (%s)\n", i, ptr+5);
 				free (ptr);
 				break;

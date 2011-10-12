@@ -1,10 +1,5 @@
 BIN=rarun2
+BINDEPS=r_util
 OBJ=main.o
 
-all: ${OBJ}
-	${CC} -o ${BIN} ${OBJ}
-
-clean:
-	rm -f ${BIN} ${OBJ}
-
-.PHONY: all clean
+include ../binr.mk

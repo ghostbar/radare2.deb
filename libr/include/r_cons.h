@@ -186,6 +186,7 @@ R_API void r_cons_set_raw(int b);
 /* output */
 R_API void r_cons_printf(const char *format, ...);
 R_API void r_cons_strcat(const char *str);
+#define r_cons_puts(x) r_cons_strcat(x)
 R_API void r_cons_strcat_justify (const char *str, int j, char c);
 R_API void r_cons_memcat(const char *str, int len);
 R_API void r_cons_newline();
@@ -218,6 +219,7 @@ R_API void r_cons_invert(int set, int color);
 R_API int r_cons_yesno(int def, const char *fmt, ...);
 R_API void r_cons_set_cup(int enable);
 R_API void r_cons_column(int c);
+R_API int r_cons_get_column();
 #endif
 
 #endif

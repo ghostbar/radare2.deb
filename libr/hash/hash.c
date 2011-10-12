@@ -6,7 +6,7 @@
 R_API int r_hash_pcprint(const ut8 *buffer, ut64 len) {
 	const ut8 *end = buffer + len;
 	int n;
-	for(n=0; buffer<end; buffer++)
+	for (n=0; buffer<end; buffer++)
 		if (IS_PRINTABLE (*buffer))
 			n++;
 	return ((100*n)/len);
@@ -15,7 +15,7 @@ R_API int r_hash_pcprint(const ut8 *buffer, ut64 len) {
 R_API int r_hash_parity(const ut8 *buf, ut64 len) {
 	const ut8 *end = buf+len;
 	ut32 ones = 0;
-	for(;buf<end;buf++) {
+	for (;buf<end;buf++) {
 		ut8 x = buf[0];
 		ones += ((x&128)?1:0) + ((x&64)?1:0) + ((x&32)?1:0) + ((x&16)?1:0) +
 			((x&8)?1:0) + ((x&4)?1:0) + ((x&2)?1:0) + ((x&1)?1:0);
@@ -72,6 +72,21 @@ R_API const char *r_hash_name(int bit) {
 	return "";
 }
 
+R_API int r_hash_size(int bit) {
+	if (bit & R_HASH_MD4) return R_HASH_SIZE_MD4;
+	if (bit & R_HASH_MD5) return R_HASH_SIZE_MD5;
+	if (bit & R_HASH_SHA1) return R_HASH_SIZE_SHA1;
+	if (bit & R_HASH_SHA256) return R_HASH_SIZE_SHA256;
+	if (bit & R_HASH_SHA384) return R_HASH_SIZE_SHA384;
+	if (bit & R_HASH_SHA512) return R_HASH_SIZE_SHA512;
+	if (bit & R_HASH_PARITY) return 1;
+	if (bit & R_HASH_ENTROPY) return 4; // special case
+	if (bit & R_HASH_XOR) return 1;
+	if (bit & R_HASH_XORPAIR) return 1;
+	if (bit & R_HASH_MOD255) return 1;
+	if (bit & R_HASH_PCPRINT) return 1;
+	return 0;
+}
 /* TODO: ignore case.. we have to use strcasestr */
 R_API ut64 r_hash_name_to_bits(const char *name) {
 	ut64 bits = R_HASH_NONE;

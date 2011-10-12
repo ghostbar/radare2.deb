@@ -1,5 +1,5 @@
 PKGNAME radare2
-VERSION 0.8.1
+VERSION 0.8.6
 CONTACT pancake ; pancake@nopcode.org
 
 LANG_C!
@@ -17,10 +17,6 @@ IFNOT HAVE_EWF { HAVE_LIB_EWF = 0 ; }
 CHKLIB gmp
 ARG_WITHOUT HAVE_GMP gmp disable GMP dependency ;
 IFNOT HAVE_GMP { HAVE_LIB_GMP = 0 ; }
-
-CHKLIB magic
-ARG_WITHOUT HAVE_MAGIC magic disable magic dependency ;
-IFNOT HAVE_MAGIC { HAVE_LIB_MAGIC = 0 ; }
 
 CHKLIB ssl
 PKGCFG SSL_CFLAGS SSL_LDFLAGS openssl
@@ -83,16 +79,14 @@ IFEQ LIBVERSION xxx ; {
 }
 
 REPORT PREFIX HAVE_LIB_EWF HAVE_LIB_GMP HAVE_OPENSSL HAVE_LIB_TCC
-	HAVE_LIB_MAGIC DEBUGGER USERCC USEROSTYPE LIL_ENDIAN VERSION LIBVERSION ;
+	DEBUGGER USERCC USEROSTYPE LIL_ENDIAN VERSION LIBVERSION ;
 
-(( deprecated:
- pkgcfg/r_th.pc
- pkgcfg/r_db.pc
-))
 (( TODO: Add the rest of .pc files here.. add a rule for acr? ))
 SUBDIRS ./config-user.mk
 	libr/include/r_userconf.h
 	pkgcfg/r_io.pc
+	pkgcfg/r_db.pc
+	pkgcfg/r_magic.pc
 	pkgcfg/r_asm.pc
 	pkgcfg/r_bin.pc
 	pkgcfg/r_anal.pc
@@ -116,5 +110,6 @@ SUBDIRS ./config-user.mk
 	pkgcfg/r_lib.pc
 	pkgcfg/r_parse.pc
 	pkgcfg/r_print.pc
+	pkgcfg/r_th.pc
 	pkgcfg/r_fs.pc
 ;

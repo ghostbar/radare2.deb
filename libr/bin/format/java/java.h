@@ -77,22 +77,25 @@ struct r_bin_java_fm_t {
 	struct r_bin_java_attr_t *attributes;
 };
 
-struct r_bin_java_obj_t {
+typedef struct r_bin_java_obj_t {
 	struct r_bin_java_classfile_t cf;
 	struct r_bin_java_classfile2_t cf2;
 	struct r_bin_java_cp_item_t *cp_items;
-	unsigned int fields_count;
+	ut32 fields_count;
 	struct r_bin_java_fm_t *fields;
-	unsigned int methods_count;
+	ut32 methods_count;
 	struct r_bin_java_fm_t *methods;
 	int size;
-    const char* file;
-	struct r_buf_t* b;
-};
+	const char* file;
+	struct r_buf_t*b;
+	int midx;
+	int fsym;
+	int fsymsz;
+} RBinJavaObj;
 
 struct r_bin_java_sym_t {
 	char name[R_BIN_JAVA_MAXSTR];
-	ut64 offset;
+	ut64 offset; // XXX: ut64 is too much
 	ut64 size;
 	int last;
 };
@@ -107,6 +110,7 @@ struct r_bin_java_str_t {
 
 char* r_bin_java_get_version(struct r_bin_java_obj_t* bin);
 ut64 r_bin_java_get_entrypoint(struct r_bin_java_obj_t* bin);
+ut64 r_bin_java_get_main(struct r_bin_java_obj_t* bin);
 struct r_bin_java_sym_t* r_bin_java_get_symbols(struct r_bin_java_obj_t* bin);
 struct r_bin_java_str_t* r_bin_java_get_strings(struct r_bin_java_obj_t* bin);
 void* r_bin_java_free(struct r_bin_java_obj_t* bin);

@@ -20,6 +20,7 @@
 #include <grub/err.h>
 #include <grub/misc.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #include <grub/i18n.h>
 
 GRUB_EXPORT(grub_errno);
@@ -40,7 +41,7 @@ char grub_errmsg[GRUB_MAX_ERRMSG];
 
 static struct
 {
-  grub_err_t errno;
+  grub_err_t no;
   char errmsg[GRUB_MAX_ERRMSG];
 } grub_error_stack_items[GRUB_ERROR_STACK_SIZE];
 
@@ -70,7 +71,7 @@ grub_fatal (const char *fmt, ...)
   grub_vprintf (_(fmt), ap);
   va_end (ap);
 
-  grub_abort ();
+  abort ();
 }
 
 void
@@ -80,7 +81,7 @@ grub_error_push (void)
   if (grub_error_stack_pos < GRUB_ERROR_STACK_SIZE)
     {
       /* Copy active error message to stack.  */
-      grub_error_stack_items[grub_error_stack_pos].errno = grub_errno;
+      grub_error_stack_items[grub_error_stack_pos].no = grub_errno;
       grub_memcpy (grub_error_stack_items[grub_error_stack_pos].errmsg,
                    grub_errmsg,
                    sizeof (grub_errmsg));
@@ -108,7 +109,7 @@ grub_error_pop (void)
       /* Pop error message from error stack to current active error.  */
       grub_error_stack_pos--;
 
-      grub_errno = grub_error_stack_items[grub_error_stack_pos].errno;
+      grub_errno = grub_error_stack_items[grub_error_stack_pos].no;
       grub_memcpy (grub_errmsg,
                    grub_error_stack_items[grub_error_stack_pos].errmsg,
                    sizeof (grub_errmsg));

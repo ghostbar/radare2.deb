@@ -14,10 +14,8 @@ struct r_class_t {
 #define r_buf_init(x) r_buf_class->init
 #endif
 
-R_API struct r_buf_t *r_buf_new() {
-	RBuffer *b;
-	
-	b = R_NEW (RBuffer);
+R_API RBuffer *r_buf_new() {
+	RBuffer *b = R_NEW (RBuffer);
 	if (b) {
 		b->buf = NULL;
 		b->length = 0;
@@ -53,7 +51,9 @@ R_API int r_buf_prepend_bytes(RBuffer *b, const ut8 *buf, int length) {
 }
 
 R_API char *r_buf_to_string(RBuffer *b) {
-	char *s = malloc (b->length+1);
+	char *s;
+	if (!b) return strdup ("");
+	s = malloc (b->length+1);
 	memcpy (s, b->buf, b->length);
 	s[b->length] = 0;
 	return s;
@@ -64,6 +64,38 @@ R_API int r_buf_append_bytes(RBuffer *b, const ut8 *buf, int length) {
 		return R_FALSE;
 	memcpy (b->buf+b->length, buf, length);
 	b->length += length;
+	return R_TRUE;
+}
+
+R_API int r_buf_append_nbytes(RBuffer *b, int length) {
+	if (!(b->buf = realloc (b->buf, b->length+length)))
+		return R_FALSE;
+	memset (b->buf+b->length, 0, length);
+	b->length += length;
+	return R_TRUE;
+}
+
+R_API int r_buf_append_ut16(RBuffer *b, ut16 n) {
+	if (!(b->buf = realloc (b->buf, b->length+sizeof (n))))
+		return R_FALSE;
+	memcpy (b->buf+b->length, &n, sizeof (n));
+	b->length += sizeof (n);
+	return R_TRUE;
+}
+
+R_API int r_buf_append_ut32(RBuffer *b, ut32 n) {
+	if (!(b->buf = realloc (b->buf, b->length+sizeof (n))))
+		return R_FALSE;
+	memcpy (b->buf+b->length, &n, sizeof (n));
+	b->length += sizeof (n);
+	return R_TRUE;
+}
+
+R_API int r_buf_append_ut64(RBuffer *b, ut64 n) {
+	if (!(b->buf = realloc (b->buf, b->length+sizeof (n))))
+		return R_FALSE;
+	memcpy (b->buf+b->length, &n, sizeof (n));
+	b->length += sizeof (n);
 	return R_TRUE;
 }
 

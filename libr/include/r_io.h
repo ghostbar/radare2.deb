@@ -16,7 +16,7 @@
 
 #define R_IO_NFDS 32
 
-#define RMT_MAX 1024
+#define RMT_MAX    4096
 #define RMT_OPEN   0x01
 #define RMT_READ   0x02
 #define RMT_WRITE  0x03
@@ -33,11 +33,11 @@
 
 #define IO_MAP_N 128
 typedef struct r_io_map_t {
-        int fd;
+	int fd;
 	int flags;
-        ut64 delta;
-        ut64 from;
-        ut64 to;
+	ut64 delta;
+	ut64 from;
+	ut64 to;
 } RIOMap;
 
 typedef struct r_io_desc_t {
@@ -108,6 +108,9 @@ typedef struct r_io_t {
 	RList *maps; /*<RIOMap>*/
 	RList *desc;
 	struct list_head cache;
+	//XXX: Need by rap
+	void *user;
+	int (*core_cmd_cb)(void *user, const char *str);
 } RIO;
 
 //struct r_io_plugin_fd_t {
@@ -257,6 +260,7 @@ R_API RIOMap *r_io_map_resolve(RIO *io, int fd);
 /* io/section.c */
 R_API void r_io_section_init(RIO *io);
 R_API void r_io_section_add(RIO *io, ut64 offset, ut64 vaddr, ut64 size, ut64 vsize, int rwx, const char *name);
+R_API RIOSection *r_io_section_get_name(RIO *io, const char *name);
 R_API RIOSection *r_io_section_get_i(RIO *io, int idx);
 R_API int r_io_section_rm(RIO *io, int idx);
 R_API void r_io_section_list(RIO *io, ut64 offset, int rad);
@@ -313,7 +317,10 @@ extern struct r_io_plugin_t r_io_plugin_debug;
 extern struct r_io_plugin_t r_io_plugin_shm;
 extern struct r_io_plugin_t r_io_plugin_gdb;
 extern struct r_io_plugin_t r_io_plugin_rap;
+extern struct r_io_plugin_t r_io_plugin_http;
 extern struct r_io_plugin_t r_io_plugin_haret;
+extern struct r_io_plugin_t r_io_plugin_bfdbg;
+extern struct r_io_plugin_t r_io_plugin_w32;
 #endif
 
 #if 0

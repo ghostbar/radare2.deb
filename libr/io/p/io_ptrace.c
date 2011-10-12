@@ -22,7 +22,9 @@ typedef struct {
 
 #undef R_IO_NFDS
 #define R_IO_NFDS 2
+#ifndef __ANDROID__
 extern int errno;
+#endif
 
 static int __waitpid(int pid) {
 	int st = 0;
@@ -54,6 +56,8 @@ static int debug_os_read_at(int pid, ut32 *buf, int sz, ut64 addr) {
 
 static int __read(struct r_io_t *io, RIODesc *fd, ut8 *buf, int len) {
 	ut64 addr = io->off;
+	if (!fd || !fd->data)
+		return -1;
 	memset (buf, '\xff', len); // TODO: only memset the non-readed bytes
 	return debug_os_read_at (RIOPTRACE_PID (fd), (ut32*)buf, len, addr);
 }
@@ -77,6 +81,8 @@ static int ptrace_write_at(int pid, const ut8 *pbuf, int sz, ut64 addr) {
 }
 
 static int __write(RIO *io, RIODesc *fd, const ut8 *buf, int len) {
+	if (!fd || !fd->data)
+		return -1;
 	return ptrace_write_at (RIOPTRACE_PID (fd), buf, len, io->off);
 }
 
@@ -97,6 +103,9 @@ static RIODesc *__open(struct r_io_t *io, const char *file, int rw, int mode) {
 			ret = 0;
 		else
 		if (ret == -1) {
+#ifdef __ANDROID__
+		eprintf ("ptrace_attach: Operation not permitted\n");
+#else
 			switch (errno) {
 			case EPERM:
 				ret = pid;
@@ -107,6 +116,7 @@ static RIODesc *__open(struct r_io_t *io, const char *file, int rw, int mode) {
 				eprintf ("ERRNO: %d (EINVAL)\n", errno);
 				break;
 			}
+#endif
 		} else
 		if (__waitpid (pid))
 			ret = pid;
@@ -125,7 +135,10 @@ static ut64 __lseek(struct r_io_t *io, RIODesc *fd, ut64 offset, int whence) {
 }
 
 static int __close(RIODesc *fd) {
-	int pid = RIOPTRACE_PID (fd);
+	int pid;
+	if (!fd || !fd->data)
+		return -1;
+	pid = RIOPTRACE_PID (fd);
 	free (fd->data);
 	fd->data = NULL;
 	return ptrace (PTRACE_DETACH, pid, 0, 0);
@@ -166,8 +179,7 @@ struct r_io_plugin_t r_io_plugin_ptrace = {
 };
 #else
 struct r_io_plugin_t r_io_plugin_ptrace = {
-	.name = "ptrace",
-	.desc = "ptrace io (NOT SUPPORTED FOR THIS PLATFORM)",
+	.name = NULL
 };
 #endif
 

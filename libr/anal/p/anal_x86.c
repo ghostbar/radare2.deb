@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009 */
+/* radare - LGPL - Copyright 2009-2011 */
 /*   nibble<.ds@gmail.com> */
 
 #include <string.h>
@@ -10,14 +10,10 @@
 
 #include "x86/x86im/x86im.h"
 
-static const char *gpr8[] = {
-	"al", "cl", "dl", "bl", "ah", "ch", "dh", "bh" };
-static const char *gpr8b[] = {
-	"spl", "bpl", "sil", "dil" };
-static const char *gpr16[] = {
-	"ax", "cx", "dx", "bx", "sp", "bp", "si", "di" };
-static const char *gpr32[] = {
-	"eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi" };
+static const char *gpr8[] = { "al", "cl", "dl", "bl", "ah", "ch", "dh", "bh" };
+static const char *gpr8b[] = { "spl", "bpl", "sil", "dil" };
+static const char *gpr16[] = { "ax", "cx", "dx", "bx", "sp", "bp", "si", "di" };
+static const char *gpr32[] = { "eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi" };
 static const char *gpr64[] = {
 	"rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi",
 	"r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15" };
@@ -782,6 +778,7 @@ static int x86_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len)
 	x86im_instr_object io;
 	st64 imm, disp;
 	char mnem[256];
+	int ret;
 
 	if (data == NULL)
 		return 0;
@@ -792,9 +789,13 @@ static int x86_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len)
 	op->jump = op->fail = -1;
 	op->ref = op->value = -1;
 
-	if ((x86im_dec (&io,
-			anal->bits == 32 ? X86IM_IO_MODE_32BIT : X86IM_IO_MODE_64BIT,
-			(ut8*)data)) == X86IM_STATUS_SUCCESS) {
+	ret = -1;
+	if (anal->bits==64)
+		ret = (x86im_dec (&io, X86IM_IO_MODE_64BIT, (ut8*)data));
+	if (ret != X86IM_STATUS_SUCCESS)
+		ret = (x86im_dec (&io, X86IM_IO_MODE_32BIT, (ut8*)data));
+	
+	if (ret == X86IM_STATUS_SUCCESS) {
 		if (io.len > len)
 			return 0;
 		x86im_fmt_format_name (&io, mnem);	
@@ -880,7 +881,6 @@ static int x86_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len)
 		op->length = io.len;
 		op->nopcode = io.opcode_count;
 	}
-
 	return op->length;
 }
 
@@ -1042,7 +1042,7 @@ struct r_anal_plugin_t r_anal_plugin_x86 = {
 	.name = "x86",
 	.desc = "X86 analysis plugin (x86im backend)",
 	.arch = R_SYS_ARCH_X86,
-	.bits = 32,
+	.bits = 32|64,
 	.init = NULL,
 	.fini = NULL,
 	.op = &x86_op,

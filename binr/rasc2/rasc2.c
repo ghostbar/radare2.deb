@@ -9,8 +9,10 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <r_util.h>
 
 #if __UNIX__
+#include <sys/mman.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #endif
@@ -19,18 +21,20 @@
 #include <windows.h>
 #endif
 
-#define BLOCK 4096
-int execute = 0;
-int scidx = -1;
-int hexa_print = 0;
-unsigned long off = 0, addr = 0;
-unsigned char shellcode[BLOCK];
-unsigned char output[BLOCK];
+// TODO: remove this limit
+#define BLOCK 32768
+static const char *ofile = NULL;
+static const char *encoder = NULL;
+static int scidx = -1;
+static int hexa_print = 0;
+static ut32 off = 0, addr = 0;
+static ut8 shellcode[BLOCK];
+static ut8 output[BLOCK];
 
 /* sizes */
-int A=0, N=0;
-int C=0, E=0;
-int scsize = 0;
+static int A=0, N=0;
+static int C=0, E=0;
+static int scsize = 0;
 #define SCSIZE N+A+C+E+scsize
 
 static int show_helpline() {
@@ -55,6 +59,8 @@ static int show_help() {
 	"  -c           output in C format\n"
 	"  -e           output in escapped string\n"
 	"  -x           output in hexpairs format\n"
+	"  -O [encoder] select output encoder (fmi: -O help)\n"
+	"  -o [file]    select output file\n"
 	"  -X           execute shellcode\n"
 	"  -t           test current platform\n"
 	"  -V           show version information\n"
@@ -67,11 +73,41 @@ static int show_help() {
 	//printf("  -P          push file and remote execute\n");
 	//printf("  -u          use UDP\n");
 	return 0;
+}
 
+int encode (const char *encoder, ut8 *dst, int dstlen, ut8 *src, int srclen) {
+	int xordeclen, i;
+	if (!strcmp (encoder, "xor")) {
+		//ut8 key = 33;
+		// Find valid xor key
+		// length is key here
+		const ut8 *xordec = (const ut8*)
+			// TODO: setup ecx here
+			"\xe8\xff\xff\xff\xff" // call $$+4
+			"\xc1" // ffc1 = inc ecx
+			"\x5e" // pop esi
+			"\x30\x4c\x0e\x07" // xor [esi+ecx+7], cl
+			"\xe2\xfa"; // loop xoresi
+		xordeclen = strlen ((const char *)xordec);
+		if (srclen+xordeclen>=dstlen) {
+			eprintf ("encode: too long");
+			return 0;
+		}
+		memcpy (dst, xordec, xordeclen);
+		for (i=0;i<srclen; i++) {
+			dst[xordeclen+i] = src[i] ^ i; // XXX
+		}
+		memcpy (dst+xordeclen, src, srclen);
+		return srclen + xordeclen;
+	} else {
+		eprintf ("Encoders: xor\n");
+		exit (0);
+	}
+	return 0;
 }
 
 char *filetostr(char *file) {
-        FILE *fd = fopen(file,"r");
+        FILE *fd = fopen (file,"r");
         char *buf;
         int i, size = BLOCK;
 
@@ -80,10 +116,10 @@ char *filetostr(char *file) {
 
         buf = (char *)malloc (size);
         buf[0]='\0';
-        for (i=0;!feof(fd);i++) {
+        for (i=0; !feof (fd); i++) {
                 if (i==size) {
                         size = size + BLOCK;
-                        buf = realloc(buf, size);
+                        buf = realloc (buf, size);
                 }
                 fread (buf+i, 1, 1, fd);
         }
@@ -100,19 +136,22 @@ int otf_patch() {
 	/* on the fly patching */
 	if (scidx != -1) {
 		if (shellcodes[scidx].cmd) {
+			// XXX: This is broken
 			ptr = getenv ("CMD");
 			if (ptr) {
-				strcpy((char*) (shellcode+shellcodes[scidx].cmd), ptr);
-				shellcode[shellcodes[scidx].cmd+strlen(ptr)]='\0';
-				if (strlen(ptr)>7)
-					scsize+=strlen(ptr)-7;
+				int srclen = strlen (ptr);
+				char *dst = (char*) (shellcode+shellcodes[scidx].cmd);
+				memcpy (dst, ptr, srclen);
+				shellcode[shellcodes[scidx].cmd+srclen]='\0';
+				if (strlen (ptr)>7)
+					scsize += strlen (ptr)-7;
 			}
 		}
 		if (shellcodes[scidx].host) {
 			ptr = getenv ("HOST");
 			if (ptr) {
 				int x,y,z,w;
-				sscanf(ptr,"%d.%d.%d.%d", &x,&y,&z,&w);
+				sscanf (ptr,"%d.%d.%d.%d", &x,&y,&z,&w);
 				shellcode[shellcodes[scidx].host+3]=x;
 				shellcode[shellcodes[scidx].host+2]=y;
 				shellcode[shellcodes[scidx].host+1]=z;
@@ -123,14 +162,14 @@ int otf_patch() {
 			ptr = getenv ("PORT");
 			if (ptr) {
 				unsigned short port = atoi(ptr);
-				memcpy (shellcode+shellcodes[scidx].port,&port,2);
+				memcpy (shellcode+shellcodes[scidx].port, &port, 2);
 			}
 		}
 	}
 	/* patch return address */
 	if (addr != 0) {
 		/* TODO: swapping endian for addr (-e) */
-		unsigned char *foo = (unsigned char *)&addr;
+		ut8 *foo = (ut8 *)&addr;
 		if (off<0) off = 0;
 		if (off>SCSIZE) off = SCSIZE-4;
 		output[off+0] = foo[0];
@@ -149,8 +188,8 @@ int print_shellcode() {
 		return 1;
 	}
 
-	if (SCSIZE>=BLOCK) {
-		printf ("Dont overflow me\n");
+	if (SCSIZE+A+N+4>=BLOCK) {
+		eprintf ("TODO: add support for unlimitted buffers.\n");
 		return 1;
 	}
 
@@ -158,86 +197,104 @@ int print_shellcode() {
 	for (i=0;i<A;i++)
 		output[i] = 'A';
 	if (N%2) {
-		for(i=0;i<N;i++)
+		for (i=0; i<N; i++)
 			output[i+A] = '\x90';
 	} else {
-		for(i=0;i<N;i+=2) {
+		for (i=0; i<N; i+=2) {
 			output[i+A]   = '\x40'; // inc eax
 			output[i+A+1] = '\x48'; // dec eax
 		}
 	}
-	for(i=0,j='A';i<E;i++,j++) {
+	for (i=0,j='A'; i<E; i++,j++) {
+		int idx = i*4;
 		if (j=='\n'||j=='\r')
 			j++;
-		output[i*4+A+N] = (unsigned char)(j%256);
-		output[i*4+A+N+1] = (unsigned char)(j%256);
-		output[i*4+A+N+2] = (unsigned char)(j%256);
-		output[i*4+A+N+3] = (unsigned char)(j%256);
+		output[idx+A+N]   = (ut8)(j%256);
+		output[idx+A+N+1] = (ut8)(j%256);
+		output[idx+A+N+2] = (ut8)(j%256);
+		output[idx+A+N+3] = (ut8)(j%256);
 	}
 	/* patch addr and env */
 	otf_patch ();
 
-	memcpy (output+A+N+E, shellcode, scsize);
-	for (i=0;i<C;i++)
+	if (encoder) {
+		ut8 blob[BLOCK];
+		scsize = encode (encoder, blob, sizeof (blob), shellcode, scsize);
+		memcpy (output+A+N+E, blob, scsize);
+	} else memcpy (output+A+N+E, shellcode, scsize);
+	for (i=0; i<C; i++)
 		output[i+A+E+N+scsize] = '\xCC';
 
+	if (ofile) {
+		int fd;
+		unlink (ofile);
+		fd = open (ofile, O_RDWR | O_CREAT, 0755);
+		dup2 (fd, 1);
+	}
 	switch (hexa_print) {
 	case 0: // raw
 		write (1, output, SCSIZE);
 		break;
 	case 1: // hexpairs
-		for(i=0;i<SCSIZE;i++)
-			printf("%02x", output[i]);
+		for (i=0; i<SCSIZE; i++)
+			printf ("%02x", output[i]);
 		printf ("\n");
 		break;
 	case 2: // C
-		printf ("unsigned char shellcode[] = {  ");
+		printf ("ut8 shellcode[] = {  ");
 		j = 0;
-		for (i=0;i<SCSIZE;i++) {
+		for (i=0; i<SCSIZE; i++) {
 			if (!(i%12)) printf ("\n  ");
 			printf ("0x%02x", output[i]);
 			if (i+1!=SCSIZE+scsize)
 				printf (", ");
 		}
 		printf ("\n};\n");
-		fflush (stdout);
 		break;
 	case 3:
 		if (scsize == 0) {
 			printf("No shellcode defined\n");
 			return 1;
 		} else {
-			void (*cb)() = (void *)&shellcode; cb();
+			ut8 *ptr = malloc (4096);
+			void (*cb)() = (void *)&shellcode;
+			memcpy (ptr, shellcode, SCSIZE);
+			r_mem_protect (ptr, 4096, "rx");
+			r_mem_protect (ptr, 4096, "rwx"); // try, ignore if fail
+			cb = (void*)ptr;
+			cb ();
+			free (ptr);
 		}
 		break;
 	case 4:
-		printf("\"");
+		printf ("\"");
 		j = 0;
-		for(i=0;i<SCSIZE;i++) {
-			printf("\\x%02x", output[i]);
-		}
-		printf("\"\n");
-		fflush(stdout);
+		for (i=0;i<SCSIZE;i++)
+			printf ("\\x%02x", output[i]);
+		printf ("\"\n");
 		break;
 	}
+	fflush (stdout);
+	if (ofile)
+		close (1);
 	return 0;
 }
 
-int hex2int (unsigned char *val, unsigned char c) {
-        if ('0' <= c && c <= '9')      *val = (unsigned char)(*val) * 16 + ( c - '0');
-        else if (c >= 'A' && c <= 'F') *val = (unsigned char)(*val) * 16 + ( c - 'A' + 10);
-        else if (c >= 'a' && c <= 'f') *val = (unsigned char)(*val) * 16 + ( c - 'a' + 10);
+int hex2int (ut8 *val, ut8 c) {
+        if ('0' <= c && c <= '9')      *val = (ut8)(*val) * 16 + ( c - '0');
+        else if (c >= 'A' && c <= 'F') *val = (ut8)(*val) * 16 + ( c - 'A' + 10);
+        else if (c >= 'a' && c <= 'f') *val = (ut8)(*val) * 16 + ( c - 'a' + 10);
         else return 0;
         return 1;
 }
 
 int hexpair2bin(const char *arg) { // (0A) => 10 || -1 (on error)
-	unsigned char *ptr;
-	unsigned char c = '\0';
-	unsigned char d = '\0';
-	unsigned int  j = 0;
+	ut8 *ptr;
+	ut8 c = '\0';
+	ut8 d = '\0';
+	unsigned int j = 0;
 
-	for (ptr = (unsigned char *)arg; ;ptr = ptr + 1) {
+	for (ptr = (ut8 *)arg; ; ptr++) {
 		if (ptr[0]==' '||ptr[0]=='\t'||ptr[0]=='\n'||ptr[0]=='\r')
 			continue;
 		if (!IS_PRINTABLE(ptr[0]))
@@ -327,7 +384,7 @@ static int load_shellcode_from_file(char *str) {
 		fprintf (stderr, "TODO\n");
 		break;
 	case 1: // .s file (assembly
-		sprintf (buf, "gcc -nostdlib -o .x %s", str);
+		snprintf (buf, sizeof (buf), "gcc -nostdlib -o .x %s", str);
 		system (buf);
 		system ("rsc syms-dump .x | grep _start | cut -d : -f 2 | tee .y");
 		unlink (".x");
@@ -352,8 +409,17 @@ int main(int argc, char **argv) {
 	if (argc<2)
 		return show_helpline ();
 
-	while ((c = getopt (argc, argv, "a:VcC:ts:S:i:Ll:uhN:A:XxE:e")) != -1) {
-		switch( c ) {
+	while ((c = getopt (argc, argv, "a:VcC:ts:S:i:Ll:uhN:A:XxE:eo:O:")) != -1) {
+		switch (c) {
+		case 'o':
+			// output file
+			ofile = optarg;
+			break;
+		case 'O':
+			// output encoder
+			eprintf ("TODO: no encoders implemented yet\n");
+			encoder = optarg;
+			break;
 		case 't':
 			return test ();
 		case 'x':

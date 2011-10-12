@@ -121,7 +121,9 @@ R_API char *r_print_hexpair(RPrint *p, const char *str, int n) {
 		}
 		memcpy (d, s, 2);
 	}
-	memcpy (d, Color_RESET, strlen (Color_RESET)+1);
+	if ((p->flags & R_PRINT_FLAGS_COLOR) || p->cur_enabled)
+		memcpy (d, Color_RESET, strlen (Color_RESET)+1);
+	else *d = 0;
 	return dst;
 }
 
@@ -168,7 +170,7 @@ R_API int r_print_string(RPrint *p, ut64 seek, const ut8 *buf, int len, int wide
 	//if (p->flags & R_PRINT_FLAGS_OFFSET)
 		// r_print_addr(p, seek);
 	p->interrupt = 0;
-	for (i=0;!p->interrupt&&i<len;i++) {
+	for (i=0; !p->interrupt && i<len; i++) {
 		if (zeroend && buf[i]=='\0')
 			break;
 		r_print_cursor (p, i, 1);
@@ -176,7 +178,7 @@ R_API int r_print_string(RPrint *p, ut64 seek, const ut8 *buf, int len, int wide
 			// TODO: some ascii can be bypassed here
 			p->printf ("%%%02x", buf[i]);
 		} else {
-			if (IS_PRINTABLE (buf[i]))
+			if (buf[i]=='\n' || IS_PRINTABLE (buf[i]))
 				p->printf ("%c", buf[i]);
 			else p->printf ("\\x%02x", buf[i]);
 		}
@@ -275,9 +277,15 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 
 R_API void r_print_bytes(RPrint *p, const ut8* buf, int len, const char *fmt) {
 	int i;
-	for (i=0; i<len; i++)
-		p->printf (fmt, buf[i]);
-	p->printf ("\n");
+	if (p) {
+		for (i=0; i<len; i++)
+			p->printf (fmt, buf[i]);
+		p->printf ("\n");
+	} else {
+		for (i=0; i<len; i++)
+			printf (fmt, buf[i]);
+		printf ("\n");
+	}
 }
 
 R_API void r_print_raw(RPrint *p, const ut8* buf, int len) {
@@ -299,15 +307,21 @@ R_API void r_print_c(RPrint *p, const ut8 *str, int len) {
 	p->printf (" };\n");
 }
 
+// HACK :D
+static RPrint staticp = {
+	.printf = printf
+};
+
 /* TODO: handle screen width */
 // TODO: use stderr here?
 R_API void r_print_progressbar(RPrint *p, int pc, int _cols) {
-        int tmp, cols = (_cols==-1)?78:_cols;
+        int i, cols = (_cols==-1)? 78: _cols;
+	if (!p) p = &staticp;
         (pc<0)?pc=0:(pc>100)?pc=100:0;
         p->printf ("%4d%% [", pc);
         cols -= 15;
-        for (tmp=cols*pc/100;tmp;tmp--) p->printf ("#");
-        for (tmp=cols-(cols*pc/100);tmp;tmp--) p->printf ("-");
+        for (i=cols*pc/100;i;i--) p->printf ("#");
+        for (i=cols-(cols*pc/100);i;i--) p->printf ("-");
         p->printf ("]");
 }
 

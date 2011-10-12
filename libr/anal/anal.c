@@ -10,10 +10,11 @@ static RAnalPlugin *anal_static_plugins[] =
 	{ R_ANAL_STATIC_PLUGINS };
 
 static RAnalVarType anal_default_vartypes[] =
-	{{ "char",  "b",  1 },
+	{{ "char",  "c",  1 },
 	 { "byte",  "b",  1 },
-	 { "int",   "d",  4 },
+	 { "int",   "i",  4 },
 	 { "int32", "d",  4 },
+	 { "int64", "q",  8 },
 	 { "dword", "x",  4 },
 	 { "float", "f",  4 },
 	 { NULL,    NULL, 0 }};
@@ -32,6 +33,7 @@ R_API RAnal *r_anal_new() {
 	anal->reg = r_reg_new ();
 	anal->lineswidth = 0;
 	anal->fcns = r_anal_fcn_list_new ();
+	anal->fcnstore = r_listrange_new ();
 	anal->refs = r_anal_ref_list_new ();
 	anal->vartypes = r_anal_var_type_list_new ();
 	r_anal_set_bits (anal, 32);
@@ -50,11 +52,10 @@ R_API RAnal *r_anal_new() {
 
 R_API RAnal *r_anal_free(RAnal *anal) {
 	if (anal) {
-		/* TODO: Free a->anals here */
-		if (anal->fcns)
-			r_list_free (anal->fcns);
-		if (anal->vartypes)
-			r_list_free (anal->vartypes);
+		/* TODO: Free anals here */
+		r_listrange_free (anal->fcnstore);
+		r_list_free (anal->fcns);
+		r_list_free (anal->vartypes);
 	}
 	free (anal);
 	return NULL;
@@ -95,8 +96,7 @@ R_API int r_anal_use(RAnal *anal, const char *name) {
 }
 
 R_API int r_anal_set_reg_profile(RAnal *anal) {
-	if (anal)
-	if (anal->cur && anal->cur->set_reg_profile)
+	if (anal && anal->cur && anal->cur->set_reg_profile)
 		return anal->cur->set_reg_profile (anal);
 	return R_FALSE;
 }
@@ -158,9 +158,11 @@ R_API RList *r_anal_get_fcns(RAnal *anal) {
 	return anal->fcns;
 }
 
+/* XXX: Move this function into fcn.c !!! */
 R_API RAnalFcn *r_anal_get_fcn_at(RAnal *anal, ut64 addr) {
 	RAnalFcn *fcni;
 	RListIter *iter;
+eprintf ("DEPRECATED: get-at\n");
 	r_list_foreach (anal->fcns, iter, fcni)
 		if (fcni->addr == addr)
 			return fcni;
@@ -171,12 +173,13 @@ R_API void r_anal_trace_bb(RAnal *anal, ut64 addr) {
 	RAnalBlock *bbi;
 	RAnalFcn *fcni;
 	RListIter *iter, *iter2;
-	VERBOSE_ANAL eprintf("bbtraced\n"); // XXX Debug msg
-	r_list_foreach (anal->fcns, iter, fcni)
+	VERBOSE_ANAL eprintf ("bbtraced\n"); // XXX Debug msg
+	r_list_foreach (anal->fcns, iter, fcni) {
 		r_list_foreach (fcni->bbs, iter2, bbi) {
 			if (addr>=bbi->addr && addr<(bbi->addr+bbi->size)) {
 				bbi->traced = R_TRUE;
 				break;
 			}
 		}
+	}
 }

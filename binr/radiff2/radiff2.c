@@ -3,7 +3,17 @@
 #include <r_diff.h>
 #include <r_core.h>
 
+enum {
+	MODE_DIFF,
+	MODE_DIST,
+	MODE_LOCS,
+	MODE_CODE,
+	MODE_GRAPH,
+	MODE_COLS
+};
+
 static ut32 count = 0;
+static int useva = R_TRUE;
 
 static int cb(RDiff *d, void *user, RDiffOp *op) {
 	int i, rad = (int)(size_t)user;
@@ -13,12 +23,13 @@ static int cb(RDiff *d, void *user, RDiffOp *op) {
 	}
 	if (rad) {
 		// TODO
+		eprintf ("TODO: radiff2: cb in radare output format\n");
 	} else {
 		printf ("0x%08"PFMT64x" ", op->a_off);
 		for (i = 0;i<op->a_len;i++)
 			printf ("%02x", op->a_buf[i]);
 		printf (" => ");
-		for (i = 0;i<op->b_len;i++)
+		for (i=0; i<op->b_len; i++)
 			printf ("%02x", op->b_buf[i]);
 		printf (" 0x%08"PFMT64x"\n", op->b_off);
 	}
@@ -33,7 +44,7 @@ static void diffrow(ut64 addr, const char *name, ut64 addr2, const char *name2, 
 
 static RCore* opencore(const char *f) {
 	RCore *c = r_core_new ();
-	r_config_set_i (c->config, "io.va", R_TRUE);
+	r_config_set_i (c->config, "io.va", useva);
 	r_config_set_i (c->config, "anal.split", R_TRUE);
 	if (r_core_file_open (c, f, 0, 0) == NULL) {
 		r_core_free (c);
@@ -83,27 +94,43 @@ static void diff_bins(RCore *c, RCore *c2) {
 }
 
 static int show_help(int line) {
-	printf ("Usage: radiff2 [-nsdl] [file] [file]\n");
+	printf ("Usage: radiff2 [-cCdrspv] [-g sym] [file] [file]\n");
 	if (!line) printf (
 //		"  -l        diff lines of text\n"
 		"  -c        count of changes\n"
 		"  -C        graphdiff code\n"
 		"  -d        use delta diffing\n"
-		"  -g [sym]  graph diff\n"
-		"  -r        radare commands\n"
-		"  -s        calculate text distance\n"
-		"  -v        use vaddr\n"
-		"  -V        show version information\n");
+		"  -g [sym]  graph diff of given symbol\n"
+		"  -r        output in radare commands\n"
+		"  -s        compute text distance\n"
+		"  -p        use physical addressing (io.va=0)\n"
+		"  -v        show version information\n");
 	return 1;
 }
 
-enum {
-	MODE_DIFF,
-	MODE_DIST,
-	MODE_LOCS,
-	MODE_CODE,
-	MODE_GRAPH,
-};
+static void dump_cols (ut8 *a, int as, ut8 *b, int bs) {
+	ut32 sz = R_MIN (as, bs);
+	ut32 i, j;
+	printf ("  offset     1 2 3 4 5 6 7 8             1 2 3 4 5 6 7 8\n");
+	for (i=0; i<sz; i++) {
+		char dch = (memcmp (a+i, b+i, 8))? ' ': '!';
+		printf ("0x%08x%c ", i, dch);
+		for (j=0; j<8; j++)
+			printf ("%02x", a[i+j]);
+		printf (" ");
+		for (j=0; j<8; j++)
+                	printf ("%c", IS_PRINTABLE (a[i+j])?a[i+j]:'.');
+		printf ("   ");
+		for (j=0; j<8; j++)
+			printf ("%02x", b[i+j]);
+		printf (" ");
+		for (j=0; j<8; j++)
+                	printf ("%c", IS_PRINTABLE (b[i+j])? b[i+j]:'.');
+		printf ("\n");
+	}
+	if (as != bs)
+		printf ("...\n");
+}
 
 int main(int argc, char **argv) {
 	const char *addr = NULL;
@@ -111,14 +138,14 @@ int main(int argc, char **argv) {
 	RDiff *d;
 	char *file, *file2;
 	ut8 *bufa, *bufb;
-	int o, sza, szb, rad = 0, va = 0, delta = 0;
+	int o, sza, szb, rad = 0, delta = 0;
 	int showcount = 0, mode = MODE_DIFF;
 	double sim;
 
-	while ((o = getopt (argc, argv, "Cvg:rhcdsV")) != -1) {
+	while ((o = getopt (argc, argv, "Cpg:rhcdsvx")) != -1) {
 		switch (o) {
-		case 'v':
-			va = 1;
+		case 'p':
+			useva = R_FALSE;
 			break;
 		case 'r':
 			rad = 1;
@@ -143,10 +170,13 @@ int main(int argc, char **argv) {
 		case 's':
 			mode = MODE_DIST;
 			break;
+		case 'x':
+			mode = MODE_COLS;
+			break;
 //		case 'l':
 //			mode = MODE_LOCS;
 //			break;
-		case 'V':
+		case 'v':
 			printf ("radiff2 v"R2_VERSION"\n");
 			return 0;
 		default:
@@ -184,6 +214,9 @@ int main(int argc, char **argv) {
 	}
 
 	switch (mode) {
+	case MODE_COLS:
+		dump_cols (bufa, sza, bufb, szb);
+		break;
 	case MODE_DIFF:
 		d = r_diff_new (0LL, 0LL);
 		r_diff_set_delta (d, delta);

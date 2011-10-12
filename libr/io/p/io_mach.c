@@ -142,7 +142,7 @@ static int debug_attach(int pid) {
         task_t task = pid_to_task (pid);
         if (task == -1)
                 return -1;
-        eprintf ("; pid = %d\ntask= %d\n", pid, task);
+        eprintf ("pid: %d\ntask: %d\n", pid, task);
 #if 0
 	// TODO : move this code into debug
         if (task_threads (task, &inferior_threads, &inferior_thread_count)
@@ -248,7 +248,7 @@ static int __system(struct r_io_t *io, RIODesc *fd, const char *cmd) {
 // TODO: rename ptrace to io_mach .. err io.ptrace ??
 struct r_io_plugin_t r_io_plugin_mach = {
 	.name = "mach",
-        .desc = "mach debug io",
+        .desc = "mach debugger io plugin (mach://pid)",
         .open = __open,
         .close = __close,
 	.read = __read,

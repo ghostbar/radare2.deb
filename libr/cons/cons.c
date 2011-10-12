@@ -33,8 +33,11 @@ R_API void r_cons_strcat_justify (const char *str, int j, char c) {
 	int i, o, len;
 	for (o=i=len=0; str[i]; i++, len++) {
 		if (str[i]=='\n') {
-			if (c) r_cons_memset (c, 1);
 			r_cons_memset (' ', j);
+			if (c) {
+				r_cons_memset (c, 1);
+				r_cons_memset (' ', 1);
+			}
 			r_cons_memcat (str+o, len);
 			if (str[o+len] == '\n')
 				r_cons_newline ();
@@ -121,8 +124,10 @@ R_API RCons *r_cons_new () {
 }
 
 R_API RCons *r_cons_free () {
-	if (I.buffer)
+	if (I.buffer) {
 		free (I.buffer);
+		I.buffer = NULL;
+	}
 	return NULL;
 }
 
@@ -310,16 +315,30 @@ R_API void r_cons_visual_write (char *buffer) {
 
 R_API void r_cons_printf(const char *format, ...) {
 	int len;
-	char buf[CONS_BUFSZ];
 	va_list ap;
 
 	if (strchr (format, '%')) {
 		va_start (ap, format);
+#if OLD
+	char buf[CONS_BUFSZ];
 		len = vsnprintf (buf, CONS_BUFSZ-1, format, ap);
 		if (len>0)
 			r_cons_memcat (buf, len);
+#else
+		palloc (MOAR); // use proper palloc here
+		len = vsnprintf (I.buffer+I.buffer_len, I.buffer_sz-I.buffer_len-1, format, ap);
+		if (len>0)
+			I.buffer_len += len;
+#endif
 		va_end (ap);
 	} else r_cons_strcat (format);
+}
+
+R_API int r_cons_get_column() {
+	char *line = strrchr (I.buffer, '\n');
+	if (!line) line = I.buffer;
+	I.buffer[I.buffer_len] = 0;
+	return r_str_ansi_len (line);
 }
 
 /* final entrypoint for adding stuff in the buffer screen */
@@ -365,6 +384,7 @@ R_API int r_cons_get_size(int *rows) {
 	if (str != NULL) {
 		I.columns = atoi (str);
 		I.rows = 23; // XXX. windows must get console size
+		free (str);
 	} else {
 		I.columns = 80;
 		I.rows = 23;

@@ -37,10 +37,10 @@ static int replace(int argc, const char *argv[], char *newstr) {
 		{ NULL }
 	};
 
-	for(i=0;ops[i].op != NULL;i++) {
-		if (!strcmp(ops[i].op, argv[0])) {
+	for(i=0; ops[i].op != NULL; i++) {
+		if (!strcmp (ops[i].op, argv[0])) {
 			if (newstr != NULL) {
-				for(j=k=0;ops[i].str[j]!='\0';j++,k++) {
+				for (j=k=0;ops[i].str[j]!='\0';j++,k++) {
 					if (ops[i].str[j]>='0' && ops[i].str[j]<='9') {
 						const char *w = argv[ ops[i].str[j]-'0' ];
 						if (w != NULL) {
@@ -55,19 +55,20 @@ static int replace(int argc, const char *argv[], char *newstr) {
 		}
 	}
 
+	/* TODO: this is slow */
 	if (newstr != NULL) {
 		newstr[0] = '\0';
 		for (i=0; i<argc; i++) {
-			strcat(newstr, argv[i]);
-			strcat(newstr, (i == 0 || i== argc - 1)?" ":",");
+			strcat (newstr, argv[i]);
+			strcat (newstr, (i == 0 || i== argc - 1)?" ":",");
 		}
 	}
 
 	return R_FALSE;
 }
 
-static int parse(struct r_parse_t *p, void *data, char *str) {
-	int i, len = strlen ((char*)data);
+static int parse(RParse *p, const char *data, char *str) {
+	int i, len = strlen (data);
 	char w0[32];
 	char w1[32];
 	char w2[32];
@@ -77,7 +78,7 @@ static int parse(struct r_parse_t *p, void *data, char *str) {
 	// malloc can be slow here :?
 	if ((buf = malloc (len+1)) == NULL)
 		return R_FALSE;
-	memcpy (buf, (char*)data, len+1);
+	memcpy (buf, data, len+1);
 
 	if (*buf) {
 		w0[0]='\0';
@@ -128,7 +129,7 @@ static int assemble(struct r_parse_t *p, char *data, char *str) {
 	printf ("assembling '%s' to generate real asm code\n", str);
 	ptr = strchr (str, '=');
 	if (ptr) {
-		*ptr='\0';
+		*ptr = '\0';
 		sprintf (data, "mov %s, %s", str, ptr+1);
 	} else strcpy (data, str);
 	return R_TRUE;
@@ -180,7 +181,7 @@ struct r_parse_plugin_t r_parse_plugin_x86_pseudo = {
 	.desc = "X86 pseudo syntax",
 	.init = NULL,
 	.fini = NULL,
-	.parse = &parse,
+	.parse = parse,
 	.assemble = &assemble,
 	.filter = &filter,
 	.varsub = &varsub,

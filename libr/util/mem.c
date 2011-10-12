@@ -1,7 +1,10 @@
-/* radare - LGPL - Copyright 2007-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
 
 #include <r_util.h>
 #include <stdlib.h>
+#if __UNIX__
+#include <sys/mman.h>
+#endif
 
 // TODO: find better name (r_mem_length()); is this used somewhere?
 R_API int r_mem_count(const ut8 **addr) {
@@ -20,7 +23,7 @@ R_API int r_mem_eq(ut8 *a, ut8 *b, int len) {
 }
 
 R_API void r_mem_copyloop(ut8 *dest, const ut8 *orig, int dsize, int osize) {
-	int i=0,j;
+	int i=0, j;
 	while (i<dsize)
 		for (j=0; j<osize && i<dsize;j++)
 			dest[i++] = orig[j];
@@ -154,22 +157,22 @@ R_API void r_mem_copyendian (ut8 *dest, const ut8 *orig, int size, int endian) {
         } else
 	switch (size) {
 	case 1:
-		dest[0] = orig[0];
+		*dest = *orig;
 		break;
 	case 2:
-		buffer[0] = orig[0];
+		*buffer = *orig;
 		dest[0] = orig[1];
 		dest[1] = buffer[0];
 		break;
 	case 4:
-		memcpy(buffer, orig, 4);
+		memcpy (buffer, orig, 4);
 		dest[0] = buffer[3];
 		dest[1] = buffer[2];
 		dest[2] = buffer[1];
 		dest[3] = buffer[0];
 		break;
 	case 8:
-		memcpy(buffer, orig, 8);
+		memcpy (buffer, orig, 8);
 		dest[0] = buffer[7];
 		dest[1] = buffer[6];
 		dest[2] = buffer[5];
@@ -187,7 +190,7 @@ R_API void r_mem_copyendian (ut8 *dest, const ut8 *orig, int size, int endian) {
 //R_DOC r_mem_mem: Finds the needle of nlen size into the haystack of hlen size
 //R_UNIT printf("%s\n", r_mem_mem("food is pure lame", 20, "is", 2));
 R_API const ut8 *r_mem_mem(const ut8 *haystack, int hlen, const ut8 *needle, int nlen) {
-	int i, until = hlen-nlen;
+	int i, until = hlen-nlen+1;
 	for (i=0; i<until; i++) {
 		if (!memcmp (haystack+i, needle, nlen))
 			return haystack+i;
@@ -203,5 +206,31 @@ R_API int r_mem_pack() {
 
 R_API int r_mem_unpack(const ut8 *buf) {
 	// TODO: copy this from r_buf??
+	return R_TRUE;
+}
+
+R_API int r_mem_protect(void *ptr, int size, const char *prot) {
+#if __UNIX__
+	int p = 0;
+	if (strchr (prot, 'x')) p |= PROT_EXEC;
+	if (strchr (prot, 'r')) p |= PROT_READ;
+	if (strchr (prot, 'w')) p |= PROT_WRITE;
+	if (mprotect (ptr, size, p)==-1)
+		return R_FALSE;
+#elif __WINDOWS__
+	int r, w, x;
+	DWORD p = PAGE_NOACCESS;
+	r = strchr (prot, 'r')? 1: 0; 
+	w = strchr (prot, 'w')? 1: 0;
+	x = strchr (prot, 'x')? 1: 0;;
+	if (w && x) return R_FALSE;
+	if (x) p = PAGE_EXECUTE_READ;
+	else if (w) p = PAGE_READWRITE;
+	else if (r) p = PAGE_READONLY;
+	if (!VirtualProtect (ptr, size, p, NULL))
+		return R_FALSE;
+#else
+	#warning Unknown platform
+#endif
 	return R_TRUE;
 }

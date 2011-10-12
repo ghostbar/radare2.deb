@@ -1,6 +1,8 @@
 /* radare - LGPL - Copyright 2009-2011 nibble<.ds@gmail.com> */
 
 /* TODO:
+ * Use -v to show version information.. not -V .. like the rest of tools
+ *  --- needs sync with callers and so on..
  * -L [lib]  dlopen library and show addr
  */
 
@@ -15,22 +17,24 @@
 #include <r_flags.h>
 #include <r_util.h>
 
-#define ACTION_UNK       0x0000
-#define ACTION_ENTRIES   0x0001
-#define ACTION_IMPORTS   0x0002
-#define ACTION_SYMBOLS   0x0004
-#define ACTION_SECTIONS  0x0008
-#define ACTION_INFO      0x0010
-#define ACTION_OPERATION 0x0020
-#define ACTION_HELP      0x0040
-#define ACTION_STRINGS   0x0080
-#define ACTION_FIELDS    0x0100
-#define ACTION_LIBS      0x0200
-#define ACTION_SRCLINE   0x0400
-#define ACTION_MAIN      0x0800
-#define ACTION_EXTRACT   0x1000
-#define ACTION_RELOCS    0x2000
-#define ACTION_LISTARCHS 0x4000
+#define ACTION_UNK       0x00000
+#define ACTION_ENTRIES   0x00001
+#define ACTION_IMPORTS   0x00002
+#define ACTION_SYMBOLS   0x00004
+#define ACTION_SECTIONS  0x00008
+#define ACTION_INFO      0x00010
+#define ACTION_OPERATION 0x00020
+#define ACTION_HELP      0x00040
+#define ACTION_STRINGS   0x00080
+#define ACTION_FIELDS    0x00100
+#define ACTION_LIBS      0x00200
+#define ACTION_SRCLINE   0x00400
+#define ACTION_MAIN      0x00800
+#define ACTION_EXTRACT   0x01000
+#define ACTION_RELOCS    0x02000
+#define ACTION_LISTARCHS 0x04000
+#define ACTION_CREATE    0x08000
+#define ACTION_CLASSES   0x10000
 
 static struct r_lib_t *l;
 static struct r_bin_t *bin = NULL;
@@ -40,36 +44,40 @@ static int va = R_FALSE;
 static ut64 gbaddr = 0LL;
 static char* file = NULL;
 static char* output = "out";
+static char* create = NULL;
 static ut64 at = 0LL;
 static char *name = NULL;
 
 static int rabin_show_help() {
 	printf ("rabin2 [options] [file]\n"
-		" -A               List archs\n"
-		" -a [arch_bits]   Set arch\n"
-		" -f [str]         Select sub-bin named str\n"
-		" -b [addr]        Override baddr\n"
-		" -e               Entrypoint\n"
-		" -M               Main\n"
-		" -i               Imports (symbols imported from libraries)\n"
-		" -s               Symbols (exports)\n"
-		" -S               Sections\n"
-		" -z               Strings\n"
-		" -I               Binary info\n"
-		" -H               Header fields\n"
-		" -l               Linked libraries\n"
-		" -R               Relocations\n"
-		" -O [str]         Write/Extract operations (str=help for help)\n"
-		" -o [str]         Output file/folder for write operations (out by default)\n"
-		" -r               radare output\n"
-		" -v               Use vaddr in radare output\n"
-		" -m [addr]        Show source line at addr\n"
-		" -L               List supported bin plugins\n"
-		" -@ [addr]        Show section, symbol or import at addr\n"
-		" -n [str]         Show section, symbol or import named str\n"
-		" -x               Extract bins contained in file\n"
-		" -V               Show version information\n"
-		" -h               This help\n");
+		" -A              list archs\n"
+		" -a [arch_bits]  set arch (x86_32, arm_32, x86_64)\n"
+		" -b [addr]       override baddr\n"
+		" -c [fmt:C:D]    create [elf,mach0,pe] with Code and Data hexpairs (see -a)\n"
+		" -C [fmt:C:D]    list classes\n"
+		" -p [patchfile]  patch file (see man rabin2)\n"
+		" -e              entrypoint\n"
+		" -f [str]        select sub-bin named str\n"
+		" -i              imports (symbols imported from libraries)\n"
+		" -s              symbols (exports)\n"
+		" -S              sections\n"
+		" -M              main (show address of main symbol)\n"
+		" -z              strings\n"
+		" -I              binary info\n"
+		" -H              header fields\n"
+		" -l              linked libraries\n"
+		" -R              relocations\n"
+		" -O [str]        write/extract operations (str=help for help)\n"
+		" -o [str]        output file/folder for write operations (out by default)\n"
+		" -r              radare output\n"
+		" -v              use vaddr in radare output\n"
+		" -m [addr]       show source line at addr\n"
+		" -L              list supported bin plugins\n"
+		" -@ [addr]       show section, symbol or import at addr\n"
+		" -n [str]        show section, symbol or import named str\n"
+		" -x              extract bins contained in file\n"
+		" -V              show version information\n"
+		" -h              this help\n");
 	return 1;
 }
 
@@ -103,13 +111,13 @@ static int rabin_show_entrypoints() {
 
 static int rabin_show_main() {
 	RBinAddr *binmain;
-	ut64 baddr = gbaddr?gbaddr:r_bin_get_baddr (bin);
+	ut64 baddr = gbaddr? gbaddr: r_bin_get_baddr (bin);
 
 	if ((binmain = r_bin_get_sym (bin, R_BIN_SYM_MAIN)) == NULL)
 		return R_FALSE;
 	if (rad) {
 		printf ("fs symbols\n");
-		printf ("f main @ 0x%08"PFMT64x"\n", va?baddr+binmain->rva:binmain->offset);
+		printf ("f main @ 0x%08"PFMT64x"\n", va? baddr+binmain->rva: binmain->offset);
 	} else {
 		eprintf ("[Main]\n");
 		printf ("addr=0x%08"PFMT64x" off=0x%08"PFMT64x"\n",
@@ -125,7 +133,7 @@ static int rabin_extract(int all) {
 	// XXX: Wrong for w32 (/)
 	if (all) {
 		for (i=0; i<bin->narch; i++) {
-			r_bin_set_archidx (bin, i);
+			r_bin_select_idx (bin, i);
 			if (bin->curarch.info == NULL) {
 				eprintf ("No extract info found.\n");
 			} else {
@@ -197,17 +205,21 @@ static int rabin_show_relocs() {
 	if ((relocs = r_bin_get_relocs (bin)) == NULL)
 		return R_FALSE;
 
-	if (rad) printf ("fs relocs\n");
-	else eprintf ("[Relocations]\n");
-
-	r_list_foreach (relocs, iter, reloc) {
-		if (rad) printf ("f reloc.%s @ 0x%08"PFMT64x"\n", reloc->name, va?baddr+reloc->rva:reloc->offset);
-		else printf ("sym=%02i addr=0x%08"PFMT64x" off=0x%08"PFMT64x" type=0x%08x %s\n",
+	if (rad) {
+		printf ("fs relocs\n");
+		r_list_foreach (relocs, iter, reloc) {
+			printf ("f reloc.%s @ 0x%08"PFMT64x"\n", reloc->name, va?baddr+reloc->rva:reloc->offset);
+			i++;
+		}
+	} else {
+		eprintf ("[Relocations]\n");
+		r_list_foreach (relocs, iter, reloc) {
+			printf ("sym=%02i addr=0x%08"PFMT64x" off=0x%08"PFMT64x" type=0x%08x %s\n",
 				reloc->sym, baddr+reloc->rva, reloc->offset, reloc->type, reloc->name);
-		i++;
+			i++;
+		}
+		eprintf ("\n%i relocations\n", i);
 	}
-
-	if (!rad) eprintf ("\n%i relocations\n", i);
 
 	return R_TRUE;
 }
@@ -257,7 +269,25 @@ static int rabin_show_imports() {
 	return R_TRUE;
 }
 
-static int rabin_show_symbols() {
+static void rabin_show_classes() {
+	RBinClass *c;
+	RListIter *iter;
+	RList *cs = r_bin_get_classes (bin);
+	r_list_foreach (cs, iter, c) {
+		if (rad) {
+			printf ("f class.%s\n", c->name);
+			if (c->super)
+				printf ("f super.%s.%s\n", c->name, c->super);
+		} else {
+			printf ("class = %s\n", c->name);
+			if (c->super)
+				printf ("  super = %s\n", c->super);
+		}
+		// TODO: show belonging methods and fields
+	}
+}
+
+static int rabin_show_symbols(ut64 at) {
 	RList *symbols;
 	RListIter *iter;
 	RBinSymbol *symbol;
@@ -347,7 +377,7 @@ static int rabin_show_strings() {
 	return R_TRUE;
 }
 
-static int rabin_show_sections() {
+static int rabin_show_sections(ut64 at) {
 	RList *sections;
 	RListIter *iter;
 	RBinSection *section;
@@ -367,6 +397,7 @@ static int rabin_show_sections() {
 	r_list_foreach (sections, iter, section) {
 		if (name && strcmp (section->name, name))
 			continue;
+		r_name_filter (section->name, sizeof (section->name));
 		if (at) {
 			if ((section->size != 0 &&
 				((baddr+section->rva <= at && baddr+section->rva+section->size > at) ||
@@ -375,7 +406,6 @@ static int rabin_show_sections() {
 				printf ("%s\n", section->name);
 		} else {
 			if (rad) {
-				r_name_filter (section->name, sizeof (section->name));
 				printf ("S 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" %s %d\n",
 					section->offset, baddr+section->rva,
 					section->size, section->vsize, section->name, (int)section->srwx);
@@ -609,7 +639,7 @@ static int rabin_do_operation(const char *op) {
 	return R_TRUE;
 }
 
-static int rabin_show_srcline() {
+static int rabin_show_srcline(ut64 at) {
 	char *srcline;
 	if ((srcline = r_bin_meta_get_source_line (bin, at))) {
 		printf ("%s\n", srcline);
@@ -663,13 +693,20 @@ int main(int argc, char **argv) {
 		r_lib_opendir (l, LIBDIR"/radare2/");
 	}
 
-	while ((c = getopt (argc, argv, "Af:a:B:b:Mm:n:@:VisSzIHelRwO:o:rvLhx")) != -1) {
+	while ((c = getopt (argc, argv, "Af:a:B:b:c:CMm:n:@:VisSzIHelRwO:o:p:rvLhx")) != -1) {
 		switch(c) {
 		case 'A':
 			action |= ACTION_LISTARCHS;
 			break;
 		case 'a':
 			if (optarg) arch = strdup (optarg);
+			break;
+		case 'c':
+			action = ACTION_CREATE;
+			create = strdup (optarg);
+			break;
+		case 'C':
+			action |= ACTION_CLASSES;
 			break;
 		case 'f':
 			if (optarg) arch_name = strdup (optarg);
@@ -757,10 +794,6 @@ int main(int argc, char **argv) {
 	if (action == ACTION_HELP || action == ACTION_UNK || file == NULL)
 		return rabin_show_help ();
 
-	if (!r_bin_load (bin, file, R_FALSE) && !r_bin_load (bin, file, R_TRUE)) {
-		eprintf ("r_bin: Cannot open '%s'\n", file);
-		return 1;
-	}
 	if (arch) {
 		char *ptr;
 		ptr = strchr (arch, '_');
@@ -769,13 +802,57 @@ int main(int argc, char **argv) {
 			bits = r_num_math (NULL, ptr+1);
 		}
 	}
-	if (action & ACTION_LISTARCHS && (arch || bits || arch_name)) {
-		if (!r_bin_set_arch (bin, arch, bits, arch_name)) {
-			r_bin_list_archs (bin);
-			free (arch);
-			r_bin_free (bin);
+	if (action & ACTION_CREATE) {
+		// TODO: move in a function outside
+		RBuffer *b;
+		int datalen, codelen;
+		ut8 *data = NULL, *code = NULL;
+		char *p2, *p = strchr (create, ':');
+		if (!p) {
+			eprintf ("Invalid format for -c flag. Use 'format:codehexpair:datahexpair'\n");
 			return 1;
 		}
+		*p++ = 0;
+		p2 = strchr (p, ':');
+		if (p2) {
+			// has data
+			*p2++ = 0;
+			data = malloc (strlen (p2));
+			datalen = r_hex_str2bin (p2, data);
+		}
+		code = malloc (strlen (p));
+		codelen = r_hex_str2bin (p, code);
+		if (!arch) arch = "x86";
+		if (!bits) bits = 32;
+
+		if (!r_bin_use_arch (bin, arch, bits, create)) {
+			eprintf ("Cannot set arch\n");
+			return 1;
+		}
+		b = r_bin_create (bin, code, codelen, data, datalen);
+		if (b) {
+			if (r_file_dump (file, b->buf, b->length)) {
+				eprintf ("dumped %d bytes in '%s'\n", b->length, file);
+				r_file_chmod (file, "+x", 0);
+			} else eprintf ("error dumping into a.out\n");
+			r_buf_free (b);
+		} else eprintf ("Cannot create binary for this format '%s'.\n", create);
+		r_bin_free (bin);
+		return 0;
+	}
+
+	if (!r_bin_load (bin, file, R_FALSE) && !r_bin_load (bin, file, R_TRUE)) {
+		eprintf ("r_bin: Cannot open '%s'\n", file);
+		return 1;
+	}
+
+	if (action & ACTION_LISTARCHS || ((arch || bits || arch_name) &&
+		!r_bin_select (bin, arch, bits, arch_name))) {
+		r_bin_list_archs (bin);
+		free (arch);
+		free (arch_name);
+		r_bin_free (bin);
+		return 1;
 	}
 
 	if (action&ACTION_SECTIONS)
@@ -785,7 +862,9 @@ int main(int argc, char **argv) {
 	if (action&ACTION_MAIN)
 		rabin_show_main ();
 	if (action&ACTION_IMPORTS)
-		rabin_show_imports (at);
+		rabin_show_imports ();
+	if (action&ACTION_CLASSES)
+		rabin_show_classes ();
 	if (action&ACTION_SYMBOLS)
 		rabin_show_symbols (at);
 	if (action&ACTION_STRINGS)
@@ -795,11 +874,11 @@ int main(int argc, char **argv) {
 	if (action&ACTION_FIELDS)
 		rabin_show_fields();
 	if (action&ACTION_LIBS)
-		rabin_show_libs();
+		rabin_show_libs ();
 	if (action&ACTION_RELOCS)
-		rabin_show_relocs();
+		rabin_show_relocs ();
 	if (action&ACTION_SRCLINE)
-		rabin_show_srcline(at);
+		rabin_show_srcline (at);
 	if (action&ACTION_EXTRACT)
 		rabin_extract ((arch==NULL && arch_name==NULL && bits==0));
 	if (op != NULL && action&ACTION_OPERATION)

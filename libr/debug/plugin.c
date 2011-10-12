@@ -7,6 +7,7 @@
 extern RDebugPlugin r_debug_plugin_native;
 extern RDebugPlugin r_debug_plugin_rap;
 extern RDebugPlugin r_debug_plugin_gdb;
+extern RDebugPlugin r_debug_plugin_bf;
 
 static RDebugPlugin *debug_static_plugins[] = 
 	{ R_DEBUG_STATIC_PLUGINS };
@@ -32,7 +33,7 @@ R_API int r_debug_use(RDebug *dbg, const char *str) {
 		if (h->name && !strcmp (str, h->name)) {
 			dbg->h = h;
 			if (dbg->anal && dbg->anal->cur)
-				r_debug_set_arch (dbg, dbg->anal->cur->arch, dbg->anal->cur->bits);
+				r_debug_set_arch (dbg, dbg->anal->cur->arch, dbg->bits);
 			dbg->bp->breakpoint = dbg->h->breakpoint;
 			dbg->bp->user = dbg;
 		}
@@ -66,6 +67,7 @@ R_API int r_debug_plugin_list(RDebug *dbg) {
 }
 
 R_API int r_debug_plugin_add(RDebug *dbg, RDebugPlugin *foo) {
+	if (!foo->name) return R_FALSE;
 	list_add_tail (&(foo->list), &(dbg->plugins));
 	return R_TRUE;
 }

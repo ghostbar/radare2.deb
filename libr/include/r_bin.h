@@ -37,6 +37,12 @@ enum {
 	R_BIN_NM_ANY=-1,
 };
 
+enum {
+	R_BIN_CLASS_PRIVATE,
+	R_BIN_CLASS_PUBLIC,
+	R_BIN_CLASS_FRIENDLY,
+	R_BIN_CLASS_PROTECTED,
+};
 
 // XXX: isnt this a copy of Obj ?
 typedef struct r_bin_arch_t {
@@ -53,6 +59,7 @@ typedef struct r_bin_arch_t {
 	RList* fields;
 	RList* libs;
 	RList* relocs;
+	RList* classes;
 	RBuffer *buf;
 	void *bin_obj;
 	struct r_bin_plugin_t *curplugin;
@@ -100,10 +107,12 @@ typedef struct r_bin_plugin_t {
 	RList* (*fields)(RBinArch *arch);
 	RList* (*libs)(RBinArch *arch);
 	RList* (*relocs)(RBinArch *arch);
+	RList* (*classes)(RBinArch *arch);
 	int (*demangle_type)(const char *str);
 	struct r_bin_meta_t *meta;
 	struct r_bin_write_t *write;
 	int (*get_offset)(RBinArch *arch, int type, int idx);
+	RBuffer* (*create)(RBin *bin, const ut8 *code, int codelen, const ut8 *data, int datalen);
 	struct list_head list; // TODO deprecate!!!
 } RBinPlugin;
 
@@ -120,6 +129,14 @@ typedef struct r_bin_section_t {
 	ut64 offset;
 	ut64 srwx;
 } RBinSection;
+
+typedef struct r_bin_class_t {
+	char *name;
+	char *super;
+	RList *methods;
+	RList *fields;
+	int visibility;
+} RBinClass;
 
 #define RBinSectionName r_offsetof(RBinSection, name)
 #define RBinSectionOffset r_offsetof(RBinSection, offset)
@@ -196,6 +213,7 @@ typedef struct r_bin_write_t {
 	int (*rpath_del)(RBinArch *arch);
 } RBinWrite;
 
+/* totally unused */
 typedef struct r_bin_obj_t {
 	ut64 baddr;
 	RList/*<RBinSection>*/ *sections;
@@ -206,6 +224,7 @@ typedef struct r_bin_obj_t {
 	RList/*<??>*/ *libs;
 	RList/*<??>*/ *relocs;
 	RList/*<??>*/ *strings;
+	RList/*<RBinClass>*/ *classes;
 	RBinInfo *info;
 	RBinAddr *binsym[R_BIN_SYM_LAST];
 // TODO: deprecate r_bin_is_big_endian
@@ -243,6 +262,7 @@ R_API RBinInfo* r_bin_get_info(RBin *bin);
 R_API RList* r_bin_get_libs(RBin *bin);
 R_API RList* r_bin_get_relocs(RBin *bin);
 R_API RList* r_bin_get_sections(RBin *bin);
+R_API RList* /*<RBinClass>*/r_bin_get_classes(RBin *bin);
 R_API RBinSection* r_bin_get_section_at(RBin *bin, ut64 off, int va);
 R_API RList* r_bin_get_strings(RBin *bin);
 R_API RList* r_bin_get_symbols(RBin *bin);
@@ -253,10 +273,12 @@ R_API int r_bin_has_dbg_linenums (RBin *bin);
 R_API int r_bin_has_dbg_syms (RBin *bin);
 R_API int r_bin_has_dbg_relocs (RBin *bin);
 R_API RBin* r_bin_new();
-R_API int r_bin_set_arch(RBin *bin, const char *arch, int bits, const char *name);
-R_API int r_bin_set_archidx(RBin *bin, int idx);
+R_API int r_bin_use_arch(RBin *bin, const char *arch, int bits, const char *name);
+R_API int r_bin_select(RBin *bin, const char *arch, int bits, const char *name);
+R_API int r_bin_select_idx(RBin *bin, int idx);
 R_API void r_bin_list_archs(RBin *bin);
 R_API void r_bin_set_user_ptr(RBin *bin, void *user);
+R_API RBuffer *r_bin_create (RBin *bin, const ut8 *code, int codelen, const ut8 *data, int datalen);
 /* bin_meta.c */
 R_API int r_bin_meta_get_line(RBin *bin, ut64 addr, char *file, int len, int *line);
 R_API char *r_bin_meta_get_source_line(RBin *bin, ut64 addr);
@@ -266,6 +288,7 @@ R_API int r_bin_wr_rpath_del(RBin *bin);
 R_API int r_bin_wr_output(RBin *bin, const char *filename);
 
 /* plugin pointers */
+extern RBinPlugin r_bin_plugin_any;
 extern RBinPlugin r_bin_plugin_fs;
 extern RBinPlugin r_bin_plugin_elf;
 extern RBinPlugin r_bin_plugin_elf64;

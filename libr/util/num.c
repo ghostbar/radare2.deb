@@ -55,6 +55,7 @@ R_API RNum *r_num_new(RNumCallback cb, void *ptr) {
 	return num;
 }
 
+// TODO: try to avoid the use of sscanf
 /* old get_offset */
 R_API ut64 r_num_get(RNum *num, const char *str) {
 	int i, j;
@@ -78,6 +79,8 @@ R_API ut64 r_num_get(RNum *num, const char *str) {
 	} else {
 		len = strlen (str);
 		lch = str[len>0?len-1:0];
+		if (*str=='0' && lch != 'b' && lch != 'h')
+			lch = 'o';
 		switch (lch) {
 		case 'h': // hexa
 			sscanf (str, "%"PFMT64x"", &ret);
@@ -132,8 +135,7 @@ R_API ut64 r_num_op(char op, ut64 a, ut64 b) {
 R_API static ut64 r_num_math_internal(RNum *num, char *s) {
 	ut64 ret = 0LL;
 	char *p = s;
-	int i, nop, op='\0';
-
+	int i, nop, op = 0;
 	for (i=0; s[i]; i++) {
 		switch (s[i]) {
 		case '+':
@@ -156,9 +158,13 @@ R_API static ut64 r_num_math_internal(RNum *num, char *s) {
 R_API ut64 r_num_math(RNum *num, const char *str) {
 	ut64 ret = 0LL;
 	char op = '+';
-	int len = strlen (str)+1;
-	char *p, *s, *os = malloc (len+1);
+	int len;
+	char *p, *s, *os;
 	char *group;
+	if (!str) return 0LL;
+
+	len = strlen (str)+1;
+	os = malloc (len+1);
 
 	s = os;
 	memcpy (s, str, len);
@@ -188,10 +194,10 @@ R_API ut64 r_num_math(RNum *num, const char *str) {
 			if (r_str_delta (p, '(', ')')<0) {
 				char *p2 = strchr (p, '(');
 				if (p2 != NULL) {
-					p2[0]='\0';
+					*p2 = '\0';
 					ret = r_num_op (op, ret, r_num_math_internal (num, p));
 					ret = r_num_op (op, ret, r_num_math (num, p2+1));
-					p =p2+1; 
+					p = p2+1; 
 					continue;
 				} else eprintf ("WTF!\n");
 			} else ret = r_num_op (op, ret, r_num_math_internal (num, p));
@@ -225,7 +231,7 @@ R_API int r_num_to_bits (char *out, ut64 num) {
 	if (out) {
 		for (i=0; i<size; i++)
 			out[size-1-i] = (num>>i&1)? '1': '0';
-		out[size]='\0'; //Maybe not nesesary?
+		out[size] = '\0'; //Maybe not nesesary?
 	}
 	return size;
 }

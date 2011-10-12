@@ -42,6 +42,7 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 
 	// TODO: All those options must be print flags
 	int show_color = r_config_get_i (core->config, "scr.color");
+	int acase = r_config_get_i (core->config, "asm.ucase");
 	int decode = r_config_get_i (core->config, "asm.decode");
 	int pseudo = r_config_get_i (core->config, "asm.pseudo");
 	int filter = r_config_get_i (core->config, "asm.filter");
@@ -61,11 +62,24 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 	int show_xrefs = r_config_get_i (core->config, "asm.xrefs");
 	int show_functions = r_config_get_i (core->config, "asm.functions");
 	int cursor, nb, nbytes = r_config_get_i (core->config, "asm.nbytes");
+	int show_comment_right_default = r_config_get_i (core->config, "asm.cmtright");
 	int lbytes = r_config_get_i (core->config, "asm.lbytes");
 	int linesopts = 0;
 	int lastfail = 0;
 	const char *pre = "  ";
+	int show_comment_right = 0;
+	int ocols = 0;
+	int lcols = 0;
 	
+
+	if (show_lines) ocols += 10;
+	if (show_offset) ocols += 14;
+	lcols = ocols+2;
+	if (show_bytes) ocols += 20;
+	if (show_trace) ocols += 8;
+	if (show_stackptr) ocols += 4;
+	/* disasm */ ocols += 20;
+
 	nb = (nbytes*2);
 	core->inc = 0;
 
@@ -113,25 +127,55 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 #endif
 		}
 	}
-	// TODO: make anal->reflines implicit
-	free (core->reflines); // TODO: leak
-	free (core->reflines2); // TODO: leak
-	core->reflines = r_anal_reflines_get (core->anal, addr, buf, len, -1, linesout, show_linescall);
-	core->reflines2 = r_anal_reflines_get (core->anal, addr, buf, len, -1, linesout, 1);
+	if (show_lines) {
+		// TODO: make anal->reflines implicit
+		free (core->reflines); // TODO: leak
+		free (core->reflines2); // TODO: leak
+		core->reflines = r_anal_reflines_get (core->anal, addr, buf, len, -1, linesout, show_linescall);
+		core->reflines2 = r_anal_reflines_get (core->anal, addr, buf, len, -1, linesout, 1);
+	} else core->reflines = core->reflines2 = NULL;
+
 	for (lines=i=idx=ret=0; idx < len && lines < l; idx+=ret,i++, lines++) {
 		ut64 at = addr + idx;
 		r_asm_set_pc (core->assembler, at);
-		line = r_anal_reflines_str (core->anal, core->reflines, at, linesopts);
-		refline = filter_refline (line);
-
+		if (show_lines) {
+			line = r_anal_reflines_str (core->anal, core->reflines, at, linesopts);
+			refline = filter_refline (line);
+		} else {
+			line = NULL;
+			refline = strdup ("");
+		}
 		f = show_functions? r_anal_fcn_find (core->anal, at, R_ANAL_FCN_TYPE_NULL): NULL;
 
-		if (show_comments)
-		if ((comment = r_meta_get_string (core->anal->meta, R_META_TYPE_COMMENT, at))) {
-			if (show_color) r_cons_strcat (Color_TURQOISE);
-			r_cons_strcat_justify (comment, strlen (refline) + 5, ';');
-			if (show_color) r_cons_strcat (Color_RESET);
-			free (comment);
+	/* show comment at right? */
+		show_comment_right = 0;
+		if (show_comments) {
+			comment = r_meta_get_string (core->anal->meta, R_META_TYPE_COMMENT, at);
+			if (comment) {
+				int linelen, maxclen = strlen (comment)+5;
+				linelen = maxclen;
+				if (show_comment_right_default)
+				if (ocols+maxclen < core->cons->columns) {
+					if (comment && *comment && strlen (comment)<maxclen) {
+						char *p = strchr (comment, '\n');
+						if (p) {
+							linelen = p-comment;
+							if (!strchr (p+1, '\n')) // more than one line?
+								show_comment_right = 1;
+						}
+					}
+				}
+				if (!show_comment_right) {
+					int mycols = lcols;
+					if (mycols + linelen + 10 > core->cons->columns)
+						mycols = 0;
+					if (show_color) r_cons_strcat (Color_TURQOISE);
+					r_cons_strcat_justify (comment, mycols, ';');
+					if (show_color) r_cons_strcat (Color_RESET);
+					free (comment);
+					comment = NULL;
+				}
+			}
 		}
 		// TODO : line analysis must respect data types! shouldnt be interpreted as code
 		ret = r_asm_disassemble (core->assembler, &asmop, buf+idx, len-idx);
@@ -140,11 +184,18 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 			//eprintf ("** invalid opcode at 0x%08"PFMT64x" **\n",
 			//	core->assembler->pc + ret);
 			lastfail = 1;
-			continue;
+			strcpy (asmop.buf_asm, "invalid");
+			sprintf (asmop.buf_hex, "%02x", buf[idx]);
+			//continue;
 		} else lastfail = 0;
+		if (acase)
+			r_str_case (asmop.buf_asm, 1);
 		if (core->inc == 0)
 			core->inc = ret;
-		r_anal_op (core->anal, &analop, at, buf+idx, (int)(len-idx));
+
+		if (lastfail)
+			memset (&analop, 0, sizeof (analop));
+		else r_anal_op (core->anal, &analop, at, buf+idx, (int)(len-idx));
 		{
 			RAnalValue *src;
 			switch (analop.type) {
@@ -252,13 +303,14 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 				else r_cons_printf ("%s:\n", flag->name);
 			}
 		}
-		if (show_lines && line)
+		if (show_lines && line) {
 			r_cons_strcat (line);
+		}
 		if (show_offset) {
-			if (at == dest)
+			if (show_color && (at == dest))
 				r_cons_invert (R_TRUE, R_TRUE);
 			printoffset (at, show_color);
-			if (at == dest)
+			if (show_color && (at == dest))
 				r_cons_printf (Color_RESET);
 		}
 		if (show_trace) {
@@ -288,7 +340,7 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 			free (out);
 			}
 			ret = (int)mi->size;
-i+=mi->size-1;
+		i += mi->size-1;
 			free (line);
 			free (refline);
 			line = refline = NULL;
@@ -404,9 +456,10 @@ i+=mi->size-1;
 			}
 		}
 		if (decode) {
+			char *tmpopstr = r_anal_op_to_string (core->anal, &analop);
 			// TODO: Use data from code analysis..not raw analop here
 			// if we want to get more information
-			opstr = r_anal_op_to_string (core->anal, &analop);
+			opstr = (tmpopstr)? tmpopstr: strdup (asmop.buf_asm);
 		} else if (pseudo) {
 			r_parse_parse (core->parser, asmop.buf_asm, str);
 			opstr = str;
@@ -470,6 +523,7 @@ i+=mi->size-1;
 			r_anal_cc_reset (&cc);
 		}
 
+		if (core->visual)
 		switch (analop.type) {
 		case R_ANAL_OP_TYPE_JMP:
 		case R_ANAL_OP_TYPE_CJMP:
@@ -503,9 +557,20 @@ i+=mi->size-1;
 						free (str);
 					} else r_cons_printf ("unknown type '%c'\n", mi2->type);
 				}
-			} else r_cons_printf ("; err [0x%"PFMT64x"]", analop.ref);
+			}
 		}
-		r_cons_newline ();
+		if (show_comments && show_comment_right && comment) {
+			int c = r_cons_get_column ();
+			if (c<ocols)
+				r_cons_memset (' ',ocols-c);
+			if (show_color) r_cons_strcat (Color_TURQOISE);
+			r_cons_strcat ("  ; ");
+	//		r_cons_strcat_justify (comment, strlen (refline) + 5, ';');
+			r_cons_strcat (comment);
+			if (show_color) r_cons_strcat (Color_RESET);
+			free (comment);
+			comment = NULL;
+		} else r_cons_newline ();
 		if (line) {
 			if (show_lines && analop.type == R_ANAL_OP_TYPE_RET) {
 				if (strchr (line, '>'))

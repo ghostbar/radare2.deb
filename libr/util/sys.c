@@ -4,16 +4,16 @@
 #include <dirent.h>
 #include <r_types.h>
 #include <r_util.h>
-#if __UNIX__
-#include <sys/wait.h>
-#include <sys/stat.h>
-#include <errno.h>
-#include <signal.h>
-#if __linux__
-#include <execinfo.h>
+#if __linux__ && __GNU_LIBRARY__
+# include <execinfo.h>
 #endif
+#if __UNIX__
+# include <sys/wait.h>
+# include <sys/stat.h>
+# include <errno.h>
+# include <signal.h>
 #elif __WINDOWS__
-#include <io.h>
+# include <io.h>
 #endif
 
 /* TODO: import stuff fron bininfo/p/bininfo_addr2line */
@@ -181,27 +181,30 @@ R_API int r_sys_crash_handler(const char *cmd) {
 #endif
 }
 
+R_API char *r_sys_getenv(const char *key) {
 #if __WINDOWS__
-R_API const char *r_sys_getenv(const char *key) {
 	static char envbuf[1024];
 	envbuf[0] = 0;
 	GetEnvironmentVariable (key, (LPSTR)&envbuf, sizeof (envbuf));
-	return envbuf;
-}
+	// TODO: handle return value of GEV
+	return *envbuf? strdup (envbuf): NULL;
 #else
-R_API const char *r_sys_getenv(const char *key) {
-	return getenv (key);
-}
+	char *b = getenv (key);
+	return b? strdup (b): NULL;
 #endif
+}
 
-R_API char *r_sys_getcwd(void) {
-#if __UNIX__
-	return getcwd (NULL, 0);
-#elif __WINDOWS__
-	return _getcwd (NULL, 0);
+R_API char *r_sys_getdir(void) {
+#if __WINDOWS__
+	char *cwd = _getcwd (NULL, 0);
 #else
-#warning TODO: r_sys_getcwd
+	char *cwd = getcwd (NULL, 0);
 #endif
+	return cwd? strdup (cwd): NULL;
+}
+
+R_API int r_sys_chdir(const char *s) {
+	return chdir (s)==0;
 }
 
 #if __UNIX__
@@ -285,9 +288,9 @@ R_API char *r_sys_cmd_str_full(const char *cmd, const char *input, int *len, cha
 		close (sh_out[0]);
 		close (sh_err[0]);
 		close (sh_in[1]);
-		waitpid(pid, &status, 0);
+		waitpid (pid, &status, 0);
 		if (status != 0) {
-			eprintf("%s: command returned !0\n", __func__);
+			eprintf ("%s: command '%s' returned !0\n", __func__, cmd);
 			return (NULL);
 		}
 
