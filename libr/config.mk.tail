@@ -30,12 +30,12 @@ else
 ifneq ($(DEPS),)
 #LDFLAGS+=`echo "${DEPS} " | perl -ne 's,r_([^ ]*),../$$1/libr_$$1.a,g; print'`
 #OK#LDFLAGS+=`echo $DEPS | awk '{gsub(/r_([^ ]*)/,"../&/lib&.a");gsub(/\/r_/,"\/");print}'`
-LDFLAGS+=$(shell echo $DEPS | awk '{gsub(/r_([^ ]*)/,"../&/lib&.a");gsub(/\/r_/,"\/");print}')
+LDFLAGS+=$(shell echo ${DEPS} | awk '{gsub(/r_([^ ]*)/,"../&/lib&.a");gsub(/\/r_/,"\/");print}')
 endif
 ifneq ($(BINDEPS),)
 #LDFLAGS+=`echo "${BINDEPS} " | if [ -d ../../libr ]; then perl -ne 's,r_([^ ]*),../../libr/$$1/libr_$$1.a,g; print' ; else perl -ne 's,r_([^ ]*),../../$$1/libr_$$1.a,g; print' ; fi `
 #OK#LDFLAGS+=`echo "${BINDEPS} " | if [ -d ../../libr ]; then echo $BINDEPS | awk '{gsub(/r_([^ ]*)/,"../../libr/&/lib&.a");gsub(/\/r_/,"\/");print}' ; else awk '{gsub(/r_([^ ]*)/,"../../&/lib&.a");gsub(/\/r_/,"\/");print}'; fi`
-LDFLAGS+=$(shell echo "${BINDEPS} " | if [ -d ../../libr ]; then echo $BINDEPS | awk '{gsub(/r_([^ ]*)/,"../../libr/&/lib&.a");gsub(/\/r_/,"\/");print}' ; else awk '{gsub(/r_([^ ]*)/,"../../&/lib&.a");gsub(/\/r_/,"\/");print}'; fi)
+LDFLAGS+=$(shell echo "${BINDEPS} " | if [ -d ../../libr ]; then awk '{gsub(/r_([^ ]*)/,"../../libr/&/lib&.a");gsub(/\/r_/,"\/");print}' ; else awk '{gsub(/r_([^ ]*)/,"../../&/lib&.a");gsub(/\/r_/,"\/");print}'; fi)
 endif
 endif
 
@@ -75,6 +75,13 @@ EXT_SO=dylib
 EXT_EXE=
 TH_LIBS=-lpthread
 endif
+ifeq (${OSTYPE},android)
+CFLAGS+=-D__UNIX__=1
+EXT_AR=a
+EXT_SO=so
+EXT_EXE=
+TH_LIBS=
+endif
 
 ifeq (${EXT_SO},)
 all:
@@ -84,5 +91,12 @@ endif
 LIB=lib${NAME}
 LIBAR=${LIB}.${EXT_AR}
 LIBSO=${LIB}.${EXT_SO}
-libname=-shared ${LDFLAGS_SONAME}$1.${EXT_SO}.${LIBVERSION}
-
+ifeq (${OSTYPE},android)
+libname=-shared -o $1.${EXT_SO} ${LDFLAGS_SONAME}$1.${EXT_SO}
+else
+ifeq (${OSTYPE},windows)
+libname=-shared -o $1.${EXT_SO}
+else
+libname=-shared -o $1.${EXT_SO} ${LDFLAGS_SONAME}$1.${EXT_SO}.${LIBVERSION}
+endif
+endif

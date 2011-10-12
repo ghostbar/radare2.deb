@@ -11,6 +11,7 @@
 #include <r_util.h>
 #include <r_syscall.h>
 
+// TODO: Remove this define? /cc @nibble_ds
 #define VERBOSE_ANAL if(0)
 
 /* meta */
@@ -159,6 +160,7 @@ typedef struct r_anal_t {
 	int split;
 	void *user;
 	RList *fcns;
+	RListRange *fcnstore;
 	RList *refs;
 	RList *vartypes;
 	RMeta *meta;
@@ -279,7 +281,8 @@ enum {
 	R_ANAL_FCN_TYPE_FCN = 1,
 	R_ANAL_FCN_TYPE_LOC = 2,
 	R_ANAL_FCN_TYPE_SYM = 4,
-	R_ANAL_FCN_TYPE_IMP = 8
+	R_ANAL_FCN_TYPE_IMP = 8,
+	R_ANAL_FCN_TYPE_ROOT = 16  /* matching flag */
 };
 
 #define R_ANAL_VARSUBS 32
@@ -305,6 +308,11 @@ typedef struct r_anal_fcn_t {
 	RList *refs;
 	RList *xrefs;
 } RAnalFcn;
+
+typedef struct r_anal_fcn_store_t {
+	RHashTable64 *h;
+	RList *l;
+} RAnalFcnStore;
 
 typedef struct r_anal_var_access_t {
 	ut64 addr;
@@ -375,7 +383,17 @@ typedef struct r_anal_plugin_t {
 	struct list_head list;
 } RAnalPlugin;
 
+
 #ifdef R_API
+/* --------- */ /* REFACTOR */ /* ---------- */
+R_API RListRange* r_listrange_new ();
+R_API void r_listrange_free(RListRange *s);
+R_API void r_listrange_add(RListRange *s, RAnalFcn *f);
+R_API void r_listrange_del(RListRange *s, RAnalFcn *f);
+R_API void r_listrange_resize(RListRange *s, RAnalFcn *f, int newsize);
+R_API RAnalFcn *r_listrange_find_in_range(RListRange* s, ut64 addr);
+R_API RAnalFcn *r_listrange_find_root(RListRange* s, ut64 addr);
+/* --------- */ /* REFACTOR */ /* ---------- */
 /* anal.c */
 R_API RAnal *r_anal_new();
 R_API RAnal *r_anal_free(RAnal *r);
@@ -411,6 +429,7 @@ R_API char *r_anal_op_to_string(RAnal *anal, RAnalOp *op);
 R_API RAnalFcn *r_anal_fcn_new();
 R_API RAnalFcn *r_anal_fcn_find(RAnal *anal, ut64 addr, int type);
 R_API RList *r_anal_fcn_list_new();
+R_API int r_anal_fcn_insert(RAnal *anal, RAnalFcn *fcn);
 R_API void r_anal_fcn_free(void *fcn);
 R_API int r_anal_fcn(RAnal *anal, RAnalFcn *fcn, ut64 addr,
 		ut8 *buf, ut64 len, int reftype);
@@ -520,6 +539,9 @@ R_API int r_meta_list(RMeta *m, int type);
 R_API void r_meta_item_free(void *_item);
 R_API RMetaItem *r_meta_item_new(int type);
 
+R_API int r_anal_fcn_xref_add (RAnal *anal, RAnalFcn *fcn, ut64 at, ut64 addr, int type);
+R_API int r_anal_fcn_xref_del (RAnal *anal, RAnalFcn *fcn, ut64 at, ut64 addr, int type);
+
 /* plugin pointers */
 extern RAnalPlugin r_anal_plugin_csr;
 extern RAnalPlugin r_anal_plugin_avr;
@@ -531,6 +553,8 @@ extern RAnalPlugin r_anal_plugin_java;
 extern RAnalPlugin r_anal_plugin_mips;
 extern RAnalPlugin r_anal_plugin_dalvik;
 extern RAnalPlugin r_anal_plugin_sh;
+extern RAnalPlugin r_anal_plugin_sparc;
+extern RAnalPlugin r_anal_plugin_bf;
 
 #endif
 #endif

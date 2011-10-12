@@ -15,6 +15,13 @@
 #if __BSD__
 #include <machine/reg.h>
 
+/* hakish hack to hack the openbsd/sparc64 hack */
+#undef reg
+#undef fpreg
+#undef fpstate
+#undef trapframe
+#undef rwindow
+
 #define PTRACE_PEEKTEXT PT_READ_I
 #define PTRACE_POKETEXT PT_WRITE_I
 #define PTRACE_PEEKDATA PT_READ_D
@@ -79,6 +86,14 @@ typedef struct r_debug_map_t {
 	int user;
 } RDebugMap;
 
+typedef struct r_debug_desc_t {
+	int fd;
+	char *path;
+	int perm;
+	int type;
+	ut64 off;
+} RDebugDesc;
+
 typedef struct r_debug_trace_t {
 	RList *traces;
 	int count;
@@ -136,7 +151,7 @@ typedef struct r_debug_desc_plugin_t {
 	int (*write)(int fd, ut64 addr, int len);
 	int (*seek)(int fd, ut64 addr);
 	int (*dup)(int fd, int newfd);
-	RList* (*list)();
+	RList* (*list)(int pid);
 } RDebugDescPlugin;
 
 /* TODO: pass dbg and user data pointer everywhere */
@@ -156,6 +171,7 @@ typedef struct r_debug_plugin_t {
 	RFList (*backtrace)(int count);
 	/* flow */
 	int (*step)(RDebug *dbg);
+	int (*step_over)(RDebug *dbg);
 	int (*cont)(RDebug *dbg, int pid, int tid, int sig);
 	int (*wait)(RDebug *dbg, int pid);
 	int (*kill)(RDebug *dbg, boolt thread, int sig);
@@ -163,8 +179,8 @@ typedef struct r_debug_plugin_t {
 	RList* (*frames)(RDebug *dbg);
 	RBreakpointCallback breakpoint;
 // XXX: specify, pid, tid, or RDebug ?
-	int (*reg_read)(struct r_debug_t *dbg, int type, ut8 *buf, int size);
-	int (*reg_write)(int pid, int tid, int type, const ut8 *buf, int size); //XXX struct r_regset_t regs);
+	int (*reg_read)(RDebug *dbg, int type, ut8 *buf, int size);
+	int (*reg_write)(RDebug *dbg, int type, const ut8 *buf, int size); //XXX struct r_regset_t regs);
 	char* (*reg_profile)(RDebug *dbg);
 	/* memory */
 	RList *(*map_get)(RDebug *dbg);
@@ -238,9 +254,11 @@ R_API void r_debug_map_list_free(RList *maps);
 R_API RDebugMap *r_debug_map_get(RDebug *dbg, ut64 addr);
 R_API RDebugMap *r_debug_map_new (char *name, ut64 addr, ut64 addr_end, int perm, int user);
 R_API void r_debug_map_free(RDebugMap *map);
-R_API void r_debug_map_list(RDebug *dbg, ut64 addr);
+R_API void r_debug_map_list(RDebug *dbg, ut64 addr, int rad);
 
 /* descriptors */
+R_API RDebugDesc *r_debug_desc_new (int fd, char* path, int perm, int type, int off);
+R_API void r_debug_desc_free (RDebugDesc *p);
 R_API int r_debug_desc_open(RDebug *dbg, const char *path);
 R_API int r_debug_desc_close(RDebug *dbg, int fd);
 R_API int r_debug_desc_dup(RDebug *dbg, int fd, int newfd);

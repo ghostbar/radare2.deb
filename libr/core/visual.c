@@ -4,7 +4,7 @@
 
 #define NPF 6
 static int blocksize = 0;
-static const char *printfmt[] = { "x", "pd", "f tmp;sr sp;x 64;dr=;s-;s tmp;f-tmp;pd", "p8", "pc", "ps" };
+static const char *printfmt[] = { "x", "pd", "f tmp;sr sp;pw 64;dr=;s-;s tmp;f-tmp;pd", "p8", "pc", "ps" };
 static int autoblocksize = 1;
 static int obs = 0;
 
@@ -48,7 +48,6 @@ R_API void r_core_visual_prompt (RCore *core) {
 	r_cons_any_key ();
 	if (curset) r_core_seek (core, oseek, 1);
 }
-
 
 static int visual_fkey(RCore *core, int ch) {
 	const char *cmd;
@@ -169,6 +168,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		r_cons_flush ();
 		r_cons_set_raw (0);
 		strcpy (buf, "wx ");
+		r_line_set_prompt ("hex: ");
 		if (r_cons_fgets (buf+3, 1000, 0, NULL) <0) buf[0]='\0';
 		if (*buf) {
 			if (curset) r_core_seek (core, core->offset + cursor, 0);
@@ -200,13 +200,25 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		r_io_sundo_push (core->io);
 		break;
 	case 'G':
+{
+		int ret = 0;
 		if (core->io->va) {
-			ut64 offset = r_io_section_get_vaddr (core->io, core->file->size-core->blocksize);
-			r_core_seek (core, offset, 1);
-		} else
-			r_core_seek (core, core->file->size-core->blocksize, 1);
+			ut64 offset = r_io_section_get_vaddr (core->io, 0);
+			//ut64 offset = r_io_section_get_vaddr (core->io,
+			//	core->file->size-core->blocksize);
+			if (offset == UT64_MAX) {
+				ret = r_core_seek (core, offset, 1);
+				memset (core->block, 0xff, core->blocksize);
+			} else {
+				offset += core->file->size - core->blocksize;
+				ret = r_core_seek (core, offset, 1);
+				memset (core->block, 0xff, core->blocksize);
+			}
+		} else {
+			ret = r_core_seek (core, core->file->size-core->blocksize, 1);
+		}
 		r_io_sundo_push (core->io);
-		//r_core_cmd(core, "s 0", 0);
+}
 		break;
 	case 'h':
 		if (curset) {
@@ -369,10 +381,10 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		core->printidx = (core->printidx-1)%NPF;
 		break;
 	case 'm':
-		r_core_visual_mark (core, r_cons_readchar());
+		r_core_visual_mark (core, r_cons_readchar ());
 		break;
 	case '\'':
-		r_core_visual_mark_seek (core, r_cons_readchar());
+		r_core_visual_mark_seek (core, r_cons_readchar ());
 		break;
 	case 'y':
 		if (ocursor==-1) r_core_yank (core, core->offset+cursor, 1);
@@ -436,7 +448,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		r_cons_printf ("Enter a comment: ('-' to remove, '!' to use $EDITOR)\n");
 		r_cons_flush ();
 		r_cons_set_raw (R_FALSE);
-		strcpy (buf, "CC 0 ");
+		strcpy (buf, "CC ");
 		r_line_set_prompt ("comment: ");
 		i = strlen (buf);
 		if (r_cons_fgets (buf+i, sizeof (buf)-i-1, 0, NULL) >1) {
@@ -536,7 +548,7 @@ R_API void r_core_visual_title (RCore *core, int color) {
 		break;
 	case 1: // pd
 	case 2: // pd+dbg
-		r_core_block_size (core, core->cons->rows * 15);
+		r_core_block_size (core, core->cons->rows * 5); // this is hacky
 		break;
 	}
 

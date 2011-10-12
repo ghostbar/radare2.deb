@@ -61,6 +61,7 @@ R_API char *r_anal_cc_to_string (RAnal *anal, RAnalCC* cc) {
 			snprintf (str, sizeof (str), "%s (", si->name);
 			for (i=0; i<si->args; i++) {
 				const char *reg = r_syscall_reg (anal->syscall, i+1, si->args);
+				if (!reg) break; // no registers?
 				item = r_reg_get (anal->reg, reg, R_REG_TYPE_GPR);
 				if (item) {
 					snprintf (buf, sizeof (buf), "0x%"PFMT64x, r_reg_get_value (anal->reg, item));
@@ -80,12 +81,12 @@ R_API char *r_anal_cc_to_string (RAnal *anal, RAnalCC* cc) {
 			snprintf (str, sizeof (str), "%s(", fcn->name);
 		else if (cc->jump != -1LL)
 			snprintf (str, sizeof (str), "0x%08"PFMT64x"(", cc->jump);
-		else strncpy (str, "unk(", sizeof (str));
+		else strncpy (str, "unk(", sizeof (str)-1);
 		if (fcn) cc->nargs = (fcn->nargs>cc->nargs?cc->nargs:fcn->nargs);
 		for (i=0; i<cc->nargs; i++) {
 			if (cc->args[cc->nargs-i] != -1LL)
 				 snprintf (buf, sizeof (buf), "0x%"PFMT64x, cc->args[cc->nargs-i]);
-			else strncpy (buf, "unk", sizeof (buf));
+			else strncpy (buf, "unk", sizeof (buf)-1);
 			strcat (str, buf);
 			if (i<cc->nargs-1) strcat (str, ", ");
 		}

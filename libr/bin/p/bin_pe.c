@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009 nibble<.ds@gmail.com> */
+/* radare - LGPL - Copyright 2009-2011 nibble<.ds@gmail.com>, pancake<nopcode.org> */
 
 #include <r_types.h>
 #include <r_util.h>
@@ -63,7 +63,7 @@ static RList* sections(RBinArch *arch) {
 		return NULL;
 	ret->free = free;
 	if (!(sections = PE_(r_bin_pe_get_sections)(arch->bin_obj)))
-		return ret;
+		return NULL;
 	for (i = 0; !sections[i].last; i++) {
 		if (!(ptr = R_NEW (RBinSection)))
 			break;
@@ -221,6 +221,72 @@ static int check(RBinArch *arch) {
 	return ret;
 }
 
+/* inspired in http://www.phreedom.org/solar/code/tinype/tiny.97/tiny.asm */
+static RBuffer* create(RBin* bin, const ut8 *code, int codelen, const ut8 *data, int datalen) {
+	ut32 hdrsize, p_start, p_opthdr, p_sections, p_lsrlc, n;
+	ut32 baddr = 0x400000;
+	RBuffer *buf = r_buf_new ();
+
+#define B(x,y) r_buf_append_bytes(buf,(const ut8*)x,y)
+#define D(x) r_buf_append_ut32(buf,x)
+#define H(x) r_buf_append_ut16(buf,x)
+#define Z(x) r_buf_append_nbytes(buf,x)
+#define W(x,y,z) r_buf_write_at(buf,x,(const ut8*)y,z)
+#define WZ(x,y) p_tmp=buf->length;Z(x);W(p_tmp,y,strlen(y))
+
+	B ("MZ\x00\x00", 4);
+	B ("PE\x00\x00", 4);
+	H (0x14c);
+	H (1);
+	D (0); // nothing
+	p_start = 97; // HACK this is filesize
+
+	D (0);
+	D (0);
+	p_lsrlc = buf->length;
+	H (-1); // sections-opthdr
+	H (0x103);
+	// opthdr:
+	p_opthdr = buf->length;
+	H (0x10b);
+	B ("\x08\x00", 2);
+	p_sections = buf->length;
+	n = p_sections-p_opthdr;
+	W (p_lsrlc, &n, 4);
+	// sections:
+	D (R_ROUND (codelen, 4));
+	D (0);
+	D (codelen); // codesize
+	D (p_start);
+	D (codelen);
+	D (p_start);
+	D (baddr);
+	D (4); // sect align
+	D (4); // file align
+	H (4);
+	H (0);
+	H (0);
+	H (0);
+	H (4);
+	H (0);
+	D (0);
+	hdrsize = 100;
+	D (R_ROUND (hdrsize, 4)+R_ROUND (codelen, 4));
+	D (R_ROUND (hdrsize, 4));
+	D (0);
+	B ("\x02", 1);
+	//hdrsize = filesize; // 97
+	//printf ("FILESIZE = %d\n", buf->length);
+	B (code, codelen);
+
+	if (data && datalen>0) {
+		//ut32 data_section = buf->length;
+		eprintf ("Warning: DATA section not support for PE yet\n");
+		B (data, datalen);
+	}
+	return buf;
+}
+
 struct r_bin_plugin_t r_bin_plugin_pe = {
 	.name = "pe",
 	.desc = "PE bin plugin",
@@ -242,6 +308,7 @@ struct r_bin_plugin_t r_bin_plugin_pe = {
 	.relocs = NULL,
 	.meta = NULL,
 	.write = NULL,
+	.create = &create,
 };
 
 #ifndef CORELIB

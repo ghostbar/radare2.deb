@@ -102,6 +102,7 @@ static int Elf_(r_bin_elf_init_strtab)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	bin->strtab_size = bin->strtab_section->sh_size;
 	if ((bin->strtab = (char *)malloc (bin->strtab_section->sh_size)) == NULL) {
 		perror ("malloc");
+		bin->shstrtab = NULL;
 		return R_FALSE;
 	}
 	bin->shstrtab = bin->strtab;
@@ -109,6 +110,7 @@ static int Elf_(r_bin_elf_init_strtab)(struct Elf_(r_bin_elf_obj_t) *bin) {
 				bin->strtab_section->sh_size) == -1) {
 		eprintf ("Error: read (strtab)\n");
 		R_FREE (bin->strtab);
+		bin->shstrtab = NULL;
 		return R_FALSE;
 	}
 	return R_TRUE;
@@ -494,9 +496,26 @@ int Elf_(r_bin_elf_get_bits)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	}
 }
 
+static inline int needle(struct Elf_(r_bin_elf_obj_t) *bin, const char *s) {
+	if (bin->shstrtab)
+		return r_mem_mem ((const ut8*)bin->shstrtab, bin->shstrtab_size,
+				(const ut8*)s, strlen (s)) != NULL;
+	return 0;
+}
+
 // TODO: must return const char * all those strings must be const char os[LINUX] or so
 char* Elf_(r_bin_elf_get_osabi_name)(struct Elf_(r_bin_elf_obj_t) *bin) {
+	/* Hack to identify OS */
+	if (needle (bin, "openbsd")) return strdup ("openbsd");
+	if (needle (bin, "netbsd")) return strdup ("netbsd");
+	if (needle (bin, "freebsd")) return strdup ("freebsd");
+	if (needle (bin, "GNU")) return strdup ("linux");
+	return strdup ("linux");
+#if 0
+	// XXX: this is wrong. openbsd bins are identified as linux ones.
 	switch (bin->ehdr.e_ident[EI_OSABI]) {
+	case ELFOSABI_ARM_AEABI:
+	case ELFOSABI_ARM:        return strdup ("arm");
 	case ELFOSABI_NONE:       return strdup ("linux"); // sysv
 	case ELFOSABI_HPUX:       return strdup ("hpux");
 	case ELFOSABI_NETBSD:     return strdup ("netbsd");
@@ -509,9 +528,9 @@ char* Elf_(r_bin_elf_get_osabi_name)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	case ELFOSABI_MODESTO:    return strdup ("modesto");
 	case ELFOSABI_OPENBSD:    return strdup ("openbsd");
 	case ELFOSABI_STANDALONE: return strdup ("standalone");
-	case ELFOSABI_ARM:        return strdup ("arm");
 	default:                  return r_str_dup_printf ("<unknown: %x>", bin->ehdr.e_ident[EI_OSABI]);
 	}
+#endif
 }
 
 int Elf_(r_bin_elf_is_big_endian)(struct Elf_(r_bin_elf_obj_t) *bin) {

@@ -1,30 +1,50 @@
 /* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
 
+#define USE_THREADS 1
+
 #include <r_core.h>
-//#include <r_th.h>
 #include <r_io.h>
 #include <stdio.h>
 #include <getopt.h>
 
+#if USE_THREADS
+#include <r_th.h>
+static char *rabin_cmd = NULL;
+static int threaded = 0;
+#endif
 static struct r_core_t r;
 
 static int main_help(int line) {
-	printf ("Usage: radare2 [-dwnLqv] [-p prj] [-s addr] [-b bsz] [-e k=v] [file]\n");
+	if (line<2)
+		printf ("Usage: radare2 [-dDwntLqv] [-P patch] [-p prj]"
+			" [-s addr] [-b bsz] [-c cmd] [-e k=v] [file]\n");
 	if (!line) printf (
 		" -d           use 'file' as a program to debug\n"
+		" -D [backend] enable debug mode (e cfg.debug=true)\n"
 		" -w           open file in write mode\n"
 		" -n           do not run ~/.radare2rc\n"
 		" -q           quite mode (no prompt)\n"
 		" -f           block size = file size\n"
 		" -p [prj]     set project file\n"
+		" -P [file]    apply rapatch file and quit\n"
 		" -s [addr]    initial seek\n"
 		" -b [size]    initial block size\n"
 		" -i [file]    run script file\n"
 		" -v           show radare2 version\n"
 		" -l [lib]     load plugin file\n"
-		//" -t         load rabin2 info in thread\n"
+#if USE_THREADS
+		" -t           load rabin2 info in thread\n"
+#endif
 		" -L           list supported IO plugins\n"
 		" -e k=v       evaluate config var\n"
+		" -c 'cmd..'   execute radare command\n"
+		" -h           show this help\n"
+		" -H           show extended help (files and environment)\n");
+	if (line==2)
+		printf (
+		"Files:\n"
+		" RCFILE       ~/.radare2rc\n"
+		" MAGICPATH    "R_MAGIC_PATH"\n"
 		"Environment:\n"
 		" R_DEBUG      if defined, show error messages and crash signal\n"
 		" LIBR_PLUGINS path to plugins directory\n"
@@ -40,17 +60,16 @@ static int main_version() {
 
 static int list_io_plugins(RIO *io) {
 	struct list_head *pos;
-	printf ("IO plugins:\n");
 	list_for_each_prev(pos, &io->io_list) {
 		struct r_io_list_t *il = list_entry(pos, struct r_io_list_t, list);
-		printf("  %-10s %s\n", il->plugin->name, il->plugin->desc);
+		printf (" %-10s %s\n", il->plugin->name, il->plugin->desc);
 	}
 	return 0;
 }
 
 // Load the binary information from rabin2
 // TODO: use thread to load this, split contents line, per line and use global lock
-#if 0
+#if USE_THREADS
 static int rabin_delegate(RThread *th) {
 	if (rabin_cmd && r_file_exist (r.file->filename)) {
 		char *nptr, *ptr, *cmd = r_sys_cmd_str (rabin_cmd, NULL, NULL);
@@ -74,11 +93,14 @@ static int rabin_delegate(RThread *th) {
 #endif
 
 int main(int argc, char **argv) {
-/*
+#if USE_THREADS
 	RThreadLock *lock = NULL;
 	RThread *rabin_th = NULL;
-*/
+#endif
+	RListIter *iter;
+	char *cmdn;
 	RCoreFile *fh = NULL;
+	const char *patchfile = NULL;
 	//int threaded = R_FALSE;
 	int has_project = R_FALSE;
  	int ret, c, perms = R_IO_READ;
@@ -89,7 +111,9 @@ int main(int argc, char **argv) {
 	ut64 seek = 0;
 	char file[4096];
 	char *cmdfile = NULL;
+	const char *debugbackend = "native";
 	int is_gdb = R_FALSE;
+	RList *cmds = r_list_new ();
 
 	if (r_sys_getenv ("R_DEBUG"))
 		r_sys_crash_handler ("gdb --pid %d");
@@ -98,18 +122,32 @@ int main(int argc, char **argv) {
 		return main_help (1);
 	r_core_init (&r);
 
-	while ((c = getopt (argc, argv, "wfhe:ndqvs:p:b:Lui:l:"))!=-1) {
+	while ((c = getopt (argc, argv, "wfhHe:ndqvs:p:b:Lui:l:P:c:D:"
+#if USE_THREADS
+"t"
+#endif
+			))!=-1) {
 		switch (c) {
-#if 0
+#if USE_THREADS
 		case 't':
 			threaded = R_TRUE;
 			break;
 #endif
+		case 'D':
+			debug = 2;
+			debugbackend = optarg;
+			break;
 		case 'q':
 			r_config_set (r.config, "scr.prompt", "false");
 			break;
 		case 'p':
 			r_config_set (r.config, "file.project", optarg);
+			break;
+		case 'P':
+			patchfile = optarg;
+			break;
+		case 'c':
+			r_list_append (cmds, optarg);
 			break;
 		case 'i':
 			cmdfile = optarg;
@@ -123,6 +161,8 @@ int main(int argc, char **argv) {
 		case 'e':
 			r_config_eval (r.config, optarg);
 			break;
+		case 'H':
+			return main_help (2);
 		case 'h':
 			return main_help (0);
 		case 'f':
@@ -154,45 +194,56 @@ int main(int argc, char **argv) {
 		int filelen = 0;
 		r_config_set (r.config, "io.va", "false"); // implicit?
 		r_config_set (r.config, "cfg.debug", "true");
-		is_gdb = (!memcmp (argv[optind], "gdb://", 6));
-		if (is_gdb) *file = 0;
-		else memcpy (file, "dbg://", 7);
-		if (optind < argc) {
-			char *ptr = r_file_path (argv[optind]);
-			if (ptr) {
-				strcat (file, ptr);
-				free (ptr);
-				optind++;
-			}
+		if (optind>=argc) {
+			eprintf ("No program given to -d\n");
+			return 1;
 		}
-		while (optind < argc) {
-			int largv = strlen (argv[optind]);
-			if (filelen+largv+1>=sizeof (file)) {
-				eprintf ("Too long arguments\n");
-				return 1;
+		if (debug == 2) {
+			// autodetect backend with -D
+			r_config_set (r.config, "dbg.backend", debugbackend);
+		} else {
+			is_gdb = (!memcmp (argv[optind], "gdb://", 6));
+			if (is_gdb) *file = 0;
+			else memcpy (file, "dbg://", 7);
+			if (optind < argc) {
+				char *ptr = r_file_path (argv[optind]);
+				if (ptr) {
+					strcat (file, ptr);
+					free (ptr);
+					optind++;
+				}
 			}
-			memcpy (file+filelen, argv[optind], largv);
-			filelen += largv;
-			if (filelen+6>=sizeof (file)) {
-				eprintf ("Too long arguments\n");
-				return 1;
-			}
-			memcpy (file+filelen, " ", 2);
-			filelen += 2;
-			if (++optind != argc) {
+			while (optind < argc) {
+				int largv = strlen (argv[optind]);
+				if (filelen+largv+1>=sizeof (file)) {
+					eprintf ("Too long arguments\n");
+					return 1;
+				}
+				memcpy (file+filelen, argv[optind], largv);
+				filelen += largv;
+				if (filelen+6>=sizeof (file)) {
+					eprintf ("Too long arguments\n");
+					return 1;
+				}
 				memcpy (file+filelen, " ", 2);
 				filelen += 2;
+				if (++optind != argc) {
+					memcpy (file+filelen, " ", 2);
+					filelen += 2;
+				}
+			}
+
+			fh = r_core_file_open (&r, file, perms, 0LL);
+			if (fh != NULL) {
+				//const char *arch = r_config_get (r.config, "asm.arch");
+				// TODO: move into if (debug) ..
+				if (is_gdb) r_debug_use (r.dbg, "gdb");
+				else r_debug_use (r.dbg, debugbackend);
 			}
 		}
+	}
 
-		fh = r_core_file_open (&r, file, perms, 0LL);
-		if (fh != NULL) {
-			//const char *arch = r_config_get (r.config, "asm.arch");
-			// TODO: move into if (debug) ..
-			if (is_gdb) r_debug_use (r.dbg, "gdb");
-			else r_debug_use (r.dbg, "native");
-		}
-	} else {
+	if (!debug || debug==2) {
 		if (optind<argc) {
 			while (optind < argc)
 				fh = r_core_file_open (&r, argv[optind++], perms, 0);
@@ -206,29 +257,40 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	/* execute -c commands */
+	r_list_foreach (cmds, iter, cmdn) {
+		r_core_cmd0 (&r, cmdn);
+	}
+	r_list_free (cmds);
+
 	if (fh == NULL) {
-		eprintf ("Cannot open file.\n");
+		if (perms & R_IO_WRITE)
+			eprintf ("Cannot open file for writing.\n");
+		else eprintf ("Cannot open file.\n");
 		return 1;
 	}
 	if (r.file == NULL) // no given file
 		return 1;
 	//if (!has_project && run_rc) {
-#if 0
+#if USE_THREADS
 	if (run_rc) {
-		rabin_cmd = r_str_dup_printf ("rabin2 -rSIeMzisR%s %s",
-			(debug||r.io->va)?"v":"", r.file->filename);
 		if (threaded) {
+			rabin_cmd = r_str_dup_printf ("rabin2 -rSIeMzisR%s %s",
+					(debug||r.io->va)?"v":"", r.file->filename);
 			/* TODO: only load data if no project is used */
 			lock = r_th_lock_new ();
 			rabin_th = r_th_new (&rabin_delegate, lock, 0);
-		} else rabin_delegate (NULL);
+		} //else rabin_delegate (NULL);
 	} else eprintf ("Metadata loaded from 'file.project'\n");
 #endif
 
 	has_project = r_core_project_open (&r, r_config_get (r.config, "file.project"));
 	if (run_rc) {
 		char *homerc = r_str_home (".radare2rc");
-		r_core_bin_load (&r, NULL);
+#if USE_THREADS
+		if (!rabin_th)	
+#endif
+			r_core_bin_load (&r, NULL);
 		if (homerc) {
 			r_core_cmd_file (&r, homerc);
 			free (homerc);
@@ -236,11 +298,15 @@ int main(int argc, char **argv) {
 	}
 
 	if (debug) {
-		int *p = r.file->fd->data;
-		int pid = *p; // 1st element in debugger's struct must be int
+		int pid, *p = r.file->fd->data;
+		if (!p) {
+			eprintf ("Invalid debug io\n");
+			return 1;
+		}
+		pid = *p; // 1st element in debugger's struct must be int
 		r_core_cmd (&r, "e io.ffio=true", 0);
 		if (is_gdb) r_core_cmd (&r, "dh gdb", 0);
-		else r_core_cmd (&r, "dh native", 0);
+		else r_core_cmdf (&r, "dh %s", debugbackend);
 		r_core_cmdf (&r, "dpa %d", pid);
 		r_core_cmdf (&r, "dp=%d", pid);
 		r_core_cmd (&r, ".dr*", 0);
@@ -301,14 +367,18 @@ int main(int argc, char **argv) {
 	if (cmdfile)
 		r_core_cmd_file (&r, cmdfile);
 
+	if (patchfile) {
+		r_core_patch (&r, patchfile);
+	} else
 	for (;;) {
+#if USE_THREADS
 		do { 
 			if (r_core_prompt (&r, R_FALSE)<1)
 				break;
-//			if (lock) r_th_lock_enter (lock);
+			if (lock) r_th_lock_enter (lock);
 			if ((ret = r_core_prompt_exec (&r))==-1)
 				eprintf ("Invalid command\n");
-/*			if (lock) r_th_lock_leave (lock);
+			if (lock) r_th_lock_leave (lock);
 			if (rabin_th && !r_th_wait_async (rabin_th)) {
 				eprintf ("rabin thread end \n");
 				r_th_free (rabin_th);
@@ -316,8 +386,10 @@ int main(int argc, char **argv) {
 				lock = NULL;
 				rabin_th = NULL;
 			}
-*/
 		} while (ret != R_CORE_CMD_EXIT);
+#else
+		r_core_prompt_loop (&r);
+#endif
 
 		if (debug) {
 			if (r_cons_yesno ('y', "Do you want to quit? (Y/n)")) {

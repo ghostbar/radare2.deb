@@ -57,6 +57,8 @@ static int help () {
 		"  -s    hexstr -> bin     ;  rax2 -s 43 4a 50\n"
 		"  -S    bin -> hexstr     ;  rax2 -S C  J  P\n"
 		"  -V    version           ;  rax2 -V\n"
+		"  -x    hash string       ;  rax2 -x linux osx\n"
+		"  -k    keep base         ;  rax2 -k 33+3 -> 36\n"
 		"  -h    help              ;  rax2 -h\n");
 	return R_TRUE;
 }
@@ -79,6 +81,12 @@ static int rax (char *str, int last) {
 			break;
 		case 'b':
 			flags ^= 8;
+			break;
+		case 'x':
+			flags ^= 16;
+			break;
+		case 'k':
+			flags ^= 32;
 			break;
 		case 'V':
 			printf ("rax2 v"R2_VERSION"\n");
@@ -123,15 +131,20 @@ static int rax (char *str, int last) {
 				printf ("%c", buf[i]);
 		return R_TRUE;
 	}
+	if (flags & 16) {
+		int h = r_str_hash (str);
+		printf ("0x%x\n", h);
+		return R_TRUE;
+	}
 
-	if (str[0]=='0' && str[1]=='x') {
+#define KB (flags&32)
+	if (KB)
 		out_mode = 'I';
+	if (str[0]=='0' && str[1]=='x') {
+		out_mode = (KB)? '0': 'I';
 	} else if (str[0]=='b') {
 		out_mode = 'B';
 		str++;
-	} else if (str[strlen(str)-1]=='d') {
-		out_mode = 'I';
-		str[strlen(str)-1] = 'b';
 	} else if (str[0]=='F' && str[1]=='x') {
 		out_mode = 'F';
 		*str = '0';
@@ -141,9 +154,12 @@ static int rax (char *str, int last) {
 	} else if (str[0]=='O' && str[1]=='x') {
 		out_mode = 'O';
 		*str = '0';
+	} else if (str[strlen (str)-1]=='d') {
+		out_mode = 'I';
+		str[strlen (str)-1] = 'b';
 	//TODO: Move print into format_output
 	} else if (str[strlen(str)-1]=='f') {
-		unsigned char *p = (unsigned char *)&f;
+		ut8 *p = (ut8*)&f;
 		sscanf (str, "%f", &f);
 		printf ("Fx%02x%02x%02x%02x\n", p[0], p[1], p[2], p[3]);
 		return R_TRUE;

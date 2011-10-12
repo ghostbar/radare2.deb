@@ -268,12 +268,13 @@ R_API int r_fs_dir_dump (RFS* fs, const char *path, const char *name) {
 			if (item) {
 				r_fs_read (fs, item, 0, item->size);
 				r_file_dump (str, item->data, item->size);
+				free (item->data);
 				r_fs_close (fs, item);
 			}
 		} else {
 			r_fs_dir_dump (fs, npath, str);
-			free (npath);
 		}
+		free (npath);
 		free (str);
 	}
 	return R_TRUE;
@@ -310,6 +311,7 @@ static void r_fs_find_off_aux (RFS* fs, const char *name, ut64 offset, RList *li
 				r_fs_read (fs, file, 0, file->size);
 				if (file->off == offset)
 					r_list_append (list, found);
+				free (file->data);
 				r_fs_close (fs, file);
 			}
 		}
@@ -530,7 +532,7 @@ R_API int r_fs_prompt (RFS *fs, char *root) {
 			eprintf ("%s\n", path);
 		} else if (!memcmp (buf, "cd ", 3)) {
 			char opath[4096];
-			strncpy (opath, path, sizeof (opath));
+			strncpy (opath, path, sizeof (opath)-1);
 			input = buf+3;
 			while (*input == ' ')
 				input++;
@@ -562,6 +564,7 @@ R_API int r_fs_prompt (RFS *fs, char *root) {
 			if (file) {
 				r_fs_read (fs, file, 0, file->size);
 				write (1, file->data, file->size);
+				free (file->data);
 				r_fs_close (fs, file);
 			} else eprintf ("Cannot open file\n");
 		} else if (!memcmp (buf, "mount", 5)) {
@@ -582,8 +585,14 @@ R_API int r_fs_prompt (RFS *fs, char *root) {
 			if (file) {
 				r_fs_read (fs, file, 0, file->size);
 				r_file_dump (input, file->data, file->size);
+				free (file->data);
 				r_fs_close (fs, file);
-			} else printf ("Cannot open file\n");
+			} else {
+				input -= 2; //OMFG!!!! O_O
+				memcpy (input, "./", 2);
+				if (!r_fs_dir_dump (fs, str, input))
+					printf ("Cannot open file\n");
+			}
 		} else if (!memcmp (buf, "help", 4) || !strcmp (buf, "?")) {
 			eprintf (
 			"Commands:\n"

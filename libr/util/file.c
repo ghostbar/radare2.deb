@@ -23,18 +23,21 @@ R_API boolt r_file_exist(const char *str) {
 	struct stat buf;
 	if (stat (str, &buf)==-1)
 		return R_FALSE;
-	return (S_ISREG (buf.st_mode))?R_TRUE:R_FALSE;
+	return (S_ISREG (buf.st_mode))? R_TRUE: R_FALSE;
 }
 
 R_API char *r_file_abspath(const char *file) {
+	char *ret = NULL;
+	char *cwd = r_sys_getdir ();
 #if __UNIX__
-	if (file[0] != '/')
-		return r_str_dup_printf ("%s/%s", r_sys_getcwd (), file);
+	if (cwd && *file != '/')
+		ret = r_str_dup_printf ("%s/%s", cwd, file);
 #elif __WINDOWS__
-	if (!strchr (file, ':'))
-		return r_str_dup_printf ("%s/%s", r_sys_getcwd (), file);
+	if (cwd && !strchr (file, ':'))
+		ret = r_str_dup_printf ("%s/%s", cwd, file);
 #endif
-	return strdup (file);
+	free (cwd);
+	return ret? ret: strdup (file);
 }
 
 R_API char *r_file_path(const char *bin) {
@@ -47,16 +50,18 @@ R_API char *r_file_path(const char *bin) {
 		do {
 			ptr = strchr (str, ':');
 			if (ptr) {
-				ptr[0]='\0';
-				snprintf (file, 1023, "%s/%s", str, bin);
+				*ptr = '\0';
+				snprintf (file, sizeof (file), "%s/%s", str, bin);
 				if (r_file_exist (file)) {
 					free (path);
+					free (path_env);
 					return strdup (file);
 				}
-				str = ptr+1;
+				str = ptr + 1;
 			}
 		} while (ptr);
-	} else return strdup (bin);
+	}
+	free (path_env);
 	free (path);
 	return strdup (bin);
 }
@@ -168,7 +173,7 @@ R_API char *r_file_slurp_line(const char *file, int line, int context) {
 	char *ptr = NULL, *str = r_file_slurp (file, &sz);
 	// TODO: Implement context
 	if (str) {
-		for (i=0;str[i];i++)
+		for (i=0; str[i]; i++)
 			if (str[i]=='\n')
 				lines++;
 		if (line > lines) {
@@ -219,7 +224,7 @@ R_API RMmap *r_file_mmap (const char *file, boolt rw) {
 #if __WINDOWS__
 	int fd = open (file, 0);
 #else
-	int fd = open (file, rw?O_RDWR:O_RDONLY);
+	int fd = open (file, rw? O_RDWR: O_RDONLY);
 #endif
 	if (fd != -1) {
 		m = R_NEW (RMmap);
@@ -287,16 +292,17 @@ R_API void r_file_mmap_free (RMmap *m) {
 R_API char *r_file_temp (const char *prefix) {
 	int namesz;
 	char *name;
-	const char *path = r_file_tmpdir ();
+	char *path = r_file_tmpdir ();
 	namesz = strlen (prefix) + strlen (path) + 32;
 	name = malloc (namesz);
 	snprintf (name, namesz, "%s/%s.%"PFMT64x, path, prefix, r_sys_now ());
+	free (path);
 	return name;
 }
 
 R_API int r_file_mkstemp (const char *prefix, char **oname) {
 	int h;
-	const char *path = r_file_tmpdir ();
+	char *path = r_file_tmpdir ();
 	char *name = malloc (1024);
 #if __WINDOWS__
 	if (GetTempFileName (path, prefix, 0, name))
@@ -310,17 +316,18 @@ R_API int r_file_mkstemp (const char *prefix, char **oname) {
 #endif
 	if (oname && h!=-1) *oname = name;
 	else free (name);
+	free (path);
 	return h;
 }
 
-R_API const char *r_file_tmpdir() {
-	const char *path;
+R_API char *r_file_tmpdir() {
 #if __WINDOWS__
-	path = r_sys_getenv ("TEMP");
-	if (!path) path = "C:\\WINDOWS\\Temp\\";
+	char *path = r_sys_getenv ("TEMP");
+	if (!path) path = strdup ("C:\\WINDOWS\\Temp\\");
 #else
-	path = r_sys_getenv ("TMPDIR");
-	if (!path) path = "/tmp";
+	char *path = r_sys_getenv ("TMPDIR");
+	if (!path) path = strdup ("/tmp");
 #endif
 	return path;
 }
+

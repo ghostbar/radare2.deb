@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2010 nibble<.ds@gmail.com> */
+/* radare - LGPL - Copyright 2009-2011 nibble<.ds@gmail.com> */
 
 #include <stdio.h>
 #include <string.h>
@@ -16,14 +16,20 @@ static int coutput = R_FALSE;
 static void r_asm_list(RAsm *a) {
 	RAsmPlugin *h;
 	RListIter *iter;
-	r_list_foreach (a->plugins, iter, h)
-		printf ("asm %-10s\t %s\n", h->name, h->desc);
+	r_list_foreach (a->plugins, iter, h) {
+		const char *feat="---";
+		if (h->assemble && h->disassemble)  feat = "ad";
+		if (h->assemble && !h->disassemble) feat = "a_";
+		if (!h->assemble && h->disassemble) feat = "_d";
+		printf ("%s  %-8s  %s\n", feat, h->name, h->desc);
+	}
 }
 
 static int rasm_show_help() {
 	printf ("rasm2 [-e] [-o offset] [-a arch] [-s syntax] -d \"opcode\"|\"hexpairs\"|- [-f file ..]\n"
 		" -d           Disassemble from hexpair bytes\n"
 		" -f           Read data from file\n"
+		" -F [in:out]  Specify input and/or output filters (att2intel, x86.pseudo, ...)\n"
 		" -o [offset]  Offset where this opcode is suposed to be\n"
 		" -a [arch]    Set architecture plugin\n"
 		" -b [bits]    Set architecture bits\n"
@@ -33,7 +39,7 @@ static int rasm_show_help() {
 		" -C           Output in C format\n"
 		" -L           List supported asm plugins\n"
 		" -e           Use big endian\n"
-		" -V           Show version information\n"
+		" -v           Show version information\n"
 		" If '-l' value is greater than output length, output is padded with nops\n"
 		" If the last argument is '-' reads from stdin\n");
 	return 0;
@@ -54,7 +60,7 @@ static int rasm_disasm(char *buf, ut64 offset, ut64 len, int ascii, int bin) {
 		data = (ut8*)buf;
 	} else {
 		for (; *ptr; ptr++)
-			if (ptr[0]!= ' ' && ptr[0]!= '\n' && ptr[0]!= '\r')
+			if (*ptr!=' ' && *ptr!='\n' && *ptr!='\r')
 				if (!(++word%2)) clen++;
 		data = alloca (clen);
 		if (r_hex_str2bin (buf, data)==-1)
@@ -123,7 +129,7 @@ static int __lib_asm_cb(struct r_lib_plugin_t *pl, void *user, void *data) {
 static int __lib_asm_dt(struct r_lib_plugin_t *pl, void *p, void *u) { return R_TRUE; }
 
 int main(int argc, char *argv[]) {
-	char *arch = NULL, *file = NULL;
+	char *arch = NULL, *file = NULL, *filters = NULL;
 	ut64 offset = 0x8048000;
 	int dis = 0, ascii = 0, bin = 0, ret = 0, bits = 32, c;
 	ut64 len = 0, idx = 0;
@@ -138,10 +144,13 @@ int main(int argc, char *argv[]) {
 		return rasm_show_help ();
 
 	r_asm_use (a, "x86"); // XXX: do not harcode default arch
-	while ((c = getopt (argc, argv, "CeVa:b:s:do:Bl:hLf:")) != -1) {
+	while ((c = getopt (argc, argv, "Ceva:b:s:do:Bl:hLf:F:")) != -1) {
 		switch (c) {
 		case 'f':
 			file = optarg;
+			break;
+		case 'F':
+			filters = optarg;
 			break;
 		case 'C':
 			coutput = R_TRUE;
@@ -175,7 +184,7 @@ int main(int argc, char *argv[]) {
 		case 'e':
 			r_asm_set_big_endian (a, R_TRUE);
 			break;
-		case 'V':
+		case 'v':
 			printf ("rasm2 v"R2_VERSION"\n");
 			return 0;
 		case 'h':
@@ -197,12 +206,25 @@ int main(int argc, char *argv[]) {
 	if (!r_asm_set_bits (a, bits))
 		eprintf ("WARNING: cannot set asm backend to %d bits\n", bits);
 
+	if (filters) {
+		char *p = strchr (filters, ':');
+		if (p) {
+			*p = 0;
+			if (*filters) r_asm_filter_input (a, filters);
+			if (p[1]) r_asm_filter_output (a, p+1);
+			*p = ':';
+		} else {
+			if (dis) r_asm_filter_output (a, filters);
+			else r_asm_filter_input (a, filters);
+		}
+	}
+
 	if (file) {
 		char *content;
 		int length;
 		if (!strcmp (file, "-")) {
 			char buf[R_ASM_BUFSIZE]; // TODO: Fix this limitation
-			ret = fread (buf, 1, R_ASM_BUFSIZE, stdin);
+			ret = fread (buf, 1, sizeof (buf)-1, stdin);
 			if (ret == R_ASM_BUFSIZE)
 				eprintf ("WARNING: Cannot slurp more from stdin\n");
 			if (ret>=0)
@@ -222,10 +244,10 @@ int main(int argc, char *argv[]) {
 		if (!strcmp (argv[optind], "-")) {
 			char buf[R_ASM_BUFSIZE];
 			for (;;) {
-				fgets (buf, R_ASM_BUFSIZE, stdin);
+				fgets (buf, sizeof (buf)-1, stdin);
 				if ((!bin || !dis) && feof (stdin))
 					break;
-				if (!bin || !dis) buf[strlen(buf)-1]='\0';
+				if (!bin || !dis) buf[strlen (buf)-1]='\0';
 				if (dis) ret = rasm_disasm (buf, offset, len, ascii, bin);
 				else ret = rasm_asm (buf, offset, len, bin);
 				idx += ret;

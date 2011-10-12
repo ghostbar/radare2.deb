@@ -2,9 +2,11 @@
 #define _INCLUDE_R_CORE_H_
 
 #include "r_types.h"
+#include "r_magic.h"
 #include "r_io.h"
 #include "r_fs.h"
 #include "r_lib.h"
+#include "r_egg.h"
 #include "r_lang.h"
 #include "r_asm.h"
 #include "r_parse.h"
@@ -77,6 +79,7 @@ typedef struct r_core_t {
 	int oobi_len;
 	ut8 *yank;
 	int yank_len;
+	int tmpseek;
 	boolt visual;
 	ut64 yank_off;
 	int interrupted; // XXX IS THIS DUPPED SOMEWHERE?
@@ -102,7 +105,10 @@ typedef struct r_core_t {
 	RSearch *search;
 	RSign *sign;
 	RFS *fs;
+	REgg *egg;
 	char *cmdqueue;
+	char *lastcmd;
+	int cmdrepeat;
 	ut64 inc;
 	int rtr_n;
 	RCoreRtrHost rtr_host[RTR_MAX_HOSTS];
@@ -124,7 +130,9 @@ R_API struct r_core_t *r_core_free(struct r_core_t *c);
 R_API int r_core_config_init(struct r_core_t *core);
 R_API int r_core_prompt(RCore *r, int sync);
 R_API int r_core_prompt_exec(RCore *r);
+R_API void r_core_prompt_loop(RCore *r);
 R_API int r_core_cmd(struct r_core_t *r, const char *cmd, int log);
+R_API void r_core_cmd_repeat(RCore *core, int next);
 R_API char *r_core_editor (RCore *core, const char *str);
 // XXX void*?? must be RCore !
 R_API int r_core_cmdf(void *user, const char *fmt, ...);
@@ -229,6 +237,11 @@ R_API int r_core_visual_trackflags (RCore *core);
 R_API void r_core_visual_prompt (RCore *core);
 R_API int r_core_search_preludes(RCore *core);
 R_API int r_core_search_prelude(RCore *core, ut64 from, ut64 to, const ut8 *buf, int blen, const ut8 *mask, int mlen);
+
+R_API int r_core_patch (RCore *core, const char *patch);
+
+R_API void r_core_hack_help(RCore *core);
+R_API int r_core_hack(RCore *core, const char *op);
 
 #endif
 

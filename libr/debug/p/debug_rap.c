@@ -1,6 +1,7 @@
 /* radare - LGPL - Copyright 2011 pancake<nopcode.org> */
 
 #include <r_asm.h>
+#include <r_cons.h>
 #include <r_debug.h>
 
 static int r_debug_rap_step(RDebug *dbg) {
@@ -13,7 +14,7 @@ static int r_debug_rap_reg_read(RDebug *dbg, int type, ut8 *buf, int size) {
 	return 0;
 }
 
-static int r_debug_rap_reg_write(int pid, int tid, int type, const ut8 *buf, int size) {
+static int r_debug_rap_reg_write(RDebug *dbg, int type, const ut8 *buf, int size) {
 	return R_FALSE; // XXX Error check	
 }
 
@@ -48,9 +49,14 @@ static int r_debug_rap_detach(int pid) {
 	return R_TRUE;
 }
 
-static const char *r_debug_rap_reg_profile(RDebug *dbg) {
+static char *r_debug_rap_reg_profile(RDebug *dbg) {
+	char *out, *tf = r_file_temp ("/tmp/rap.XXXXXX");
+	int fd = r_cons_pipe_open (tf, 0);
 	r_io_system (dbg->iob.io, "drp");
-	return NULL;
+	r_cons_pipe_close (fd);
+	out = r_file_slurp (tf, NULL);
+	r_file_rm (tf);
+	return out;
 }
 
 static int r_debug_rap_breakpoint (void *user, int type, ut64 addr, int hw, int rwx){

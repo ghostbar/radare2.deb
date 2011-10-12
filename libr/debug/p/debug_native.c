@@ -12,7 +12,7 @@
 #if DEBUGGER
 static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig);
 static int r_debug_native_reg_read(RDebug *dbg, int type, ut8 *buf, int size);
-static int r_debug_native_reg_write(int pid, int tid, int type, const ut8* buf, int size);
+static int r_debug_native_reg_write(RDebug *dbg, int type, const ut8* buf, int size);
 
 #define MAXBT 128
 
@@ -99,12 +99,17 @@ static int r_debug_native_reg_write(int pid, int tid, int type, const ut8* buf, 
 #define DEBUGGER 0
 #warning No debugger support for SunOS yet
 
+
 #elif __linux__
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/user.h>
 #include <limits.h>
+#ifdef __ANDROID__
+// #if __arm__
+# define R_DEBUG_REG_T struct pt_regs
+#else
+#include <sys/user.h>
 # if __i386__ || __x86_64__
 # define R_DEBUG_REG_T struct user_regs_struct
 # elif __arm__
@@ -113,8 +118,10 @@ static int r_debug_native_reg_write(int pid, int tid, int type, const ut8* buf, 
 #include <sys/ucontext.h>
 typedef unsigned long mips64_regs_t [4096];
 # define R_DEBUG_REG_T mips64_regs_t
+#endif
 # endif
 #else // OS
+
 
 #warning Unsupported debugging platform
 #undef DEBUGGER
@@ -169,7 +176,7 @@ static inline void debug_arch_x86_trap_set(RDebug *dbg, int foo) {
         if (foo) regs.__eflags |= EFLAGS_TRAP_FLAG;
         else regs.__eflags &= ~EFLAGS_TRAP_FLAG;
 #endif
-	r_debug_native_reg_write (dbg->pid, dbg->tid, R_REG_TYPE_GPR, (const ut8*)&regs, sizeof (regs));
+	r_debug_native_reg_write (dbg, R_REG_TYPE_GPR, (const ut8*)&regs, sizeof (regs));
 #endif
 }
 #endif // __APPLE__
@@ -178,9 +185,9 @@ static int r_debug_native_step(RDebug *dbg) {
 	int ret = R_FALSE;
 	int pid = dbg->pid;
 #if __WINDOWS__
-	CONTEXT regs __attribute__ ((aligned (16)));
 	/* set TRAP flag */
 /*
+	CONTEXT regs __attribute__ ((aligned (16)));
 	r_debug_native_reg_read (dbg, R_REG_TYPE_GPR, &regs, sizeof (regs));
 	regs.EFlags |= 0x100;
 	r_debug_native_reg_write (pid, dbg->tid, R_REG_TYPE_GPR, &regs, sizeof (regs));
@@ -210,11 +217,11 @@ static int r_debug_native_step(RDebug *dbg) {
 		ret = R_FALSE;
 	} else ret = R_TRUE;
 #else // linux
-	ut32 addr = 0; /* should be eip */
+	ut64 addr = 0; /* should be eip */
 	//ut32 data = 0;
 	//printf("NATIVE STEP over PID=%d\n", pid);
 	addr = r_debug_reg_get (dbg, "pc");
-	ret = ptrace (PTRACE_SINGLESTEP, pid, addr, 0); //addr, data);
+	ret = ptrace (PTRACE_SINGLESTEP, pid, (void*)(size_t)addr, 0); //addr, data);
 	if (ret == -1) {
 		perror ("native-singlestep");
 		ret = R_FALSE;
@@ -319,6 +326,7 @@ static int r_debug_native_wait(RDebug *dbg, int pid) {
 // TODO: why strdup here?
 static const char *r_debug_native_reg_profile(RDebug *dbg) {
 #if __WINDOWS__
+if (dbg->bits & R_SYS_BITS_32) {
 	return strdup (
 	"=pc	eip\n"
 	"=sp	esp\n"
@@ -355,6 +363,45 @@ static const char *r_debug_native_reg_profile(RDebug *dbg) {
 	"seg	ss	.32	200	0\n"
 	/* +512 bytes for maximum supoprted extension extended registers */
 	);
+} else {
+	// XXX. this is wrong
+	return strdup (
+	"=pc	rip\n"
+	"=sp	rsp\n"
+	"=bp	rbp\n"
+	"=a0	rax\n"
+	"=a1	rbx\n"
+	"=a2	rcx\n"
+	"=a3	rdi\n"
+	"drx	dr0	.32	4	0\n"
+	"drx	dr1	.32	8	0\n"
+	"drx	dr2	.32	12	0\n"
+	"drx	dr3	.32	16	0\n"
+	"drx	dr6	.32	20	0\n"
+	"drx	dr7	.32	24	0\n"
+	/* floating save area 4+4+4+4+4+4+4+80+4 = 112 */
+	"seg	gs	.32	132	0\n"
+	"seg	fs	.32	136	0\n"
+	"seg	es	.32	140	0\n"
+	"seg	ds	.32	144	0\n"
+	"gpr	rdi	.32	156	0\n"
+	"gpr	rsi	.32	160	0\n"
+	"gpr	rbx	.32	164	0\n"
+	"gpr	rdx	.32	168	0\n"
+	"gpr	rcx	.32	172	0\n"
+	"gpr	rax	.32	176	0\n"
+	"gpr	rbp	.32	180	0\n"
+	"gpr	rsp	.32	196	0\n"
+	"gpr	rip	.32	184	0\n"
+	"seg	cs	.32	184	0\n"
+	"seg	ds	.32	152	0\n"
+	"seg	gs	.32	140	0\n"
+	"seg	fs	.32	144	0\n"
+	"gpr	rflags	.32	192	0	c1p.a.zstido.n.rv\n" // XXX must be flg
+	"seg	ss	.32	200	0\n"
+	/* +512 bytes for maximum supoprted extension extended registers */
+	);
+}
 #elif __linux__ && __MIPS__
 	return strdup (
 	"=pc	r0\n"
@@ -530,7 +577,7 @@ static const char *r_debug_native_reg_profile(RDebug *dbg) {
 	"seg	gs	.32	72	0\n"
 // TODO: implement flags like in linux --those flags are wrong
 	);
-#elif __i386__
+#elif __i386__ && __linux__
 	return strdup (
 	"=pc	eip\n"
 	"=sp	esp\n"
@@ -592,7 +639,34 @@ static const char *r_debug_native_reg_profile(RDebug *dbg) {
 	"drx	dr6	.32	24	0\n"
 	"drx	dr7	.32	28	0\n"
 	);
-#elif __x86_64__ && __APPLE__
+#elif __APPLE__
+if (dbg->bits & R_SYS_BITS_32) {
+	return strdup (
+	"=pc	eip\n"
+	"=sp	esp\n"
+	"=bp	ebp\n"
+	"=a0	eax\n"
+	"=a1	ebx\n"
+	"=a2	ecx\n"
+	"=a3	edi\n"
+	"gpr	eax	.32	8	0\n"
+	"gpr	ebx	.32	12	0\n"
+	"gpr	ecx	.32	16	0\n"
+	"gpr	edx	.32	20	0\n"
+	"gpr	edi	.32	24	0\n"
+	"gpr	esi	.32	28	0\n"
+	"gpr	ebp	.32	32	0\n"
+	"gpr	esp	.32	36	0\n"
+	"seg	ss	.32	40	0\n"
+	"gpr	eflags	.32	44	0	c1p.a.zstido.n.rv\n"
+	"gpr	eip	.32	48	0\n"
+	"seg	cs	.32	52	0\n"
+	"seg	ds	.32	56	0\n"
+	"seg	es	.32	60	0\n"
+	"seg	fs	.32	64	0\n"
+	"seg	gs	.32	68	0\n"
+	);
+} else if (dbg->bits == R_SYS_BITS_64) {
 	return strdup (
 	"=pc	rip\n"
 	"=sp	rsp\n"
@@ -631,6 +705,10 @@ static const char *r_debug_native_reg_profile(RDebug *dbg) {
 	"drx	dr7	.32	28	0\n"
 #endif
 	);
+} else {
+	eprintf ("invalid bit size\n");
+	return NULL;
+}
 #elif __x86_64__  && (__OpenBSD__ || __NetBSD__)
 	return strdup (
 	"=pc	rip\n"
@@ -721,13 +799,29 @@ static const char *r_debug_native_reg_profile(RDebug *dbg) {
 	"gpr	r12	.64	24	0\n"
 	"gpr	rbp	.64	32	0\n"
 	"gpr	rbx	.64	40	0\n"
+	"gpr	ebx	.32	40	0\n"
+	"gpr	bx	.16	40	0\n"
+	"gpr	bh	.8	40	0\n"
+	"gpr	bl	.8	41	0\n"
 	"gpr	r11	.64	48	0\n"
 	"gpr	r10	.64	56	0\n"
 	"gpr	r9	.64	64	0\n"
 	"gpr	r8	.64	72	0\n"
 	"gpr	rax	.64	80	0\n"
+	"gpr	eax	.32	80	0\n"
+	"gpr	ax	.16	80	0\n"
+	"gpr	ah	.8	80	0\n"
+	"gpr	al	.8	81	0\n"
 	"gpr	rcx	.64	88	0\n"
+	"gpr	ecx	.32	88	0\n"
+	"gpr	cx	.16	88	0\n"
+	"gpr	ch	.8	88	0\n"
+	"gpr	cl	.8	89	0\n"
 	"gpr	rdx	.64	96	0\n"
+	"gpr	edx	.32	96	0\n"
+	"gpr	dx	.16	96	0\n"
+	"gpr	dh	.8	96	0\n"
+	"gpr	dl	.8	97	0\n"
 	"gpr	rsi	.64	104	0\n"
 	"gpr	rdi	.64	112	0\n"
 	"gpr	oeax	.64	120	0\n"
@@ -1160,6 +1254,9 @@ eprintf ("++ EFL = 0x%08x  %d\n", ctx.EFlags, r_offsetof (CONTEXT, EFlags));
 		// XXX: maybe the register map is not correct, must review
 	}
 #elif __linux__
+#ifdef __ANDROID__
+	return R_FALSE;
+#else
 	{
 		int i;
 		for (i=0; i<7; i++) { // DR0-DR7
@@ -1170,6 +1267,7 @@ eprintf ("++ EFL = 0x%08x  %d\n", ctx.EFlags, r_offsetof (CONTEXT, EFlags));
 			memcpy (buf+(i*4), &ret, 4);
 		}
 	}
+#endif
 #else
 		return R_FALSE;
 #endif
@@ -1207,36 +1305,43 @@ eprintf ("++ EFL = 0x%08x  %d\n", ctx.EFlags, r_offsetof (CONTEXT, EFlags));
 #endif
 }
 
-static int r_debug_native_reg_write(int pid, int tid, int type, const ut8* buf, int size) {
+static int r_debug_native_reg_write(RDebug *dbg, int type, const ut8* buf, int size) {
 	// XXX use switch or so
 	if (type == R_REG_TYPE_DRX) {
 #if __KFBSD__
 		return (0 == ptrace (PT_SETDBREGS, pid, (caddr_t)buf, sizeof (struct dbreg)));
 #elif __linux__
+// XXX: this android check is only for arm
+#ifndef __ANDROID__
 		{
 		int i;
 		ut32 *val = (ut32 *)buf;
 		for (i=0; i<7; i++) { // DR0-DR7
-			ptrace (PTRACE_POKEUSER, pid, r_offsetof (
+			ptrace (PTRACE_POKEUSER, dbg->pid, r_offsetof (
 				struct user, u_debugreg[i]), *(val+i));
 			//if (ret != 0)
 			//	return R_FALSE;
 		}
 		}
 #else
+return R_FALSE;
+#endif
+#else
 		eprintf ("TODO: add support for write DRX registers\n");
 		return R_FALSE;
 #endif
 	} else
 	if (type == R_REG_TYPE_GPR) {
+		int pid = dbg->pid;
 #if __WINDOWS__
+		int tid = dbg->tid;
 		CONTEXT ctx __attribute__((aligned (16)));
 		memcpy (&ctx, buf, sizeof (CONTEXT));
 		ctx.ContextFlags = CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS;
 	//	eprintf ("EFLAGS =%x\n", ctx.EFlags);
 		return SetThreadContext (tid2handler (pid, tid), &ctx)? R_TRUE: R_FALSE;
 #elif __linux__
-		int ret = ptrace (PTRACE_SETREGS, pid, 0, buf);
+		int ret = ptrace (PTRACE_SETREGS, pid, 0, (void*)buf);
 		if (sizeof (R_DEBUG_REG_T) < size)
 			size = sizeof (R_DEBUG_REG_T);
 		return (ret != 0) ? R_FALSE: R_TRUE;
@@ -1477,13 +1582,12 @@ static RList *r_debug_native_map_get(RDebug *dbg) {
 	int i, perm, unk = 0;
 	char *pos_c;
 	char path[1024], line[1024];
-	char region[100], region2[100], perms[5], null[16];
+	char region[100], region2[100], perms[5];
 	FILE *fd;
 	if (dbg->pid == -1) {
 		eprintf ("r_debug_native_map_get: No selected pid (-1)\n");
 		return NULL;
 	}
-
 #if __KFBSD__
 	list = r_debug_native_sysctl_map (dbg);
 	if (list != NULL)
@@ -1516,6 +1620,7 @@ static RList *r_debug_native_map_get(RDebug *dbg) {
 		if (pos_c) strncpy (path, pos_c, sizeof (path)-1);
 		else path[0]='\0';
 #else
+		char null[16];
 		sscanf (line, "%s %s %s %s %s %s",
 			&region[2], perms,  null, null, null, path);
 
@@ -1523,9 +1628,9 @@ static RList *r_debug_native_map_get(RDebug *dbg) {
 		if (!pos_c)
 			continue;
 
-		pos_c[-1] = (char)'0';
+		pos_c[-1] = (char)'0'; // xxx. this is wrong
 		pos_c[ 0] = (char)'x';
-		strncpy (region2, pos_c-1, sizeof (region2));
+		strncpy (region2, pos_c-1, sizeof (region2)-1);
 #endif // __KFBSD__
 		region[0] = region2[0] = '0';
 		region[1] = region2[1] = 'x';
@@ -1534,7 +1639,7 @@ static RList *r_debug_native_map_get(RDebug *dbg) {
 			snprintf (path, sizeof (path), "unk%d", unk++);
 
 		perm = 0;
-		for(i = 0; perms[i] && i < 4; i++)
+		for (i = 0; perms[i] && i < 4; i++)
 			switch (perms[i]) {
 			case 'r': perm |= R_IO_READ; break;
 			case 'w': perm |= R_IO_WRITE; break;
@@ -1685,17 +1790,18 @@ static RList *r_debug_native_frames(RDebug *dbg) {
 static int r_debug_native_kill(RDebug *dbg, boolt thread, int sig) {
 #if __WINDOWS__
 	// TODO: implement thread support signaling here
-	HANDLE hProcess; // XXX
+	eprintf ("TODO: r_debug_native_kill\n");
 #if 0
-    static uint WM_CLOSE = 0x10;
-    static bool CloseWindow(IntPtr hWnd) {
-	hWnd = FindWindowByCaption (0, "explorer");
-        SendMessage(hWnd, WM_CLOSE, NULL, NULL);
-	CloseWindow(hWnd);
-        return true;
-    }
-#endif
+	HANDLE hProcess; // XXX
+	static uint WM_CLOSE = 0x10;
+	static bool CloseWindow(IntPtr hWnd) {
+		hWnd = FindWindowByCaption (0, "explorer");
+		SendMessage(hWnd, WM_CLOSE, NULL, NULL);
+		CloseWindow(hWnd);
+		return true;
+	}
 	TerminateProcess (hProcess, 1);
+#endif
 	return R_FALSE;
 #else
 	int ret = R_FALSE;
@@ -1717,7 +1823,9 @@ static int r_debug_native_kill(RDebug *dbg, boolt thread, int sig) {
 #endif
 }
 
+struct r_debug_desc_plugin_t r_debug_desc_plugin_native;
 static int r_debug_native_init(RDebug *dbg) {
+	dbg->h->desc = r_debug_desc_plugin_native;
 #if __WINDOWS__
 	return w32_dbg_init ();
 #else
@@ -1747,6 +1855,183 @@ static int r_debug_native_bp(void *user, int add, ut64 addr, int hw, int rwx) {
 #endif
 	return R_FALSE;
 }
+
+#if __KFBSD__
+#include <sys/un.h>
+#include <arpa/inet.h>
+static void addr_to_string(struct sockaddr_storage *ss, char *buffer, int buflen) {
+	char buffer2[INET6_ADDRSTRLEN];
+	struct sockaddr_in6 *sin6;
+	struct sockaddr_in *sin;
+	struct sockaddr_un *sun;
+
+	switch (ss->ss_family) {
+	case AF_LOCAL:
+		sun = (struct sockaddr_un *)ss;
+		if (strlen (sun->sun_path) == 0)
+			strlcpy(buffer, "-", buflen);
+		else
+			strlcpy(buffer, sun->sun_path, buflen);
+		break;
+
+	case AF_INET:
+		sin = (struct sockaddr_in *)ss;
+		snprintf(buffer, buflen, "%s:%d", inet_ntoa(sin->sin_addr),
+		    ntohs(sin->sin_port));
+		break;
+
+	case AF_INET6:
+		sin6 = (struct sockaddr_in6 *)ss;
+		if (inet_ntop(AF_INET6, &sin6->sin6_addr, buffer2,
+		    sizeof(buffer2)) != NULL)
+			snprintf(buffer, buflen, "%s.%d", buffer2,
+			    ntohs(sin6->sin6_port));
+		else
+			strlcpy(buffer, "-", sizeof(buffer));
+		break;
+
+	default:
+		strlcpy(buffer, "", buflen);
+		break;
+	}
+}
+#endif
+
+static RList *r_debug_desc_native_list (int pid) {
+	RList *ret = NULL;
+// TODO: windows
+#if __KFBSD__
+	int perm, type, mib[4];
+	size_t len;
+	char *buf, *bp, *eb, *str, path[1024];
+	RDebugDesc *desc;
+	struct kinfo_file *kve;
+
+	len = 0;
+	mib[0] = CTL_KERN;
+	mib[1] = KERN_PROC;
+	mib[2] = KERN_PROC_FILEDESC;
+	mib[3] = pid;
+
+	if (sysctl(mib, 4, NULL, &len, NULL, 0) != 0)
+		return NULL;
+	len = len * 4 / 3;
+	buf = malloc(len);
+	if (buf == NULL)
+		return (NULL);
+	if (sysctl(mib, 4, buf, &len, NULL, 0) != 0) {
+		free (buf);
+		return NULL;
+	}
+	bp = buf;
+	eb = buf + len;
+	ret = r_list_new ();
+	if (ret) {
+		ret->free = (RListFree) r_debug_desc_free;
+		while (bp < eb) {
+			kve = (struct kinfo_file *)(uintptr_t)bp;
+			bp += kve->kf_structsize;
+			if (kve->kf_fd < 0) // Skip root and cwd. We need it ??
+				continue;
+			str = kve->kf_path;
+			switch (kve->kf_type) {
+				case KF_TYPE_VNODE: type = 'v'; break;
+				case KF_TYPE_SOCKET:
+					type = 's';
+					if (kve->kf_sock_domain == AF_LOCAL) {
+						struct sockaddr_un *sun =
+							(struct sockaddr_un *)&kve->kf_sa_local;
+						if (sun->sun_path[0] != 0)
+							addr_to_string (&kve->kf_sa_local, path, sizeof (path));
+						else
+							addr_to_string (&kve->kf_sa_peer, path, sizeof (path));
+					} else {
+						addr_to_string (&kve->kf_sa_local, path, sizeof (path));
+						strlcat (path, " ", sizeof (path));
+						addr_to_string (&kve->kf_sa_peer, path + strlen (path),
+								sizeof (path));
+					}
+					str = path;
+					break;
+				case KF_TYPE_PIPE: type = 'p'; break;
+				case KF_TYPE_FIFO: type = 'f'; break;
+				case KF_TYPE_KQUEUE: type = 'k'; break;
+				case KF_TYPE_CRYPTO: type = 'c'; break;
+				case KF_TYPE_MQUEUE: type = 'm'; break;
+				case KF_TYPE_SHM: type = 'h'; break;
+				case KF_TYPE_PTS: type = 't'; break;
+				case KF_TYPE_SEM: type = 'e'; break;
+				case KF_TYPE_NONE:
+				case KF_TYPE_UNKNOWN:
+				default: type = '-'; break;
+			}
+			perm = (kve->kf_flags & KF_FLAG_READ)?R_IO_READ:0;
+			perm |= (kve->kf_flags & KF_FLAG_WRITE)?R_IO_WRITE:0;
+			desc = r_debug_desc_new (kve->kf_fd, str, perm, type,
+					kve->kf_offset);
+			if (desc == NULL)
+				break;
+			r_list_append (ret, desc);
+		}
+	}
+	free (buf);
+#elif __linux__
+	RDebugDesc *desc;
+	int type, perm;
+	char path[512], file[512], buf[512];
+	struct dirent *de;
+	DIR *dd;
+	struct stat st;
+
+	snprintf (path, sizeof (path), "/proc/%i/fd/", pid);
+	dd = opendir(path);
+	if (dd==NULL) {
+		printf("Cannot open /proc\n");
+		return NULL;
+	}
+
+	ret = r_list_new ();
+	if (ret) {
+		ret->free = (RListFree) r_debug_desc_free;
+		while((de = (struct dirent *)readdir(dd))) {
+			if (de->d_name[0]=='.')
+				continue;
+			strncpy (file, path, sizeof (file)-1);
+			strncat (file, de->d_name, sizeof (file)-1);
+			memset (buf, 0, sizeof (buf));
+			readlink(file, buf, sizeof (buf));
+			type = perm = 0;
+			if (stat(file, &st) != -1) {
+				type = st.st_mode & S_IFIFO  ? 'P':
+					st.st_mode & S_IFSOCK ? 'S':
+					st.st_mode & S_IFCHR  ? 'C':'-';
+			}
+			if (lstat(path, &st) != -1) {
+				if (st.st_mode & S_IRUSR)
+					perm |= R_IO_READ;
+				if (st.st_mode & S_IWUSR)
+					perm |= R_IO_WRITE;
+			}
+			//TODO: Offset
+			desc = r_debug_desc_new (atoi (de->d_name), buf, perm, type, 0);
+			if (desc == NULL)
+				break;
+			r_list_append (ret, desc);
+		}
+		closedir(dd);
+	}
+#endif
+	return ret;
+}
+
+static int r_debug_desc_native_open (const char *path) {
+	return 0;
+}
+
+struct r_debug_desc_plugin_t r_debug_desc_plugin_native = {
+	.open = r_debug_desc_native_open,
+	.list = r_debug_desc_native_list,
+};
 
 struct r_debug_plugin_t r_debug_plugin_native = {
 	.name = "native",
@@ -1781,9 +2066,9 @@ struct r_debug_plugin_t r_debug_plugin_native = {
 	.kill = &r_debug_native_kill,
 	.frames = &r_debug_native_frames, // rename to backtrace ?
 	.reg_profile = (void *)r_debug_native_reg_profile,
-	.reg_read = &r_debug_native_reg_read,
+	.reg_read = r_debug_native_reg_read,
 	.reg_write = (void *)&r_debug_native_reg_write,
-	.map_get = (void *)&r_debug_native_map_get,
+	.map_get = r_debug_native_map_get,
 	.breakpoint = r_debug_native_bp,
 };
 

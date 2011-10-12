@@ -17,6 +17,7 @@ R_API char *r_bin_demangle_java(const char *str) {
 	if (!ptr)
 		return NULL;
 	buf = r_buf_new ();
+	if (!buf) return NULL;
 	r_buf_append_bytes (buf, (const ut8*)str, (int)(size_t)(ptr-str));
 	r_buf_append_bytes (buf, (const ut8*)" (", 2);
 	while (*str) {
@@ -99,10 +100,10 @@ R_API char *r_bin_demangle (RBin *bin, const char *str) {
 #ifdef TEST
 main() {
 	char *out, str[128];
-	strncpy (str, "_Z1hic", sizeof (str));
-	strncpy (str, "main(Ljava/lang/String;I)V", sizeof (str));
-	strncpy (str, "main([Ljava/lang/String;)V", sizeof (str));
-	strncpy (str, "foo([III)Ljava/lang/Polla;", sizeof (str));
+	strncpy (str, "_Z1hic", sizeof (str)-1);
+	strncpy (str, "main(Ljava/lang/String;I)V", sizeof (str)-1);
+	strncpy (str, "main([Ljava/lang/String;)V", sizeof (str)-1);
+	strncpy (str, "foo([III)Ljava/lang/Integer;", sizeof (str)-1);
 	//out = cplus_demangle_v3 (str, flags);
 	out = r_bin_demangle_java (str); //, flags);
 	printf ("INPUT (%s)\n", str);

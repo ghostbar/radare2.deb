@@ -1,7 +1,8 @@
 BIN=radare2
 BINDEPS=r_core r_parse r_search r_cons r_lib r_config r_diff
-BINDEPS+=r_bin r_debug r_anal r_reg r_bp r_io r_cmd r_fs
-BINDEPS+=r_sign r_print r_lang r_asm r_syscall r_hash r_line r_socket r_flags r_util
+BINDEPS+=r_bin r_debug r_anal r_reg r_bp r_io r_cmd r_fs r_db
+BINDEPS+=r_sign r_print r_lang r_asm r_syscall r_hash r_line
+BINDEPS+=r_magic r_socket r_flags r_util r_th r_egg
 
 include ../binr.mk
 
@@ -14,11 +15,18 @@ osxsign:
 	sudo chown root:procmod radare2
 	sudo chmod g+s radare2
 
+ifeq ($(OSTYPE),android)
+LDFLAGS+=${DL_LIBS} -lm
+endif
 ifeq ($(WITHNONPIC),1)
 LDFLAGS+=${DL_LIBS} -lm
 LDFLAGS+=../../libr/fs/p/grub/libgrubfs.a
+LDFLAGS+=../../libr/db/sdb/src/libsdb.a
 ifeq ($(HAVE_LIB_GMP),1)
 LDFLAGS+=-lgmp
+endif
+ifeq ($(HAVE_LIB_MAGIC),1)
+LDFLAGS+=-lmagic
 endif
 endif
 

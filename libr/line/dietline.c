@@ -121,7 +121,9 @@ R_API int r_line_hist_load(const char *file) {
 	char buf[R_LINE_BUFSIZE];
 	FILE *fd;
 
+	// TODO: use r_str_home()
 	// XXX dupped shitty code.. see hist_save ()
+	// XXX memory leak here
 	snprintf (buf, sizeof (buf)-1, "%s/%s", r_sys_getenv ("HOME"), file);
 	if (!(fd = fopen (buf, "r")))
 		return R_FALSE;
@@ -247,7 +249,7 @@ R_API char *r_line_readline() {
 	const char *gcomp_line = "";
 	static int gcomp_idx = 0;
 	static int gcomp = 0;
-	char buf[10];
+	signed char buf[10];
 	int ch, i; /* grep completion */
 
 	I.buffer.index = I.buffer.length = 0;
@@ -299,7 +301,7 @@ R_API char *r_line_readline() {
 		if (I.echo)
 			printf ("\r\x1b[2K\r"); //%*c\r", columns, ' ');
 #endif
-		switch (buf[0]) {
+		switch (*buf) {
 		//case -1: // ^D
 		//	return NULL;
 		case 0: // control-space
@@ -313,7 +315,7 @@ R_API char *r_line_readline() {
 			break;
 		case 3: // ^C 
 			if (I.echo)
-				printf ("\n^C\n");
+				printf ("^C\n");
 			I.buffer.index = I.buffer.length = 0;
 			*I.buffer.data = '\0';
 			goto _end;
@@ -500,7 +502,7 @@ R_API char *r_line_readline() {
 						break;
 					if (strstr (I.history.data[i], I.buffer.data)) {
 						gcomp_line = I.history.data[i];
-						if (!gcomp_idx--);
+						if (!gcomp_idx--)
 							break;
 					}
 				}

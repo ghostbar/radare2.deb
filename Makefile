@@ -27,6 +27,21 @@ libr:
 binr:
 	cd binr && ${MAKE} all
 
+R=$(shell hg tags|head -n2 | tail -n1|awk '{print $$2}' |cut -d : -f 1)
+T=$(shell hg tip|grep changeset:|cut -d : -f 2)
+.PHONY: chlog
+chlog:
+	@hg log -v -r tip:$R > chlog
+	@echo "-=== release ${VERSION} ===-"
+	@echo "hg tag -r $T ${VERSION}"
+	@printf "last commit:   "
+	@hg log -r tip | grep date: |cut -d : -f 2- |sed -e 's,^\ *,,g'
+	@printf "oldest commit: "
+	@hg log -r $R | grep date: |cut -d : -f 2- |sed -e 's,^\ *,,g'
+	@printf "Commits:  "
+	@grep changeset: chlog |wc -l
+	@grep -v : chlog | grep -v '^$$'
+
 w32:
 	make clean
 	# TODO: add support for debian
@@ -36,9 +51,11 @@ w32:
 w32dist:
 	rm -rf radare2-w32-${VERSION} w32dist
 	mkdir w32dist
-	for a in `find binr libr | grep -e exe$$ -e dll$$`; do cp $$a w32dist ; done
+	for a in `find libr | grep -e dll$$`; do cp $$a w32dist ; done
+	for a in `find binr | grep -e exe$$`; do cp $$a w32dist ; done
 	rm w32dist/plugin.dll
 	mv w32dist radare2-w32-${VERSION}
+	rm -f radare2-w32-${VERSION}.zip 
 	zip -r radare2-w32-${VERSION}.zip radare2-w32-${VERSION}
 
 w32beta: w32dist
@@ -83,6 +100,8 @@ install-doc-symlink:
 install: install-doc install-man
 	cd libr && ${MAKE} install PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	cd binr && ${MAKE} install PREFIX=${PREFIX} DESTDIR=${DESTDIR}
+	cd libr/syscall/d ; ${MAKE} install PREFIX=${PREFIX} DESTDIR=${DESTDIR}
+	cd libr/magic ; ${MAKE} install-data PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 
 install-pkgconfig-symlink:
 	@${INSTALL_DIR} ${DESTDIR}/${LIBDIR}/pkgconfig
@@ -91,10 +110,13 @@ install-pkgconfig-symlink:
 symstall install-symlink: install-man-symlink install-doc-symlink install-pkgconfig-symlink
 	cd libr && ${MAKE} install-symlink PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	cd binr && ${MAKE} install-symlink PREFIX=${PREFIX} DESTDIR=${DESTDIR}
+	cd libr/syscall/d ; ${MAKE} install-symlink PREFIX=${PREFIX} DESTDIR=${DESTDIR}
+	cd libr/magic ; ${MAKE} install-symlink-data PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 
 deinstall uninstall:
 	cd libr && ${MAKE} uninstall PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	cd binr && ${MAKE} uninstall PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR}
+	cd libr/syscall/d && ${MAKE} uninstall PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	@echo
 	@echo "Run 'make purge' to also remove installed files from previous versions of r2"
 	@echo
@@ -115,7 +137,7 @@ r2-bindings-dist:
 
 dist:
 	VERSION=${VERSION} ; \
-	FILES=`hg st -mc .| cut -c 3-|sed -e s,^,radare2-${VERSION}/, | grep -v r2-bindings | grep -v '/\.'` ; \
+	FILES=`hg manifest | grep -v r2-bindings | sed -e s,^,radare2-${VERSION}/,` ; \
 	cd .. && mv radare2 radare2-${VERSION} && \
 	${TAR} radare2-${VERSION}.tar.gz $${FILES} ;\
 	mv radare2-${VERSION} radare2
@@ -125,7 +147,7 @@ pub:
 
 shot:
 	DATE=`date '+%Y%m%d'` ; \
-	FILES=`hg status -mc|cut -c 3-|sed -e s,^,radare2-$${DATE}/,`; \
+	FILES=`hg manifest | sed -e s,^,radare2-${DATE}/,` ; \
 	cd .. && mv radare2 radare2-$${DATE} && \
 	${TAR} radare2-$${DATE}.tar.gz $${FILES} ;\
 	mv radare2-$${DATE} radare2 && \
