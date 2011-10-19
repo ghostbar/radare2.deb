@@ -1456,9 +1456,23 @@ static int cmd_cmp(void *data, const char *input) {
 		break;
 #endif
 	case 'g':
-		{
+		{ // XXX: this is broken
+			int diffops = 0;
 		RCore *core2;
-		char *file2 = (char*)r_str_chop_ro (input+1);
+		char *file2 = NULL;
+		if (input[1]=='o') {
+			file2 = (char*)r_str_chop_ro (input+2);
+			r_anal_diff_setup (core->anal, R_TRUE, -1, -1);
+		} else 
+		if (input[1]==' ') {
+			file2 = (char*)r_str_chop_ro (input+2);
+			r_anal_diff_setup (core->anal, R_FALSE, -1, -1);
+		} else {
+			eprintf ("Usage: cg[o] [file]\n");
+			eprintf (" cg  - byte-per-byte code graph diff\n");
+			eprintf (" cgo - opcode-bytes code graph diff\n");
+			return R_FALSE;
+		}
 
 		if (!(core2 = r_core_new ())) {
 			eprintf ("Cannot init diff core\n");
@@ -1471,8 +1485,15 @@ static int cmd_cmp(void *data, const char *input) {
 			r_core_free (core2);
 			return R_FALSE;
 		}
+		// TODO: must replicate on core1 too
+		r_config_set_i (core2->config, "io.va", R_TRUE);
+		r_config_set_i (core2->config, "anal.split", R_TRUE);
+                r_anal_diff_setup (core->anal, diffops, -1, -1);
+                r_anal_diff_setup (core2->anal, diffops, -1, -1);
+
 		r_core_bin_load (core2, file2);
 		r_core_gdiff (core, core2);
+		r_core_diff_show (core, core2);
 		r_core_free (core2);
 		}
 		break;
@@ -1487,7 +1508,7 @@ static int cmd_cmp(void *data, const char *input) {
 		" cx [hexpair]  Compare hexpair string\n"
 		" cX [addr]     Like 'cc' but using hexdiff output\n"
 		" cf [file]     Compare contents of file at current seek\n"
-		" cg [file]     Graphdiff current file and [file]\n");
+		" cg[o] [file]  Graphdiff current file and [file]\n");
 		break;
 	default:
 		eprintf ("Usage: c[?Ddxf] [argument]\n");
@@ -1616,7 +1637,7 @@ static void r_core_magic_at(RCore *core, const char *file, ut64 addr, int depth,
 			}
 		// TODO: This must be a callback .. move this into RSearch?
 		r_cons_printf ("0x%08"PFMT64x" %d %s\n", addr, magicdepth-depth, p);
-		// walking childs
+		// walking children
 		for (q=p; *q; q++) {
 			switch (*q) {
 			case ' ':
@@ -2629,7 +2650,7 @@ static int cmd_anal(void *data, const char *input) {
 		case '?':
 			r_cons_printf (
 			"Usage: ag[?f]\n"
-			" ag [addr]       ; Output graphviz code (bb at addr and childs)\n"
+			" ag [addr]       ; Output graphviz code (bb at addr and children)\n"
 			" aga [addr]      ; Idem, but only addresses\n"
 			" agc [addr]      ; Output graphviz call graph of function\n"
 			" agl [fcn name]  ; Output graphviz code using meta-data\n"
@@ -4833,7 +4854,7 @@ static void cmd_debug_pid(RCore *core, const char *input) {
 	case '?':
 		r_cons_printf ("Usage: dp[=][pid]\n"
 			" dp      list current pid and childrens\n"
-			" dp 748  list childs of pid\n"
+			" dp 748  list children of pid\n"
 			" dp*     list all attachable pids\n"
 			" dpa 377 attach and select this pid\n"
 			" dp=748  select this pid\n"
@@ -4975,7 +4996,7 @@ static int cmd_debug(void *data, const char *input) {
 		case '?':
 			eprintf("Usage: dc[?]  -- continue execution\n"
 				" dc?              show this help\n"
-				" dc               continue execution of all childs\n"
+				" dc               continue execution of all children\n"
 				" dcf              continue until fork (TODO)\n"
 				" dca [sym] [sym]. continue at every hit on any given symbol\n"
 				" dct [len]        traptrace from curseek to len, no argument to list\n"

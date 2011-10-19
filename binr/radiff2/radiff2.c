@@ -36,12 +36,6 @@ static int cb(RDiff *d, void *user, RDiffOp *op) {
 	return 1;
 }
 
-
-static void diffrow(ut64 addr, const char *name, ut64 addr2, const char *name2, const char *match) {
-	printf ("%30s  0x%"PFMT64x" |%8s  | 0x%"PFMT64x"  %s\n",
-		name, addr, match, addr2, name2);
-}
-
 static RCore* opencore(const char *f) {
 	RCore *c = r_core_new ();
 	r_config_set_i (c->config, "io.va", useva);
@@ -59,46 +53,13 @@ static void diff_graph(RCore *c, RCore *c2, const char *arg) {
 	r_core_cmdf (c, "agd %s", arg);
 }
 
-static void diff_bins(RCore *c, RCore *c2) {
-	const char *match;
-	RListIter *iter;
-	RAnalFcn *f;
-	RList *fcns = r_anal_get_fcns (c->anal);
-	r_list_foreach (fcns, iter, f) {
-		switch (f->type) {
-		case R_ANAL_FCN_TYPE_FCN:
-		case R_ANAL_FCN_TYPE_SYM:
-			switch (f->diff->type) {
-			case R_ANAL_DIFF_TYPE_MATCH:
-				match = "MATCH";
-				break;
-			case R_ANAL_DIFF_TYPE_UNMATCH:
-				match = "UNMATCH";
-				break;
-			default:
-				match = "NEW";
-			}
-			diffrow (f->addr, f->name, f->diff->addr, f->diff->name, match);
-			break;
-		}
-	}
-	fcns = r_anal_get_fcns (c2->anal);
-	r_list_foreach (fcns, iter, f) {
-		switch (f->type) {
-		case R_ANAL_FCN_TYPE_FCN:
-		case R_ANAL_FCN_TYPE_SYM:
-			if (f->diff->type == R_ANAL_DIFF_TYPE_NULL)
-				diffrow (f->addr, f->name, f->diff->addr, f->diff->name, "NEW");
-		}
-	}
-}
-
 static int show_help(int line) {
-	printf ("Usage: radiff2 [-cCdrspv] [-g sym] [file] [file]\n");
+	printf ("Usage: radiff2 [-cCdrspOv] [-g sym] [file] [file]\n");
 	if (!line) printf (
 //		"  -l        diff lines of text\n"
 		"  -c        count of changes\n"
 		"  -C        graphdiff code\n"
+		"  -O        code diffing with opcode bytes only\n"
 		"  -d        use delta diffing\n"
 		"  -g [sym]  graph diff of given symbol\n"
 		"  -r        output in radare commands\n"
@@ -140,9 +101,10 @@ int main(int argc, char **argv) {
 	ut8 *bufa, *bufb;
 	int o, sza, szb, rad = 0, delta = 0;
 	int showcount = 0, mode = MODE_DIFF;
+	int diffops = 0;
 	double sim;
 
-	while ((o = getopt (argc, argv, "Cpg:rhcdsvx")) != -1) {
+	while ((o = getopt (argc, argv, "Cpg:Orhcdsvx")) != -1) {
 		switch (o) {
 		case 'p':
 			useva = R_FALSE;
@@ -159,6 +121,9 @@ int main(int argc, char **argv) {
 			break;
 		case 'C':
 			mode = MODE_CODE;
+			break;
+		case 'O':
+			diffops = 1;
 			break;
 		case 'd':
 			delta = 1;
@@ -194,15 +159,18 @@ int main(int argc, char **argv) {
 	case MODE_GRAPH:
 	case MODE_CODE:
 		c = opencore (file);
+		if (!c) eprintf ("Cannot open '%s'\n", file);
 		c2 = opencore (file2);
-		if (c==NULL || c2==NULL) {
-			eprintf ("Cannot open file\n");
+		if (!c||!c2) {
+			eprintf ("Cannot open '%s'\n", file2);
 			return 1;
 		}
+		r_anal_diff_setup (c->anal, diffops, -1, -1);
+		r_anal_diff_setup (c2->anal, diffops, -1, -1);
 		r_core_gdiff (c, c2);
 		if (mode == MODE_GRAPH)
 			diff_graph (c, c2, addr);
-		else diff_bins (c, c2);
+		else r_core_diff_show (c, c2);
 		return 0;
 	}
 
