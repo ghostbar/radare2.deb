@@ -1,9 +1,10 @@
-radare2 (0.8.6-1) unstable; urgency=low
+radare2 (0.8.8~hg20111019-1) unstable; urgency=low
 
   * new upstream release
+   - fixed lintian warnings
   * update copyright information
 
- -- Sebastian Reichel <sre@debian.org>  Wed, 12 Oct 2011 18:04:08 +0200
+ -- Sebastian Reichel <sre@debian.org>  Wed, 19 Oct 2011 03:56:57 +0200
 
 radare2 (0.8.1-1) unstable; urgency=low
 
