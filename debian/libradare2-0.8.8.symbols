@@ -100,6 +100,8 @@ libr_anal.so.0.8.8 libradare2-0.8.8 #MINVER#
  r_anal_diff_fingerprint_fcn@Base 0.7
  r_anal_diff_free@Base 0.7
  r_anal_diff_new@Base 0.7
+ r_anal_diff_setup@Base 0.8.8~hg20111019
+ r_anal_diff_setup_i@Base 0.8.8~hg20111019
  r_anal_fcn@Base 0.6
  r_anal_fcn_add@Base 0.6
  r_anal_fcn_add_bb@Base 0.7
@@ -787,6 +789,7 @@ libr_core.so.0.8.8 libradare2-0.8.8 #MINVER#
  r_core_cmd_str@Base 0.6
  r_core_cmdf@Base 0.6
  r_core_config_init@Base 0.6
+ r_core_diff_show@Base 0.8.8~hg20111019
  r_core_disassemble@Base 0.7
  r_core_disassemble_bytes@Base 0.6
  r_core_disassemble_instr@Base 0.6
@@ -1542,46 +1545,6 @@ libr_line.so.0.8.8 libradare2-0.8.8 #MINVER#
  r_line_readline@Base 0.6
  r_line_set_prompt@Base 0.7
  r_line_singleton@Base 0.6
-libr_magic.so.0.8.8 libradare2-0.8.8 #MINVER#
- file_apprentice@Base 0.8.6
- file_ascmagic@Base 0.8.6
- file_badread@Base 0.8.6
- file_badseek@Base 0.8.6
- file_buffer@Base 0.8.6
- file_check_mem@Base 0.8.6
- file_delmagic@Base 0.8.6
- file_error@Base 0.8.6
- file_fmttime@Base 0.8.6
- file_formats@Base 0.8.6
- file_fsmagic@Base 0.8.6
- file_getbuffer@Base 0.8.6
- file_is_tar@Base 0.8.6
- file_looks_utf8@Base 0.8.6
- file_magerror@Base 0.8.6
- file_magwarn@Base 0.8.6
- file_mdump@Base 0.8.6
- file_names@Base 0.8.6
- file_nformats@Base 0.8.6
- file_nnames@Base 0.8.6
- file_oomem@Base 0.8.6
- file_printf@Base 0.8.6
- file_reset@Base 0.8.6
- file_showstr@Base 0.8.6
- file_signextend@Base 0.8.6
- file_softmagic@Base 0.8.6
- file_vprintf@Base 0.8.6
- r_magic_buffer@Base 0.8.6
- r_magic_check@Base 0.8.6
- r_magic_compile@Base 0.8.6
- r_magic_descriptor@Base 0.8.6
- r_magic_errno@Base 0.8.6
- r_magic_error@Base 0.8.6
- r_magic_file@Base 0.8.6
- r_magic_free@Base 0.8.6
- r_magic_load@Base 0.8.6
- r_magic_new@Base 0.8.6
- r_magic_setflags@Base 0.8.6
- strdupn@Base 0.8.6
 libr_parse.so.0.8.8 libradare2-0.8.8 #MINVER#
  matchs@Base 0.6
  memAllocated@Base 0.6
