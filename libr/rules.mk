@@ -54,6 +54,8 @@ else
 $(LIBAR):
 endif
 
+MAGICSED=| sed -e 's,-lr_magic,@LIBMAGIC@,g'
+
 pkgcfg:
 	@echo Generating pkgconfig stub for ${NAME}
 	@echo 'prefix=@PREFIX@' > ../../pkgcfg/${NAME}.pc.acr
@@ -66,7 +68,7 @@ pkgcfg:
 	@echo 'Version: @VERSION@' >> ../../pkgcfg/${NAME}.pc.acr
 	@echo 'Requires:' >> ../../pkgcfg/${NAME}.pc.acr
 	@if [ "${NAME}" = "libr" ]; then NAME=''; else NAME=${NAME}; fi ;\
-	echo 'Libs: -L$${libdir} '`echo $${NAME} ${DEPS}|sed -e s,r_,-lr_,g` >> ../../pkgcfg/${NAME}.pc.acr
+	echo 'Libs: -L$${libdir} '`echo $${NAME} ${DEPS}|sed -e s,r_,-lr_,g` ${MAGICSED} >> ../../pkgcfg/${NAME}.pc.acr
 	@echo 'Cflags: -I$${includedir}/libr' >> ../../pkgcfg/${NAME}.pc.acr
 
 install:
