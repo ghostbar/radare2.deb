@@ -1,4 +1,4 @@
-radare2 (0.8.8~hg20111019-1) unstable; urgency=low
+radare2 (0.8.8~hg20111020-1) unstable; urgency=low
 
   * new upstream release
    - fixed lintian warnings
