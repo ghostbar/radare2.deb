@@ -424,6 +424,8 @@ libr_bin.so.0.8.8 libradare2-0.8.8 #MINVER#
  Elf32_r_bin_elf_get_entry_offset@Base 0.6
  Elf32_r_bin_elf_get_fields@Base 0.6
  Elf32_r_bin_elf_get_file_type@Base 0.6
+ Elf32_r_bin_elf_get_fini_offset@Base 0.8.8~hg20111020
+ Elf32_r_bin_elf_get_init_offset@Base 0.8.8~hg20111020
  Elf32_r_bin_elf_get_libs@Base 0.6
  Elf32_r_bin_elf_get_machine_name@Base 0.6
  Elf32_r_bin_elf_get_main_offset@Base 0.6
@@ -448,6 +450,8 @@ libr_bin.so.0.8.8 libradare2-0.8.8 #MINVER#
  Elf64_r_bin_elf_get_entry_offset@Base 0.6
  Elf64_r_bin_elf_get_fields@Base 0.6
  Elf64_r_bin_elf_get_file_type@Base 0.6
+ Elf64_r_bin_elf_get_fini_offset@Base 0.8.8~hg20111020
+ Elf64_r_bin_elf_get_init_offset@Base 0.8.8~hg20111020
  Elf64_r_bin_elf_get_libs@Base 0.6
  Elf64_r_bin_elf_get_machine_name@Base 0.6
  Elf64_r_bin_elf_get_main_offset@Base 0.6
@@ -946,26 +950,6 @@ libr_db.so.0.8.8 libradare2-0.8.8 #MINVER#
  sdb_sync@Base 0.8.6
  sdb_unlock@Base 0.8.6
 libr_debug.so.0.8.8 libradare2-0.8.8 #MINVER#
- bfvm_cont@Base 0.8.6
- bfvm_contsc@Base 0.8.6
- bfvm_dec@Base 0.8.6
- bfvm_free@Base 0.8.6
- bfvm_get@Base 0.8.6
- bfvm_get_ptr@Base 0.8.6
- bfvm_get_ptr_at@Base 0.8.6
- bfvm_in_trap@Base 0.8.6
- bfvm_inc@Base 0.8.6
- bfvm_init@Base 0.8.6
- bfvm_maps@Base 0.8.6
- bfvm_new@Base 0.8.6
- bfvm_peek@Base 0.8.6
- bfvm_poke@Base 0.8.6
- bfvm_reg_set@Base 0.8.6
- bfvm_reset@Base 0.8.6
- bfvm_show_regs@Base 0.8.6
- bfvm_step@Base 0.8.6
- bfvm_trace@Base 0.8.6
- bfvm_trace_op@Base 0.8.6
  gdbwrap_atoh@Base 0.8
  gdbwrap_bye@Base 0.8
  gdbwrap_close@Base 0.8
@@ -1065,6 +1049,7 @@ libr_debug.so.0.8.8 libradare2-0.8.8 #MINVER#
  r_debug_step_hard@Base 0.7
  r_debug_step_over@Base 0.6
  r_debug_step_soft@Base 0.7
+ r_debug_stop@Base 0.8.8~hg20111020
  r_debug_stop_reason@Base 0.6
  r_debug_syscall@Base 0.6
  r_debug_thread_list@Base 0.6
@@ -1381,26 +1366,6 @@ libr_hash.so.0.8.8 libradare2-0.8.8 #MINVER#
  r_hash_xor@Base 0.6
  r_hash_xorpair@Base 0.6
 libr_io.so.0.8.8 libradare2-0.8.8 #MINVER#
- bfvm_cont@Base 0.8.6
- bfvm_contsc@Base 0.8.6
- bfvm_dec@Base 0.8.6
- bfvm_free@Base 0.8.6
- bfvm_get@Base 0.8.6
- bfvm_get_ptr@Base 0.8.6
- bfvm_get_ptr_at@Base 0.8.6
- bfvm_in_trap@Base 0.8.6
- bfvm_inc@Base 0.8.6
- bfvm_init@Base 0.8.6
- bfvm_maps@Base 0.8.6
- bfvm_new@Base 0.8.6
- bfvm_peek@Base 0.8.6
- bfvm_poke@Base 0.8.6
- bfvm_reg_set@Base 0.8.6
- bfvm_reset@Base 0.8.6
- bfvm_show_regs@Base 0.8.6
- bfvm_step@Base 0.8.6
- bfvm_trace@Base 0.8.6
- bfvm_trace_op@Base 0.8.6
  r_io_accept@Base 0.7
  r_io_bind@Base 0.6
  r_io_cache_commit@Base 0.6
@@ -1545,6 +1510,18 @@ libr_line.so.0.8.8 libradare2-0.8.8 #MINVER#
  r_line_readline@Base 0.6
  r_line_set_prompt@Base 0.7
  r_line_singleton@Base 0.6
+libr_magic.so.0.8.8 libradare2-0.8.8 #MINVER#
+ r_magic_buffer@Base 0.8.8~hg20111020
+ r_magic_check@Base 0.8.8~hg20111020
+ r_magic_compile@Base 0.8.8~hg20111020
+ r_magic_descriptor@Base 0.8.8~hg20111020
+ r_magic_errno@Base 0.8.8~hg20111020
+ r_magic_error@Base 0.8.8~hg20111020
+ r_magic_file@Base 0.8.8~hg20111020
+ r_magic_free@Base 0.8.8~hg20111020
+ r_magic_load@Base 0.8.8~hg20111020
+ r_magic_new@Base 0.8.8~hg20111020
+ r_magic_setflags@Base 0.8.8~hg20111020
 libr_parse.so.0.8.8 libradare2-0.8.8 #MINVER#
  matchs@Base 0.6
  memAllocated@Base 0.6
