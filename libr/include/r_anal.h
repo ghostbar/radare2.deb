@@ -155,9 +155,9 @@ enum {
 
 typedef struct r_anal_t {
 	int bits;
-	int lineswidth;
+	int lineswidth; // wtf
 	int big_endian;
-	int split;
+	int split; // used only from core
 	void *user;
 	RList *fcns;
 	RListRange *fcnstore;
@@ -171,7 +171,7 @@ typedef struct r_anal_t {
 	double diff_thbb;
 	double diff_thfcn;
 	RIOBind iob;
-	struct r_anal_ctx_t *ctx;
+	//struct r_anal_ctx_t *ctx;
 	struct r_anal_plugin_t *cur;
 	struct list_head anals; // TODO: Reimplement with RList
 } RAnal;
