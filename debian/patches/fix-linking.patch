@@ -1,0 +1,28 @@
+Description: fix linking of some plugins
+ fix build of some plugins
+Author: pancake <pancake@youterm.com>
+Origin: upstream, http://radare.org/cgi-bin/hg/radare2/rev/df56087b2363
+diff -r 8e34cf4c2db9 -r df56087b2363 libr/debug/p/gdb.mk
+--- a/libr/debug/p/gdb.mk	Thu Oct 20 19:52:19 2011 +0200
++++ b/libr/debug/p/gdb.mk	Fri Oct 21 01:41:57 2011 +0200
+@@ -10,6 +10,8 @@
+ endif
+ 
+ LDFLAGS+=-L../../util -lr_util
++LDFLAGS+=-L../../cons -lr_cons
++LDFLAGS+=-L../../parse -lr_parse
+ LDFLAGS+=-L../../anal -lr_anal
+ LDFLAGS+=-L../../reg -lr_reg
+ LDFLAGS+=-L../../bp -lr_bp
+diff -r 8e34cf4c2db9 -r df56087b2363 libr/debug/t/Makefile
+--- a/libr/debug/t/Makefile	Thu Oct 20 19:52:19 2011 +0200
++++ b/libr/debug/t/Makefile	Fri Oct 21 01:41:57 2011 +0200
+@@ -2,7 +2,7 @@
+ 
+ OBJ=main.o
+ BIN=main
+-BINDEPS=r_lib r_debug r_bp r_io r_reg r_cons r_util r_anal r_socket r_syscall r_diff r_db
++BINDEPS=r_lib r_debug r_bp r_io r_reg r_cons r_util r_anal r_socket r_syscall r_diff r_db r_parse
+ LIBS+=${DL_LIBS}
+ ifeq (${HAVE_LIB_SSL},1)
+ CFLAGS+=${SSL_CFLAGS}
