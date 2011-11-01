@@ -213,8 +213,7 @@ static void emit_restore_stack (REgg *egg, int size) {
 }
 
 static void emit_get_while_end (REgg *egg, char *str, const char *ctxpush, const char *label) {
-	if (attsyntax) sprintf (str, "  push %s\n  jmp %s /* ---- */\n", ctxpush, label);
-	else sprintf (str, "  push %s\n  jmp %s\n", ctxpush, label);
+	sprintf (str, "  push %s\n  jmp %s\n", ctxpush, label);
 }
 
 static void emit_while_end (REgg *egg, const char *labelback) {
@@ -231,15 +230,8 @@ static void emit_while_end (REgg *egg, const char *labelback) {
 //	}
 }
 
+// XXX: this is wrong
 static void emit_get_var (REgg *egg, int type, char *out, int idx) {
-	// TODO: deprecate or gtfo
-	if (attsyntax) {
-		switch (type) {
-		case 0: sprintf (out, "%d(%%"R_BP")", -idx); break; /* variable */
-		case 1: sprintf (out, "%d(%%"R_SP")", idx); break; /* argument */
-		}
-		return;
-	}
 	switch (type) {
 	case 0:  /* variable */
 		if (idx>0) sprintf (out, "["R_BP"+%d]", idx);
@@ -248,10 +240,16 @@ static void emit_get_var (REgg *egg, int type, char *out, int idx) {
 		break;
 	case 1: /* argument */
 // OMG WE CANT stuff found in relative address in stack in the stack
-idx = 8; // HACK to make arg0, arg4, ... work
+		eprintf ("WARNING: Using stack vars in naked functions\n");
+		idx = 8; // HACK to make arg0, arg4, ... work
 		if (idx>0) sprintf (out, "["R_SP"+%d]", idx);
 		else if (idx<0) sprintf (out, "["R_SP"%d]", idx);
 		else strcpy (out, "["R_SP"]");
+		break;
+	case 2:
+		if (idx>0) sprintf (out, "["R_BP"+%d]", idx);
+		else if (idx<0) sprintf (out, "["R_BP"%d]", idx);
+		else strcpy (out, "["R_BP"]");
 		break;
 	}
 }
@@ -262,10 +260,15 @@ static void emit_trap (REgg *egg) {
 
 static void emit_load_ptr(REgg *egg, const char *dst) {
 	int d = atoi (dst);
+	if (d == 0) { // hack to handle stackvarptrz
+		char *p = strchr (dst, '+');
+		if (p) d = atoi (p+1);
+	}
 	//eprintf ("emit_load_ptr: HACK\n");
 	// XXX: 32/64bit care
+	//r_egg_printf (egg, "# DELTA IS (%s)\n", dst);
 	if (attsyntax) r_egg_printf (egg, "  leal %d(%%"R_BP"), %%"R_AX"\n", d);
-	else r_egg_printf (egg, "  leal "R_AX", ["R_BP"+%d]\n", d);
+	else r_egg_printf (egg, "  lea "R_AX", ["R_BP"+%d]\n", d);
 	//r_egg_printf (egg, "  movl %%"R_BP", %%"R_AX"\n");
 	//r_egg_printf (egg, "  addl $%d, %%"R_AX"\n", d);
 }
