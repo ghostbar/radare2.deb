@@ -4,7 +4,7 @@ radare2 (0.8.8-1) unstable; urgency=low
    - fixed lintian warnings
   * update copyright information
 
- -- Sebastian Reichel <sre@debian.org>  Tue, 01 Nov 2011 12:12:01 +0100
+ -- Sebastian Reichel <sre@debian.org>  Tue, 01 Nov 2011 13:03:36 +0100
 
 radare2 (0.8.1-1) unstable; urgency=low
 
