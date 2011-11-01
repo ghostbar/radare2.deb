@@ -980,7 +980,7 @@ static int cmd_seek(void *data, const char *input) {
 				off = r_debug_reg_get (core->dbg, input+2);
 				r_io_sundo_push (core->io);
 				r_core_seek (core, off, 1);
-			} else eprintf ("cfg.debug is false\n");
+			}// else eprintf ("cfg.debug is false\n");
 		} else eprintf ("Usage: 'sr pc' ; seek to register\n");
 	} else
 	if (*input) {
@@ -1127,6 +1127,26 @@ static int cmd_help(void *data, const char *input) {
 	char out[128];
 	ut64 n;
 	switch (input[0]) {
+	case 'r':
+		{ // TODO : Add support for 64bit random numbers
+		char *p;
+		ut64 b = 0;
+		ut32 r = UT32_MAX;
+		if (input[1])
+			strncpy (out, input+(input[1]==' '? 2: 1), sizeof (out)-1);
+		else *out = 0;
+		p = strchr (out+1, ' ');
+		if (p) {
+			*p = 0;
+			b = (ut32)r_num_math (core->num, out);
+			r = (ut32)r_num_math (core->num, p+1)-b;
+		} else r = (ut32)r_num_math (core->num, out);
+		if (r == 0)
+			r = UT32_MAX>>1;
+		core->num->value = (ut64) (b + r_num_rand (r));
+		r_cons_printf ("0x%"PFMT64x"\n", core->num->value);
+		}
+		break;
 	case 'b':
 		{
 		n = r_num_get (core->num, input+1);
@@ -1245,6 +1265,25 @@ static int cmd_help(void *data, const char *input) {
 		}
 		}
 		break;
+	case 'p':
+		// physical address
+		{
+			ut64 o, n = r_num_math (core->num, input+2);
+			o = r_io_section_vaddr_to_offset (core->io, n);
+			r_cons_printf ("0x%08"PFMT64x"\n", o);
+		}
+		break;
+	case 'S':
+		// section name
+		{
+			RIOSection *s;
+			ut64 n = r_num_math (core->num, input+2);
+			n = r_io_section_vaddr_to_offset (core->io, n);
+			s = r_io_section_get (core->io, n);
+			if (s && s->name)
+				r_cons_printf ("%s\n", s->name);
+		}
+		break;
 	case 'i': // input num
 		{
 		char foo[1024];
@@ -1272,9 +1311,12 @@ static int cmd_help(void *data, const char *input) {
 			" ?? [cmd]        ; ? == 0  run command when math matches\n"
 			" ?i prompt       ; prompt for number and store in $$?\n"
 			" ?e string       ; echo string\n"
+			" ?r [from] [to]  ; generate random number between from-to\n"
 			" ?b [num]        ; show binary value of number\n"
 			" ?f [num] [str]  ; map each bit of the number as flag string index\n"
+			" ?p vaddr        ; give physical address for given vaddr\n"
 			" ?s from to step ; sequence of numbers from to by steps\n"
+			" ?S addr         ; return section name of given address\n"
 			" ?x num|0xnum|str; returns the hexpair of number or string\n"
 			" ?X num|expr     ; returns the hexadecimal value numeric expr\n"
 			" ?z str          ; returns the length of string (0 if null)\n"
@@ -2081,7 +2123,7 @@ static int cmd_flag(void *data, const char *input) {
 		break;
 	case 'o':
 		{
-			char *file = PREFIX"/share/doc/radare2/fortunes";
+			char *file = R2_PREFIX"/share/doc/radare2/fortunes";
 			char *line = r_file_slurp_random_line (file);
 			if (line) {
 				r_cons_printf (" -- %s\n", line);
@@ -3256,7 +3298,7 @@ static int cmd_write(void *data, const char *input) {
 		} else r_cons_printf (
 			"Usage: w[x] [str] [<file] [<<EOF] [@addr]\n"
 			" w foobar     write string 'foobar'\n"
-			" wr 10        Write 10 random bytes\n"
+			" wr 10        write 10 random bytes\n"
 			" ww foobar    write wide string 'f\\x00o\\x00o\\x00b\\x00a\\x00r\\x00'\n"
 			" wa push ebp  write opcode, separated by ';' (use '\"' around the command)\n"
 			" waf file     assemble file and write bytes\n"
@@ -3265,7 +3307,7 @@ static int cmd_write(void *data, const char *input) {
 			" wc[ir*?]     write cache commit/reset/list\n"
 			" wx 9090      write two intel nops\n"
 			" wv eip+34    write 32-64 bit value\n"
-			" wo? hex     write in block with operation. 'wo?' fmi\n"
+			" wo? hex      write in block with operation. 'wo?' fmi\n"
 			" wm f0ff      set binary mask hexpair to be used as cyclic write mask\n"
 			" wf file      write contents of file at current offset\n"
 			" wF file      write contents of hexpairs file here\n"
@@ -4348,8 +4390,8 @@ static int r_core_cmd_subst(RCore *core, char *cmd) {
 		ptr[0] = '\0';
 		if (ptr[1]=='<') {
 			/* this is a bit mess */
-			const char *oprompt = r_line_singleton ()->prompt;
-			oprompt = ">";
+			//const char *oprompt = strdup (r_line_singleton ()->prompt);
+			//oprompt = ">";
 			for (str=ptr+2; str[0]==' '; str++);
 			eprintf ("==> Reading from stdin until '%s'\n", str);
 			free (core->oobi);
@@ -4371,7 +4413,7 @@ static int r_core_cmd_subst(RCore *core, char *cmd) {
 					break;
 				strcat ((char *)core->oobi, buf);
 			}
-			r_line_singleton ()->prompt = oprompt;
+			//r_line_set_prompt (oprompt);
 		} else {
 			for (str=ptr+1; *str== ' ';str++);
 			eprintf ("SLURPING FILE '%s'\n", str);
