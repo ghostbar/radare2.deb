@@ -15,10 +15,6 @@ ifeq (i386,$(DEB_HOST_ARCH_CPU))
 DEBUG_SUPPORT=1
 endif
 
-ifeq (hurd,$(DEB_HOST_ARCH_OS))
-EXTRA_FLAGS+=--with-ostype=gnulinux
-endif
-
 ifeq (0,$(DEBUG_SUPPORT))
 EXTRA_FLAGS+=--without-debugger
 endif
