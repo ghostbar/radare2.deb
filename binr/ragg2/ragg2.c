@@ -7,17 +7,40 @@ static int usage () {
 	eprintf ("ragg2 [options] [file|-]\n"
 	" -a [x86|arm]    select architecture\n"
 	" -b [32|64]      register size\n"
-	" -k [linux|osx]  operating system's kernel\n"
+	" -k [os]         operating system's kernel (linux,bsd,osx,w32)\n"
 	" -f [format]     output format (raw, pe, elf, mach0)\n"
 	" -F              output native format (osx=mach0, linux=elf, ..)\n"
 	" -o [file]       output file\n"
 	" -O              use default output file (filename without extension or a.out)\n"
 	" -I              add include path\n"
+	" -L              list all plugins (shellcodes and encoders)\n"
+	" -i [shellcode]  include shellcode plugin, uses options. see -L\n"
+	" -e [encoder]    use specific encoder. see -L\n"
+	" -B [hexpairs]   append some hexpair bytes\n"
+	" -c [k=v]        set configuration options\n"
+	" -p [padding]    add padding after compilation (padding=n10s32)\n"
+	"                 ntas : begin nop, trap, 'a', sequence\n"
+	"                 NTAS : same as above, but at begining\n"
 	" -s              show assembler\n"
-	" -x              show hexpairs (enabled by default)\n"
-	" -X              execute\n"
+	" -r              show raw bytes instead of hexpairs\n"
+	" -x              execute\n"
 	" -h              show this help\n");
 	return 1;
+}
+
+static void list (REgg *egg) {
+	RListIter *iter;
+	REggPlugin *p;
+	printf ("shellcodes:\n");
+	r_list_foreach (egg->plugins, iter, p) {
+		if (p->type == R_EGG_PLUGIN_SHELLCODE)
+		printf ("%10s : %s\n", p->name, p->desc);
+	}
+	printf ("encoders:\n");
+	r_list_foreach (egg->plugins, iter, p) {
+		if (p->type == R_EGG_PLUGIN_ENCODER)
+		printf ("%10s : %s\n", p->name, p->desc);
+	}
 }
 
 static int create (const char *format, const char *arch, int bits, const ut8 *code, int codelen) {
@@ -50,12 +73,18 @@ int openfile (const char *f, int x) {
 #define ISEXEC (*format!='r')
 
 int main(int argc, char **argv) {
-	const char *arch = "x86";
+	const char *file = NULL;
+	const char *padding = NULL;
+	const char *bytes = NULL;
+	const char *arch = R_SYS_ARCH;
 	const char *os = R_EGG_OS_NAME;
 	char *format = "raw";
 	int show_execute = 0;
 	int show_hex = 1;
 	int show_asm = 0;
+	int show_raw = 0;
+	char *shellcode = NULL;
+	char *encoder = NULL;
 	int bits = 32;
 	const char *ofile = NULL;
 	int ofileauto = 0;
@@ -63,7 +92,7 @@ int main(int argc, char **argv) {
 	int c, i;
 	REgg *egg = r_egg_new ();
 
-        while ((c = getopt (argc, argv, "ha:b:f:o:sxXk:FOI:")) != -1) {
+        while ((c = getopt (argc, argv, "he:a:b:f:o:sxrk:FOI:Li:c:p:B:")) != -1) {
                 switch (c) {
 		case 'a':
 			arch = optarg;
@@ -72,8 +101,14 @@ int main(int argc, char **argv) {
 				show_hex = 0;
 			}
 			break;
+		case 'e':
+			encoder = optarg;
+			break;
 		case 'b':
 			bits = atoi (optarg);
+			break;
+		case 'B':
+			bytes = optarg;
 			break;
 		case 'o':
 			ofile = optarg;
@@ -83,6 +118,21 @@ int main(int argc, char **argv) {
 			break;
 		case 'I':
 			r_egg_lang_include_path (egg, optarg);
+			break;
+		case 'i':
+			shellcode = optarg;
+			break;
+		case 'p':
+			padding = optarg;
+			break;
+		case 'c':
+			{
+			char *p = strchr (optarg, '=');
+			if (p) {
+				*p=0;
+				r_egg_option_set (egg, optarg, p+1);
+			} else r_egg_option_set (egg, optarg, "true");
+			}
 			break;
 		case 'F':
 #if __APPLE__
@@ -105,32 +155,58 @@ int main(int argc, char **argv) {
 		case 'k':
 			os = optarg;
 			break;
-		case 'x':
-			show_hex = 1;
+		case 'r':
+			show_raw = 1;
 			break;
-		case 'X':
+		case 'x':
 			// execute
 			show_execute = 1;
 			break;
+		case 'L':
+			list (egg);
+			return 0;
 		case 'h':
 			return usage ();
 		}
 	}
 
-	if (optind == argc)
+	if (optind == argc && !shellcode && !bytes && !encoder) {
+		eprintf ("Missing argument\n");
 		return usage ();
+	} else file = argv[optind];
 
+	r_egg_setup (egg, arch, bits, 0, os);
+	if (shellcode) {
+		if (!r_egg_shellcode (egg, shellcode)) {
+			eprintf ("Unknown shellcode '%s'\n", shellcode);
+			return 1;
+		}
+	}
+	if (bytes) {
+		ut8 *b = malloc (strlen (bytes)+1);
+		int len = r_hex_str2bin (bytes, b);
+		if (len>0) {
+			if (!r_egg_raw (egg, b, len)) {
+				eprintf ("Unknown '%s'\n", shellcode);
+				return 1;
+			}
+		} else eprintf ("Invalid hexpair string for -B\n");
+		free (b);
+	}
+	if (encoder)
+		if (!r_egg_encode (egg, encoder))
+			eprintf ("Invalid encoder '%s'\n", encoder);
 	/* create output file if needed */
 	if (ofileauto) {
 		int fd;
-		char *o, *p = strdup (argv[optind]);
-		if ( (o = strchr (p, '.')) ) {
-			*o = 0;
-			fd = openfile (p, ISEXEC);
-		} else {
-			fd = openfile ("a.out", ISEXEC);
-		}
-		free (p);
+		if (file) {
+			char *o, *p = strdup (file);
+			if ( (o = strchr (p, '.')) ) {
+				*o = 0;
+				fd = openfile (p, ISEXEC);
+			} else fd = openfile ("a.out", ISEXEC);
+			free (p);
+		} else fd = openfile ("a.out", ISEXEC);
 		if (fd == -1) {
 			eprintf ("cannot open file '%s'\n", optarg);
 			goto fail;
@@ -138,50 +214,55 @@ int main(int argc, char **argv) {
 	}
 	if (ofile) {
 		if (openfile (ofile, ISEXEC) == -1) {
-			eprintf ("cannot open file '%s'\n", optarg);
+			eprintf ("cannot open file '%s'\n", ofile);
 			goto fail;
 		}
 	}
 
-	r_egg_setup (egg, arch, bits, 0, os);
-	if (!strcmp (argv[optind], "-")) {
-		char buf[1024];
-		for (;;) {
-			fgets (buf, sizeof (buf)-1, stdin);
-			if (feof (stdin)) break;
-			r_egg_load (egg, buf, 0);
-		}
-	} else {
-		if (!r_egg_include (egg, argv[optind], 0)) {
-			eprintf ("Cannot open '%s'\n", argv[optind]);
-			goto fail;
+	if (file) {
+		if (!strcmp (file, "-")) {
+			char buf[1024];
+			for (;;) {
+				fgets (buf, sizeof (buf)-1, stdin);
+				if (feof (stdin)) break;
+				r_egg_load (egg, buf, 0);
+			}
+		} else {
+			if (!r_egg_include (egg, file, 0)) {
+				eprintf ("Cannot open '%s'\n", file);
+				goto fail;
+			}
 		}
 	}
 	r_egg_compile (egg);
+	if (padding)
+		r_egg_padding (egg, padding);
 	//printf ("src (%s)\n", r_egg_get_source (egg));
 	if (show_asm)
 		printf ("%s\n", r_egg_get_assembly (egg));
-	if (show_hex || show_execute) {
+	if (show_raw || show_hex || show_execute) {
 		if (!r_egg_assemble (egg)) {
 			eprintf ("r_egg_assemble: invalid assembly\n");
 			goto fail;
 		}
-		b = r_egg_get_bin (egg);
-		if (b == NULL) {
+		if (!(b = r_egg_get_bin (egg))) {
 			eprintf ("r_egg_get_bin: invalid egg :(\n");
 			goto fail;
+		}
+		if (show_raw) {
+			write (1, b->buf, b->length);
+		} else
+		if (show_execute) {
+			r_egg_run (egg);
+			return 0;
 		} else {
-			if (show_execute) {
-				// TODO
-				eprintf ("TODO: execute\n");
-			}
 			switch (*format) {
 			case 'r':
 				if (show_hex) {
 					for (i=0; i<b->length; i++)
 						printf ("%02x", b->buf[i]);
 					printf ("\n");
-				}
+				} // else show_raw is_above()
 				break;
 			case 'p': // PE
 			case 'e': // ELF

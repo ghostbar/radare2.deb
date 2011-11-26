@@ -99,6 +99,7 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #define R_NEW_COPY(x,y) x=(y*)malloc(sizeof(y));memcpy(x,y,sizeof(y))
 #define IS_PRINTABLE(x) (x>=' '&&x<='~')
 #define IS_WHITESPACE(x) (x==' '||x=='\t')
+#define R_MEM_ALIGN(x) ((void *)(size_t)(((ut64)(size_t)x) & 0xfffffffffffff000LL))
 
 #define BIT_SET(x,y) (x[y>>4] |= (1<<(y&0xf)))
 #define BIT_CHK(x,y) ((x[y>>4] & (1<<(y&0xf))))
@@ -140,6 +141,25 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #define PFMT64x "llx"
 #define PFMT64d "lld"
 #define PFMT64o "llo"
+#endif
+
+
+#if __APPLE__
+# if __i386__
+# define R_SYS_BASE ((ut64)0x1000)
+# elif __x86_64__
+# define R_SYS_BASE ((ut64)0x100000000)
+# else
+# define R_SYS_BASE ((u64)0x1000)
+# endif
+#elif __WINDOWS__
+# define R_SYS_BASE ((ut64)0x01001000)
+#else // linux, bsd, ...
+# if __arm__
+# define R_SYS_BASE ((ut64)0x4000)
+# else
+# define R_SYS_BASE ((ut64)0x8048000)
+# endif
 #endif
 
 /* arch */

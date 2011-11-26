@@ -76,166 +76,39 @@ R_API char *r_core_sysenv_begin(RCore *core, const char *cmd) {
 
 R_API int r_core_bin_load(RCore *r, const char *file) {
 	int va = r->io->va || r->io->debug;
-	char str[R_FLAG_NAME_SIZE];
 
-	RBinSection *section;
-	RBinSymbol *symbol;
-	RBinString *string;
-	RBinImport *import;
-	RBinAddr *binmain;
-	RBinReloc *reloc;
-	RListIter *iter;
-	RBinAddr *entry;
-	RBinInfo *info;
-	RBinObj *obj;
-	RList *list;
-	ut64 baddr;
-	int i = 0;
-	ut64 size;
-
-	if (file == NULL)
+	if (file == NULL) {
+		if (r->file == NULL)
+			return R_FALSE;
 		file = r->file->filename;
+	}
 	if (!r_bin_load (r->bin, file, 0))
 		return R_FALSE;
-	r->file->obj = obj = r_bin_get_object (r->bin, 0);
-	baddr = r_bin_get_baddr (r->bin);
-	size = r->bin->curarch.size;
-
-	// I -> Binary info
-	if ((info = r_bin_get_info (r->bin)) != NULL) {
-		r_config_set (r->config, "file.type", info->rclass);
-		r_config_set (r->config, "cfg.bigendian", info->big_endian?"true":"false");
-		if (!strcmp (info->rclass, "fs")) {
-			r_config_set (r->config, "asm.arch", info->arch);
-			r_core_cmdf (r, "m %s /root 0", info->arch);
-		} else {
-			r_config_set (r->config, "asm.os", info->os);
-			r_config_set (r->config, "asm.arch", info->arch);
-			r_config_set (r->config, "anal.plugin", info->arch);
-			snprintf (str, R_FLAG_NAME_SIZE, "%i", info->bits);
-			r_config_set (r->config, "asm.bits", str);
-			r_config_set (r->config, "asm.dwarf", R_BIN_DBG_STRIPPED (info->dbg_info)?"false":"true");
-		}
-	}
-
-	// M -> Main
-	r_flag_space_set (r->flags, "symbols");
-	if ((binmain = r_bin_get_sym (r->bin, R_BIN_SYM_MAIN)) != NULL)
-		r_flag_set (r->flags, "main", va? baddr+binmain->rva: binmain->offset,
-				r->blocksize, 0);
-
-	// e -> Entrypoints
-	i = 0;
-	if ((list = r_bin_get_entries (r->bin)) != NULL) {
-		r_list_foreach (list, iter, entry) {
-			snprintf (str, R_FLAG_NAME_SIZE, "entry%i", i++);
-			r_flag_set (r->flags, str, va? baddr+entry->rva: entry->offset,
-					r->blocksize, 0);
-		}
-		/* Seek to the last entry point */
-		if (entry)
-			r_core_seek (r, va? baddr+entry->rva: entry->offset, 0);
-	}
-
-	// s -> Symbols
-	if ((list = r_bin_get_symbols (r->bin)) != NULL) {
-		char *name, *dname;
-		r_flag_space_set (r->flags, "symbols");
-		r_list_foreach (list, iter, symbol) {
-			name = strdup (symbol->name);
-			r_name_filter (name, 80);
-			snprintf (str, R_FLAG_NAME_SIZE, "sym.%s", name);
-			if (!strncmp (symbol->type,"OBJECT", 6))
-				r_meta_add (r->anal->meta, R_META_TYPE_DATA,
-					va? baddr+symbol->rva: symbol->offset,
-					(va? baddr+symbol->rva: symbol->offset)+symbol->size, name);
-			r_flag_set (r->flags, str, va? baddr+symbol->rva: symbol->offset,
-						symbol->size, 0);
-			dname = r_bin_demangle (r->bin, symbol->name);
-			if (dname) {
-				r_meta_add (r->anal->meta, R_META_TYPE_COMMENT,
-					va? baddr+symbol->rva: symbol->offset,
-					symbol->size, dname);
-				free (dname);
+	if (r->bin->narch>1) {
+		int i;
+		eprintf ("NOTE: Fat binary found. Selected sub-bin is: -a %s -b %d\n",
+			r->assembler->cur->arch, r->assembler->bits);
+		eprintf ("NOTE: Use -a and -b to select sub binary in fat binary\n");
+		for (i=0; i<r->bin->narch; i++) {
+			r_bin_select_idx (r->bin, i);
+			if (r->bin->curarch.info == NULL) {
+				eprintf ("No extract info found.\n");
+			} else {
+				eprintf ("  $ r2 -a %s -b %d %s  # 0x%08"PFMT64x"\n", 
+						r->bin->curarch.info->arch,
+						r->bin->curarch.info->bits,
+						r->bin->curarch.file,
+						r->bin->curarch.offset);
 			}
-			free (name);
 		}
 	}
+	r_bin_select (r->bin, r->assembler->cur->arch, r->assembler->bits, NULL);//"x86_32");
+	r->file->obj = r_bin_get_object (r->bin, 0);
 
-	// R -> Relocations
-	if ((list = r_bin_get_relocs (r->bin)) != NULL) {
-		r_flag_space_set (r->flags, "relocs");
-		r_list_foreach (list, iter, reloc) {
-			snprintf (str, R_FLAG_NAME_SIZE, "reloc.%s", reloc->name);
-			r_flag_set (r->flags, str, va?baddr+reloc->rva:reloc->offset,
-					r->blocksize, 0);
-		}
+	{
+		ut64 offset = r_bin_get_offset (r->bin);
+		r_core_bin_info (r, R_CORE_BIN_ACC_ALL, R_CORE_BIN_SET, va, NULL, offset);
 	}
-
-	// z -> Strings
-	if (r_config_get_i (r->config, "bin.strings"))
-	if ((list = r_bin_get_strings (r->bin)) != NULL) {
-/*
-// load all strings ALWAYS!! rhashtable is fast
-		if (r_list_length (list) > 102400) {
-			eprintf ("rabin2: too many strings. not importing string info\n");
-		} else {
-*/
-			r_flag_space_set (r->flags, "strings");
-			r_list_foreach (list, iter, string) {
-				/* Jump the withespaces before the string */
-				for (i=0;*(string->string+i)==' ';i++);
-				r_meta_add (r->anal->meta, R_META_TYPE_STRING, va?baddr+string->rva:string->offset,
-					(va?baddr+string->rva:string->offset)+string->size, string->string+i);
-				r_name_filter (string->string, 128);
-				snprintf (str, R_FLAG_NAME_SIZE, "str.%s", string->string);
-				r_flag_set (r->flags, str, va?baddr+string->rva:string->offset,
-						string->size, 0);
-			}
-		//}
-	}
-
-	// i -> Imports
-	if ((list = r_bin_get_imports (r->bin)) != NULL) {
-		r_flag_space_set (r->flags, "imports");
-		r_list_foreach (list, iter, import) {
-			r_name_filter (import->name, 128);
-			snprintf (str, R_FLAG_NAME_SIZE, "imp.%s", import->name);
-			if (import->size)
-				if (!r_anal_fcn_add (r->anal, va?baddr+import->rva:import->offset,
-						import->size, str, R_ANAL_FCN_TYPE_IMP, NULL))
-					eprintf ("Cannot add function: %s (duplicated)\n", import->name);
-			r_flag_set (r->flags, str, va?baddr+import->rva:import->offset,
-					import->size, 0);
-		}
-	}
-
-	// S -> Sections
-	i = 0;
-	if ((list = r_bin_get_sections (r->bin)) != NULL) {
-		r_flag_space_set (r->flags, "sections");
-		r_list_foreach (list, iter, section) {
-			r_name_filter (section->name, 128);
-			snprintf (str, R_FLAG_NAME_SIZE, "section.%s", section->name);
-			r_flag_set (r->flags, str, va?baddr+section->rva:section->offset,
-					section->size, 0);
-			r_io_section_add (r->io, section->offset, baddr+section->rva,
-					section->size, section->vsize, section->srwx, section->name);
-			snprintf (str, R_FLAG_NAME_SIZE, "[%i] va=0x%08"PFMT64x" pa=0x%08"PFMT64x" sz=%"
-					PFMT64d" vsz=%"PFMT64d" rwx=%c%c%c%c %s",
-					i++, baddr+section->rva, section->offset, section->size, section->vsize,
-					R_BIN_SCN_SHAREABLE (section->srwx)?'s':'-',
-					R_BIN_SCN_READABLE (section->srwx)?'r':'-',
-					R_BIN_SCN_WRITABLE (section->srwx)?'w':'-',
-					R_BIN_SCN_EXECUTABLE (section->srwx)?'x':'-',
-					section->name);
-			r_meta_add (r->anal->meta, R_META_TYPE_COMMENT, va?baddr+section->rva:section->offset,
-					va?baddr+section->rva:section->offset, str);
-		}
-	}
-	// H -> Header fields
-	r_io_section_add (r->io, 0, baddr, size, size, 7, "ehdr");
-
 	return R_TRUE;
 }
 
@@ -334,7 +207,7 @@ R_API int r_core_file_close_fd(RCore *core, int fd) {
 }
 
 R_API int r_core_hash_load(RCore *r, const char *file) {
-	const ut8 *buf = NULL;
+	ut8 *buf = NULL;
 	int i, buf_len = 0;
 	const ut8 *md5, *sha1;
 	char hash[128], *p;
@@ -344,7 +217,7 @@ R_API int r_core_hash_load(RCore *r, const char *file) {
 	limit = r_config_get_i (r->config, "cfg.hashlimit");
 	if (r->file->size > limit)
 		return R_FALSE;
-	buf = (const ut8*)r_file_slurp (file, &buf_len);
+	buf = (ut8*)r_file_slurp (file, &buf_len);
 	if (buf==NULL)
 		return R_FALSE;
 	ctx = r_hash_new (R_TRUE, R_HASH_MD5);
@@ -352,9 +225,9 @@ R_API int r_core_hash_load(RCore *r, const char *file) {
 	p = hash;
 	for (i=0; i<R_HASH_SIZE_MD5; i++) {
 		sprintf (p, "%02x", md5[i]);
-		p+=2;
+		p += 2;
 	}
-	*p=0;
+	*p = 0;
 	r_config_set (r->config, "file.md5", hash);
 	r_hash_free (ctx);
 	ctx = r_hash_new (R_TRUE, R_HASH_SHA1);
@@ -367,5 +240,6 @@ R_API int r_core_hash_load(RCore *r, const char *file) {
 	*p=0;
 	r_config_set (r->config, "file.sha1", hash);
 	r_hash_free (ctx);
+	free (buf);
 	return R_TRUE;
 }

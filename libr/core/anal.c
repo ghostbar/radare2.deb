@@ -7,15 +7,21 @@
 #include <r_flags.h>
 #include <r_core.h>
 
-static char *r_core_anal_graph_label(RCore *core, struct r_anal_bb_t *bb, int opts) {
-	RAnalOp *opi;
-	RListIter *iter;
+static char *r_core_anal_graph_label(RCore *core, RAnalBlock *bb, int opts) {
 	char cmd[1024], file[1024], *cmdstr = NULL, *filestr = NULL, *str = NULL;
 	int i, j, line = 0, oline = 0, idx = 0;
+	ut64 at;
 
 	if (opts & R_CORE_ANAL_GRAPHLINES) {
+#if R_ANAL_BB_HA_OPS
+		RAnalOp *opi;
+		RListIter *iter;
 		r_list_foreach (bb->ops, iter, opi) {
 			r_bin_meta_get_line (core->bin, opi->addr, file, sizeof (file)-1, &line);
+#else
+		for (at=bb->addr; at<bb->addr+bb->size; at+=2) {
+			r_bin_meta_get_line (core->bin, at, file, sizeof (file)-1, &line);
+#endif
 			if (line != 0 && line != oline && strcmp (file, "??")) {
 				filestr = r_file_slurp_line (file, line, 0);
 				if (filestr) {
@@ -37,7 +43,7 @@ static char *r_core_anal_graph_label(RCore *core, struct r_anal_bb_t *bb, int op
 	if (cmdstr) {
 		if (!(str = malloc (strlen(cmdstr)*2)))
 			return NULL;
-		for(i=j=0; cmdstr[i]; i++,j++) {
+		for (i=j=0; cmdstr[i]; i++,j++) {
 			switch (cmdstr[i]) {
 			case 0x1b:
 				/* skip ansi chars */
@@ -102,7 +108,7 @@ static void r_core_anal_graph_nodes(RCore *core, RAnalFcn *fcn, int opts) {
 }
 
 R_API int r_core_anal_bb(RCore *core, RAnalFcn *fcn, ut64 at, int head) {
-	struct r_anal_bb_t *bb, *bbi;
+	struct r_anal_bb_t *bb = NULL, *bbi;
 	RListIter *iter;
 	ut64 jump, fail;
 	ut8 *buf;
@@ -112,9 +118,10 @@ R_API int r_core_anal_bb(RCore *core, RAnalFcn *fcn, ut64 at, int head) {
 	if (!(bb = r_anal_bb_new ()))
 		return R_FALSE;
 	if (split) ret = r_anal_fcn_split_bb (fcn, bb, at);
-	else r_list_foreach (fcn->bbs, iter, bbi)
+	else r_list_foreach (fcn->bbs, iter, bbi) {
 		if (at == bbi->addr)
 			ret = R_ANAL_RET_DUP;
+	}
 	if (ret == R_ANAL_RET_DUP) { /* Dupped bb */
 		r_anal_bb_free (bb);
 		return R_FALSE;
@@ -122,8 +129,10 @@ R_API int r_core_anal_bb(RCore *core, RAnalFcn *fcn, ut64 at, int head) {
 		if (!(buf = malloc (core->blocksize)))
 			return R_FALSE;
 		do {
-			if ((buflen = r_io_read_at (core->io, at+bblen, buf, core->blocksize)) != core->blocksize)
+			if ((buflen = r_io_read_at (core->io, at+bblen, buf, core->blocksize)) != core->blocksize) {
+				r_anal_bb_free (bb);
 				return R_FALSE;
+			}
 			bblen = r_anal_bb (core->anal, bb, at+bblen, buf, buflen, head); 
 			if (bblen == R_ANAL_RET_ERROR ||
 				(bblen == R_ANAL_RET_END && bb->size < 1)) { /* Error analyzing bb */
@@ -268,10 +277,11 @@ R_API int r_core_anal_fcn_clean(RCore *core, ut64 addr) {
 }
 
 R_API void r_core_anal_refs(RCore *core, ut64 addr, int gv) {
-	int showhdr = 0;
+	const char *font = r_config_get (core->config, "graph.font");
 	RListIter *iter, *iter2;
 	RAnalRef *fcnr;
 	RAnalFcn *fcni;
+	int showhdr = 0;
 
 	r_list_foreach (core->anal->fcns, iter, fcni) {
 		if (addr != 0 && addr != fcni->addr)
@@ -282,17 +292,23 @@ R_API void r_core_anal_refs(RCore *core, ut64 addr, int gv) {
 				if (gv) r_cons_printf ("digraph code {\n"
 					"\tgraph [bgcolor=white];\n"
 					"\tnode [color=lightgray, style=filled shape=box"
-					" fontname=\"Courier\" fontsize=\"8\"];\n");
+					" fontname=\"%s\" fontsize=\"8\"];\n", font);
 				showhdr = 1;
 			}
 			// TODO: display only code or data refs?
 			RFlagItem *flag = r_flag_get_i (core->flags, fcnr->addr);
-			if (gv) r_cons_printf ("\t\"0x%08"PFMT64x"\" -> \"0x%08"PFMT64x"\" "
+			if (gv) {
+				r_cons_printf ("\t\"0x%08"PFMT64x"\" -> \"0x%08"PFMT64x"\" "
 					"[label=\"%s\" color=\"%s\" URL=\"%s/0x%08"PFMT64x"\"];\n",
-				fcni->addr, fcnr->addr, flag?flag->name:"",
-				(fcnr->type==R_ANAL_REF_TYPE_CODE ||
-				 fcnr->type==R_ANAL_REF_TYPE_CALL)?"green":"red",
-				flag?flag->name:"", fcnr->addr);
+					fcni->addr, fcnr->addr, flag?flag->name:"",
+					(fcnr->type==R_ANAL_REF_TYPE_CODE ||
+					 fcnr->type==R_ANAL_REF_TYPE_CALL)?"green":"red",
+					flag?flag->name:"", fcnr->addr);
+				r_cons_printf ("\t\"0x%08"PFMT64x"\" "
+					"[label=\"%s\" URL=\"%s/0x%08"PFMT64x"\"];\n",
+					fcnr->addr, flag?flag->name:"",
+					flag?flag->name:"", fcnr->addr);
+			}
 			else r_cons_printf (" - 0x%08"PFMT64x" (%c)\n", fcnr->addr, fcnr->type);
 		}
 	}
@@ -409,6 +425,7 @@ R_API int r_core_anal_graph(RCore *core, ut64 addr, int opts) {
 	RAnalFcn *fcni;
 	RListIter *iter;
 	int reflines, bytes, dwarf;
+	const char *font = r_config_get (core->config, "graph.font");
 
 	if (r_list_empty (core->anal->fcns))
 		return R_FALSE;
@@ -422,7 +439,7 @@ R_API int r_core_anal_graph(RCore *core, ut64 addr, int opts) {
 	r_cons_printf ("digraph code {\n"
 		"\tgraph [bgcolor=white];\n"
 		"\tnode [color=lightgray, style=filled shape=box"
-		" fontname=\"Courier\" fontsize=\"8\"];\n");
+		" fontname=\"%s\" fontsize=\"8\"];\n", font);
 	r_cons_flush ();
 	r_list_foreach (core->anal->fcns, iter, fcni)
 		if (fcni->type & (R_ANAL_FCN_TYPE_SYM | R_ANAL_FCN_TYPE_FCN) &&
@@ -462,7 +479,7 @@ R_API int r_core_anal_search(RCore *core, ut64 from, ut64 to, ut64 ref) {
 	ut8 *buf = (ut8 *)malloc (core->blocksize);
 	int ptrdepth = r_config_get_i (core->config, "anal.ptrdepth");
 	int ret, i, count = 0;
-	RAnalOp op;
+	RAnalOp op = {0};
 	ut64 at;
 	// TODO: get current section range here or gtfo
 	// ???
@@ -483,6 +500,7 @@ R_API int r_core_anal_search(RCore *core, ut64 from, ut64 to, ut64 ref) {
 			if (ret != core->blocksize)
 				break;
 			for (i=0; i<core->blocksize-OPSZ; i++) {
+				r_anal_op_fini (&op);
 				if (!r_anal_op (core->anal, &op, at+i, buf+i, core->blocksize-i))
 					continue;
 				if (op.type == R_ANAL_OP_TYPE_JMP || op.type == R_ANAL_OP_TYPE_CJMP ||
@@ -505,6 +523,7 @@ R_API int r_core_anal_search(RCore *core, ut64 from, ut64 to, ut64 ref) {
 			}
 		}
 	free (buf);
+	r_anal_op_fini (&op);
 	return count;
 }
 
@@ -521,7 +540,6 @@ R_API int r_core_anal_ref_list(RCore *core, int rad) {
 						refi->at, refi->addr);
 			else r_cons_printf ("0x%08"PFMT64x" -> 0x%08"PFMT64x" (%c)\n", 
 					refi->at, refi->addr, refi->type);
-
 		}
 	r_list_foreach (core->anal->refs, iter2, refi) {
 		if (rad) r_cons_printf ("ar%s 0x%08"PFMT64x" 0x%08"PFMT64x"\n", 
@@ -529,7 +547,6 @@ R_API int r_core_anal_ref_list(RCore *core, int rad) {
 					refi->at, refi->addr);
 		else r_cons_printf ("0x%08"PFMT64x" -> 0x%08"PFMT64x" (%c)\n", 
 				refi->at, refi->addr, refi->type);
-
 	}
 	r_cons_flush ();
 	return R_TRUE;
@@ -543,30 +560,36 @@ R_API int r_core_anal_all(RCore *core) {
 	RBinAddr *entry;
 	RBinSymbol *symbol;
 	ut64 baddr;
+	ut64 offset;
 	int depth =r_config_get_i (core->config, "anal.depth"); 
 	int va = core->io->va || core->io->debug;
 
 	baddr = r_bin_get_baddr (core->bin);
+	offset = r_bin_get_offset (core->bin);
 	/* Analyze Functions */
 	/* Main */
 	if ((binmain = r_bin_get_sym (core->bin, R_BIN_SYM_MAIN)) != NULL)
-		r_core_anal_fcn (core, va?baddr+binmain->rva:binmain->offset, -1,
+		r_core_anal_fcn (core, offset + va?baddr+binmain->rva:binmain->offset, -1,
 				R_ANAL_REF_TYPE_NULL, depth);
 	/* Entries */
+	{
+	RFlagItem *item = r_flag_get (core->flags, "entry0");
+	if (item)
+		r_core_anal_fcn (core, item->offset, -1, R_ANAL_REF_TYPE_NULL, depth);
+	}
 	if ((list = r_bin_get_entries (core->bin)) != NULL)
 		r_list_foreach (list, iter, entry)
-			r_core_anal_fcn (core, va?baddr+entry->rva:entry->offset, -1,
+			r_core_anal_fcn (core, offset + va? baddr+entry->rva:entry->offset, -1,
 					R_ANAL_REF_TYPE_NULL, depth);
 	/* Symbols (Imports are already analized by rabin2 on init) */
 	if ((list = r_bin_get_symbols (core->bin)) != NULL)
 		r_list_foreach (list, iter, symbol)
 			if (!strncmp (symbol->type,"FUNC", 4))
-				r_core_anal_fcn (core, va?baddr+symbol->rva:symbol->offset, -1,
+				r_core_anal_fcn (core, offset + va?baddr+symbol->rva:symbol->offset, -1,
 						R_ANAL_REF_TYPE_NULL, depth);
 	/* Set fcn type to R_ANAL_FCN_TYPE_SYM for symbols */
 	r_list_foreach (core->anal->fcns, iter, fcni)
 		if (!memcmp (fcni->name, "sym.", 4) || !memcmp (fcni->name, "main", 4))
 			fcni->type = R_ANAL_FCN_TYPE_SYM;
-
 	return R_TRUE;
 }

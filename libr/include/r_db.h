@@ -77,6 +77,7 @@ R_API RList *r_pair_list (RPair *p, const char *domain);
 R_API void r_pair_set_sync_dir (RPair *p, const char *dir);
 R_API void r_pair_load (RPair *p);
 R_API void r_pair_sync (RPair *p);
+R_API void r_pair_reset (RPair *p);
 /* */
 R_API struct r_db_t *r_db_new();
 R_API struct r_db_block_t *r_db_block_new();
@@ -94,8 +95,8 @@ R_API void *r_db_iter_prev(struct r_db_iter_t *iter);
 R_API struct r_db_iter_t *r_db_iter_new(struct r_db_t *db, int key);
 R_API struct r_db_iter_t *r_db_iter_free(struct r_db_iter_t *iter);
 R_API int r_db_free(struct r_db_t *db);
-R_API int r_db_push(struct r_db_t *db, const ut8 *b);
-R_API ut8 *r_db_pop(struct r_db_t *db);
+//R_API int r_db_push(struct r_db_t *db, const ut8 *b);
+//R_API ut8 *r_db_pop(struct r_db_t *db);
 #endif
 
 #endif

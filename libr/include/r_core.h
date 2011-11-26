@@ -219,6 +219,31 @@ R_API char *r_core_sysenv_begin(RCore *core, const char *cmd);
 R_API void r_core_sysenv_end(RCore *core, const char *cmd);
 R_API void r_core_sysenv_help();
 
+/* bin.c */
+#define R_CORE_BIN_PRINT	0x000
+#define R_CORE_BIN_RADARE	0x001
+#define R_CORE_BIN_SET		0x002
+
+#define R_CORE_BIN_ACC_STRINGS	0x001
+#define R_CORE_BIN_ACC_INFO		0x002
+#define R_CORE_BIN_ACC_MAIN		0x004
+#define R_CORE_BIN_ACC_ENTRIES	0x008
+#define R_CORE_BIN_ACC_RELOCS	0x010
+#define R_CORE_BIN_ACC_IMPORTS	0x020
+#define R_CORE_BIN_ACC_SYMBOLS	0x040
+#define R_CORE_BIN_ACC_SECTIONS	0x080
+#define R_CORE_BIN_ACC_FIELDS	0x100
+#define R_CORE_BIN_ACC_LIBS		0x200
+#define R_CORE_BIN_ACC_CLASSES	0x400
+#define R_CORE_BIN_ACC_ALL		0xFFF
+
+typedef struct r_core_bin_filter_t {
+	ut64 offset;
+	char *name;
+} RCoreBinFilter;
+
+R_API int r_core_bin_info (RCore *core, int action, int mode, int va, RCoreBinFilter *filter, ut64 offset);
+
 /* rtr */
 R_API void r_core_rtr_help(RCore *core);
 R_API void r_core_rtr_pushout(RCore *core, const char *input);
@@ -236,6 +261,7 @@ R_API void r_core_seek_next (RCore *core, const char *type);
 R_API void r_core_seek_previous (RCore *core, const char *type);
 R_API void r_core_visual_define (RCore *core);
 R_API int r_core_visual_trackflags (RCore *core);
+R_API int r_core_visual_comments (RCore *core);
 R_API void r_core_visual_prompt (RCore *core);
 R_API int r_core_search_preludes(RCore *core);
 R_API int r_core_search_prelude(RCore *core, ut64 from, ut64 to, const ut8 *buf, int blen, const ut8 *mask, int mlen);

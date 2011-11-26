@@ -80,28 +80,27 @@ R_API RIODesc *r_io_open(struct r_io_t *io, const char *file, int flags, int mod
 	int fd = -2;
 	char *uri = strdup (file);
 	struct r_io_plugin_t *plugin;
-	if (io != NULL) {
-		for (;;) {
-			plugin = r_io_plugin_resolve (io, uri);
-			if (plugin && plugin->open) {
-				desc = plugin->open (io, uri, flags, mode);
-				if (io->redirect) {
-					free ((void *)uri);
-					uri = strdup (io->redirect);
-					r_io_redirect (io, NULL);
-					continue;
-				}
-				if (desc != NULL) {
-					r_io_desc_add (io, desc);
-					fd = desc->fd;
-					if (fd != -1)
-						r_io_plugin_open (io, fd, plugin);
-					if (desc != io->fd)
-						io->plugin = plugin;
-				}
+	if (!io) return NULL;
+	for (;;) {
+		plugin = r_io_plugin_resolve (io, uri);
+		if (plugin && plugin->open) {
+			desc = plugin->open (io, uri, flags, mode);
+			if (io->redirect) {
+				free ((void *)uri);
+				uri = strdup (io->redirect);
+				r_io_redirect (io, NULL);
+				continue;
 			}
-			break;
+			if (desc != NULL) {
+				r_io_desc_add (io, desc);
+				fd = desc->fd;
+				if (fd != -1)
+					r_io_plugin_open (io, fd, plugin);
+				if (desc != io->fd)
+					io->plugin = plugin;
+			}
 		}
+		break;
 	}
 	if (fd == -2) {
 #if __WINDOWS__
@@ -176,6 +175,13 @@ R_API int r_io_read_at(RIO *io, ut64 addr, ut8 *buf, int len) {
 #else
 	int ret, l, olen = len;
 	int w = 0;
+#if 1
+	// HACK?: if io->va == 0 -> call seek+read without checking sections ?
+	if (!io->va) {
+		r_io_seek (io, addr, R_IO_SEEK_SET);
+		return r_io_read_internal (io, buf, len);
+	}
+#endif
 	while (len>0) {
 		ut64 last = r_io_section_next (io, addr);
 		l = (len > (last-addr))? (last-addr): len;
@@ -340,9 +346,13 @@ R_API ut64 r_io_size(RIO *io) {
 	ut64 size, here;
 	if (r_io_is_listener (io))
 		return UT64_MAX;
+// XXX. problematic when io.va = 1
+int iova = io->va;
+io->va = 0;
 	//r_io_set_fdn (io, fd);
 	here = r_io_seek (io, 0, R_IO_SEEK_CUR);
 	size = r_io_seek (io, 0, R_IO_SEEK_END);
+io->va = iova;
 	r_io_seek (io, here, R_IO_SEEK_SET);
 	return size;
 }

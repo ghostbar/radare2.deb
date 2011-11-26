@@ -49,10 +49,10 @@ R_API RList *r_sys_dir(const char *path) {
 R_API char *r_sys_cmd_strf(const char *fmt, ...) {
 	char *ret, cmd[4096];
 	va_list ap;
-	va_start(ap, fmt);
+	va_start (ap, fmt);
 	vsnprintf (cmd, sizeof (cmd), fmt, ap);
 	ret = r_sys_cmd_str (cmd, NULL, NULL);
-	va_end(ap);
+	va_end (ap);
 	return ret;
 }
 
@@ -208,7 +208,7 @@ R_API int r_sys_chdir(const char *s) {
 
 #if __UNIX__
 R_API char *r_sys_cmd_str_full(const char *cmd, const char *input, int *len, char **sterr) {
-	char *output, buffer[1024];
+	char buffer[1024], *output = NULL;
 	char *inputptr = (char *)input;
 	int pid, bytes = 0, status;
 	int sh_in[2], sh_out[2], sh_err[2];
@@ -237,14 +237,13 @@ R_API char *r_sys_cmd_str_full(const char *cmd, const char *input, int *len, cha
 		dup2 (sh_out[1], 1); close (sh_out[0]); close (sh_out[1]);
 		if (sterr) dup2 (sh_err[1], 2); else close (2);
 		close (sh_err[0]); close (sh_err[1]); 
-		execl ("/bin/sh", "sh", "-c", cmd, (char*)NULL);
-		exit (1);
+		exit (execl ("/bin/sh", "sh", "-c", cmd, (char*)NULL));
 	default:
-		output = calloc (1, 1024); // TODO: use malloc
+		output = strdup ("");
 		if (!output)
 			return NULL;
 		if (sterr) {
-			*sterr = calloc (1, 1024);
+			*sterr = strdup ("");
 			if (!*sterr) {
 				free (output);
 				return NULL;
@@ -293,9 +292,11 @@ R_API char *r_sys_cmd_str_full(const char *cmd, const char *input, int *len, cha
 			return (NULL);
 		}
 
-		if (*output)
-			return output;
-		free (output);
+		if (output) {
+			if (*output)
+				return output;
+			free (output);
+		}
 	}
 	return NULL;
 }
@@ -431,4 +432,18 @@ R_API const char *r_sys_arch_str(int arch) {
 	if (arch & R_SYS_ARCH_SH) return "sh";
 	if (arch & R_SYS_ARCH_AVR) return "avr";
 	return "none";
+}
+
+R_API int r_sys_run(const ut8 *buf, int len) {
+	int ret, (*cb)();
+	ut8 *ptr, *p = malloc ((4096+len)<<1);
+	ptr = (ut8*)R_MEM_ALIGN (p);
+	if (!ptr) return R_FALSE;
+	memcpy (ptr, buf, 4096);
+	r_mem_protect (ptr, 4096, "rx");
+	r_mem_protect (ptr, 4096, "rwx"); // try, ignore if fail
+	cb = (void*)ptr;
+	ret = cb ();
+	free (p);
+	return ret;
 }

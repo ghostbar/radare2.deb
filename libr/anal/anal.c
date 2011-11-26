@@ -54,15 +54,13 @@ R_API RAnal *r_anal_new() {
 	return anal;
 }
 
-R_API RAnal *r_anal_free(RAnal *anal) {
-	if (anal) {
-		/* TODO: Free anals here */
-		r_listrange_free (anal->fcnstore);
-		r_list_free (anal->fcns);
-		r_list_free (anal->vartypes);
-	}
+R_API void r_anal_free(RAnal *anal) {
+	if (!anal) return;
+	/* TODO: Free anals here */
+	r_listrange_free (anal->fcnstore);
+	r_list_free (anal->fcns);
+	r_list_free (anal->vartypes);
 	free (anal);
-	return NULL;
 }
 
 R_API void r_anal_set_user_ptr(RAnal *anal, void *user) {
@@ -156,21 +154,6 @@ R_API char *r_anal_strmask (RAnal *anal, const char *data) {
 	free (op);
 	free (buf);
 	return ret;
-}
-
-R_API RList *r_anal_get_fcns(RAnal *anal) {
-	return anal->fcns;
-}
-
-/* XXX: Move this function into fcn.c !!! */
-R_API RAnalFcn *r_anal_get_fcn_at(RAnal *anal, ut64 addr) {
-	RAnalFcn *fcni;
-	RListIter *iter;
-eprintf ("DEPRECATED: get-at\n");
-	r_list_foreach (anal->fcns, iter, fcni)
-		if (fcni->addr == addr)
-			return fcni;
-	return NULL;
 }
 
 R_API void r_anal_trace_bb(RAnal *anal, ut64 addr) {

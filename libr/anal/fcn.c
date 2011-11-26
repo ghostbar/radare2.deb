@@ -73,7 +73,7 @@ R_API int r_anal_fcn_xref_del (RAnal *anal, RAnalFcn *fcn, ut64 at, ut64 addr, i
 }
 
 R_API int r_anal_fcn(RAnal *anal, RAnalFcn *fcn, ut64 addr, ut8 *buf, ut64 len, int reftype) {
-	RAnalOp op;
+	RAnalOp op = {0};
 	char *varname;
 	int oplen, idx = 0;
 	if (fcn->addr == -1)
@@ -82,9 +82,11 @@ R_API int r_anal_fcn(RAnal *anal, RAnalFcn *fcn, ut64 addr, ut8 *buf, ut64 len, 
 		R_ANAL_FCN_TYPE_LOC: R_ANAL_FCN_TYPE_FCN;
 	len -= 16; // XXX: hack to avoid buffer overflow by reading >64 bytes..
 	while (idx < len) {
+		r_anal_op_fini (&op);
 		if ((oplen = r_anal_op (anal, &op, addr+idx, buf+idx, len-idx)) == 0) {
 			if (idx == 0) {
 				// eprintf ("Unknown opcode at 0x%08"PFMT64x"\n", addr+idx);
+				r_anal_op_fini (&op);
 				return R_ANAL_RET_END;
 			} else break;
 		}
@@ -127,13 +129,17 @@ R_API int r_anal_fcn(RAnal *anal, RAnalFcn *fcn, ut64 addr, ut8 *buf, ut64 len, 
 		case R_ANAL_OP_TYPE_CALL:
 			if (!r_anal_fcn_xref_add (anal, fcn, op.addr, op.jump,
 					op.type == R_ANAL_OP_TYPE_CALL?
-					R_ANAL_REF_TYPE_CALL : R_ANAL_REF_TYPE_CODE))
+					R_ANAL_REF_TYPE_CALL : R_ANAL_REF_TYPE_CODE)) {
+				r_anal_op_fini (&op);
 				return R_ANAL_RET_ERROR;
+			}
 			break;
 		case R_ANAL_OP_TYPE_RET:
+			r_anal_op_fini (&op);
 			return R_ANAL_RET_END;
 		}
 	}
+	r_anal_op_fini (&op);
 	return fcn->size;
 }
 
@@ -202,7 +208,6 @@ R_API int r_anal_fcn_del(RAnal *anal, ut64 addr) {
 }
 
 R_API RAnalFcn *r_anal_fcn_find(RAnal *anal, ut64 addr, int type) {
-	int root = type & R_ANAL_FCN_TYPE_ROOT;
 #if USE_NEW_FCN_STORE
 	// TODO: type is ignored here? wtf.. we need more work on fcnstore
 	if (root) return r_listrange_find_root (anal->fcnstore, addr);
@@ -210,15 +215,17 @@ R_API RAnalFcn *r_anal_fcn_find(RAnal *anal, ut64 addr, int type) {
 #else
 	RAnalFcn *fcn, *ret = NULL;
 	RListIter *iter;
+	if (type == R_ANAL_FCN_TYPE_ROOT) {
+		r_list_foreach (anal->fcns, iter, fcn) {
+			if (addr == fcn->addr)
+				return fcn;
+		}
+		return NULL;
+	}
 	r_list_foreach (anal->fcns, iter, fcn) {
-		if (type == R_ANAL_FCN_TYPE_NULL || (fcn->type & type)) {
-			if (root) {
-				if (addr == fcn->addr)
-					ret = fcn; 
-			} else {
-				if (addr == fcn->addr || (ret == NULL && (addr > fcn->addr && addr < fcn->addr+fcn->size)))
-					ret = fcn; 
-			}
+		if (!type || (fcn->type & type)) {
+			if (addr == fcn->addr || (ret == NULL && (addr > fcn->addr && addr < fcn->addr+fcn->size)))
+				ret = fcn; 
 		}
 	}
 	return ret;
@@ -266,7 +273,9 @@ R_API int r_anal_fcn_add_bb(RAnalFcn *fcn, ut64 addr, ut64 size, ut64 jump, ut64
 // TODO: rename fcn_bb_split()
 R_API int r_anal_fcn_split_bb(RAnalFcn *fcn, RAnalBlock *bb, ut64 addr) {
 	RAnalBlock *bbi;
+#if R_ANAL_BB_HAS_OPS
 	RAnalOp *opi;
+#endif
 	RListIter *iter;
 
 	r_list_foreach (fcn->bbs, iter, bbi) {
@@ -290,16 +299,20 @@ R_API int r_anal_fcn_split_bb(RAnalFcn *fcn, RAnalBlock *bb, ut64 addr) {
 				bb->type = bbi->type;
 				bbi->type = R_ANAL_BB_TYPE_BODY;
 			}
-			iter = r_list_iterator (bbi->ops);
-			while (r_list_iter_next (iter)) {
-				opi = r_list_iter_get (iter);
-				if (opi->addr >= addr) {
-					r_list_split (bbi->ops, opi);
-					bbi->ninstr--;
-					r_list_append (bb->ops, opi);
-					bb->ninstr++;
+#if R_ANAL_BB_HAS_OPS
+			if (bbi->ops) {
+				iter = r_list_iterator (bbi->ops);
+				while (r_list_iter_next (iter)) {
+					opi = r_list_iter_get (iter);
+					if (opi->addr >= addr) {
+						r_list_split (bbi->ops, opi);
+						bbi->ninstr--;
+						r_list_append (bb->ops, opi);
+						bb->ninstr++;
+					}
 				}
 			}
+#endif
 			return R_ANAL_RET_END;
 		}
 	}
@@ -309,9 +322,11 @@ R_API int r_anal_fcn_split_bb(RAnalFcn *fcn, RAnalBlock *bb, ut64 addr) {
 // TODO: rename fcn_bb_overlap()
 R_API int r_anal_fcn_overlap_bb(RAnalFcn *fcn, RAnalBlock *bb) {
 	RAnalBlock *bbi;
+	RListIter *iter;
+#if R_ANAL_BB_HAS_OPS
 	RListIter nit; // hack to make r_list_unlink not fail that hard
 	RAnalOp *opi;
-	RListIter *iter;
+#endif
 
 	r_list_foreach (fcn->bbs, iter, bbi)
 		if (bb->addr+bb->size > bbi->addr && bb->addr+bb->size <= bbi->addr+bbi->size) {
@@ -323,6 +338,7 @@ R_API int r_anal_fcn_overlap_bb(RAnalFcn *fcn, RAnalBlock *bb) {
 				bb->type = R_ANAL_BB_TYPE_HEAD;
 				bbi->type = bbi->type^R_ANAL_BB_TYPE_HEAD;
 			} else bb->type = R_ANAL_BB_TYPE_BODY;
+#if R_ANAL_BB_HAS_OPS
 			r_list_foreach (bb->ops, iter, opi) {
 				if (opi->addr >= bbi->addr) {
 					nit.n = iter->n;
@@ -331,7 +347,8 @@ R_API int r_anal_fcn_overlap_bb(RAnalFcn *fcn, RAnalBlock *bb) {
 					iter = &nit;
 				}
 			}
-					//r_list_unlink (bb->ops, opi);
+#endif
+			//r_list_unlink (bb->ops, opi);
 			r_list_append (fcn->bbs, bb);
 			return R_ANAL_RET_END;
 		}
@@ -447,4 +464,15 @@ R_API int r_anal_fcn_from_string(RAnal *a, RAnalFcn *f, const char *sig) {
 	free (str);
 	eprintf ("Function string parse fail\n");
 	return R_FALSE;
+}
+
+R_API RAnalFcn *r_anal_get_fcn_at(RAnal *anal, ut64 addr) {
+	RAnalFcn *fcni;
+	RListIter *iter;
+//eprintf ("DEPRECATED: get-at\n");
+	r_list_foreach (anal->fcns, iter, fcni)
+		//if (fcni->addr == addr)
+		if (addr >= fcni->addr && addr < (fcni->addr+fcni->size))
+			return fcni;
+	return NULL;
 }
