@@ -22,7 +22,7 @@ Description: free and advanced command line hexadecimal editor
  (osx,bsd,linux,w32), stream analyzer, assembler/disassembler (rasm)
  for x86,arm,ppc,m68k,java,msil,sparc code analysis modules and
  scripting facilities. A bindiffer named radiff, base converter (rax),
- shellcode development helper (rasc), a binary information extracter
+ shellcode development helper (rasc), a binary information extractor
  supporting (pe, mach0, elf, class, ...) named rabin, and a block-based
  hash utility called rahash.
 
@@ -39,7 +39,7 @@ Description: free and advanced command line hexadecimal editor
 # (osx,bsd,linux,w32), stream analyzer, assembler/disassembler (rasm)
 # for x86,arm,ppc,m68k,java,msil,sparc code analysis modules and
 # scripting facilities. A bindiffer named radiff, base converter (rax),
-# shellcode development helper (rasc), a binary information extracter
+# shellcode development helper (rasc), a binary information extractor
 # supporting (pe, mach0, elf, class, ...) named rabin, and a block-based
 # hash utility called rahash.
 # .
@@ -61,7 +61,7 @@ Description: libraries from the radare2 suite
  (osx,bsd,linux,w32), stream analyzer, assembler/disassembler (rasm)
  for x86,arm,ppc,m68k,java,msil,sparc code analysis modules and
  scripting facilities. A bindiffer named radiff, base converter (rax),
- shellcode development helper (rasc), a binary information extracter
+ shellcode development helper (rasc), a binary information extractor
  supporting (pe, mach0, elf, class, ...) named rabin, and a block-based
  hash utility called rahash.
  .
@@ -80,7 +80,7 @@ Description: devel files from the radare2 suite
  (osx,bsd,linux,w32), stream analyzer, assembler/disassembler (rasm)
  for x86,arm,ppc,m68k,java,msil,sparc code analysis modules and
  scripting facilities. A bindiffer named radiff, base converter (rax),
- shellcode development helper (rasc), a binary information extracter
+ shellcode development helper (rasc), a binary information extractor
  supporting (pe, mach0, elf, class, ...) named rabin, and a block-based
  hash utility called rahash.
  .
@@ -100,7 +100,7 @@ Description: debug symbols for libraries from radare suite
  (osx,bsd,linux,w32), stream analyzer, assembler/disassembler (rasm)
  for x86,arm,ppc,m68k,java,msil,sparc code analysis modules and
  scripting facilities. A bindiffer named radiff, base converter (rax),
- shellcode development helper (rasc), a binary information extracter
+ shellcode development helper (rasc), a binary information extractor
  supporting (pe, mach0, elf, class, ...) named rabin, and a block-based
  hash utility called rahash.
  .
