@@ -2,6 +2,7 @@ libr_anal.so.0.9hg libradare2-0.8.8 #MINVER#
  cmd_fpu_tbl_00_BF@Base 0.6
  cmd_fpu_tbl_C0_FF@Base 0.6
  dislen@Base 0.6
+ gpr_regs@Base 0.9~hg20111125
  itbl_1byte@Base 0.6
  itbl_1byte_grp11_op_C6@Base 0.6
  itbl_1byte_grp11_op_C7@Base 0.6
@@ -89,6 +90,8 @@ libr_anal.so.0.9hg libradare2-0.8.8 #MINVER#
  r_anal_cc_update@Base 0.7
  r_anal_cond_clone@Base 0.6
  r_anal_cond_eval@Base 0.6
+ r_anal_cond_fini@Base 0.9~hg20111125
+ r_anal_cond_free@Base 0.9~hg20111125
  r_anal_cond_new@Base 0.6
  r_anal_cond_new_from_op@Base 0.7
  r_anal_cond_new_from_string@Base 0.6
@@ -121,12 +124,12 @@ libr_anal.so.0.9hg libradare2-0.8.8 #MINVER#
  r_anal_fcn_xref_del@Base 0.8.6
  r_anal_free@Base 0.6
  r_anal_get_fcn_at@Base 0.7
- r_anal_get_fcns@Base 0.7
  r_anal_list@Base 0.6
  r_anal_new@Base 0.6
  r_anal_op@Base 0.7
  r_anal_op_copy@Base 0.8
  r_anal_op_execute@Base 0.7
+ r_anal_op_fini@Base 0.9~hg20111125
  r_anal_op_free@Base 0.7
  r_anal_op_list_new@Base 0.7
  r_anal_op_new@Base 0.7
@@ -331,6 +334,7 @@ libr_asm.so.0.9hg libradare2-0.8.8 #MINVER#
  r_asm_code_new@Base 0.6
  r_asm_code_set_equ@Base 0.6
  r_asm_del@Base 0.6
+ r_asm_describe@Base 0.9~hg20111125
  r_asm_disassemble@Base 0.6
  r_asm_filter_input@Base 0.8.6
  r_asm_filter_output@Base 0.8.6
@@ -364,6 +368,7 @@ libr_asm.so.0.9hg libradare2-0.8.8 #MINVER#
  r_asm_set_subarch@Base 0.6
  r_asm_set_syntax@Base 0.6
  r_asm_set_user_ptr@Base 0.6
+ r_asm_setup@Base 0.9~hg20111125
  r_asm_use@Base 0.6
  read_short@Base 0.6
  regname@Base 0.6
@@ -532,6 +537,7 @@ libr_bin.so.0.9hg libradare2-0.8.8 #MINVER#
  dex_read_sleb128@Base 0.8
  dex_read_uleb128@Base 0.8
  dex_uleb128_len@Base 0.8
+ fstypes@Base 0.9~hg20111125
  is_gnu_v3_mangled_ctor@Base 0.7
  is_gnu_v3_mangled_dtor@Base 0.7
  java_demangle_v3@Base 0.7
@@ -560,6 +566,7 @@ libr_bin.so.0.9hg libradare2-0.8.8 #MINVER#
  r_bin_get_info@Base 0.6
  r_bin_get_libs@Base 0.6
  r_bin_get_object@Base 0.6
+ r_bin_get_offset@Base 0.9~hg20111125
  r_bin_get_relocs@Base 0.6
  r_bin_get_section_at@Base 0.6
  r_bin_get_sections@Base 0.6
@@ -621,6 +628,7 @@ libr_bin.so.0.9hg libradare2-0.8.8 #MINVER#
  r_bin_meta_get_source_line@Base 0.6
  r_bin_new@Base 0.6
  r_bin_object_free@Base 0.6
+ r_bin_p9_get_arch@Base 0.9~hg20111125
  r_bin_plugin_any@Base 0.8.6
  r_bin_plugin_dex@Base 0.8
  r_bin_plugin_elf64@Base 0.6
@@ -629,6 +637,7 @@ libr_bin.so.0.9hg libradare2-0.8.8 #MINVER#
  r_bin_plugin_java@Base 0.6
  r_bin_plugin_mach064@Base 0.6
  r_bin_plugin_mach0@Base 0.6
+ r_bin_plugin_p9@Base 0.9~hg20111125
  r_bin_plugin_pe64@Base 0.6
  r_bin_plugin_pe@Base 0.6
  r_bin_select@Base 0.8.6
@@ -730,6 +739,7 @@ libr_cons.so.0.9hg libradare2-0.8.8 #MINVER#
  r_cons_break_end@Base 0.6
  r_cons_clear00@Base 0.6
  r_cons_clear@Base 0.6
+ r_cons_clear_line@Base 0.9~hg20111125
  r_cons_column@Base 0.8
  r_cons_eof@Base 0.6
  r_cons_fgets@Base 0.6
@@ -779,6 +789,7 @@ libr_core.so.0.9hg libradare2-0.8.8 #MINVER#
  r_core_asm_hit_new@Base 0.6
  r_core_asm_search@Base 0.6
  r_core_asm_strsearch@Base 0.6
+ r_core_bin_info@Base 0.9~hg20111125
  r_core_bin_load@Base 0.6
  r_core_block_read@Base 0.6
  r_core_block_size@Base 0.6
@@ -847,6 +858,7 @@ libr_core.so.0.9hg libradare2-0.8.8 #MINVER#
  r_core_visual@Base 0.6
  r_core_visual_anal@Base 0.6
  r_core_visual_cmd@Base 0.6
+ r_core_visual_comments@Base 0.9~hg20111125
  r_core_visual_config@Base 0.6
  r_core_visual_define@Base 0.6
  r_core_visual_mounts@Base 0.8
@@ -1021,6 +1033,7 @@ libr_debug.so.0.9hg libradare2-0.8.8 #MINVER#
  r_debug_map_list_free@Base 0.6
  r_debug_map_list_new@Base 0.6
  r_debug_map_new@Base 0.6
+ r_debug_map_protect@Base 0.9~hg20111125
  r_debug_map_sync@Base 0.6
  r_debug_new@Base 0.6
  r_debug_pid_free@Base 0.6
@@ -1082,10 +1095,13 @@ libr_egg.so.0.9hg libradare2-0.8.8 #MINVER#
  nested@Base 0.8.8
  nestede@Base 0.8.8
  nestedi@Base 0.8.8
+ r_egg_add@Base 0.9~hg20111125
  r_egg_alloc@Base 0.8.6
  r_egg_append@Base 0.8.6
  r_egg_assemble@Base 0.8.6
  r_egg_compile@Base 0.8.6
+ r_egg_encode@Base 0.9~hg20111125
+ r_egg_fill@Base 0.9~hg20111125
  r_egg_free@Base 0.8.6
  r_egg_get_assembly@Base 0.8.6
  r_egg_get_bin@Base 0.8.6
@@ -1100,16 +1116,24 @@ libr_egg.so.0.9hg libradare2-0.8.8 #MINVER#
  r_egg_math@Base 0.8.6
  r_egg_mkvar@Base 0.8.6
  r_egg_new@Base 0.8.6
+ r_egg_option_get@Base 0.9~hg20111125
+ r_egg_option_set@Base 0.9~hg20111125
+ r_egg_padding@Base 0.9~hg20111125
+ r_egg_plugin_exec@Base 0.9~hg20111125
+ r_egg_plugin_xor@Base 0.9~hg20111125
  r_egg_printf@Base 0.8.6
  r_egg_raw@Base 0.8.6
  r_egg_reset@Base 0.8.6
  r_egg_run@Base 0.8.6
  r_egg_setup@Base 0.8.6
+ r_egg_shellcode@Base 0.9~hg20111125
  r_egg_syscall@Base 0.8.6
  r_egg_to_string@Base 0.8.6
+ radare_plugin@Base 0.9~hg20111125
 libr_flags.so.0.9hg libradare2-0.8.8 #MINVER#
  r_flag_free@Base 0.6
  r_flag_get@Base 0.6
+ r_flag_get_at@Base 0.9~hg20111125
  r_flag_get_i@Base 0.6
  r_flag_item_set_name@Base 0.8
  r_flag_list@Base 0.6
@@ -1125,6 +1149,7 @@ libr_flags.so.0.9hg libradare2-0.8.8 #MINVER#
  r_flag_unset_glob@Base 0.8
  r_flag_unset_i@Base 0.6
 libr_fs.so.0.9hg libradare2-0.8.8 #MINVER#
+ fstypes@Base 0.9~hg20111125
  grub_abort@Base 0.7
  grub_amiga_partition_map@Base 0.7
  grub_apple_partition_map@Base 0.7
@@ -1282,6 +1307,7 @@ libr_fs.so.0.9hg libradare2-0.8.8 #MINVER#
  r_fs_find_off@Base 0.8
  r_fs_free@Base 0.7
  r_fs_mount@Base 0.7
+ r_fs_name@Base 0.9~hg20111125
  r_fs_new@Base 0.7
  r_fs_open@Base 0.7
  r_fs_partition_free@Base 0.7
@@ -1289,6 +1315,7 @@ libr_fs.so.0.9hg libradare2-0.8.8 #MINVER#
  r_fs_partition_new@Base 0.7
  r_fs_partition_type@Base 0.8
  r_fs_partition_type_get@Base 0.8
+ r_fs_partition_type_str@Base 0.9~hg20111125
  r_fs_partitions@Base 0.7
  r_fs_plugin_cpio@Base 0.7
  r_fs_plugin_ext2@Base 0.7
@@ -1767,6 +1794,18 @@ libr_util.so.0.9hg libradare2-0.8.8 #MINVER#
  r_flist_new@Base 0.6
  r_flist_prev@Base 0.6
  r_flist_set@Base 0.6
+ r_graph_add@Base 0.9~hg20111125
+ r_graph_free@Base 0.9~hg20111125
+ r_graph_get_current@Base 0.9~hg20111125
+ r_graph_get_node@Base 0.9~hg20111125
+ r_graph_new@Base 0.9~hg20111125
+ r_graph_node_free@Base 0.9~hg20111125
+ r_graph_node_new@Base 0.9~hg20111125
+ r_graph_plant@Base 0.9~hg20111125
+ r_graph_pop@Base 0.9~hg20111125
+ r_graph_push@Base 0.9~hg20111125
+ r_graph_reset@Base 0.9~hg20111125
+ r_graph_traverse@Base 0.9~hg20111125
  r_hashtable64_free@Base 0.8
  r_hashtable64_insert@Base 0.8
  r_hashtable64_lookup@Base 0.8
@@ -1962,6 +2001,7 @@ libr_util.so.0.9hg libradare2-0.8.8 #MINVER#
  r_sys_now@Base 0.6
  r_sys_perror@Base 0.6
  r_sys_rmkdir@Base 0.6
+ r_sys_run@Base 0.9~hg20111125
  r_sys_setenv@Base 0.6
  r_sys_sleep@Base 0.6
  r_sys_usleep@Base 0.6
