@@ -9,6 +9,8 @@
 #include <r_util.h>
 #include <r_parse.h>
 
+#define R_ASM_OPCODES_PATH R2_LIBDIR"/radare2/"R2_VERSION"/opcodes"
+// XXX too big!
 #define R_ASM_BUFSIZE 1024
 
 /* backward compatibility */
@@ -46,7 +48,7 @@ enum {
 };
 
 typedef struct r_asm_op_t {
-	int  inst_len;
+	int  inst_len; // rename to size or length
 	// But this is pretty slow..so maybe we should add some accessors
 	ut8  buf[R_ASM_BUFSIZE];
 	char buf_asm[R_ASM_BUFSIZE];
@@ -81,6 +83,7 @@ typedef struct r_asm_t {
 	RBinBind binb;
 	RParse *ifilter;
 	RParse *ofilter;
+	RPair *pair;
 } RAsm;
 
 typedef int (*RAsmModifyCallback)(RAsm *a, ut8 *buf, int field, ut64 val);
@@ -108,6 +111,7 @@ R_API void r_asm_free(RAsm *a);
 R_API int r_asm_modify(RAsm *a, ut8 *buf, int field, ut64 val);
 R_API void r_asm_set_user_ptr(RAsm *a, void *user);
 R_API int r_asm_add(RAsm *a, RAsmPlugin *foo);
+R_API int r_asm_setup(RAsm *a, const char *arch, int bits, int big_endian);
 R_API int r_asm_use(RAsm *a, const char *name);
 R_API int r_asm_set_bits(RAsm *a, int bits);
 R_API int r_asm_set_big_endian(RAsm *a, int boolean);
@@ -121,6 +125,7 @@ R_API struct r_asm_code_t* r_asm_massemble(RAsm *a, const char *buf);
 R_API struct r_asm_code_t* r_asm_assemble_file(RAsm *a, const char *file);
 R_API int r_asm_filter_input(RAsm *a, const char *f);
 R_API int r_asm_filter_output(RAsm *a, const char *f);
+R_API char *r_asm_describe(RAsm *a, const char* str);
 
 /* code.c */
 R_API RAsmCode *r_asm_code_new();

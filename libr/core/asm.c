@@ -41,6 +41,7 @@ R_API char* r_core_asm_search(RCore *core, const char *input, ut64 from, ut64 to
 }
 
 #define OPSZ 8
+// TODO: add support for byte-per-byte opcode search
 R_API RList *r_core_asm_strsearch(RCore *core, const char *input, ut64 from, ut64 to) {
 	RCoreAsmHit *hit;
 	RAsmOp op;
@@ -67,9 +68,8 @@ R_API RList *r_core_asm_strsearch(RCore *core, const char *input, ut64 from, ut6
 		free (ptr);
 		return NULL;
 	}
-	for (tokcount=0;;tokcount++) {
-		if (tokcount==0) tok = (char*)strtok (ptr, ";");
-		else tok = (char*)strtok (NULL, ";");
+	for (tokcount=0; ; tokcount++) {
+		tok = strtok (tokcount? NULL: ptr, ",");
 		if (tok == NULL)
 			break;
 		tokens[tokcount] = r_str_trim_head_tail (tok);
@@ -104,6 +104,10 @@ R_API RList *r_core_asm_strsearch(RCore *core, const char *input, ut64 from, ut6
 					}
 					hit->addr = at+tidx;
 					hit->len = idx+len-tidx;
+					if (hit->len == -1) {
+						r_core_asm_hit_free (hit);
+						return hits;
+					}
 					hit->code = strdup (code);
 					r_list_append (hits, hit);
 					R_FREE (code);

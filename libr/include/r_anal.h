@@ -11,6 +11,15 @@
 #include <r_util.h>
 #include <r_syscall.h>
 
+// TODO: save memory2 : fingerprints must be pointers to a buffer
+// containing a dupped file in memory
+
+/* save memory:
+   bb_has_ops=1 -> 600M 
+   bb_has_ops=0 -> 350MB
+*/
+#define R_ANAL_BB_HAS_OPS 0
+
 // TODO: Remove this define? /cc @nibble_ds
 #define VERBOSE_ANAL if(0)
 
@@ -245,7 +254,9 @@ typedef struct r_anal_bb_t {
 	int traced;
 	ut8 *fingerprint;
 	RAnalDiff *diff;
+#if R_ANAL_BB_HAS_OPS
 	RList *ops;
+#endif
 	RAnalCond *cond;
 } RAnalBlock;
 
@@ -400,7 +411,7 @@ R_API RAnalFcn *r_listrange_find_root(RListRange* s, ut64 addr);
 /* --------- */ /* REFACTOR */ /* ---------- */
 /* anal.c */
 R_API RAnal *r_anal_new();
-R_API RAnal *r_anal_free(RAnal *r);
+R_API void r_anal_free(RAnal *r);
 R_API void r_anal_set_user_ptr(RAnal *anal, void *user);
 R_API int r_anal_add(RAnal *anal, struct r_anal_plugin_t *foo);
 R_API int r_anal_list(RAnal *anal);
@@ -411,12 +422,12 @@ R_API int r_anal_set_big_endian(RAnal *anal, int boolean);
 R_API char *r_anal_strmask (RAnal *anal, const char *data);
 R_API void r_anal_trace_bb(RAnal *anal, ut64 addr);
 R_API RAnalFcn *r_anal_get_fcn_at(RAnal *anal, ut64 addr);
-R_API RList *r_anal_get_fcns(RAnal *anal);
+#define r_anal_get_fcns(x) x->fcns
 
 /* bb.c */
 R_API RAnalBlock *r_anal_bb_new();
 R_API RList *r_anal_bb_list_new();
-R_API void r_anal_bb_free(void *bb);
+R_API void r_anal_bb_free(RAnalBlock *bb);
 R_API int r_anal_bb(RAnal *anal, RAnalBlock *bb,
 		ut64 addr, ut8 *buf, ut64 len, int head);
 R_API RAnalBlock *r_anal_bb_from_offset(RAnal *anal, ut64 off);
@@ -424,6 +435,7 @@ R_API RAnalBlock *r_anal_bb_from_offset(RAnal *anal, ut64 off);
 /* op.c */
 R_API RAnalOp *r_anal_op_new();
 R_API void r_anal_op_free(void *op);
+R_API void r_anal_op_fini(RAnalOp *op);
 R_API RList *r_anal_op_list_new();
 R_API int r_anal_op(RAnal *anal, RAnalOp *op, ut64 addr,
 		const ut8 *data, int len);
@@ -448,6 +460,10 @@ R_API int r_anal_fcn_overlap_bb(RAnalFcn *fcn, RAnalBlock *bb);
 R_API RAnalVar *r_anal_fcn_get_var(RAnalFcn *fs, int num, int dir);
 R_API char *r_anal_fcn_to_string(RAnal *a, RAnalFcn* fs);
 R_API int r_anal_fcn_from_string(RAnal *a, RAnalFcn *f, const char *_str);
+#define r_anal_fcn_get_refs(x) x->refs
+#define r_anal_fcn_get_xrefs(x) x->xrefs
+#define r_anal_fcn_get_vars(x) x->vars
+#define r_anal_fcn_get_bbs(x) x->bbs
 
 /* ref.c */
 R_API RAnalRef *r_anal_ref_new();
@@ -505,7 +521,8 @@ R_API void r_anal_value_free(RAnalValue *value);
 
 R_API RAnalCond *r_anal_cond_new();
 R_API RAnalCond *r_anal_cond_new_from_op(RAnalOp *op);
-#define r_anal_cond_free(x) free(x);
+R_API void r_anal_cond_fini (RAnalCond *c);
+R_API void r_anal_cond_free (RAnalCond *c);
 R_API char *r_anal_cond_to_string(RAnalCond *cond);
 R_API int r_anal_cond_eval (RAnal *anal, RAnalCond *cond);
 R_API RAnalCond *r_anal_cond_new_from_string(const char *str);

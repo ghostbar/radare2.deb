@@ -56,6 +56,8 @@ w32dist:
 	rm w32dist/plugin.dll
 	mkdir -p w32dist/radare2/${VERSION}/syscall
 	cp -f libr/syscall/d/*.sdb w32dist/radare2/${VERSION}/syscall
+	mkdir -p w32dist/radare2/${VERSION}/opcodes
+	cp -f libr/asm/d/*.sdb w32dist/radare2/${VERSION}/opcodes
 	mkdir -p w32dist/share/doc/radare2
 	cp -f doc/fortunes w32dist/share/doc/radare2
 	mv w32dist radare2-w32-${VERSION}
@@ -104,6 +106,7 @@ install-doc-symlink:
 install: install-doc install-man
 	cd libr && ${MAKE} install PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	cd binr && ${MAKE} install PREFIX=${PREFIX} DESTDIR=${DESTDIR}
+	cd libr/asm/d ; ${MAKE} install PREFIX=${PREFIX} LIBDIR=${LIBDIR} DESTDIR=${DESTDIR}
 	cd libr/syscall/d ; ${MAKE} install PREFIX=${PREFIX} LIBDIR=${LIBDIR} DESTDIR=${DESTDIR}
 	cd libr/magic ; ${MAKE} install-data LIBDIR=${LIBDIR} PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 
@@ -114,6 +117,7 @@ install-pkgconfig-symlink:
 symstall install-symlink: install-man-symlink install-doc-symlink install-pkgconfig-symlink
 	cd libr && ${MAKE} install-symlink PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	cd binr && ${MAKE} install-symlink PREFIX=${PREFIX} DESTDIR=${DESTDIR}
+	cd libr/asm/d ; ${MAKE} install-symlink LIBDIR=${LIBDIR} PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	cd libr/syscall/d ; ${MAKE} install-symlink LIBDIR=${LIBDIR} PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	cd libr/magic ; ${MAKE} install-symlink-data LIBDIR=${LIBDIR} PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 
@@ -126,7 +130,21 @@ deinstall uninstall:
 	@echo
 
 purge:
-	rm -rf ${DESTDIR}/${LIBDIR}/libr_*
+	rm -f ${DESTDIR}/${BINDIR}/r2
+	rm -f ${DESTDIR}/${BINDIR}/radare2
+	rm -f ${DESTDIR}/${BINDIR}/rabin2
+	rm -f ${DESTDIR}/${BINDIR}/rafind2
+	rm -f ${DESTDIR}/${BINDIR}/ranal2
+	rm -f ${DESTDIR}/${BINDIR}/rax2
+	rm -f ${DESTDIR}/${BINDIR}/rsc2
+	rm -f ${DESTDIR}/${BINDIR}/rasm2
+	rm -f ${DESTDIR}/${BINDIR}/rarc2
+	rm -f ${DESTDIR}/${BINDIR}/rahash2
+	rm -f ${DESTDIR}/${BINDIR}/ragg2
+	rm -f ${DESTDIR}/${BINDIR}/rarun2
+	rm -f ${DESTDIR}/${BINDIR}/rasc2
+	rm -f ${DESTDIR}/${BINDIR}/radiff2
+	rm -f ${DESTDIR}/${LIBDIR}/libr_*
 	rm -rf ${DESTDIR}/${LIBDIR}/radare2
 	rm -rf ${DESTDIR}/${INCLUDEDIR}/libr
 	cd man ; for a in *.1 ; do rm -f ${MDR}/man1/$$a ; done

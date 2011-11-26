@@ -184,7 +184,38 @@ typedef struct r_list_range_t {
 	//RListComparator c;
 } RListRange;
 
+/* graph api */
+typedef struct r_graph_node_t {
+	RList *parents; // <RGraphNode>
+	RList *children; // <RGraphNode>
+	ut64 addr;
+	void *data;
+	int refs;
+	RListFree free;
+} RGraphNode;
+
+typedef struct r_graph_t {
+	RList *path; // <RGraphNode>
+	RGraphNode *root;
+	RList *roots; // <RGraphNode>
+	RListIter *cur; // ->data = RGraphNode*
+	RList *nodes; // <RGraphNode>
+	int level;
+} RGraph;
+
 #ifdef R_API
+R_API RGraphNode *r_graph_node_new (ut64 addr, void *data);
+R_API void r_graph_node_free (RGraphNode *n);
+R_API void r_graph_traverse(RGraph *t);
+R_API RGraph * r_graph_new ();
+R_API void r_graph_free (RGraph* t);
+R_API RGraphNode* r_graph_get_current (RGraph *t, ut64 addr);
+R_API RGraphNode* r_graph_get_node (RGraph *t, ut64 addr, boolt c);
+R_API void r_graph_reset (RGraph *t);
+R_API void r_graph_add (RGraph *t, ut64 from, ut64 addr, void *data);
+R_API void r_graph_plant(RGraph *t);
+R_API void r_graph_push (RGraph *t, ut64 addr, void *data);
+R_API RGraphNode* r_graph_pop(RGraph *t);
 
 R_API RMmap *r_file_mmap (const char *file, boolt rw);
 R_API void r_file_mmap_free (RMmap *m);
@@ -203,7 +234,7 @@ R_API RNum *r_num_new(RNumCallback cb, void *ptr);
 #define R_BUF_CUR -1
 R_API RBuffer *r_buf_new();
 R_API int r_buf_set_bits(RBuffer *b, int bitoff, int bitsize, ut64 value);
-R_API int r_buf_set_bytes(RBuffer *b, ut8 *buf, int length);
+R_API int r_buf_set_bytes(RBuffer *b, const ut8 *buf, int length);
 R_API int r_buf_append_bytes(RBuffer *b, const ut8 *buf, int length);
 R_API int r_buf_append_nbytes(RBuffer *b, int length);
 R_API int r_buf_append_ut32(RBuffer *b, ut32 n);
@@ -366,6 +397,7 @@ R_API int r_file_mkstemp(const char *prefix, char **oname);
 R_API char *r_file_tmpdir();
 
 R_API ut64 r_sys_now();
+R_API int r_sys_run(const ut8 *buf, int len);
 R_API int r_sys_crash_handler(const char *cmd);
 R_API const char *r_sys_arch_str(int arch);
 R_API int r_sys_arch_id(const char *arch);

@@ -36,7 +36,7 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 	char *line = NULL, *comment, *opstr, *osl = NULL; // old source line
 	char *refline = NULL;
 	RAsmOp asmop;
-	RAnalOp analop;
+	RAnalOp analop = {0};
 	RFlagItem *flag;
 	RMetaItem *mi;
 	ut64 dest = UT64_MAX;
@@ -76,7 +76,6 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 	int ocols = 0;
 	int lcols = 0;
 	
-
 	if (show_lines) ocols += 10;
 	if (show_offset) ocols += 14;
 	lcols = ocols+2;
@@ -205,9 +204,9 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 		if (core->inc == 0)
 			core->inc = ret;
 
-		if (lastfail)
-			memset (&analop, 0, sizeof (analop));
-		else r_anal_op (core->anal, &analop, at, buf+idx, (int)(len-idx));
+		r_anal_op_fini (&analop);
+		if (!lastfail)
+			r_anal_op (core->anal, &analop, at, buf+idx, (int)(len-idx));
 		{
 			RAnalValue *src;
 			switch (analop.type) {
@@ -274,7 +273,7 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 							refi->type==R_ANAL_REF_TYPE_CALL?"CODE (CALL)":"DATA", refi->addr,
 							fun?fun->name:"unk");
 				}
-				r_list_destroy (xrefs);
+				r_list_free (xrefs);
 			}
 		}
 		if (adistrick)
@@ -379,7 +378,7 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 			r_cons_printf ("*");
 		else r_cons_printf (" ");
 		if (show_bytes) {
-			char *str, pad[64];
+			char *str = NULL, pad[64];
 			char extra[64];
 			strcpy (extra, " ");
 			flag = NULL; // HACK
@@ -428,7 +427,7 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 					r_cons_printf (" %s %s %s"Color_RESET, pad, str, extra);
 				else r_cons_printf (" %s %s %s", pad, str, extra);
 			}
-			if (!show_color) free (str);
+			free (str);
 		}
 
 		if (show_color) {
@@ -450,6 +449,9 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 				break;
 			case R_ANAL_OP_TYPE_SWI:
 				r_cons_printf (Color_MAGENTA);
+				break;
+			case R_ANAL_OP_TYPE_TRAP:
+				r_cons_printf (Color_BRED);
 				break;
 			case R_ANAL_OP_TYPE_RET:
 				r_cons_printf (Color_RED);
@@ -522,10 +524,12 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 		if (!r_anal_cc_update (core->anal, &cc, &analop)) {
 			if (show_functions) {
 				char *ccstr = r_anal_cc_to_string (core->anal, &cc);
-				if (show_color)
-					r_cons_printf ("\n%s%s   "Color_TURQOISE"; %s"Color_RESET, pre, refline, ccstr);
-				else r_cons_printf ("\n%s%s    ; %s", pre, refline, ccstr);
-				free (ccstr);
+				if (ccstr) {
+					if (show_color)
+						r_cons_printf ("\n%s%s   "Color_TURQOISE"; %s"Color_RESET, pre, refline, ccstr);
+					else r_cons_printf ("\n%s%s    ; %s", pre, refline, ccstr);
+					free (ccstr);
+				}
 			}
 			r_anal_cc_reset (&cc);
 		}

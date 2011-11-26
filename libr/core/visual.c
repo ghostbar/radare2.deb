@@ -186,6 +186,46 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 	case 't':
 		r_core_visual_trackflags (core);
 		break;
+	case 'x':
+		{
+		int count = 0;
+		RList *xrefs;
+		RAnalRef *refi;
+		RListIter *iter;
+		RAnalFcn *fun;
+
+		if ((xrefs = r_anal_xref_get (core->anal, core->offset))) {
+			r_cons_printf ("XREFS:\n");
+			if (r_list_empty (xrefs)) {
+				r_cons_printf ("\tNo XREF found at 0x%"PFMT64x"\n", core->offset);
+				r_cons_any_key ();
+			} else {
+				r_list_foreach (xrefs, iter, refi) {
+					fun = r_anal_fcn_find (core->anal, refi->addr, R_ANAL_FCN_TYPE_NULL);
+					r_cons_printf ("\t[%i] %s XREF 0x%08"PFMT64x" (%s)\n", count,
+							refi->type==R_ANAL_REF_TYPE_CODE?"CODE (JMP)":
+							refi->type==R_ANAL_REF_TYPE_CALL?"CODE (CALL)":"DATA", refi->addr,
+							fun?fun->name:"unk");
+					if (++count > 9) break;
+				}
+			}
+		} else xrefs = NULL;
+		r_cons_flush ();
+		ch = r_cons_readchar ();
+		if (ch >= '0' && ch <= '9') {
+			refi = r_list_get_n (xrefs, ch-0x30);
+			if (refi) {
+				sprintf (buf, "s 0x%"PFMT64x, refi->addr);
+				r_core_cmd (core, buf, 0);
+			}
+		}
+		if (xrefs)
+			r_list_free (xrefs);
+		}
+		break;
+	case 'T':
+		r_core_visual_comments (core);
+		break;
 	case 'v':
 		r_core_visual_anal (core);
 		break;
@@ -363,6 +403,11 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 				r_config_set_i (core->config, "scr.cols", scrcols+2);
 		}
 		break;
+	case 'I':
+		r_core_cmd (core, "dsp", 0);
+		r_core_cmd (core, ".dr*", 0);
+		//r_core_cmd(core, "s eip", 0);
+		break;
 	case 's':
 		r_core_cmd (core, "ds", 0);
 		r_core_cmd (core, ".dr*", 0);
@@ -375,9 +420,11 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		break;
 	case 'p':
 		core->printidx = (core->printidx+1)%NPF;
+		r_cons_clear00 ();
 		break;
 	case 'P':
 		core->printidx = (core->printidx-1)%NPF;
+		r_cons_clear00 ();
 		break;
 	case 'm':
 		r_core_visual_mark (core, r_cons_readchar ());
@@ -487,9 +534,6 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		if (r_io_sundo_redo (core->io))
 			r_core_seek (core, core->io->off, 1);
 		break;
-	case 'x':
-		r_core_cmdf (core, "./a 0x%08llx @ entry0", core->offset);
-		break;
 	case 'z':
 		if (zoom && cursor) {
 			ut64 from = r_config_get_i (core->config, "zoom.from");
@@ -510,10 +554,11 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		" cC      - toggle cursor and colors\n"
 		" gG      - go seek to begin and end of file (0-$s)\n"
 		" d[f?]   - define function, data, code, ..\n"
-		" x       - find xrefs for current offset\n"
+		" x       - show xrefs to seek between them\n"
 		" sS      - step / step over\n"
 		" e       - edit eval configuration variables\n"
 		" t       - track flags (browse symbols, functions..)\n"
+		" T       - browse anal info and comments\n"
 		" v       - visual code analysis menu\n"
 		" fF      - seek next/prev function/flag/hit (scr.fkey)\n"
 		" B       - toggle automatic block size\n"
@@ -539,6 +584,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 // TODO: simplify R_ABS(printidx%NPF) into a macro, or just control negative values..
 R_API void r_core_visual_title (RCore *core, int color) {
 	const char *filename;
+	char pos[512];
 	/* automatic block size */
 	if (autoblocksize)
 	switch (core->printidx) {
@@ -557,23 +603,34 @@ R_API void r_core_visual_title (RCore *core, int color) {
 	if (core->file && core->file->filename)
 		filename = core->file->filename;
 	else filename = "";
+	{ /* get flag with delta */
+		RFlagItem *f = r_flag_get_at (core->flags, core->offset);
+		if (f) {
+			if (f->offset == core->offset) snprintf (pos, sizeof (pos), "@ %s", f->name);
+			else snprintf (pos, sizeof (pos), "@ %s+%d ((%llx))", f->name, (int)(core->offset-f->offset), f->offset);
+		} else pos[0] = 0;
+	}
 
 	if (cursor<0) cursor = 0;
 	if (color) r_cons_strcat (Color_YELLOW);
 	if (curset) r_cons_printf ("[0x%08"PFMT64x" %d %s(%d:%d=%d)]> %s\n", core->offset,
 		core->blocksize, core->file->filename, cursor, ocursor,
 		ocursor==-1?1:R_ABS (cursor-ocursor)+1, printfmt[R_ABS (core->printidx%NPF)]);
-	else r_cons_printf ("[0x%08"PFMT64x" %d %s]> %s\n", core->offset, core->blocksize,
-		filename, printfmt[R_ABS (core->printidx%NPF)]);
+	else r_cons_printf ("[0x%08"PFMT64x" %d %s]> %s %s\n", core->offset, core->blocksize,
+		filename, printfmt[R_ABS (core->printidx%NPF)], pos);
 	//r_cons_printf (" %d %d %d\n", core->printidx, core->cons->rows, core->blocksize);
 	if (color) r_cons_strcat (Color_RESET);
 }
 
+static int n = 0;
 static void r_core_visual_refresh (RCore *core) {
 	const char *vi;
 	r_cons_get_size (NULL);
 	r_print_set_cursor (core->print, curset, ocursor, cursor);
-	r_cons_clear00 ();
+
+	r_cons_gotoxy (0, 0);
+	r_cons_flush ();
+	//r_cons_clear00 ();
 
 	vi = r_config_get (core->config, "cmd.vprompt");
 	if (vi) r_core_cmd (core, vi, 0);

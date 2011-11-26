@@ -2,6 +2,7 @@
 
 #include <r_fs.h>
 #include "../config.h"
+#include "types.h"
 #include <errno.h>
 #include "p/grub/include/grub/msdos_partition.h"
 
@@ -126,9 +127,8 @@ R_API int r_fs_umount (RFS* fs, const char *path) {
 	RListIter *iter, *riter = NULL;
 	r_list_foreach (fs->roots, iter, root) {
 		len = strlen (root->path);
-		if (r_fs_match (path, root->path, len)) {
+		if (r_fs_match (path, root->path, len))
 			riter = iter;
-		}
 	}
 	if (riter) {
 		r_list_delete (fs->roots, riter);
@@ -173,8 +173,7 @@ R_API RFSFile *r_fs_open (RFS* fs, const char *p) {
 			if (root && root->p && root->p->open) {
 				if (strlen (root->path) == 1)
 					dir = path;
-				else
-					dir = path + strlen (root->path);
+				else dir = path + strlen (root->path);
 				f = root->p->open (root, dir);
 				if (f)
 					break;
@@ -447,40 +446,69 @@ R_API RList *r_fs_partitions (RFS *fs, const char *ptype, ut64 delta) {
 	return NULL;
 }
 
-//TODO: Complete!!
+R_API int r_fs_partition_type_str (const char *type) {
+	// TODO: implement
+	return 0;
+}
+
 R_API const char *r_fs_partition_type (const char *part, int type) {
+	// XXX: part is ignored O_o
 	switch (type) {
-		case GRUB_PC_PARTITION_TYPE_FAT12:
-		case GRUB_PC_PARTITION_TYPE_FAT16_GT32M:
-		case GRUB_PC_PARTITION_TYPE_FAT16_LT32M:
-		case GRUB_PC_PARTITION_TYPE_FAT32:
-		case GRUB_PC_PARTITION_TYPE_FAT32_LBA:
-		case GRUB_PC_PARTITION_TYPE_FAT16_LBA:
-			return strdup ("fat");
-		case GRUB_PC_PARTITION_TYPE_EXT2FS:
-			return strdup ("ext2");
-		case GRUB_PC_PARTITION_TYPE_MINIX:
-		case GRUB_PC_PARTITION_TYPE_LINUX_MINIX:
-			return strdup ("minix");
-		case GRUB_PC_PARTITION_TYPE_NTFS:
-			return strdup ("ntfs");
-		case GRUB_PC_PARTITION_TYPE_EXTENDED:
-		case GRUB_PC_PARTITION_TYPE_LINUX_EXTENDED:
-			return strdup ("ext3");
-		case GRUB_PC_PARTITION_TYPE_HFS:
-			return strdup ("hfs");
-		case GRUB_PC_PARTITION_TYPE_WIN95_EXTENDED:
-		case GRUB_PC_PARTITION_TYPE_EZD:
-		case GRUB_PC_PARTITION_TYPE_VSTAFS:
-		case GRUB_PC_PARTITION_TYPE_FREEBSD:
-		case GRUB_PC_PARTITION_TYPE_OPENBSD:
-		case GRUB_PC_PARTITION_TYPE_NETBSD:
-		case GRUB_PC_PARTITION_TYPE_GPT_DISK:
-		case GRUB_PC_PARTITION_TYPE_LINUX_RAID:
-		case GRUB_PC_PARTITION_TYPE_NONE:
-		default:
-			return NULL;
+	case GRUB_PC_PARTITION_TYPE_FAT12:
+	case GRUB_PC_PARTITION_TYPE_FAT16_GT32M:
+	case GRUB_PC_PARTITION_TYPE_FAT16_LT32M:
+	case GRUB_PC_PARTITION_TYPE_FAT32:
+	case GRUB_PC_PARTITION_TYPE_FAT32_LBA:
+	case GRUB_PC_PARTITION_TYPE_FAT16_LBA:
+		return strdup ("fat");
+	case GRUB_PC_PARTITION_TYPE_EXT2FS:
+		return strdup ("ext2");
+	case GRUB_PC_PARTITION_TYPE_MINIX:
+	case GRUB_PC_PARTITION_TYPE_LINUX_MINIX:
+		return strdup ("minix");
+	case GRUB_PC_PARTITION_TYPE_NTFS:
+		return strdup ("ntfs");
+	case GRUB_PC_PARTITION_TYPE_EXTENDED:
+	case GRUB_PC_PARTITION_TYPE_LINUX_EXTENDED:
+		return strdup ("ext3");
+	case GRUB_PC_PARTITION_TYPE_HFS:
+		return strdup ("hfs");
+	case GRUB_PC_PARTITION_TYPE_WIN95_EXTENDED: // fat?
+	case GRUB_PC_PARTITION_TYPE_EZD:
+	case GRUB_PC_PARTITION_TYPE_VSTAFS:
+	case GRUB_PC_PARTITION_TYPE_FREEBSD: // ufs
+	case GRUB_PC_PARTITION_TYPE_OPENBSD: // ufs
+	case GRUB_PC_PARTITION_TYPE_NETBSD: // ufs
+	case GRUB_PC_PARTITION_TYPE_GPT_DISK:
+	case GRUB_PC_PARTITION_TYPE_LINUX_RAID:
+	case GRUB_PC_PARTITION_TYPE_NONE:
+	default:
+		return NULL;
 	}
+}
+
+R_API char *r_fs_name (RFS *fs, ut64 offset) {
+	ut8 buf[1024];
+	int i, j, len, ret = R_FALSE;
+
+	for (i=0; fstypes[i].name; i++) {
+		RFSType *f = &fstypes[i];
+		len = R_MIN (f->buflen, sizeof (buf));
+		fs->iob.read_at (fs->iob.io, offset + f->bufoff, buf, len);
+		if (f->buflen>0 && !memcmp (buf, f->buf, f->buflen)) {
+			ret = R_TRUE;
+			len = R_MIN (f->bytelen, sizeof (buf));
+			fs->iob.read_at (fs->iob.io, offset + f->byteoff, buf, len);
+			for (j=0; j<f->bytelen; j++) {
+				if (buf[j] != f->byte) {
+					ret = R_FALSE;
+					break;
+				}
+			}
+			if (ret) return strdup (f->name);
+		}
+	}
+	return NULL;
 }
 
 R_API int r_fs_prompt (RFS *fs, const char *root) {

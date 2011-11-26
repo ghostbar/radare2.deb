@@ -22,8 +22,7 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 	*ok = 0;
 	if (str[0]=='$') {
 		*ok = 1;
-		r_anal_op (core->anal, &op, core->offset,
-			core->block, core->blocksize);
+		r_anal_op (core->anal, &op, core->offset, core->block, core->blocksize);
 		switch (str[1]) {
 		case '{':
 			{
@@ -69,7 +68,7 @@ R_API RCore *r_core_new() {
 #define CMDS (sizeof (radare_argv)/sizeof(const char*))
 static const char *radare_argv[] = {
 	"?", 
-	"dH", "ds", "dso", "dsl", "dc", "dd", "dm", "db", "dp", "dr", "dcu",
+	"dH", "ds", "dso", "dsl", "dc", "dd", "dm", "db", "db-", "dp", "dr", "dcu",
 	"S", 
 	"s", "s+", "s++", "s-", "s--", "s*", "sa", "sb", "sr",
 	"!", "!!", 
@@ -81,7 +80,7 @@ static const char *radare_argv[] = {
 	"e", "e-", "e*", "e!",
 	"i", "ii", "iI", "is", "iS", "iz",
 	"q", 
-	"f", "fr", "f-", "f*", "fs", "fS", "fr", "f?",
+	"f", "fl", "fr", "f-", "f*", "fs", "fS", "fr", "fo", "f?",
 	"m", "m*", "ml", "m-", "my", "mg", "md", "mp", "m?",
 	"o", "o-",
 	"x",
@@ -195,6 +194,8 @@ printf ("FILEN %d\n", n);
 		    (!memcmp (line->buffer.data, "b ", 2)) ||
 		    (!memcmp (line->buffer.data, "dcu ", 4)) ||
 		    (!memcmp (line->buffer.data, "/v ", 3)) ||
+		    (!memcmp (line->buffer.data, "db ", 3)) ||
+		    (!memcmp (line->buffer.data, "db- ", 4)) ||
 		    (!memcmp (line->buffer.data, "f ", 2)) ||
 		    (!memcmp (line->buffer.data, "fr ", 3)) ||
 		    (!memcmp (line->buffer.data, "/a ", 3)) ||

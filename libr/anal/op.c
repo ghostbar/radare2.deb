@@ -26,16 +26,21 @@ R_API RList *r_anal_op_list_new() {
 	return list;
 }
 
+R_API void r_anal_op_fini(RAnalOp *op) {
+	if (op->src[0]) r_anal_value_free (op->src[0]);
+	if (op->src[1]) r_anal_value_free (op->src[1]);
+	if (op->src[2]) r_anal_value_free (op->src[2]);
+	if (op->dst) r_anal_value_free (op->dst);
+	free (op->mnemonic);
+	op->mnemonic = NULL;
+	//op->src[0] = op->src[1] = op->src[2] = op->dst = NULL;
+	memset (op, 0, sizeof (RAnalOp));
+}
+
 R_API void r_anal_op_free(void *_op) {
-	if (_op) {
-		RAnalOp *op = _op;
-		r_anal_value_free (op->src[0]);
-		r_anal_value_free (op->src[1]);
-		r_anal_value_free (op->src[2]);
-		r_anal_value_free (op->dst);
-		free (op->mnemonic);
-		free (op);
-	}
+	if (!_op) return;
+	r_anal_op_fini (_op);
+	free (_op);
 }
 
 R_API int r_anal_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len) {
@@ -87,8 +92,7 @@ R_API int r_anal_op_execute (RAnal *anal, RAnalOp *op) {
 			if (div == 0) {
 				eprintf ("r_anal_op_execute: division by zero\n");
 				eprintf ("TODO: throw RAnalException\n");
-			}
-			r_anal_value_set_ut64 (anal, op->dst, 
+			} else r_anal_value_set_ut64 (anal, op->dst, 
 				r_anal_value_to_ut64 (anal, op->src[0])/div);
 			}
 			break;
@@ -110,7 +114,7 @@ R_API int r_anal_op_execute (RAnal *anal, RAnalOp *op) {
 	}
 
 	if (anal->queued) {
-		if (op->delay>0) {
+		if (op && op->delay>0) {
 			eprintf ("Exception! two consecutive delayed instructions\n");
 			return R_FALSE;
 		}

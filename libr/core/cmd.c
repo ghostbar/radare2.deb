@@ -331,7 +331,7 @@ static int cmd_rap(void *data, const char *input) {
 	return R_TRUE;
 }
 
-static void cmd_reg(RCore *core, const char *str) {
+static void cmd_debug_reg(RCore *core, const char *str) {
 	struct r_reg_item_t *r;
 	const char *name;
 	char *arg;
@@ -449,7 +449,7 @@ static void cmd_reg(RCore *core, const char *str) {
 		if (type != R_REG_TYPE_LAST) {
 			r_debug_reg_sync (core->dbg, type, R_FALSE);
 			r_debug_reg_list (core->dbg, type, size, str[0]=='*');
-		} else eprintf ("cmd_reg: Unknown type\n");
+		} else eprintf ("cmd_debug_reg: Unknown type\n");
 	}
 }
 
@@ -591,10 +591,15 @@ static int cmd_mount(void *data, const char *_input) {
 				*ptr2 = 0;
 				off = r_num_math (core->num, ptr2+1);
 			}
-			//r_io_bind (core->io, &(core->fs->iob));
-			if (!r_fs_mount (core->fs, input, ptr, off))
+			if (!r_fs_mount (core->fs, ptr, input, off))
 				eprintf ("Cannot mount %s\n", input);
-		} else eprintf ("Usage: m ext2 /mnt");
+		} else {
+			if (!(ptr = r_fs_name (core->fs, core->offset)))
+				eprintf ("Unknown filesystem type\n");
+			else if (!r_fs_mount (core->fs, ptr, input, core->offset))
+				eprintf ("Cannot mount %s\n", input);
+			free (ptr);
+		}
 		break;
 	case '-':
 		r_fs_umount (core->fs, input+1);
@@ -602,7 +607,7 @@ static int cmd_mount(void *data, const char *_input) {
 	case '*':
 		eprintf ("List commands in radare format\n");
 		r_list_foreach (core->fs->roots, iter, root) {
-			r_cons_printf ("m %s 0x%"PFMT64x" %s\n", root->p->name, root->delta, root->path);
+			r_cons_printf ("m %s %s 0x%"PFMT64x"\n", root-> path, root->p->name, root->delta);
 		}
 		break;
 	case '\0':
@@ -612,7 +617,7 @@ static int cmd_mount(void *data, const char *_input) {
 		break;
 	case 'l': // list of plugins
 		r_list_foreach (core->fs->plugins, iter, plug) {
-			r_cons_printf ("%s\t%s\n", plug->name, plug->desc);
+			r_cons_printf ("%10s  %s\n", plug->name, plug->desc);
 		}
 		break;
 	case 'd':
@@ -734,7 +739,8 @@ static int cmd_mount(void *data, const char *_input) {
 		" m              ; list all mountpoints in human readable format\n"
 		" m*             ; same as above, but in r2 commands\n"
 		" ml             ; list filesystem plugins\n"
-		" m ext2 /mnt 0  ; mount ext2 fs at /mnt with delta 0 on IO\n"
+		" m /mnt         ; mount fs at /mnt with autodetect fs and current offset\n"
+		" m /mnt ext2 0  ; mount ext2 fs at /mnt with delta 0 on IO\n"
 		" m-/            ; umount given path (/)\n"
 		" my             ; yank contents of file into clipboard\n"
 		" mo /foo        ; get offset and size of given file\n"
@@ -884,8 +890,68 @@ static int cmd_section(void *data, const char *input) {
 		" S?               ; show this help message\n"
 		" S*               ; list sections (in radare commands)\n"
 		" S=               ; list sections (in nice ascii-art bars)\n"
+		" Sd [file]        ; dump current section to a file (see dmd)\n"
+		" Sl [file]        ; load contents of file into current section (see dml)\n"
 		" S [off] [vaddr] [sz] [vsz] [name] [rwx] ; add new section\n"
 		" S-[id|0xoff|*]   ; remove this section definition\n");
+		break;
+	case 'd':
+		{
+		char file[128];
+		ut64 o = core->offset;
+		RListIter *iter;
+		RIOSection *s;
+		if (core->io->va || core->io->debug)
+			o = r_io_section_vaddr_to_offset (core->io, o);
+		r_list_foreach (core->io->sections, iter, s) {
+			if (o>=s->offset && o<s->offset+s->size) {
+				ut8 *buf = malloc (s->size);
+				r_io_read_at (core->io, s->offset, buf, s->size);
+				if (input[1]==' ' && input[2]) {
+					strncpy (file, input+2, sizeof (file));
+				} else snprintf (file, sizeof (file), "0x%08"PFMT64x"-0x%08"PFMT64x"-%s.dmp",
+					s->vaddr, s->vaddr+s->size, r_str_rwx_i (s->rwx));
+				if (!r_file_dump (file, buf, s->size)) {
+					eprintf ("Cannot write '%s'\n", file);
+					free (buf);
+					return R_FALSE;
+				}
+				eprintf ("Dumped %d bytes into %s\n", (int)s->size, file);
+				free (buf);
+				return R_TRUE;
+			}
+		}
+		}
+		break;
+	case 'l':
+		{
+		ut64 o = core->offset;
+		RListIter *iter;
+		RIOSection *s;
+		if (input[1] != ' ') {
+			eprintf ("Usage: Sl [file]\n");
+			return R_FALSE;
+		}
+		if (core->io->va || core->io->debug)
+			o = r_io_section_vaddr_to_offset (core->io, o);
+		r_list_foreach (core->io->sections, iter, s) {
+			if (o>=s->offset && o<s->offset+s->size) {
+				int sz;
+				char *buf = r_file_slurp (input+2, &sz);
+#warning TODO: use mmap here. we need a portable implementation
+				if (!buf) {
+					eprintf ("Cannot allocate 0x%08"PFMT64x" bytes\n", s->size);
+					return R_FALSE;
+				}
+				r_io_write_at (core->io, s->vaddr, (const ut8*)buf, sz);
+				eprintf ("Loaded %d bytes into the map region at 0x%08"PFMT64x"\n", sz, s->vaddr);
+				free (buf);
+				return R_TRUE;
+			}
+		}
+		eprintf ("No debug region found here\n");
+		return R_FALSE;
+		}
 		break;
 	case '-':
 		if (input[1] == '*') {
@@ -986,6 +1052,12 @@ static int cmd_seek(void *data, const char *input) {
 	if (*input) {
 		st32 delta = (input[1]==' ')? 2: 1;
 		off = r_num_math (core->num, input + delta);
+		if (isalpha (input[delta]) && off == 0) {
+			if (!r_flag_get (core->flags, input+delta)) {
+				eprintf ("Invalid address (%s)\n", input+delta);
+				return R_FALSE;
+			}
+		}
 		if (input[0]==' ' && (input[1]=='+'||input[1]=='-'))
 			input++;
 		switch (*input) {
@@ -1020,7 +1092,7 @@ static int cmd_seek(void *data, const char *input) {
 					r_core_block_read (core, 0);
 					break;
 				}
-				
+
 			} else eprintf ("Usage: sC comment grep\n");
 			break;
 		case ' ':
@@ -1032,7 +1104,7 @@ static int cmd_seek(void *data, const char *input) {
 			{
 			const char *pfx = r_config_get (core->config, "search.prefix");
 			int kwidx = (int)r_config_get_i (core->config, "search.kwidx")-1;
-			if (kwidx<0) kwidx=0;
+			if (kwidx<0) kwidx = 0;
 			//r_core_seek (core, off+1, 0);
 			eprintf ("s+1;.%s ; ? %s%d_0 ; ?! s %s%d_0\n", input, pfx, kwidx, pfx, kwidx);
 			r_core_cmdf (core, "s+1;.%s ; ? %s%d_0 ; ?! s %s%d_0", input, pfx, kwidx, pfx, kwidx);
@@ -1153,6 +1225,15 @@ static int cmd_help(void *data, const char *input) {
 		r_num_to_bits (out, n);
 		r_cons_printf ("%s\n", out);
 		}
+		break;
+	case 'd':
+		if (input[1]==' '){
+			char *d = r_asm_describe (core->assembler, input+2);
+			if (d && *d) {
+				r_cons_printf ("%s\n", d);
+				free (d);
+			} else eprintf ("Unknown opcode\n");
+		} else eprintf ("Use: ?d [opcode]    to get the description of the opcode\n");
 		break;
 	case 'f':
 		if (input[1]==' ') {
@@ -1310,6 +1391,7 @@ static int cmd_help(void *data, const char *input) {
 			" ?= eip-0x804800 ; same as above without user feedback\n"
 			" ?? [cmd]        ; ? == 0  run command when math matches\n"
 			" ?i prompt       ; prompt for number and store in $$?\n"
+			" ?d opcode       ; describe opcode for asm.arch\n"
 			" ?e string       ; echo string\n"
 			" ?r [from] [to]  ; generate random number between from-to\n"
 			" ?b [num]        ; show binary value of number\n"
@@ -1354,17 +1436,19 @@ static int cmd_help(void *data, const char *input) {
 		" d[hrscb]          ; debugger commands\n"
 		" e [a[=b]]         ; list/get/set config evaluable vars\n"
 		" f [name][sz][at]  ; set flag at current address\n"
-		" s [addr]          ; seek to address\n"
-		" S?[size] [vaddr]  ; IO section manipulation information\n"
+		" g[wcilper] [arg]  ; go compile shellcodes with r_egg\n"
 		" i [file]          ; get info about opened file\n"
+		" m[lyogfdps]       ; mountpoints commands\n"
 		" o [file] (addr)   ; open file at optional address\n"
 		" p?[len]           ; print current block with format and length\n"
 		" P[osi?]           ; project management utilities\n"
+		" r[+- ][len]       ; resize file\n"
+		" s [addr]          ; seek to address\n"
+		" S?[size] [vaddr]  ; IO section manipulation information\n"
 		" V[vcmds]          ; enter visual mode (vcmds=visualvisual  keystrokes)\n"
 		" w[mode] [arg]     ; multiple write operations\n"
 		" x [len]           ; alias for 'px' (print hexadecimal)\n"
 		" y [len] [off]     ; yank/paste bytes from/to memory\n"
-		" r[+- ][len]       ; resize file\n"
 		" ? [expr]          ; help or evaluate math expression\n"
 		" /[xmp/]           ; search for bytes, regexps, patterns, ..\n"
 		" ![cmd]            ; run given command as in system(3)\n"
@@ -1510,7 +1594,7 @@ static int cmd_cmp(void *data, const char *input) {
 		if (input[1]=='o') {
 			file2 = (char*)r_str_chop_ro (input+2);
 			r_anal_diff_setup (core->anal, R_TRUE, -1, -1);
-		} else 
+		} else
 		if (input[1]==' ') {
 			file2 = (char*)r_str_chop_ro (input+2);
 			r_anal_diff_setup (core->anal, R_FALSE, -1, -1);
@@ -1566,21 +1650,27 @@ static int cmd_cmp(void *data, const char *input) {
 
 static int cmd_info(void *data, const char *input) {
 	RCore *core = (RCore *)data;
-	char *out, buf[1024];
+	ut64 offset = r_bin_get_offset (core->bin);
+	int va = core->io->va || core->io->debug;
+	int mode = (input[1]=='*')?R_CORE_BIN_RADARE:R_CORE_BIN_PRINT;
 	switch (*input) {
-	case 's':
-	case 'i':
-	case 'I':
-	case 'e':
 	case 'S':
+		r_core_bin_info (core, R_CORE_BIN_ACC_SECTIONS|R_CORE_BIN_ACC_FIELDS, mode, va, NULL, offset);
+		break;
+	case 's':
+		r_core_bin_info (core, R_CORE_BIN_ACC_SYMBOLS, mode, va, NULL, offset);
+		break;
+	case 'i':
+		r_core_bin_info (core, R_CORE_BIN_ACC_IMPORTS, mode, va, NULL, offset);
+		break;
+	case 'I':
+		r_core_bin_info (core, R_CORE_BIN_ACC_INFO, mode, va, NULL, offset);
+		break;
+	case 'e':
+		r_core_bin_info (core, R_CORE_BIN_ACC_ENTRIES, mode, va, NULL, offset);
+		break;
 	case 'z':
-		if (core->file) {
-			snprintf (buf, sizeof (buf), "rabin2 -%c%s%s '%s'", *input,
-				input[1]=='*'? "r": "", core->io->va? "v": "", core->file->filename);
-			out = r_sys_cmd_str (buf, NULL, 0);
-			if (out && *out)
-				r_cons_strcat (out);
-		}
+		r_core_bin_info (core, R_CORE_BIN_ACC_STRINGS, mode, va, NULL, offset);
 		break;
 	case 'a':
 		if (input[1]=='*') {
@@ -1601,7 +1691,7 @@ static int cmd_info(void *data, const char *input) {
 		break;
 	case '?':
 		r_cons_printf (
-		"Usage: i[aeiIsSz]*      ; get info from opened file (rabin2)\n"
+		"Usage: i[aeiIsSz]*      ; get info from opened file\n"
 		"NOTE: Append a '*' to get the output in radare commands\n"
 		" ia    ; show all info (imports, exports, sections..)\n"
 		" ii    ; imports\n"
@@ -1666,8 +1756,9 @@ static void r_core_magic_at(RCore *core, const char *file, ut64 addr, int depth,
 			return;
 		}
 	} else {
-		if (r_magic_load (ck, R_MAGIC_PATH) == -1)
-			eprintf ("failed r_magic_load ("R_MAGIC_PATH") %s\n", r_magic_error (ck));
+		const char *magicpath = r_config_get (core->config, "dir.magic");
+		if (r_magic_load (ck, magicpath) == -1)
+			eprintf ("failed r_magic_load (dir.magic) %s\n", r_magic_error (ck));
 	}
 	//if (v) r_cons_printf ("  %d # pm %s @ 0x%"PFMT64x"\n", depth, file? file: "", addr);
 	str = r_magic_buffer (ck, core->block, core->blocksize);
@@ -1807,6 +1898,39 @@ static int cmd_print(void *data, const char *input) {
 	case 'D':
 	case 'd':
 		switch (input[1]) {
+		case 'i': {// TODO
+			RAsmOp asmop;
+			int j, ret, err = 0;
+			const ut8 *buf = core->block;
+			if (l==0) l = len;
+			for (i=j=0; i<core->blocksize && j<len; i+=ret,j++ ) {
+				ret = r_asm_disassemble (core->assembler, &asmop, buf+i, core->blocksize-i);
+				if (ret<1) {
+					ret = err = 1;
+					r_cons_printf ("0x%08"PFMT64x" %14s%02x  %s\n", core->offset+i, "", buf[i], "???");
+				} else r_cons_printf ("0x%08"PFMT64x" %16s  %s\n",
+					core->offset+i, asmop.buf_hex, asmop.buf_asm);
+			}
+			return err;
+			}
+			break;
+		case 'a':
+			{
+				RAsmOp asmop;
+				int j, ret, err = 0;
+				const ut8 *buf = core->block;
+				if (l==0) l = len;
+				for (i=j=0; i<core->blocksize && j<len; i++,j++ ) {
+					ret = r_asm_disassemble (core->assembler, &asmop, buf+i, core->blocksize-i);
+					if (ret<1) {
+						ret = err = 1;
+						r_cons_printf ("???\n");
+					} else r_cons_printf ("0x%08"PFMT64x" %16s  %s\n",
+						core->offset+i, asmop.buf_hex, asmop.buf_asm);
+				}
+				return R_TRUE;
+			}
+			break;
 		case 'b': {
 			RAnalBlock *b = r_anal_bb_from_offset (core->anal, core->offset);
 			if (b) {
@@ -1850,9 +1974,10 @@ static int cmd_print(void *data, const char *input) {
 		case '?':
 			eprintf ("Usage: pd[f|i|l] [len] @ [addr]\n");
 			//TODO: eprintf ("  pdr  : disassemble resume\n");
+			eprintf ("  pda  : disassemble all possible opcodes (byte per byte)\n");
 			eprintf ("  pdb  : disassemble basic block\n");
 			eprintf ("  pdf  : disassemble function\n");
-			eprintf ("  pdi  : disassemble only instruction\n");
+			eprintf ("  pdi  : like 'pi', with offset and bytes\n");
 			eprintf ("  pdl  : show instruction sizes\n");
 return 0;
 			break;
@@ -1870,7 +1995,8 @@ return 0;
 				if (bwdhits) {
 					r_list_foreach (bwdhits, iter, hit) {
 						r_core_read_at (core, hit->addr, block, core->blocksize);
-						core->num->value = r_core_print_disasm (core->print, core, hit->addr, block, core->blocksize, l);
+						core->num->value = r_core_print_disasm (core->print,
+							core, hit->addr, block, core->blocksize, l);
 						r_cons_printf ("------\n");
 					}
 					r_list_free (bwdhits);
@@ -1887,7 +2013,7 @@ return 0;
 			// TODO: add support for 2-4 byte length pascal strings
 			r_print_string (core->print, core->offset, core->block, mylen, 0, 1, 0); //, 78, 1);
 			core->num->value = mylen;
-		} else 
+		} else
 		if (input[1]==' ') {
 			len = r_num_math (core->num, input+2);
 			r_print_string (core->print, core->offset, core->block, len, 0, 0, 0); //, 78, 1);
@@ -1904,7 +2030,7 @@ return 0;
 				"   foo@0x40   # use 'foo' magic file on address 0x40\n"
 				"   @0x40      # use current magic file on address 0x40\n"
 				"   \\n         # append newline\n"
-				" R_MAGIC_PATH = "R_MAGIC_PATH"\n"
+				" e dir.magic  # defaults to "R_MAGIC_PATH"\n"
 				);
 		} else r_core_magic (core, input+1, R_TRUE);
 		break;
@@ -2077,6 +2203,144 @@ static int cmd_hexdump(void *data, const char *input) {
 	return cmd_print (data, input-1);
 }
 
+static void cmd_egg_option (REgg *egg, const char *key, const char *input) {
+	if (input[1]!=' ') {
+		char *a = r_egg_option_get (egg, key);
+		if (a) {
+			r_cons_printf ("%s\n", a);
+			free (a);
+		}
+	} else r_egg_option_set (egg, key, input+2);
+}
+static int cmd_egg_compile(REgg *egg) {
+	int ret = R_FALSE;
+	RBuffer *b;
+	int i;
+	char *p = r_egg_option_get (egg, "egg.shellcode");
+	if (p && *p) {
+		if (!r_egg_shellcode (egg, p)) {
+			free (p);
+			return R_FALSE;
+		}
+		free (p);
+	}
+	r_egg_compile (egg);
+	if (!r_egg_assemble (egg)) {
+		eprintf ("r_egg_assemble: invalid assembly\n");
+		return R_FALSE;
+	}
+	p = r_egg_option_get (egg, "egg.padding");
+	if (p && *p) {
+		r_egg_padding (egg, p);
+		free (p);
+	}
+	p = r_egg_option_get (egg, "egg.encoder");
+	if (p && *p) {
+		r_egg_encode (egg, p);
+		free (p);
+	}
+	if ((b = r_egg_get_bin (egg))) {
+		if (b->length>0) {
+			for (i=0; i<b->length; i++)
+				r_cons_printf ("%02x", b->buf[i]);
+			r_cons_printf ("\n");
+		}
+		ret = R_TRUE;
+	}
+	// we do not own this buffer!!
+	// r_buf_free (b);
+	r_egg_reset (egg);
+	return ret;
+}
+
+static int cmd_egg(void *data, const char *input) {
+	RCore *core = (RCore *)data;
+	REgg *egg = core->egg;
+	char *oa, *p;
+	r_egg_setup (egg,
+		r_config_get (core->config, "asm.arch"),
+		core->assembler->bits, 0,
+		r_config_get (core->config, "asm.os")); // XXX
+	switch (*input) {
+	case ' ':
+		r_egg_load (egg, input+2, 0);
+		if (!cmd_egg_compile (egg))
+			eprintf ("Cannot compile '%s'\n", input+2);
+		break;
+	case '\0':
+		if (!cmd_egg_compile (egg))
+			eprintf ("Cannot compile\n");
+		break;
+	case 'p':
+		cmd_egg_option (egg, "egg.padding", input);
+		break;
+	case 'e':
+		cmd_egg_option (egg, "egg.encoder", input);
+		break;
+	case 'i':
+		cmd_egg_option (egg, "egg.shellcode", input);
+		break;
+	case 'l':
+		{
+			RListIter *iter;
+			REggPlugin *p;
+			r_list_foreach (egg->plugins, iter, p) {
+				printf ("%s  %6s : %s\n",
+				(p->type==R_EGG_PLUGIN_SHELLCODE)?
+					"shc":"enc", p->name, p->desc);
+			}
+		}
+		break;
+	case 'r':
+		cmd_egg_option (egg, "egg.padding", "");
+		cmd_egg_option (egg, "egg.shellcode", "");
+		cmd_egg_option (egg, "egg.encoder", "");
+		break;
+	case 'c':
+		// list, get, set egg options
+		switch (input[1]) {
+		case ' ':
+			oa = strdup (input+2);
+			p = strchr (oa, '=');
+			if (p) {
+				*p = 0;
+				r_egg_option_set (egg, oa, p+1);
+			} else {
+				char *o = r_egg_option_get (egg, oa);
+				if (o) {
+					r_cons_printf ("%s\n", o);
+					free (o);
+				}
+			}
+			break;
+		case '\0':
+			// list
+			r_pair_list (egg->pair,NULL);
+			eprintf ("list options\n");
+			break;
+		default:
+			eprintf ("Usage: gc [k=v]\n");
+			break;
+		}
+		break;
+	case '?':
+		eprintf ("Usage: g[wcilper] [arg]\n"
+			" g foo.r        : compile r_egg source file\n"
+			" gw             : compile and write\n"
+			" gc cmd=/bin/ls : set config option for shellcodes and encoders\n"
+			" gc             : list all config options\n"
+			" gl             : list plugins (shellcodes, encoders)\n"
+			" gi exec        : compile shellcode. like ragg2 -i\n"
+			" gp padding     : define padding for command\n"
+			" ge xor         : specify an encoder\n"
+			" gr             : reset r_egg\n"
+			"EVAL VARS: asm.arch, asm.bits, asm.os\n"
+		);
+		break;
+	}
+	return R_TRUE;
+}
+
 static int cmd_flag(void *data, const char *input) {
 	RCore *core = (RCore *)data;
 	int len = strlen (input)+1;
@@ -2114,6 +2378,15 @@ static int cmd_flag(void *data, const char *input) {
 			else r_flag_unset (core->flags, input+1, NULL);
 		} else r_flag_unset_i (core->flags, off, NULL);
 		break;
+	case 'l':
+		if (input[1] == ' ') {
+			RFlagItem *item = r_flag_get_i (core->flags,
+				r_num_math (core->num, input+2));
+			if (item) {
+				r_cons_printf ("0x%08"PFMT64x"\n", item->offset);
+			}
+		} else eprintf ("Missing arguments\n");
+		break;
 	case 'S':
 		r_flag_sort (core->flags, (input[1]=='n'));
 		break;
@@ -2122,7 +2395,7 @@ static int cmd_flag(void *data, const char *input) {
 		else r_flag_space_list (core->flags);
 		break;
 	case 'o':
-		{
+		{ // TODO: use file.fortunes
 			char *file = R2_PREFIX"/share/doc/radare2/fortunes";
 			char *line = r_file_slurp_random_line (file);
 			if (line) {
@@ -2145,9 +2418,8 @@ static int cmd_flag(void *data, const char *input) {
 				new = old;
 				item = r_flag_get_i (core->flags, core->offset);
 			}
-			if (item) {
-				r_flag_rename (core->flags, item, new);
-			} else eprintf ("Cannot find flag\n");
+			if (item) r_flag_rename (core->flags, item, new);
+			else eprintf ("Cannot find flag\n");
 		}
 		break;
 	case '*':
@@ -2157,15 +2429,32 @@ static int cmd_flag(void *data, const char *input) {
 		r_flag_list (core->flags, 0);
 		break;
 	case 'd':
-		if (input[1]==' ') {
-			RFlagItem *f = r_flag_get_i (core->flags, r_num_math (core->num, input+2));
-			if (f) r_cons_printf ("%s\n", f->name);
-		} else eprintf ("Usage: fd [off]\n");
+		{
+			ut64 addr = 0;
+			RFlagItem *f = NULL;
+			switch (input[1]) {
+			case '?':
+				eprintf ("Usage: fd [off]\n");
+				return R_FALSE;
+			case '\0':
+				addr = core->offset;
+				break;
+			default:
+				addr = r_num_math (core->num, input+2);
+				break;
+			}
+			f = r_flag_get_at (core->flags, addr);
+			if (f) {
+				if (f->offset != addr) {
+					r_cons_printf ("%s+%d\n", f->name, (int)(addr-f->offset));
+				} else r_cons_printf ("%s\n", f->name);
+			}
+		}
 		break;
 	case '?':
 		r_cons_printf (
 		"Usage: f[?] [flagname]\n"
-		" f name 12 @ 33   ; set flag 'name' with size 12 at 33\n"
+		" f name 12 @ 33   ; set flag 'name' with length 12 at offset 33\n"
 		" f name 12 33     ; same as above\n"
 		" f+name 12 @ 33   ; like above but creates new one if doesnt exist\n"
 		" f-name           ; remove flag 'name'\n"
@@ -2177,7 +2466,9 @@ static int cmd_flag(void *data, const char *input) {
 		" fs functions     ; set flagspace\n"
 		" fs *             ; set no flagspace\n"
 		" fs               ; display flagspaces\n"
-		" fS[on]           ; sort flags by offset or name\n");
+		" fl [flagname]    ; show flag length (size)\n"
+		" fS[on]           ; sort flags by offset or name\n"
+		" fo               ; show fortunes\n");
 		break;
 	}
 	return 0;
@@ -2328,7 +2619,7 @@ R_API int r_core_search_prelude(RCore *core, ut64 from, ut64 to, const ut8 *buf,
 	ut8 *b = (ut8 *)malloc (core->blocksize);
 // TODO: handle sections ?
 	r_search_reset (core->search, R_SEARCH_KEYWORD);
-	r_search_kw_add (core->search, 
+	r_search_kw_add (core->search,
 		r_search_keyword_new (buf, blen, mask, mlen, NULL));
 	r_search_begin (core->search);
 	r_search_set_callback (core->search, &__prelude_cb_hit, core);
@@ -2533,7 +2824,7 @@ static int cmd_anal(void *data, const char *input) {
 			ut64 size = 0LL;
 			RAnalDiff *diff = NULL;
 			int type = R_ANAL_FCN_TYPE_FCN;
-			
+
 			if (n > 2) {
 				switch(n) {
 				case 5:
@@ -2570,8 +2861,20 @@ static int cmd_anal(void *data, const char *input) {
 			free (ptr);
 			}
 			break;
-		case 'l':
+		case 'i':
 			r_core_anal_fcn_list (core, input+2, 0);
+			break;
+		case 'l':
+			{
+				RAnalFcn *fcn;
+				RListIter *iter;
+
+				r_list_foreach (core->anal->fcns, iter, fcn) {
+					int bbs = r_list_length (fcn->bbs);
+					r_cons_printf ("0x%08"PFMT64x" %6"PFMT64d" %3d  %s\n",
+						fcn->addr, fcn->size, bbs, fcn->name);
+				}
+			}
 			break;
 		case '*':
 			r_core_anal_fcn_list (core, input+2, 1);
@@ -2606,8 +2909,9 @@ static int cmd_anal(void *data, const char *input) {
 			int cc;
 			if ((fcn = r_anal_get_fcn_at (core->anal, core->offset)) != NULL) {
 				cc = r_anal_fcn_cc (fcn);
-				r_cons_printf ("Cyclomatic Complexity at 0x%08"PFMT64x" = %i\n", core->offset, cc);
-			} else r_cons_printf ("Error: function not found\n");
+				r_cons_printf ("CyclomaticComplexity 0x%08"PFMT64x" = %i\n",
+						fcn->addr, cc);
+			} else eprintf ("Error: function not found\n");
 			}
 			break;
 		case 'b':
@@ -2668,7 +2972,8 @@ static int cmd_anal(void *data, const char *input) {
 			" af+ addr size name [type] [diff] ; Add function\n"
 			" afb fcnaddr addr size name [type] [diff] ; Add bb to function @ fcnaddr\n"
 			" af- [addr]                ; Clean all function analysis data (or function at addr)\n"
-			" afl [fcn name]            ; List functions\n"
+			" afl [fcn name]            ; List functions (addr, size, bbs, name)\n"
+			" afi [fcn name]            ; Show function(s) information (verbose afl)\n"
 			" afs [addr] [fcnsign]      ; Get/set function signature at current address\n"
 			" af[aAv][?] [arg]          ; Manipulate args, fastargs and variables in function\n"
 			" afc @ [addr]              ; Calculate the Cyclomatic Complexity (starting at addr)\n"
@@ -3370,7 +3675,7 @@ static int cmd_resize(void *data, const char *input) {
 
 static const char *cmdhit = NULL;
 static const char *searchprefix = NULL;
-static int searchcount = 0;
+static unsigned int searchcount = 0;
 static int searchflags = 0;
 
 static int __cb_hit(RSearchKeyword *kw, void *user, ut64 addr) {
@@ -3384,10 +3689,11 @@ static int __cb_hit(RSearchKeyword *kw, void *user, ut64 addr) {
 	}
 */
 	searchcount++;
-	if (searchflags)
+	if (searchflags) {
+		r_cons_printf ("%s%d_%d\n", searchprefix, kw->kwidx, kw->count);
 		r_core_cmdf (core, "f %s%d_%d %d 0x%08"PFMT64x"\n", searchprefix,
 			kw->kwidx, kw->count, kw->keyword_length, addr);
-	else r_cons_printf ("f %s%d_%d %d 0x%08"PFMT64x"\n", searchprefix,
+	} else r_cons_printf ("f %s%d_%d %d 0x%08"PFMT64x"\n", searchprefix,
 			kw->kwidx, kw->count, kw->keyword_length, addr);
 	if (!strnull (cmdhit)) {
 		ut64 here = core->offset;
@@ -3398,7 +3704,16 @@ static int __cb_hit(RSearchKeyword *kw, void *user, ut64 addr) {
 	return R_TRUE;
 }
 
+static inline void print_search_progress(ut64 at, ut64 to, int n) {
+	static int c = 0;
+	if (++c%13)
+		return;
+	eprintf ("\r[  ]  0x%08"PFMT64x" < 0x%08"PFMT64x"  hits = %d                      \r%s",
+			at, to, n, (c%2)?"[ #]":"[# ]");
+}
+
 static int cmd_search(void *data, const char *input) {
+	const char *mode;
 	char *inp;
 	RCore *core = (RCore *)data;
 	ut64 at, from, to;
@@ -3409,26 +3724,63 @@ static int cmd_search(void *data, const char *input) {
 	int ignorecase = R_FALSE;
 	ut64 n64;
 	ut32 n32;
+	ut16 n16;
 	ut8 *buf;
 
-	/* obey temporary seek if defined '/x 8080 @ addr:len' */
-	if (core->tmpseek) {
-		from = core->offset;
-		to = core->offset + core->blocksize;
-	} else {
-		// TODO: repeat last search doesnt works for /a
-		from = r_config_get_i (core->config, "search.from");
-		if (from == UT64_MAX)
+	mode = r_config_get (core->config, "search.in");
+	if (!strcmp (mode, "file")) {
+		if (core->io->va) {
+			RListIter *iter;
+			RIOSection *s;
 			from = core->offset;
-		to = r_config_get_i (core->config, "search.to");
-		if (to == UT64_MAX) {
-			if (core->io->va) {
-				/* TODO: section size? */
-			} else {
-				to = core->file->size;
+			to = from;
+			r_list_foreach (core->io->sections, iter, s) {
+				if ((s->vaddr+s->size) > to)
+					to = s->vaddr+s->size;
+			}
+		} else {
+			from = core->offset;
+			to = r_io_size (core->io);
+		}
+	} else
+	if (!strcmp (mode, "section")) {
+		if (core->io->va) {
+			RListIter *iter;
+			RIOSection *s;
+			from = core->offset;
+			to = from;
+			r_list_foreach (core->io->sections, iter, s) {
+				if (from >= s->vaddr && from < (s->vaddr+s->size)) {
+					to = s->vaddr+s->size;
+					break;
+				}
+			}
+		} else {
+			from = core->offset;
+			to = r_io_size (core->io);
+		}
+	} else {
+		//if (!strcmp (mode, "raw")) {
+		/* obey temporary seek if defined '/x 8080 @ addr:len' */
+		if (core->tmpseek) {
+			from = core->offset;
+			to = core->offset + core->blocksize;
+		} else {
+			// TODO: repeat last search doesnt works for /a
+			from = r_config_get_i (core->config, "search.from");
+			if (from == UT64_MAX)
+				from = core->offset;
+			to = r_config_get_i (core->config, "search.to");
+			if (to == UT64_MAX) {
+				if (core->io->va) {
+					/* TODO: section size? */
+				} else {
+					to = core->file->size;
+				}
 			}
 		}
 	}
+
 	core->search->align = r_config_get_i (core->config, "search.align");
 	searchflags = r_config_get_i (core->config, "search.flags");
 	//TODO: handle section ranges if from&&to==0
@@ -3452,11 +3804,24 @@ static int cmd_search(void *data, const char *input) {
 		inverse = R_TRUE;
 		goto reread;
 		break;
-	case 'a':
+	case 'r':
 		if (input[1]==' ')
 			r_core_anal_search (core, from, to, r_num_math (core->num, input+2));
 		else r_core_anal_search (core, from, to, core->offset);
 		break;
+	case 'a': {
+		char *kwd;
+		if (!(kwd = r_core_asm_search (core, input+2, from, to)))
+			return R_FALSE;
+		r_search_reset (core->search, R_SEARCH_KEYWORD);
+		r_search_set_distance (core->search, (int)
+				r_config_get_i (core->config, "search.distance"));
+		r_search_kw_add (core->search,
+				r_search_keyword_new_hexmask (kwd, NULL));
+		r_search_begin (core->search);
+		free (kwd);
+		dosearch = R_TRUE;
+		} break;
 	case 'A':
 		dosearch = aes_search = R_TRUE;
 		break;
@@ -3487,25 +3852,32 @@ static int cmd_search(void *data, const char *input) {
 			} else eprintf ("Invalid pattern size (must be >0)\n");
 		}
 		break;
-	case 'q':
-		r_search_reset (core->search, R_SEARCH_KEYWORD);
-		r_search_set_distance (core->search, (int)
-			r_config_get_i (core->config, "search.distance"));
-		n64 = (ut32)r_num_math (core->num, input+1);
-// TODO: Add support for /v4 /v8 /v2
-		r_search_kw_add (core->search, 
-			r_search_keyword_new ((const ut8*)&n64, 8, NULL, 0, NULL));
-		r_search_begin (core->search);
-		dosearch = R_TRUE;
-		break;
 	case 'v':
 		r_search_reset (core->search, R_SEARCH_KEYWORD);
 		r_search_set_distance (core->search, (int)
 			r_config_get_i (core->config, "search.distance"));
-		n32 = (ut32)r_num_math (core->num, input+1);
+		switch (input[1]) {
+		case '?':
+			eprintf ("Usage: /v[2|4|8] [value]\n");
+			return R_TRUE;
+		case '8':
+			n64 = r_num_math (core->num, input+2);
+			r_search_kw_add (core->search,
+				r_search_keyword_new ((const ut8*)&n64, 8, NULL, 0, NULL));
+			break;
+		case '2':
+			n16 = (ut16)r_num_math (core->num, input+2);
+			r_search_kw_add (core->search,
+				r_search_keyword_new ((const ut8*)&n16, 2, NULL, 0, NULL));
+			break;
+		default: // default size
+		case '4':
+			n32 = (ut32)r_num_math (core->num, input+1);
+			r_search_kw_add (core->search,
+				r_search_keyword_new ((const ut8*)&n32, 4, NULL, 0, NULL));
+			break;
+		}
 // TODO: Add support for /v4 /v8 /v2
-		r_search_kw_add (core->search, 
-			r_search_keyword_new ((const ut8*)&n32, 4, NULL, 0, NULL));
 		r_search_begin (core->search);
 		dosearch = R_TRUE;
 		break;
@@ -3521,7 +3893,7 @@ static int cmd_search(void *data, const char *input) {
 			r_search_reset (core->search, R_SEARCH_KEYWORD);
 			r_search_set_distance (core->search, (int)
 				r_config_get_i (core->config, "search.distance"));
-			r_search_kw_add (core->search, 
+			r_search_kw_add (core->search,
 				r_search_keyword_new ((const ut8*)str, len*2, NULL, 0, NULL));
 			r_search_begin (core->search);
 			dosearch = R_TRUE;
@@ -3539,7 +3911,7 @@ static int cmd_search(void *data, const char *input) {
 			for (i=1; inp[i]; i++)
 				inp[i] = tolower (inp[i]);
 		len = r_str_escape (inp);
-		eprintf ("Searching %d bytes: ", len);
+		eprintf ("Searching %d bytes from 0x%08"PFMT64x" to 0x%08"PFMT64x": ", len, from, to);
 		for (i=0; i<len; i++) eprintf ("%02x ", inp[i]);
 		eprintf ("\n");
 		r_search_reset (core->search, R_SEARCH_KEYWORD);
@@ -3566,7 +3938,7 @@ static int cmd_search(void *data, const char *input) {
 		r_search_reset (core->search, R_SEARCH_REGEXP);
 		r_search_set_distance (core->search, (int)
 			r_config_get_i (core->config, "search.distance"));
-		r_search_kw_add (core->search, 
+		r_search_kw_add (core->search,
 			r_search_keyword_new_str (inp, opt, NULL, 0));
 		r_search_begin (core->search);
 		dosearch = R_TRUE;
@@ -3576,7 +3948,7 @@ static int cmd_search(void *data, const char *input) {
 		break;
 	case 'd': /* search delta key */
 		r_search_reset (core->search, R_SEARCH_DELTAKEY);
-		r_search_kw_add (core->search, 
+		r_search_kw_add (core->search,
 			r_search_keyword_new_hexmask (input+2, NULL));
 		r_search_begin (core->search);
 		dosearch = R_TRUE;
@@ -3585,42 +3957,26 @@ static int cmd_search(void *data, const char *input) {
 		r_search_reset (core->search, R_SEARCH_KEYWORD);
 		r_search_set_distance (core->search, (int)
 			r_config_get_i (core->config, "search.distance"));
-		r_search_kw_add (core->search, 
+		r_search_kw_add (core->search,
 			r_search_keyword_new_hexmask (input+2, NULL));
 		r_search_begin (core->search);
 		dosearch = R_TRUE;
 		break;
 	case 'c': /* search asm */
 		{
-		/* TODO: Move to a separate function */
-		int asmstr = r_config_get_i (core->config, "search.asmstr");
-		if (asmstr) {
-			RCoreAsmHit *hit;
-			RListIter *iter;
-			int count = 0;
-			RList *hits;
-			if ((hits = r_core_asm_strsearch (core, input+2, from, to))) {
-				r_list_foreach (hits, iter, hit) {
-					r_cons_printf ("f %s_%i @ 0x%08"PFMT64x"   # %i: %s\n",
-						searchprefix, count, hit->addr, hit->len, hit->code);
-					count++;
-				}
-				r_list_destroy (hits);
+		RCoreAsmHit *hit;
+		RListIter *iter;
+		int count = 0;
+		RList *hits;
+		if ((hits = r_core_asm_strsearch (core, input+2, from, to))) {
+			r_list_foreach (hits, iter, hit) {
+				r_cons_printf ("f %s_%i @ 0x%08"PFMT64x"   # %i: %s\n",
+					searchprefix, count, hit->addr, hit->len, hit->code);
+				count++;
 			}
-			dosearch = 0;
-		} else {
-			char *kwd;
-			if (!(kwd = r_core_asm_search (core, input+2, from, to)))
-				return R_FALSE;
-			r_search_reset (core->search, R_SEARCH_KEYWORD);
-			r_search_set_distance (core->search, (int)
-					r_config_get_i (core->config, "search.distance"));
-			r_search_kw_add (core->search, 
-					r_search_keyword_new_hexmask (kwd, NULL));
-			r_search_begin (core->search);
-			free (kwd);
-			dosearch = R_TRUE;
+			r_list_destroy (hits);
 		}
+		dosearch = 0;
 		}
 		break;
 	default:
@@ -3635,12 +3991,12 @@ static int cmd_search(void *data, const char *input) {
 		" /d 101112       ; search for a deltified sequence of bytes\n"
 		" /!x 00          ; inverse hexa search (find first byte != 0x00)\n"
 		" /c jmp [esp]    ; search for asm code (see search.asmstr)\n"
+		" /a jmp eax      ; assemble opcode and search its bytes\n"
 		" /A              ; search for AES expanded keys\n"
-		" /a sym.printf   ; analyze code referencing an offset\n"
+		" /r sym.printf   ; analyze opcode reference an offset\n"
 		" /m magicfile    ; search for matching magic file (use blocksize)\n"
 		" /p patternsize  ; search for pattern of given size\n"
-		" /v num          ; look for a asm.bigendian 32bit value\n"
-		" /q num          ; look for a asm.bigendian 64bit value\n"
+		" /v[?248] num    ; look for a asm.bigendian 32bit value\n"
 		" //              ; repeat last search\n"
 		" ./ hello        ; search 'hello string' and import flags\n"
 		"Configuration:\n"
@@ -3678,8 +4034,11 @@ static int cmd_search(void *data, const char *input) {
 			r_cons_break (NULL, NULL);
 			// XXX required? imho nor_io_set_fd (core->io, core->file->fd);
 			for (at = from; at < to; at += core->blocksize) {
-				if (r_cons_singleton ()->breaked)
+				print_search_progress (at, to, searchcount);
+				if (r_cons_singleton ()->breaked) {
+					eprintf ("\n\n");
 					break;
+				}
 				ret = r_io_read_at (core->io, at, buf, core->blocksize);
 /*
 				if (ignorecase) {
@@ -3706,9 +4065,13 @@ static int cmd_search(void *data, const char *input) {
 			}
 			r_cons_break_end ();
 			free (buf);
-			if (searchflags && searchcount>0)
-				r_cons_printf ("%s%d_%d\n",
+			r_cons_clear_line ();
+			if (searchflags && searchcount>0) {
+				eprintf ("hits: %d  %s%d_0 .. %s%d_%d\n",
+					searchcount,
+					searchprefix, core->search->n_kws-1,
 					searchprefix, core->search->n_kws-1, searchcount-1);
+			} else eprintf ("hits: 0\n");
 		} else eprintf ("No keywords defined\n");
 	}
 	return R_TRUE;
@@ -4032,7 +4395,6 @@ static int cmd_meta(void *data, const char *input) {
 				if (dirsrc && *dirsrc) {
 					f = r_str_concat (strdup (dirsrc), f);
 					line = r_file_slurp_line (f, num, 0);
-					
 				}
 				if (!line) {
 					eprintf ("Cannot slurp file\n");
@@ -4353,7 +4715,7 @@ static int r_core_cmd_subst(RCore *core, char *cmd) {
 	ptr = strrchr (cmd, ';');
 	if (ptr) {
 		*ptr = '\0';
-		if (r_core_cmd_subst (core, cmd) == -1) 
+		if (r_core_cmd_subst (core, cmd) == -1)
 			return -1;
 		cmd = ptr+1;
 		//r_cons_flush ();
@@ -4736,56 +5098,137 @@ R_API int r_core_cmd_command(RCore *core, const char *command) {
 		}
 		rcmd += strlen (rcmd)+1;
 	}
-	r_str_free(buf);
+	free (buf);
 	return 0;
 }
 
-static void cmd_debug_dm(RCore *core, const char *input) {
+static int cmd_debug_map(RCore *core, const char *input) {
+	char file[128];
+	RListIter *iter;
+	RDebugMap *map;
+	ut64 addr = core->offset;
+
 	switch (input[0]) {
 	case '?':
 		r_cons_printf (
 		"Usage: dm [size]\n"
-		" dm         List memory maps of target process\n"
-		" dm*        Same as above but in radare commands\n"
-		" dm 4096    Allocate 4096 bytes in child process\n"
-		" dm-0x8048  Deallocate memory map of address 0x8048\n"
+		" dm            List memory maps of target process\n"
+		" dm*           Same as above but in radare commands\n"
+		" dm 4096       Allocate 4096 bytes in child process\n"
+		" dm-0x8048     Deallocate memory map of address 0x8048\n"
+		" dmp A S rwx   Change page at A with size S protection permissions\n"
+		" dmd [file]    Dump current debug map region to a file (from-to.dmp) (see Sd)\n"
+		" dml file      Load contents of file into the current map region (see Sl)\n"
 		" dmi [addr|libname] [symname]   List symbols of target lib\n"
 		" dmi* [addr|libname] [symname]  Same as above but in radare commands\n"
 		//" dm rw- esp 9K  set 9KB of the stack as read+write (no exec)\n"
-		"TODO: map files in process memory.\n");
+		"TODO: map files in process memory. (dmf file @ [addr])\n");
 		break;
-	case 'i':
-		{ // Move to a separate function
-		ut64 addr = 0LL;
-		char *libname = NULL, *symname = NULL;
-		char *ptr = strdup (r_str_trim_head ((char*)input+2));
-		char cmd[1024], *cmdret;
-		int i, len;
-
-		i = r_str_word_set0 (ptr);
-		switch (i) {
-			case 2: // get symname
-				symname = r_str_word_get0 (ptr, 1);
-			case 1: // get addr|libname
-				addr = r_num_math (core->num, r_str_word_get0 (ptr, 0));
-				if (!addr) libname = r_str_word_get0 (ptr, 0);
+	case 'p':
+		if (input[1] == ' ') {
+			int perms;
+			char *p, *q;
+			ut64 size, addr;
+			p = strchr (input+2, ' ');
+			if (p) {
+				*p++ = 0;
+				q = strchr (p, ' ');
+				if (q) {
+					*q++ = 0;
+					addr = r_num_math (core->num, input+2);
+					size = r_num_math (core->num, p);
+					perms = r_str_rwx (q);
+					eprintf ("(%s)(%s)(%s)\n", input+2, p, q);
+					eprintf ("0x%08"PFMT64x" %d %o\n", addr, (int) size, perms);
+					r_debug_map_protect (core->dbg, addr, size, perms);
+				} else eprintf ("See dm?\n");
+			} else eprintf ("See dm?\n");
+		} else eprintf ("See dm?\n");
+		break;
+	case 'd':
+		r_debug_map_sync (core->dbg); // update process memory maps
+		r_list_foreach (core->dbg->maps, iter, map) {
+			if (addr >= map->addr && addr < map->addr_end) {
+				ut8 *buf = malloc (map->size);
+#warning TODO: use mmap here. we need a portable implementation
+				if (!buf) {
+					eprintf ("Cannot allocate 0x%08"PFMT64x" bytes\n", map->size);
+					return R_FALSE;
+				}
+				r_io_read_at (core->io, map->addr, buf, map->size);
+				if (input[1]==' ' && input[2]) {
+					strncpy (file, input+2, sizeof (file));
+				} else snprintf (file, sizeof (file), "0x%08"PFMT64x"-0x%08"PFMT64x"-%s.dmp",
+					map->addr, map->addr_end, r_str_rwx_i (map->perm));
+				if (!r_file_dump (file, buf, map->size)) {
+					eprintf ("Cannot write '%s'\n", file);
+					free (buf);
+					return R_FALSE;
+				}
+				eprintf ("Dumped %d bytes into %s\n", (int)map->size, file);
+				free (buf);
+				return R_TRUE;
+			}
+		}
+		eprintf ("No debug region found here\n");
+		return R_FALSE;
+	case 'l':
+		if (input[1] != ' ') {
+			eprintf ("Usage: dml [file]\n");
+			return R_FALSE;
 		}
 		r_debug_map_sync (core->dbg); // update process memory maps
-		RListIter *iter = r_list_iterator (core->dbg->maps);
+		r_list_foreach (core->dbg->maps, iter, map) {
+			if (addr >= map->addr && addr < map->addr_end) {
+				int sz;
+				char *buf = r_file_slurp (input+2, &sz);
+#warning TODO: use mmap here. we need a portable implementation
+				if (!buf) {
+					eprintf ("Cannot allocate 0x%08"PFMT64x" bytes\n", map->size);
+					return R_FALSE;
+				}
+				r_io_write_at (core->io, map->addr, (const ut8*)buf, sz);
+				if (sz != map->size)
+					eprintf	("File size differs from region size (%d vs %"PFMT64d")\n",
+						sz, map->size);
+				eprintf ("Loaded %d bytes into the map region at 0x%08"PFMT64x"\n",
+					sz, map->addr);
+				free (buf);
+				return R_TRUE;
+			}
+		}
+		eprintf ("No debug region found here\n");
+		return R_FALSE;
+	case 'i':
+		{ // Move to a separate function
+		RCoreBinFilter filter;
+		char *libname = NULL, *symname = NULL;
+		char *ptr = strdup (r_str_trim_head ((char*)input+2));
+		int i;
+		ut64 baddr;
+
+		addr = 0LL;
+		i = r_str_word_set0 (ptr);
+		switch (i) {
+		case 2: // get symname
+			symname = r_str_word_get0 (ptr, 1);
+		case 1: // get addr|libname
+			addr = r_num_math (core->num, r_str_word_get0 (ptr, 0));
+			if (!addr) libname = r_str_word_get0 (ptr, 0);
+		}
+		r_debug_map_sync (core->dbg); // update process memory maps
+		iter = r_list_iterator (core->dbg->maps);
 		while (r_list_iter_next (iter)) {
-			RDebugMap *map = r_list_iter_get (iter);
+			map = r_list_iter_get (iter);
 			if ((addr != -1 && (addr >= map->addr && addr < map->addr_end)) ||
 				(libname != NULL && (strstr (map->name, libname)))) {
-				if (symname)
-					snprintf (cmd, sizeof (cmd), "rabin2 -b 0x%08"PFMT64x" -s%svn %s %s",
-							map->addr, input[1]=='*'?"r":"", symname, map->name);
-				else
-					snprintf (cmd, sizeof (cmd), "rabin2 -b 0x%08"PFMT64x" -s%sv %s",
-							map->addr, input[1]=='*'?"r":"", map->name);
-				if ((cmdret = r_sys_cmd_str (cmd, 0, &len))) {
-					r_cons_printf (cmdret);
-					free (cmdret);
-				}
+				filter.offset = 0LL;
+				filter.name = symname;
+				baddr = core->bin->curarch.baddr;
+				core->bin->curarch.baddr = map->addr;
+				r_core_bin_info (core, R_CORE_BIN_ACC_SYMBOLS, (input[1]=='*'),
+						R_TRUE, &filter, 0);
+				core->bin->curarch.baddr = baddr;
 				break;
 			}
 		}
@@ -4805,6 +5248,7 @@ static void cmd_debug_dm(RCore *core, const char *input) {
 		r_debug_map_list (core->dbg, core->offset, 0);
 		break;
 	}
+	return R_TRUE;
 }
 
 static int step_until(RCore *core, ut64 addr) {
@@ -4827,7 +5271,6 @@ static int step_until(RCore *core, ut64 addr) {
 		// check breakpoint here
 	} while (off != addr);
 	return R_TRUE;
-	
 }
 
 static int step_line(RCore *core, int times) {
@@ -4937,10 +5380,64 @@ static void cmd_debug_pid(RCore *core, const char *input) {
 	}
 }
 
+static void cmd_debug_backtrace (RCore *core, const char *input) {
+	RAnalOp analop;
+	ut64 addr, len = r_num_math (core->num, input);
+	if (len == 0) {
+		r_bp_traptrace_list (core->dbg->bp);
+	} else {
+		ut64 oaddr = 0LL;
+		eprintf ("Trap tracing 0x%08"PFMT64x"-0x%08"PFMT64x"\n", core->offset, core->offset+len);
+		r_reg_arena_swap (core->dbg->reg, R_TRUE);
+		r_bp_traptrace_reset (core->dbg->bp, R_TRUE);
+		r_bp_traptrace_add (core->dbg->bp, core->offset, core->offset+len);
+		r_bp_traptrace_enable (core->dbg->bp, R_TRUE);
+		do {
+			ut8 buf[32];
+			r_debug_continue (core->dbg);
+			if (checkbpcallback (core)) {
+				eprintf ("Interrupted by breakpoint\n");
+				break;
+			}
+			addr = r_debug_reg_get (core->dbg, "pc");
+			if (addr == 0LL) {
+				eprintf ("pc=0\n");
+				break;
+			}
+			if (addr == oaddr) {
+				eprintf ("pc=opc\n");
+				break;
+			}
+			oaddr = addr;
+			/* XXX Bottleneck..we need to reuse the bytes read by traptrace */
+			// XXX Do asm.arch should define the max size of opcode?
+			r_core_read_at (core, addr, buf, 32); // XXX longer opcodes?
+			r_anal_op (core->anal, &analop, addr, buf, sizeof (buf));
+		} while (r_bp_traptrace_at (core->dbg->bp, addr, analop.length));
+		r_bp_traptrace_enable (core->dbg->bp, R_FALSE);
+	}
+}
+
+static void dot_r_graph_traverse(RCore *core, RGraph *t) {
+	RGraphNode *n, *n2;
+	RListIter *iter, *iter2;
+	const char *gfont = r_config_get (core->config, "graph.font");
+	r_cons_printf ("digraph code {\n");
+	r_cons_printf ("graph [bgcolor=white];\n");
+	r_cons_printf ("   node [color=lightgray, style=filled shape=box fontname=\"%s\" fontsize=\"8\"];\n", gfont);
+	r_list_foreach (t->nodes, iter, n) {
+		r_cons_printf ("\"0x%08"PFMT64x"\" [URL=\"0x%08"PFMT64x"\" color=\"lightgray\" "
+			"label=\"0x%08"PFMT64x" (%d)\"]\n", n->addr, n->addr, n->addr, n->refs);
+		r_list_foreach (n->children, iter2, n2) {
+			r_cons_printf ("\"0x%08"PFMT64x"\" -> \"0x%08"PFMT64x"\" [color=\"red\"];\n", n->addr, n2->addr);
+		}
+	}
+	r_cons_printf ("}\n");
+}
+
 static int cmd_debug(void *data, const char *input) {
 	RCore *core = (RCore *)data;
-	struct r_anal_op_t analop;
-	int len, times, sig, follow=0;
+	int i, times, sig, follow=0;
 	ut64 addr;
 	char *ptr;
 
@@ -4951,11 +5448,92 @@ static int cmd_debug(void *data, const char *input) {
 			"\xcc\xc7\xc2\x10\x00\x00\x00\xcd\x80", 18);
 		break;
 	case 't':
-		// TODO: Add support to change the tag
-		if (input[1]=='r') {
+		switch (input[1]) {
+		case '?':
+			r_cons_printf ("Usage: dt[*] [tag]\n");
+			r_cons_printf ("  dtc  - trace call/ret\n");
+			r_cons_printf ("  dtg  - graph call/ret trace\n");
+			r_cons_printf ("  dtr  - reset traces (instruction//cals)\n");
+			break;
+		case 'c':
+			{
+			int n = 0;
+			int t = core->dbg->trace->enabled;
+			RGraphNode *gn;
+			core->dbg->trace->enabled = 0;
+			r_graph_plant (core->dbg->graph);
+			r_cons_break (static_debug_stop, core->dbg);
+			r_reg_arena_swap (core->dbg->reg, R_TRUE);
+			for (;;) {
+				ut8 buf[32];
+				ut64 addr;
+				RAnalOp aop;
+				if (r_cons_singleton ()->breaked)
+					break;
+				r_debug_step (core->dbg, 1);
+				r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, R_FALSE);
+				addr = r_debug_reg_get (core->dbg, "pc");
+				r_io_read_at (core->io, addr, buf, sizeof (buf));
+				r_anal_op (core->anal, &aop, addr, buf, sizeof (buf));
+				eprintf (" %d %llx\r", n++, addr);
+				switch (aop.type) {
+				case R_ANAL_OP_TYPE_UCALL:
+					// store regs
+					// step into
+					// get pc
+					r_debug_step (core->dbg, 1);
+					r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, R_FALSE);
+					addr = r_debug_reg_get (core->dbg, "pc");
+					eprintf ("0x%08llx ucall. computation may fail\n", addr);
+					r_graph_push (core->dbg->graph, addr, NULL);
+// TODO: push pc+aop.length into the call path stack
+					break;
+				case R_ANAL_OP_TYPE_CALL:
+					r_graph_push (core->dbg->graph, addr, NULL);
+					break;
+				case R_ANAL_OP_TYPE_RET:
+#if 0
+// TODO: we must store ret value for each call in the graph path to do this check
+					r_debug_step (core->dbg, 1);
+					r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, R_FALSE);
+					addr = r_debug_reg_get (core->dbg, "pc");
+					// TODO: step into and check return address if correct
+					// if not correct we are hijacking the control flow (exploit!)
+#endif
+					gn = r_graph_pop (core->dbg->graph);
+#if 0
+					if (addr != gn->addr) {
+						eprintf ("Oops. invalid return address 0x%08"PFMT64x
+							"\n0x%08"PFMT64x"\n", addr, gn->addr);
+					}
+#endif
+					break;
+				}
+				if (checkbpcallback (core)) {
+					eprintf ("Interrupted by a breakpoint\n");
+					break;
+				}
+			}
+			r_graph_traverse (core->dbg->graph);
+			core->dbg->trace->enabled = t;
+			r_cons_break_end();
+			}
+			break;
+		case 'g':
+			dot_r_graph_traverse (core, core->dbg->graph);
+			break;
+		case 'r':
+			r_graph_reset (core->dbg->graph);
 			r_debug_trace_free (core->dbg);
 			core->dbg->trace = r_debug_trace_new ();
-		} else r_debug_trace_list (core->dbg, -1);
+			break;
+		case '\0':
+			r_debug_trace_list (core->dbg, -1);
+			break;
+		default:
+			eprintf ("Wrong arg. See dt?\n");
+			break;
+		}
 		break;
 	case 'd':
 		switch (input[1]) {
@@ -5001,6 +5579,7 @@ static int cmd_debug(void *data, const char *input) {
 				" ds       step one instruction\n"
 				" ds 4     step 4 instructions\n"
 				" dso 3    step over 3 instructions\n"
+				" dsp      step into program (skip libs)\n"
 				" dsu addr step until address\n"
 				" dsl      step one source line\n"
 				" dsl 40   step 40 source lines\n");
@@ -5008,6 +5587,30 @@ static int cmd_debug(void *data, const char *input) {
 		case 'u':
 			r_reg_arena_swap (core->dbg->reg, R_TRUE);
 			step_until (core, r_num_math (core->num, input+2)); // XXX dupped by times
+			break;
+		case 'p':
+			r_reg_arena_swap (core->dbg->reg, R_TRUE);
+			for (i=0; i<times; i++) {
+				ut8 buf[64];
+				ut64 addr;
+				RAnalOp aop;
+				r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, R_FALSE);
+				addr = r_debug_reg_get (core->dbg, "pc");
+				r_io_read_at (core->io, addr, buf, sizeof (buf));
+				r_anal_op (core->anal, &aop, addr, buf, sizeof (buf));
+				if (aop.type == R_ANAL_OP_TYPE_CALL) {
+					RIOSection *s = r_io_section_get (core->io, aop.jump);
+					if (!s) {
+						r_debug_step_over (core->dbg, times);
+						continue;
+					}
+				}
+				r_debug_step (core->dbg, 1);
+				if (checkbpcallback (core)) {
+					eprintf ("Interrupted by a breakpoint\n");
+					break;
+				}
+			}
 			break;
 		case 'o':
 			r_reg_arena_swap (core->dbg->reg, R_TRUE);
@@ -5052,6 +5655,7 @@ static int cmd_debug(void *data, const char *input) {
 				" dcu [addr]       continue until address\n"
 				" dcu [addr] [end] continue until given address range\n"
 				" dco [num]        step over N instructions\n"
+				" dcp              continue until program code (mapped io section)\n"
 				" dcs [num]        continue until syscall\n"
 				" dcc              continue until call (use step into)\n"
 				" dcr              continue until ret (uses step over)\n"
@@ -5076,7 +5680,7 @@ static int cmd_debug(void *data, const char *input) {
 			checkbpcallback (core);
 			break;
 		case 'k':
-			// select pid and r_debug_continue_kill (core->dbg, 
+			// select pid and r_debug_continue_kill (core->dbg,
 			r_reg_arena_swap (core->dbg->reg, R_TRUE);
 			ptr = strchr (input+3, ' ');
 			if (ptr) {
@@ -5108,9 +5712,32 @@ static int cmd_debug(void *data, const char *input) {
 				checkbpcallback (core);
 			} else eprintf ("Usage: dcs [syscall-name-or-number]\n");
 			break;
+		case 'p':
+			{ // XXX: this is very slow
+				RIOSection *s;
+				ut64 pc;
+				int n = 0;
+				int t = core->dbg->trace->enabled;
+				core->dbg->trace->enabled = 0;
+				r_cons_break (static_debug_stop, core->dbg);
+				do {
+					r_debug_step (core->dbg, 1);
+					r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, R_FALSE);
+					pc = r_debug_reg_get (core->dbg, "pc");
+					eprintf (" %d %llx\r", n++, pc);
+					s = r_io_section_get (core->io, pc);
+					if (r_cons_singleton ()->breaked)
+						break;
+				} while (!s);
+				eprintf ("\n");
+				core->dbg->trace->enabled = t;
+				r_cons_break_end();
+				return 1;
+			}
 		case 'u':
 			ptr = strchr (input+3, ' ');
-			if (ptr) { // TODO: put '\0' in *ptr to avoid 
+// TODO : handle ^C here
+			if (ptr) { // TODO: put '\0' in *ptr to avoid
 				ut64 from, to, pc;
 				from = r_num_math (core->num, input+3);
 				to = r_num_math (core->num, ptr+1);
@@ -5147,40 +5774,7 @@ static int cmd_debug(void *data, const char *input) {
 			}
 			break;
 		case 't':
-			len = r_num_math (core->num, input+2);
-			if (len == 0) {
-				r_bp_traptrace_list (core->dbg->bp);
-			} else {
-				ut64 oaddr = 0LL;
-				eprintf ("Trap tracing 0x%08"PFMT64x"-0x%08"PFMT64x"\n", core->offset, core->offset+len);
-				r_reg_arena_swap (core->dbg->reg, R_TRUE);
-				r_bp_traptrace_reset (core->dbg->bp, R_TRUE);
-				r_bp_traptrace_add (core->dbg->bp, core->offset, core->offset+len);
-				r_bp_traptrace_enable (core->dbg->bp, R_TRUE);
-				do {
-					ut8 buf[32];
-					r_debug_continue (core->dbg);
-					if (checkbpcallback (core)) {
-						eprintf ("Interrupted by breakpoint\n");
-						break;
-					}
-					addr = r_debug_reg_get (core->dbg, "pc");
-					if (addr == 0LL) {
-						eprintf ("pc=0\n");
-						break;
-					}
-					if (addr == oaddr) {
-						eprintf ("pc=opc\n");
-						break;
-					}
-					oaddr = addr;
-					/* XXX Bottleneck..we need to reuse the bytes read by traptrace */
-					// XXX Do asm.arch should define the max size of opcode?
-					r_core_read_at (core, addr, buf, 32); // XXX longer opcodes?
-					r_anal_op (core->anal, &analop, addr, buf, sizeof (buf));
-				} while (r_bp_traptrace_at (core->dbg->bp, addr, analop.length));
-				r_bp_traptrace_enable (core->dbg->bp, R_FALSE);
-			}
+			cmd_debug_backtrace (core, input+2);
 			break;
 		default:
 			bypassbp (core);
@@ -5192,10 +5786,10 @@ static int cmd_debug(void *data, const char *input) {
 		r_cons_break_end();
 		break;
 	case 'm':
-		cmd_debug_dm (core, input+1);
+		cmd_debug_map (core, input+1);
 		break;
 	case 'r':
-		cmd_reg (core, input+1);
+		cmd_debug_reg (core, input+1);
 		//r_core_cmd (core, "|reg", 0);
 		break;
 	case 'p':
@@ -5217,7 +5811,7 @@ static int cmd_debug(void *data, const char *input) {
 		" dr[?]          cpu registers, dr? for extended help\n"
 		" db[?]          breakpoints\n"
 		" dbt            display backtrace\n"
-		" dt[r] [tag]    display instruction traces (dtr=reset)\n"
+		" dt[?r] [tag]   display instruction traces (dtr=reset)\n"
 		" dm[?*]         show memory maps\n");
 		break;
 	}
@@ -5282,6 +5876,7 @@ R_API int r_core_cmd0(void *user, const char *cmd) {
 
 /* return: pointer to a buffer with the output of the command */
 R_API char *r_core_cmd_str(RCore *core, const char *cmd) {
+	const char *static_str;
 	char *retstr = NULL;
 	r_cons_reset ();
 	if (r_core_cmd (core, cmd, 0) == -1) {
@@ -5289,7 +5884,7 @@ R_API char *r_core_cmd_str(RCore *core, const char *cmd) {
 		retstr = strdup ("");
 	} else {
 		r_cons_filter ();
-		const char *static_str = r_cons_get_buffer ();
+		static_str = r_cons_get_buffer ();
 		retstr = strdup (static_str? static_str: "");
 		r_cons_reset ();
 	}
@@ -5336,6 +5931,7 @@ R_API void r_core_cmd_init(RCore *core) {
 	r_cmd_add (core->cmd, "mount",    "mount filesystem", &cmd_mount);
 	r_cmd_add (core->cmd, "analysis", "analysis", &cmd_anal);
 	r_cmd_add (core->cmd, "flag",     "get/set flags", &cmd_flag);
+	r_cmd_add (core->cmd, "g",        "egg manipulation", &cmd_egg);
 	r_cmd_add (core->cmd, "debug",    "debugger operations", &cmd_debug);
 	r_cmd_add (core->cmd, "info",     "get file info", &cmd_info);
 	r_cmd_add (core->cmd, "cmp",      "compare memory", &cmd_cmp);
@@ -5353,7 +5949,7 @@ R_API void r_core_cmd_init(RCore *core) {
 	r_cmd_add (core->cmd, "resize",   "change file size", &cmd_resize);
 	r_cmd_add (core->cmd, "Visual",   "enter visual mode", &cmd_visual);
 	r_cmd_add (core->cmd, "!",        "run system command", &cmd_system);
-	r_cmd_add (core->cmd, "=",        "io pipe", &cmd_rap); 
+	r_cmd_add (core->cmd, "=",        "io pipe", &cmd_rap);
 	r_cmd_add (core->cmd, "#",        "calculate hash", &cmd_hash);
 	r_cmd_add (core->cmd, "?",        "help message", &cmd_help);
 	r_cmd_add (core->cmd, ".",        "interpret", &cmd_interpret);

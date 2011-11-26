@@ -49,9 +49,11 @@ static int config_bigendian_callback(void *user, void *data) {
 static int config_iova_callback(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	core->io->va = node->i_value;
-	// reload symbol information
-	r_core_cmd0 (core, ".ia*");
+	if (node->i_value != core->io->va) {
+		core->io->va = node->i_value;
+		// reload symbol information
+		r_core_cmd0 (core, ".ia*");
+	}
 	return R_TRUE;
 }
 
@@ -335,8 +337,8 @@ static int config_asmarch_callback(void *user, void *data) {
 	r_config_set (core->config, "anal.plugin", node->value);
 	if (!r_syscall_setup (core->anal->syscall, node->value,
 			asmos, core->anal->bits)) {
-		eprintf ("asm.arch: Cannot setup syscall '%s/%s' from '%s'\n",
-			node->value, asmos, R2_LIBDIR"/radare2/"R2_VERSION"/syscall");
+		//eprintf ("asm.arch: Cannot setup syscall '%s/%s' from '%s'\n",
+		//	node->value, asmos, R2_LIBDIR"/radare2/"R2_VERSION"/syscall");
 	}
 	//if (!strcmp (node->value, "bf"))
 	//	r_config_set (core->config, "dbg.backend", "bf");
@@ -370,6 +372,13 @@ static int config_asmbits_callback(void *user, void *data) {
 		eprintf ("asm.arch: Cannot setup '%i' bits analysis engine\n", (int)node->i_value);
 	if (core->dbg  && core->anal && core->anal->cur)
 		r_debug_set_arch (core->dbg, core->anal->cur->arch, node->i_value);
+	const char *asmos = r_config_get (core->config, "asm.os");
+	const char *asmarch = r_config_get (core->config, "asm.arch");
+	if (!r_syscall_setup (core->anal->syscall, asmarch,
+			asmos, node->i_value)) {
+		//eprintf ("asm.arch: Cannot setup syscall '%s/%s' from '%s'\n",
+		//	node->value, asmos, R2_LIBDIR"/radare2/"R2_VERSION"/syscall");
+	}
 	return ret;
 }
 
@@ -389,7 +398,9 @@ R_API int r_core_config_init(RCore *core) {
 	char *p;
 	cfg->printf = r_cons_printf;
 
+	//r_config_set (cfg, "dir.opcodes", R_ASM_OPCODES_PATH);
 	r_config_set (cfg, "dir.source", "");
+	r_config_set (cfg, "dir.magic", R_MAGIC_PATH);
 	r_config_set (cfg, "dir.plugins", LIBDIR"/radare2/"R2_VERSION"/");
 	r_config_desc (cfg, "dir.plugins", "Path to plugin files to be loaded at startup");
 	/* anal */
@@ -482,7 +493,11 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_desc (cfg, "fs.view", "Set visibility options for filesystems");
 	r_config_set (cfg, "bin.strings", "true");
 	p = r_sys_getenv ("EDITOR");
+#if __WINDOWS__
+	r_config_set (cfg, "cfg.editor", p? p: "notepad");
+#else
 	r_config_set (cfg, "cfg.editor", p? p: "vi");
+#endif
 	r_config_desc (cfg, "cfg.editor", "Select default editor program");
 	free (p);
 	r_config_set (cfg, "cmd.hit", "");
@@ -499,6 +514,8 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_desc (cfg, "cmd.vprompt", "Visual prompt commands");
 	r_config_set (cfg, "cmd.bp", "");
 	r_config_desc (cfg, "cmd.bp", "Command to executed every breakpoint hitted");
+	r_config_set (cfg, "graph.font", "Courier");
+	r_config_desc (cfg, "graph.font", "font to be used by the dot graphs");
 	r_config_set_cb (cfg, "scr.interactive", "true", config_scrint_callback);
 	r_config_set_cb (cfg, "scr.tee", "", config_teefile_callback);
 	r_config_set_cb (cfg, "scr.prompt", "true", &config_scrprompt_callback);
@@ -512,6 +529,8 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_set (cfg, "scr.seek", "");
 	r_config_set_i_cb (cfg, "scr.cols", 16, &config_scrcols_callback);
 	r_config_desc (cfg, "scr.cols", "Configure the number of columns to print");
+	r_config_set (cfg, "search.in", "file");
+	r_config_desc (cfg, "search.in", "Specify search boundaries. (raw, file, section)");
 	r_config_set_i (cfg, "search.kwidx", 0);
 	r_config_desc (cfg, "search.kwidx", "Store last search index count");
 	r_config_set (cfg, "search.flags", "true");
@@ -528,8 +547,6 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_desc (cfg, "search.distance", "Search string distance");
 	r_config_set_i_cb (cfg, "search.align", 0, &config_searchalign_callback);
 	r_config_desc (cfg, "search.align", "Only catch aligned search hits");
-	r_config_set (cfg, "search.asmstr", "true");
-	r_config_desc (cfg, "search.asmstr", "Search string instead of assembly");
 	r_config_set_cb (cfg, "scr.html", "false", &config_scrhtml_callback);
 	r_config_desc (cfg, "scr.html", "If enabled disassembly use HTML syntax");
 	r_config_set_cb (cfg, "io.ffio", "true", &config_ioffio_callback);
