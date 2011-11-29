@@ -136,10 +136,12 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #if __WINDOWS__
 #define PFMT64x "I64x"
 #define PFMT64d "I64d"
+#define PFMT64u "I64u"
 #define PFMT64o "I64o"
 #else
 #define PFMT64x "llx"
 #define PFMT64d "lld"
+#define PFMT64u "llu"
 #define PFMT64o "llo"
 #endif
 
@@ -150,7 +152,7 @@ typedef void (*PrintfCallback)(const char *str, ...);
 # elif __x86_64__
 # define R_SYS_BASE ((ut64)0x100000000)
 # else
-# define R_SYS_BASE ((u64)0x1000)
+# define R_SYS_BASE ((ut64)0x1000)
 # endif
 #elif __WINDOWS__
 # define R_SYS_BASE ((ut64)0x01001000)
