@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,22 +49,22 @@ static int hit(RSearchKeyword *kw, void *user, ut64 addr) {
 }
 
 static int show_help(char *argv0, int line) {
-	printf ("Usage: %s [-Xnzh] [-f from] [-t to] [-[m|s|e] str] [-x hex] file ...\n", argv0);
+	printf ("Usage: %s [-Xnzhv] [-b size] [-f from] [-t to] [-[m|s|e] str] [-x hex] file ...\n", argv0);
 	if (line) return 0;
 	printf (
 	" -z         search for zero-terminated strings\n"
-	" -s [str]   search for zero-terminated strings (can be used multiple times)\n"
+	" -s [str]   search for a specific string (can be used multiple times)\n"
 	" -e [regex] search for regular expression string matches\n"
 	" -x [hex]   search for hexpair string (909090) (can be used multiple times)\n"
-	" -m [str]   set a mask\n"
+	" -m [str]   set a binary mask to be applied on keywords\n"
 	" -f [from]  start searching from address 'from'\n"
 	" -t [to]    stop search at address 'to'\n"
 	" -X         show hexdump of search results\n"
 	" -n         do not stop on read errors\n"
 	" -r         print using radare commands\n"
-	" -b         set block size\n"
+	" -b [size]  set block size\n"
 	" -h         show this help\n"
-	" -V         print version and exit\n"
+	" -v         print version and exit\n"
 	);
 	return 0;
 }
@@ -90,6 +90,9 @@ static int rafind_open(char *file) {
 	r_search_set_callback (rs, &hit, buffer);
 	if (to == -1)
 		to = r_io_size(io);
+	if (mode == R_SEARCH_STRING) {
+		eprintf ("TODO: searchin stringz\n");
+	}
 	if (mode == R_SEARCH_KEYWORD) {
 		list_for_each(pos, &(kws_head)) {
 			BoxedString *kw = list_entry(pos, BoxedString, list);
@@ -98,17 +101,21 @@ static int rafind_open(char *file) {
 				r_search_keyword_new_str (kw->str, mask, NULL, 0));
 			free (kw);
 		}
+	} else if (mode == R_SEARCH_STRING) {
+		r_search_kw_add (rs,
+				r_search_keyword_new_hexmask ("00", NULL)); //XXX
 	}
+
 	curfile = file;
 	r_search_begin (rs);
 	r_io_seek (io, from, R_IO_SEEK_SET);
 	//printf("; %s 0x%08"PFMT64x"-0x%08"PFMT64x"\n", file, from, to);
-	for(cur=from; !last && cur<to;cur+=bsize) {
+	for (cur = from; !last && cur < to; cur += bsize) {
 		if ((cur+bsize)>to) {
 			bsize = to-cur;
 			last=1;
 		}
-		ret = r_io_read (io, buffer, bsize);
+		ret = r_io_read_at (io, cur, buffer, bsize);
 		if (ret == 0) {
 			if (nonstop) continue;
 		//	fprintf(stderr, "Error reading at 0x%08"PFMT64x"\n", cur);
@@ -116,16 +123,22 @@ static int rafind_open(char *file) {
 		}
 		if (ret != bsize)
 			bsize = ret;
-		r_search_update_i (rs, cur, buffer, bsize);
+
+		if (r_search_update (rs, &cur, buffer, ret) == -1) {
+			eprintf ("search: update read error at 0x%08"PFMT64x"\n", cur);
+			break;
+		}
+
 	}
 	rs = r_search_free (rs);
+	free (buffer);
 	return 0;
 }
 
 int main(int argc, char **argv) {
 	int c;
 
-	while ((c = getopt(argc, argv, "e:b:m:s:x:Xzf:t:rnhV")) != -1) {
+	while ((c = getopt(argc, argv, "e:b:m:s:x:Xzf:t:rnhv")) != -1) {
 		BoxedString *kw = R_NEW (BoxedString);
 		INIT_LIST_HEAD (&(kw->list));
 
@@ -173,7 +186,7 @@ int main(int argc, char **argv) {
 		case 'X':
 			pr = r_print_new ();
 			break;
-		case 'V':
+		case 'v':
 			printf ("rafind2 v"R2_VERSION"\n");
 			return 0;
 		case 'h':

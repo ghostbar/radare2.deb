@@ -34,7 +34,9 @@ R_API int r_buf_set_bits(RBuffer *b, int bitoff, int bitsize, ut64 value) {
 R_API int r_buf_set_bytes(RBuffer *b, const ut8 *buf, int length) {
 	if (b->buf)
 		free (b->buf);
-	if (!(b->buf = malloc (length)))
+	if (length<0)
+		return R_FALSE;
+	if (!(b->buf = malloc (length+1)))
 		return R_FALSE;
 	memcpy (b->buf, buf, length);
 	b->length = length;
@@ -49,6 +51,9 @@ R_API int r_buf_prepend_bytes(RBuffer *b, const ut8 *buf, int length) {
 	b->length += length;
 	return R_TRUE;
 }
+
+// TODO: R_API void r_buf_insert_bytes() // with shift
+// TODO: R_API void r_buf_write_bytes() // overwrite
 
 R_API char *r_buf_to_string(RBuffer *b) {
 	char *s;
@@ -96,6 +101,14 @@ R_API int r_buf_append_ut64(RBuffer *b, ut64 n) {
 		return R_FALSE;
 	memcpy (b->buf+b->length, &n, sizeof (n));
 	b->length += sizeof (n);
+	return R_TRUE;
+}
+
+R_API int r_buf_append_buf(RBuffer *b, RBuffer *a) {
+	if (!(b->buf = realloc (b->buf, b->length+a->length)))
+		return R_FALSE;
+	memcpy (b->buf+b->length, a->buf, a->length);
+	b->length += a->length;
 	return R_TRUE;
 }
 
@@ -174,6 +187,7 @@ R_API void r_buf_deinit(struct r_buf_t *b) {
 }
 
 R_API void r_buf_free(struct r_buf_t *b) {
+	if (!b) return;
 	r_buf_deinit (b);
 	free (b);
 }

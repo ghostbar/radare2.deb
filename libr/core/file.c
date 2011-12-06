@@ -8,6 +8,39 @@ R_API ut64 r_core_file_resize(struct r_core_t *core, ut64 newsize) {
 	return 0LL;
 }
 
+// TODO: add support for args
+R_API int r_core_file_reopen(RCore *core, const char *args) {
+	char *path;
+	RCoreFile *file;
+	int ret = R_FALSE;
+	int newpid, perm;
+	if (!core->file) {
+		eprintf ("No file opened to reopen\n");
+		return R_FALSE;
+	}
+	newpid = core->file->fd->fd;
+	perm = core->file->rwx;
+	ut64 addr = 0; // XXX ? check file->map ?
+	path = strdup (core->file->uri);
+	if (r_config_get_i (core->config, "cfg.debug"))
+		r_debug_kill (core->dbg, R_FALSE, 9); // KILL
+	r_core_file_close (core, core->file);
+	file = r_core_file_open (core, path, perm, addr);
+	if (file) {
+		eprintf ("File %s reopened\n", path);
+		ret = R_TRUE;
+	}
+	// close old file
+	r_core_file_close_fd (core, newpid);
+	// TODO: in debugger must select new PID
+	if (r_config_get_i (core->config, "cfg.debug")) {
+		newpid = core->file->fd->fd;
+		r_debug_select (core->dbg, newpid, newpid);
+	}
+	free (path);
+	return ret;
+}
+
 // NOTE: probably not all environment vars takes sesnse
 // because they can be replaced by commands in the given
 // command.. we should only expose the most essential and
@@ -105,6 +138,9 @@ R_API int r_core_bin_load(RCore *r, const char *file) {
 	} else if (!r_bin_load (r->bin, file, R_TRUE))
 		return R_FALSE;
 	r->file->obj = r_bin_get_object (r->bin, 0);
+	if (r->file->obj->info != NULL) {
+		r_config_set_i (r->config, "io.va", r->file->obj->info->has_va);
+	} else r_config_set_i (r->config, "io.va", 0);
 	{
 		ut64 offset = r_bin_get_offset (r->bin);
 		r_core_bin_info (r, R_CORE_BIN_ACC_ALL, R_CORE_BIN_SET, va, NULL, offset);
@@ -130,8 +166,11 @@ R_API RCoreFile *r_core_file_open(RCore *r, const char *file, int mode, ut64 loa
 	fh->uri = strdup (file);
 	fh->filename = strdup (fh->uri);
 	p = strstr (fh->filename, "://");
-	if (p != NULL)
-		fh->filename = p+3;
+	if (p != NULL) {
+		char *s = strdup (p+3);
+		free (fh->filename);
+		fh->filename = s;
+	}
 	fh->rwx = mode;
 	r->file = fh;
 	r->io->plugin = fd->plugin;

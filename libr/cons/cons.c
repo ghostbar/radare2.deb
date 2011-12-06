@@ -20,10 +20,10 @@ static void break_signal(int sig) {
 
 static inline void r_cons_write (const char *buf, int len) {
 #if __WINDOWS__
-	r_cons_w32_print ((unsigned char *)buf);
+	r_cons_w32_print ((unsigned char *)buf, 0);
 #else
 	if (write (I.fdout, buf, len) == -1) {
-		eprintf ("r_cons_write: write error\n");
+		//eprintf ("r_cons_write: write error\n");
 		//exit (1);
 	}
 #endif
@@ -149,6 +149,7 @@ R_API int r_cons_eof() {
 }
 
 R_API void r_cons_gotoxy(int x, int y) {
+#if 0
 #if __WINDOWS__
         static HANDLE hStdout = NULL;
         COORD coord;
@@ -160,16 +161,18 @@ R_API void r_cons_gotoxy(int x, int y) {
 #else
 	r_cons_printf ("\x1b[%d;%dH", y, x);
 #endif
+#endif
+	r_cons_printf ("\x1b[%d;%dH", y, x);
 }
 
 R_API void r_cons_clear_line() {
 #if __WINDOWS__
 	char white[1024];
 	memset (&white, ' ', sizeof (white));
-	if (I.columns<sizeof(white))
-		white[I.columns] = 0;
-	else white[sizeof (white)] = 0; // HACK
-	printf ("%s\r", white);
+	if (I.columns<sizeof (white))
+		white[I.columns-1] = 0;
+	else white[sizeof (white)-1] = 0; // HACK
+	printf ("\r%s\r", white);
 #else
 	printf ("\x1b[0K\r");
 #endif
@@ -182,44 +185,7 @@ R_API void r_cons_clear00() {
 }
 
 R_API void r_cons_clear() {
-#if __WINDOWS__
-	static HANDLE hStdout = NULL;
-	static CONSOLE_SCREEN_BUFFER_INFO csbi;
-	const COORD startCoords = { 0, 0 };
-	DWORD dummy;
-	
-	if (!hStdout) {
-		hStdout = GetStdHandle (STD_OUTPUT_HANDLE);
-		GetConsoleScreenBufferInfo (hStdout, &csbi);
-		//GetConsoleWindowInfo (hStdout, &csbi);
-	}
-	FillConsoleOutputCharacter (hStdout, ' ',
-		csbi.dwSize.X * csbi.dwSize.Y, startCoords, &dummy);
-	// SHORT Width = Info.srWindow.Right - Info.srWindow.Left + 1 ;
-	//FillConsoleOutputAttribute (hStdout, ' ',
-	//	csbi.dwSize.X * csbi.dwSize.Y, startCoords, &dummy);
-	/*
-	for (SHORT N = Info.srWindow.Top ; N <= Info.srWindow.Bottom ; ++N) {
-		DWORD Chars ;
-		COORD Pos = { Info.srWindow.Left, N } ;
-		FillConsoleOutputCharacter(ConsoleHandle, ' ', Width, Pos, &Chars) ;
-		FillConsoleOutputAttribute(ConsoleHandle, attr, Width, Pos, &Chars) ;
-	}
-	// scroll //
-	CONSOLE_SCREEN_BUFFER_INFO Info
-	GetConsoleWindowInfo(ConsoleHandle, &Info) ;
-	CHAR_INFO space ;
-	space.Char.AsciiChar = ' ' ;
-	space.Attributes = attr ;
-	SHORT Height = Info.srWindow.Bottom - Info.srWindow.Top + 1 ;
-	COORD Origin = { Info.srWindow.Left, Info.srWindow.Top - Height } ;
-	ScrollConsoleScreenBuffer(ConsoleHandle, &Info.srWindow, NULL, Origin, &space) ;
-	COORD TopLeft = { Info.srWindow.Left, Info.srWindow.Top } ;
-	SetConsoleCursorPosition(ConsoleHandle, TopLeft) ;
-	*/
-#else
 	r_cons_strcat (Color_RESET"\x1b[2J");
-#endif
 	r_cons_gotoxy (0, 0);
 	r_cons_flush ();
 	I.lines = 0;
@@ -284,7 +250,7 @@ R_API void r_cons_visual_flush() {
 		return;
 /* TODO: this ifdef must go in the function body */
 #if __WINDOWS__
-	r_cons_w32_print ((ut8*)I.buffer);
+	r_cons_w32_print ((ut8*)I.buffer, 1);
 #else
 	r_cons_visual_write (I.buffer);
 #endif
@@ -294,7 +260,6 @@ R_API void r_cons_visual_flush() {
 
 R_API void r_cons_visual_write (char *buffer) {
 	const char white[1024];
-	const char *newline = "\n"Color_RESET;
 	int cols = I.columns;
 	int alen, lines = I.rows;
 	const char *endptr;
@@ -309,33 +274,40 @@ R_API void r_cons_visual_write (char *buffer) {
 		alen = r_str_ansi_len (ptr);
 		*nl = '\n';
 
-
 		if (alen>cols) {
 			endptr = r_str_ansi_chrn (ptr, cols);
 			endptr++;
 			len = (endptr-ptr);
 			if (lines>0) {
 				r_cons_write (ptr, len);
-				r_cons_write (newline, strlen (newline));
+				//r_cons_write (newline, strlen (newline));
 			}
 		} else {
 			if (lines>0) {
 				int w = cols-alen;
-				r_cons_write (ptr-1, len);
+				if (ptr>buffer) r_cons_write (ptr-1, len);
+				else r_cons_write (ptr, len-1);
 				if (w>0) { 
 					if (w>sizeof (white)-1)
 						w = sizeof (white)-1;
 					r_cons_write (white, w);
 				}
 			}
+			// TRICK to empty columns.. maybe buggy in w32
+			if (r_mem_mem ((const ut8*)ptr, len, (const ut8*)"\x1b[0;0H", 6)) {
+				lines = I.rows;
+				r_cons_write (ptr, len);
+			}
 		}
-		lines--;
-		// TRICK for columns.. maybe buggy in w32
-		if (r_mem_mem ((const ut8*)ptr, len, (const ut8*)"\x1b[0;0H", 6)) {
-			lines = I.rows;
-			r_cons_write (ptr, len);
-		}
+		lines--; // do not use last line
 		ptr = nl+1;
+	}
+	/* fill the rest of screen */
+	if (lines>0) {
+		if (cols>sizeof (white))
+			cols = sizeof (white);
+		while (lines-->0)
+			r_cons_write (white, cols);
 	}
 }
 
@@ -406,7 +378,7 @@ R_API int r_cons_get_size(int *rows) {
 		I.rows = 23;
 	}
 #else
-	const char *str = r_sys_getenv ("COLUMNS");
+	char *str = r_sys_getenv ("COLUMNS");
 	if (str != NULL) {
 		I.columns = atoi (str);
 		I.rows = 23; // XXX. windows must get console size
@@ -419,6 +391,15 @@ R_API int r_cons_get_size(int *rows) {
 	if (rows)
 		*rows = I.rows;
 	return I.columns;
+}
+
+R_API void r_cons_show_cursor (int cursor) {
+#if __WINDOWS__
+	// TODO
+#else
+	if (cursor) write (1, "\x1b[?25h", 6);
+	else write(1, "\x1b[?25l", 6);
+#endif
 }
 
 /**
@@ -447,13 +428,8 @@ R_API void r_cons_set_raw(int is_raw) {
 }
 
 R_API void r_cons_invert(int set, int color) {
-	if (color) {
-		if (set) r_cons_strcat("\x1b[7m");
-		else r_cons_strcat("\x1b[27m");
-	} else {
-		if (set) r_cons_strcat("[");
-		else r_cons_strcat("]");
-	}
+	if (color) r_cons_strcat (set?  Color_INVERT: Color_INVERT_RESET);
+	else r_cons_strcat (set? "[": "]");
 }
 
 /*
@@ -478,7 +454,7 @@ R_API void r_cons_set_cup(int enable) {
 }
 
 R_API void r_cons_column(int c) {
-	char *b = malloc (I.buffer_len);
+	char *b = malloc (I.buffer_len+1);
 	memcpy (b, I.buffer, I.buffer_len);
 	b[I.buffer_len] = 0;
 	r_cons_reset ();
