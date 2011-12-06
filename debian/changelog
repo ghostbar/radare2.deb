@@ -1,9 +1,11 @@
-radare2 (0.9~hg20111125-1) unstable; urgency=low
+radare2 (0.9-1) unstable; urgency=low
 
-  * New upstream snapshot
-   - adds automatic hurd detection
+  * New upstream release
+   - automatic hurd detection
+  * radare2 now recommends libradare2-dev
+   - header files are used by ragg2-cc
 
- -- Sebastian Reichel <sre@debian.org>  Sat, 26 Nov 2011 22:07:29 +0100
+ -- Sebastian Reichel <sre@debian.org>  Tue, 06 Dec 2011 01:36:55 +0100
 
 radare2 (0.8.8-1) unstable; urgency=low
 

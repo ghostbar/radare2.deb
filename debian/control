@@ -13,6 +13,7 @@ Vcs-Git: git://git.debian.org/collab-maint/radare2.git
 Package: radare2
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: libradare2-dev
 Description: free and advanced command line hexadecimal editor
  The project aims to create a complete, portable, multi-architecture,
  unix-like toolchain for reverse engineering.
