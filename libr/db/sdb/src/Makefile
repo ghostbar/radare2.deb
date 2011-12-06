@@ -46,6 +46,7 @@ syms:
 main.c:
 
 ${BIN}: libsdb.a main.c
+	gcc -DVERSION=\"${VERSION}\" -o ${BIN} *.c 
 	#${CC} ${CFLAGS} -o ${BIN} main.c libsdb.a
 
 wcl:

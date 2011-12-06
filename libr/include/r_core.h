@@ -148,13 +148,14 @@ R_API void r_core_seek_previous (RCore *core, const char *type);
 R_API void r_core_seek_next (RCore *core, const char *type);
 R_API int r_core_seek_align(struct r_core_t *core, ut64 align, int count);
 R_API int r_core_block_read(struct r_core_t *core, int next);
-R_API int r_core_block_size(struct r_core_t *core, ut32 bsize);
+R_API int r_core_block_size(struct r_core_t *core, int bsize);
 R_API int r_core_read_at(struct r_core_t *core, ut64 addr, ut8 *buf, int size);
 R_API int r_core_visual(struct r_core_t *core, const char *input);
 R_API int r_core_visual_cmd(struct r_core_t *core, int ch);
 
 R_API int r_core_search_cb(RCore *core, ut64 from, ut64 to, RCoreSearchCallback cb);
 R_API int r_core_serve(RCore *core, RIODesc *fd);
+R_API int r_core_file_reopen(RCore *core, const char *args);
 R_API void r_core_file_free(RCoreFile *cf);
 R_API struct r_core_file_t *r_core_file_open(struct r_core_t *r, const char *file, int mode, ut64 loadaddr);
 R_API struct r_core_file_t *r_core_file_get_fd(struct r_core_t *core, int fd);

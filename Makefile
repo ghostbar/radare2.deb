@@ -54,6 +54,8 @@ w32dist:
 	for a in `find libr | grep -e dll$$`; do cp $$a w32dist ; done
 	for a in `find binr | grep -e exe$$`; do cp $$a w32dist ; done
 	rm w32dist/plugin.dll
+	mkdir -p w32dist/radare2/${VERSION}/magic
+	cp -f libr/magic/d/default/* w32dist/radare2/${VERSION}/magic
 	mkdir -p w32dist/radare2/${VERSION}/syscall
 	cp -f libr/syscall/d/*.sdb w32dist/radare2/${VERSION}/syscall
 	mkdir -p w32dist/radare2/${VERSION}/opcodes
@@ -106,7 +108,8 @@ install-doc-symlink:
 	${INSTALL_DIR} ${PFX}/share/doc/radare2
 	cd doc ; for a in * ; do ln -fs ${PWD}/$$a ${PFX}/share/doc/radare2 ; done
 
-DATADIRS=libr/asm/d libr/syscall/d libr/magic/d binr/ragg2/d
+DATADIRS=libr/asm/d libr/syscall/d libr/magic/d
+#binr/ragg2/d
 install: install-doc install-man
 	cd libr && ${MAKE} install PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	cd binr && ${MAKE} install PREFIX=${PREFIX} DESTDIR=${DESTDIR}

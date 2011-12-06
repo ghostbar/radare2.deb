@@ -99,6 +99,8 @@ typedef struct r_cons_t {
 
 #define R_CONS_KEY_ESC 0x1b
 
+#define Color_INVERT         "\x1b[7m"
+#define Color_INVERT_RESET   "\x1b[27m"
 /* plain colors */
 #define Color_BLACK    "\x1b[30m"
 #define Color_BGBLACK  "\x1b[40m"
@@ -171,7 +173,7 @@ R_API int r_cons_pipe_open(const char *file, int append);
 R_API void r_cons_pipe_close(int fd);
 
 #if __WINDOWS__
-R_API int r_cons_w32_print(ut8 *ptr);
+R_API int r_cons_w32_print(ut8 *ptr, int empty);
 #endif
 
 /* control */
@@ -182,6 +184,7 @@ R_API void r_cons_clear_line();
 R_API void r_cons_stdout_open(const char *file, int append);
 R_API int  r_cons_stdout_set_fd(int fd);
 R_API void r_cons_gotoxy(int x, int y);
+R_API void r_cons_show_cursor (int cursor);
 R_API void r_cons_set_raw(int b);
 
 /* output */

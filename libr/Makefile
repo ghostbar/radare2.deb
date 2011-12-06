@@ -33,6 +33,13 @@ install-pkgconfig:
 install-includes:
 	${INSTALL_DIR} ${IFX}/libr
 	(cd include && for a in *.h ; do ${INSTALL_DATA} $$a ${IFX}/libr ; done)
+	${INSTALL_DIR} ${IFX}/libr/sflib
+	(cd include/sflib && for a in * ; do \
+		${INSTALL_DIR} ${IFX}/libr/sflib/$$a ; \
+		for b in $$a/*.h ; do \
+			${INSTALL_DATA} $$b ${IFX}/libr/sflib/$$b ; \
+		done ; \
+	done)
 
 install-symlink:
 	mkdir -p ${PFX}/bin

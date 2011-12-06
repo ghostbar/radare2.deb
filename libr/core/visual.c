@@ -2,9 +2,9 @@
 
 #include "r_core.h"
 
-#define NPF 6
+#define NPF 5
 static int blocksize = 0;
-static const char *printfmt[] = { "x", "pd", "f tmp;sr sp;pw 64;dr=;s-;s tmp;f-tmp;pd", "p8", "pc", "ps" };
+static const char *printfmt[] = { "x", "pd", "f tmp;sr sp;pw 64;dr=;s-;s tmp;f-tmp;pd", "p8", "pc", };
 static int autoblocksize = 1;
 static int obs = 0;
 
@@ -42,10 +42,17 @@ static void r_core_visual_mark(RCore *core, ut8 ch) {
 R_API void r_core_visual_prompt (RCore *core) {
 	char buf[1024];
 	ut64 oseek = core->offset;
+#if __UNIX__
+	r_line_set_prompt (Color_RESET":> ");
+#else
 	r_line_set_prompt (":> ");
+#endif
+	r_cons_show_cursor (R_TRUE);
 	r_cons_fgets (buf, sizeof (buf), 0, NULL);
 	r_core_cmd (core, buf, 0);
 	r_cons_any_key ();
+	r_cons_clear00 ();
+	r_cons_show_cursor (R_FALSE);
 	if (curset) r_core_seek (core, oseek, 1);
 }
 
@@ -122,8 +129,8 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 
 	// do we need hotkeys for data references? not only calls?
 	if (ch>='0'&&ch<='9') {
+		r_io_sundo_push (core->io, core->offset);
 		r_core_seek (core, core->asmqjmps[ch-'0'], 1);
-		r_io_sundo_push (core->io);
 	} else
 	switch (ch) {
 	case 'c':
@@ -151,6 +158,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		break;
 	case 'a':
 		r_cons_printf ("Enter assembler opcodes separated with ';':\n");
+		r_cons_show_cursor (R_TRUE);
 		r_cons_flush ();
 		r_cons_set_raw (R_FALSE);
 		strcpy (buf, "wa ");
@@ -161,10 +169,12 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 			r_core_cmd (core, buf, R_TRUE);
 			if (curset) r_core_seek (core, core->offset - cursor, 1);
 		}
+		r_cons_show_cursor (R_FALSE);
 		r_cons_set_raw (R_TRUE);
 		break;
 	case 'w':
 		r_cons_printf ("Enter hexpair string to write:\n");
+		r_cons_show_cursor (R_TRUE);
 		r_cons_flush ();
 		r_cons_set_raw (0);
 		strcpy (buf, "wx ");
@@ -176,6 +186,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 			if (curset) r_core_seek (core, core->offset - cursor, 1);
 		}
 		r_cons_set_raw (1);
+		r_cons_show_cursor (R_FALSE);
 		break;
 	case 'e':
 		r_core_visual_config (core);
@@ -199,6 +210,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 			if (r_list_empty (xrefs)) {
 				r_cons_printf ("\tNo XREF found at 0x%"PFMT64x"\n", core->offset);
 				r_cons_any_key ();
+				r_cons_clear00 ();
 			} else {
 				r_list_foreach (xrefs, iter, refi) {
 					fun = r_anal_fcn_find (core->anal, refi->addr, R_ANAL_FCN_TYPE_NULL);
@@ -236,8 +248,8 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 				offset = 0;
 			r_core_seek (core, offset, 1);
 		} else
-			r_core_cmd (core, "s 0", 0);
-		r_io_sundo_push (core->io);
+			r_core_seek (core, 0, 1);
+		r_io_sundo_push (core->io, core->offset);
 		break;
 	case 'G':
 {
@@ -256,7 +268,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 			}
 		} else ret = r_core_seek (core, core->file->size-core->blocksize, 1);
 		if (ret != -1)
-			r_io_sundo_push (core->io);
+			r_io_sundo_push (core->io, core->offset);
 }
 		break;
 	case 'h':
@@ -267,7 +279,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 				r_core_seek (core, core->offset-cols, 1);
 				cursor ++;
 			}
-		} else r_core_cmd (core, "s-1", 0);
+		} else r_core_seek (core, core->offset-1, 1);
 		break;
 	case 'H':
 		if (curset) {
@@ -278,7 +290,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 				cursor += cols;
 				ocursor += cols;
 			}
-		} else r_core_cmd (core, "s-2", 0);
+		} else r_core_seek (core, core->offset-2, 1);
 		break;
 	case 'l':
 		if (curset) {
@@ -291,7 +303,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 					cursor-=cols;
 				}
 			}
-		} else r_core_cmd (core, "s+1", 0);
+		} else r_core_seek (core, core->offset+1, 1);
 		break;
 	case 'L':
 		if (curset) {
@@ -305,7 +317,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 					ocursor-=cols;
 				}
 			}
-		} else r_core_cmd (core, "s+2", 0);
+		} else r_core_seek (core, core->offset+2, 1);
 		break;
 	case 'j':
 		if (curset) {
@@ -419,12 +431,12 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		//r_core_cmd(core, "s eip", 0);
 		break;
 	case 'p':
-		core->printidx = (core->printidx+1)%NPF;
-		r_cons_clear00 ();
+		core->printidx = R_ABS ((core->printidx+1)%NPF);
 		break;
 	case 'P':
-		core->printidx = (core->printidx-1)%NPF;
-		r_cons_clear00 ();
+		if (core->printidx)
+			core->printidx--;
+		else core->printidx = NPF-1;
 		break;
 	case 'm':
 		r_core_visual_mark (core, r_cons_readchar ());
@@ -442,6 +454,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 			r_cons_strcat ("Can't paste, clipboard is empty.\n");
 			r_cons_flush ();
 			r_cons_any_key ();
+			r_cons_clear00 ();
 		} else r_core_yank_paste (core, core->offset+cursor, 0);
 		break;
 	case '-':
@@ -454,8 +467,8 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 				cursor:ocursor, R_ABS (ocursor-cursor)+1);
 			r_core_cmd (core, buf, 0);
 		} else {
-			r_core_block_size (core, core->blocksize-1);
-			r_cons_clear ();
+			if (!autoblocksize)
+				r_core_block_size (core, core->blocksize-1);
 		}
 		break;
 	case '+':
@@ -468,26 +481,26 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 				cursor<ocursor? cursor: ocursor, R_ABS (ocursor-cursor)+1);
 			r_core_cmd (core, buf, 0);
 		} else {
-			r_core_block_size (core, core->blocksize+1);
-			//r_cons_clear ();
+			if (!autoblocksize)
+				r_core_block_size (core, core->blocksize+1);
 		}
 		break;
 	case '/':
-		r_core_block_size (core, core->blocksize-cols);
-		r_cons_clear ();
+		if (!autoblocksize)
+			r_core_block_size (core, core->blocksize-cols);
 		break;
 	case '*':
-		r_core_block_size (core, core->blocksize+cols);
-		//r_cons_clear ();
+		if (!autoblocksize)
+			r_core_block_size (core, core->blocksize+cols);
 		break;
 	case '>':
 		r_core_seek_align (core, core->blocksize, 1);
-		r_io_sundo_push (core->io);
+		r_io_sundo_push (core->io, core->offset);
 		break;
 	case '<':
 		r_core_seek_align (core, core->blocksize, -1);
 		r_core_seek_align (core, core->blocksize, -1);
-		r_io_sundo_push (core->io);
+		r_io_sundo_push (core->io, core->offset);
 		break;
 	case '.':
 		r_core_cmd (core, "sr pc", 0); // XXX
@@ -503,6 +516,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		break;
 	case ';':
 		r_cons_printf ("Enter a comment: ('-' to remove, '!' to use $EDITOR)\n");
+		r_cons_show_cursor (R_TRUE);
 		r_cons_flush ();
 		r_cons_set_raw (R_FALSE);
 		strcpy (buf, "CC ");
@@ -527,6 +541,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 			if (curset) r_core_seek (core, orig, 1);
 		}
 		r_cons_set_raw (R_TRUE);
+		r_cons_show_cursor (R_FALSE);
 		break;
 	case 'B':
 		autoblocksize = !autoblocksize;
@@ -536,12 +551,19 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		r_cons_clear ();
 		break;
 	case 'u':
-		if (r_io_sundo (core->io))
-			r_core_seek (core, core->io->off, 1);
+		{
+		ut64 off = r_io_sundo (core->io, core->offset);
+		if (off != UT64_MAX)
+			r_core_seek (core, off, 1);
+		else eprintf ("Cannot undo\n");
+		}
 		break;
 	case 'U':
-		if (r_io_sundo_redo (core->io))
-			r_core_seek (core, core->io->off, 1);
+		{
+		ut64 off = r_io_sundo_redo (core->io);
+		if (off != UT64_MAX)
+			r_core_seek (core, off, 1);
+		}
 		break;
 	case 'z':
 		if (zoom && cursor) {
@@ -552,7 +574,6 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		zoom = !zoom;
 		break;
 	case '?':
-		r_cons_clear00 ();
 		r_cons_printf (
 		"\nVisual mode help:\n\n"
 		" >||<    - seek aligned to block size\n"
@@ -582,6 +603,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		" q       - back to radare shell\n");
 		r_cons_flush ();
 		r_cons_any_key ();
+		r_cons_clear00 ();
 		break;
 	case 'q':
 	case 'Q':
@@ -593,7 +615,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 // TODO: simplify R_ABS(printidx%NPF) into a macro, or just control negative values..
 R_API void r_core_visual_title (RCore *core, int color) {
 	const char *filename;
-	char pos[512];
+	char pos[512], foo[512], bar[512];
 	/* automatic block size */
 	if (autoblocksize)
 	switch (core->printidx) {
@@ -616,22 +638,28 @@ R_API void r_core_visual_title (RCore *core, int color) {
 		RFlagItem *f = r_flag_get_at (core->flags, core->offset);
 		if (f) {
 			if (f->offset == core->offset) snprintf (pos, sizeof (pos), "@ %s", f->name);
-			else snprintf (pos, sizeof (pos), "@ %s+%d ((%llx))", f->name, (int)(core->offset-f->offset), f->offset);
+			else snprintf (pos, sizeof (pos), "@ %s+%d (0x%"PFMT64x")", f->name, (int)(core->offset-f->offset), f->offset);
 		} else pos[0] = 0;
 	}
 
 	if (cursor<0) cursor = 0;
 	if (color) r_cons_strcat (Color_YELLOW);
-	if (curset) r_cons_printf ("[0x%08"PFMT64x" %d %s(%d:%d=%d)]> %s\n", core->offset,
-		core->blocksize, core->file->filename, cursor, ocursor,
-		ocursor==-1?1:R_ABS (cursor-ocursor)+1, printfmt[R_ABS (core->printidx%NPF)]);
-	else r_cons_printf ("[0x%08"PFMT64x" %d %s]> %s %s\n", core->offset, core->blocksize,
-		filename, printfmt[R_ABS (core->printidx%NPF)], pos);
+	strncpy (bar, printfmt[R_ABS (core->printidx%NPF)], sizeof (bar)-1);
+	bar[10] = '.'; // chop cmdfmt
+	bar[11] = '.'; // chop cmdfmt
+	bar[12] = 0; // chop cmdfmt
+	if (curset)
+		snprintf (foo, sizeof (foo), "[0x%08"PFMT64x" %d %s(%d:%d=%d)]> %s\n", core->offset,
+				core->blocksize, filename, cursor, ocursor,
+				ocursor==-1?1:R_ABS (cursor-ocursor)+1, bar);
+	else
+		snprintf (foo, sizeof (foo), "[0x%08"PFMT64x" %d %s]> %s %s\n",
+			core->offset, core->blocksize, filename, bar, pos);
+	r_cons_printf (foo);
 	//r_cons_printf (" %d %d %d\n", core->printidx, core->cons->rows, core->blocksize);
 	if (color) r_cons_strcat (Color_RESET);
 }
 
-static int n = 0;
 static void r_core_visual_refresh (RCore *core) {
 	const char *vi;
 	r_cons_get_size (NULL);
@@ -651,7 +679,6 @@ static void r_core_visual_refresh (RCore *core) {
 		r_core_cmd (core, vi, 0);
 		r_cons_column (80);
 	}
-
 	if (zoom) r_core_cmd (core, "pZ", 0);
 	else r_core_cmd (core, printfmt[R_ABS (core->printidx%NPF)], 0);
 	blocksize = core->num->value? core->num->value : core->blocksize;
@@ -675,6 +702,7 @@ R_API int r_core_visual(RCore *core, const char *input) {
 			r_core_cmd (core, printfmt[R_ABS (core->printidx%NPF)], 0);
 			r_cons_visual_flush ();
 			r_cons_any_key ();
+			r_cons_clear00 ();
 			r_cons_set_cup (R_FALSE);
 			return 0;
 		}
