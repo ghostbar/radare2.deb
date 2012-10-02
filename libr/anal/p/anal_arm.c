@@ -9,6 +9,8 @@
 
 /* DEPRECATE ?? */
 #include "arm/arm.h"
+#include "../asm/arch/arm/arm.h"
+#include "../asm/arch/arm/winedbg/be_arm.h"
 
 static unsigned int disarm_branch_offset (unsigned int pc, unsigned int insoff) {
 	unsigned int add = insoff << 2;
@@ -41,13 +43,18 @@ static unsigned int disarm_branch_offset (unsigned int pc, unsigned int insoff) 
 	(IS_BRANCH (x) || IS_RETURN (x) || IS_UNKJMP (x))
 
 #define API static
-#include "../../asm/arch/arm/armthumb.c"
 
 static int op_thumb(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len) {
 	int op_code;
 	ut16 *_ins = (ut16*)data;
 	ut16 ins = *_ins;
-	op->length = armthumb_length (ins);
+
+	struct arm_insn *arminsn = arm_new();
+	arm_set_thumb(arminsn, R_TRUE);
+	arm_set_input_buffer(arminsn, data);
+	arm_set_pc(arminsn, addr);
+	op->length = arm_disasm_one_insn(arminsn);
+
 	// TODO: handle 32bit instructions (branches are not correctly decoded //
 
 	/* CMP */
@@ -107,10 +114,14 @@ static int op_thumb(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int le
 		op->type = R_ANAL_OP_TYPE_SWI;
 		op->value = (ut64)(ins>>8);
 	}
+	op->jump = arminsn->jmp;
+	op->fail = arminsn->fail;
+	arm_free(arminsn);
 	return op->length;
 }
 
 static int arm_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len) {
+	struct arm_insn *arminsn;
 	ut32 branch_dst_addr, i = 0;
 	ut32* code = (ut32 *)data;
 	const ut8 *b = (ut8 *)data;
@@ -118,12 +129,18 @@ static int arm_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len)
 	if (data == NULL)
 		return 0;
 	memset (op, '\0', sizeof (RAnalOp));
+	arminsn = arm_new();
+	arm_set_thumb(arminsn, R_FALSE);
+	arm_set_input_buffer(arminsn, data);
+	arm_set_pc(arminsn, addr);
 	op->addr = addr;
 	op->type = R_ANAL_OP_TYPE_UNK;
+#if 0
 	op->jump = op->fail = -1;
 	op->ref = op->value = -1;
+#endif
 	if (anal->bits==16)
-		return op_thumb(anal, op, addr, data, len);
+		return op_thumb (anal, op, addr, data, len);
 	op->length = 4;
 #if 0
 	fprintf(stderr, "CODE %02x %02x %02x %02x\n",
@@ -181,7 +198,7 @@ static int arm_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len)
 		op->stackop = R_ANAL_STACK_INCSTACK;
 		op->value = -b[0];
 	} else
-	if( (code[i] == 0x1eff2fe1) ||(code[i] == 0xe12fff1e)) { // bx lr
+	if ( (code[i] == 0x1eff2fe1) ||(code[i] == 0xe12fff1e)) { // bx lr
 		op->type = R_ANAL_OP_TYPE_RET;
 		op->eob = 1;
 	} else
@@ -235,8 +252,12 @@ static int arm_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len)
 			op->eob = 1;
 		}
 	}
+	op->jump = arminsn->jmp;
+	op->fail = arminsn->fail;
+	arm_free(arminsn);
 	return op->length;
 }
+
 static int set_reg_profile(RAnal *anal) {
 	/* XXX Dupped Profiles */
 	return r_reg_set_profile_string (anal->reg,

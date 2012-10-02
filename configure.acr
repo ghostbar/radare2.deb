@@ -1,10 +1,11 @@
 PKGNAME radare2
-VERSION 0.9
+VERSION 0.9.2
 CONTACT pancake ; pancake@nopcode.org
 
 LANG_C!
 
-ARG_WITHOUT DEBUGGER debugger disable native debugger features ;
+ARG_ENABLE CPARSE cparse build with cparse support ;
+ARG_DISABLE DEBUGGER debugger disable native debugger features ;
 
 (( -ldl -dynamic ... ))
 USE_DL
@@ -20,9 +21,16 @@ IFAND HAVE_LIB_MAGIC USE_MAGIC {
 	LIBMAGIC = -lr_magic ;
 }
 
+CHKPRG! FLEX flex
 
 CHKLIB ewf
+PKGCFG EWF_CFLAGS EWF_LDFLAGS libewf
 ARG_WITHOUT HAVE_EWF ewf disable EWF dependency ;
+IF HAVE_PKGCFG_LIBEWF {
+	HAVE_LIB_EWF = 1 ;
+}{
+	HAVE_LIB_EWF = 0 ;
+}
 IFNOT HAVE_EWF { HAVE_LIB_EWF = 0 ; }
 
 (( TODO must deprecate ))
@@ -40,6 +48,8 @@ IFNULL SSL_LDFLAGS {
 		SSL_LDFLAGS = -lssl ;
 	}
 }
+
+ARG_WITH USE_RPATH rpath use rpath to build ;
 
 ARG_WITH HAVE_LILEND little-endian force little endian ;
 IF HAVE_LILEND { LIL_ENDIAN = 1 ; }

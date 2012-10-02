@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009 nibble<.ds@gmail.com> */
+/* radare - LGPL - Copyright 2009-2012 - pancake, nibble */
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -85,15 +85,19 @@ static int disassemble(struct r_asm_t *a, struct r_asm_op_t *op, const ut8 *buf,
 	return op->inst_len;
 }
 
+static int assemble(RAsm *a, RAsmOp *op, const char *str) {
+	return mips_assemble (str, a->pc, op->buf);
+}
+
 RAsmPlugin r_asm_plugin_mips = {
 	.name = "mips",
 	.arch = "mips",
-	.bits = (int[]){ 32, 0 },
+	.bits = (int[]){ 64, 32, 0 },
 	.desc = "MIPS disassembly plugin",
 	.init = NULL,
 	.fini = NULL,
 	.disassemble = &disassemble,
-	.assemble = NULL,
+	.assemble = &assemble,
 };
 
 #ifndef CORELIB

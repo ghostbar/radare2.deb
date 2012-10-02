@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2012 - pancake */
 
 #include <r_core.h>
 
@@ -34,7 +34,8 @@ R_API int r_core_file_reopen(RCore *core, const char *args) {
 	r_core_file_close_fd (core, newpid);
 	// TODO: in debugger must select new PID
 	if (r_config_get_i (core->config, "cfg.debug")) {
-		newpid = core->file->fd->fd;
+		if (core->file && core->file->fd)
+			newpid = core->file->fd->fd;
 		r_debug_select (core->dbg, newpid, newpid);
 	}
 	free (path);
@@ -70,7 +71,14 @@ R_API void r_core_sysenv_end(RCore *core, const char *cmd) {
 	// TODO: remove tmpfilez
 	if (strstr (cmd, "BLOCK")) {
 		// remove temporary BLOCK file
+		char *f = r_sys_getenv ("BLOCK");
+		if (f) {
+			r_file_rm (f);
+			r_sys_setenv ("BLOCK", NULL);
+		}
 	}
+	r_sys_setenv ("BYTES", NULL);
+	r_sys_setenv ("OFFSET", NULL);
 }
 
 R_API char *r_core_sysenv_begin(RCore *core, const char *cmd) {
@@ -89,6 +97,17 @@ R_API char *r_core_sysenv_begin(RCore *core, const char *cmd) {
 	ret = strdup (cmd);
 	if (strstr (cmd, "BLOCK")) {
 		// replace BLOCK in RET string
+		char *f = r_file_temp ("r2block");
+		if (f) {
+			if (r_file_dump (f, core->block, core->blocksize))
+				r_sys_setenv ("BLOCK", f);
+			free (f);
+		}
+	}
+	if (strstr (cmd, "BYTES")) {
+		char *s = r_hex_bin2strdup (core->block, core->blocksize);
+		r_sys_setenv ("BYTES", s);
+		free (s);
 	}
 	if (core->file->filename)
 		r_sys_setenv ("FILE", core->file->filename);
@@ -110,31 +129,39 @@ R_API char *r_core_sysenv_begin(RCore *core, const char *cmd) {
 R_API int r_core_bin_load(RCore *r, const char *file) {
 	int va = r->io->va || r->io->debug;
 
-	if (file == NULL) {
-		if (r->file == NULL)
+	if (file == NULL || !r->file || !*file) {
+		if (!r->file || !r->file->filename)
 			return R_FALSE;
 		file = r->file->filename;
 	}
 	if (r_bin_load (r->bin, file, R_FALSE)) {
 		if (r->bin->narch>1) {
 			int i;
+			RBinObject *o = r->bin->cur.o;
 			eprintf ("NOTE: Fat binary found. Selected sub-bin is: -a %s -b %d\n",
 					r->assembler->cur->arch, r->assembler->bits);
 			eprintf ("NOTE: Use -a and -b to select sub binary in fat binary\n");
 			for (i=0; i<r->bin->narch; i++) {
 				r_bin_select_idx (r->bin, i);
-				if (r->bin->curarch.info == NULL) {
-					eprintf ("No extract info found.\n");
-				} else {
+				if (o->info) {
 					eprintf ("  $ r2 -a %s -b %d %s  # 0x%08"PFMT64x"\n", 
-							r->bin->curarch.info->arch,
-							r->bin->curarch.info->bits,
-							r->bin->curarch.file,
-							r->bin->curarch.offset);
-				}
+							o->info->arch,
+							o->info->bits,
+							r->bin->file,
+							r->bin->cur.offset);
+				} else eprintf ("No extract info found.\n");
 			}
 		}
 		r_bin_select (r->bin, r->assembler->cur->arch, r->assembler->bits, NULL);//"x86_32");
+		{
+		RIOMap *im;
+		RListIter *iter;
+		/* Fix for fat bins */
+		r_list_foreach (r->io->maps, iter, im) {
+			im->delta = r->bin->cur.offset;
+			im->to = im->from + r->bin->cur.size;
+		}
+		}
 	} else if (!r_bin_load (r->bin, file, R_TRUE))
 		return R_FALSE;
 	r->file->obj = r_bin_get_object (r->bin, 0);
@@ -145,6 +172,8 @@ R_API int r_core_bin_load(RCore *r, const char *file) {
 		ut64 offset = r_bin_get_offset (r->bin);
 		r_core_bin_info (r, R_CORE_BIN_ACC_ALL, R_CORE_BIN_SET, va, NULL, offset);
 	}
+	if (r_config_get_i (r->config, "file.analyze"))
+		r_core_cmd0 (r, "aa");
 	return R_TRUE;
 }
 
@@ -152,9 +181,21 @@ R_API RCoreFile *r_core_file_open(RCore *r, const char *file, int mode, ut64 loa
 	RCoreFile *fh;
 	const char *cp;
 	char *p;
-	RIODesc *fd = r_io_open (r->io, file, mode, 0644);
-	if (fd == NULL)
-		return NULL;
+	RIODesc *fd;
+	if (!strcmp (file, "-")) {
+		file = "malloc://512";
+		mode = 4|2;
+	}
+	r->io->bits = r->assembler->bits; // TODO: we need an api for this
+	fd = r_io_open (r->io, file, mode, 0644);
+	if (fd == NULL) {
+		if (mode & 2) {
+			if (!r_io_create (r->io, file, 0644, 0))
+				return NULL;
+			if (!(fd = r_io_open (r->io, file, mode, 0644)))
+				return NULL;
+		} else return NULL;
+	}
 	if (r_io_is_listener (r->io)) {
 		r_core_serve (r, fd);
 		return NULL;
@@ -163,7 +204,10 @@ R_API RCoreFile *r_core_file_open(RCore *r, const char *file, int mode, ut64 loa
 	fh = R_NEW (RCoreFile);
 	fh->fd = fd;
 	fh->map = NULL;
-	fh->uri = strdup (file);
+	fh->uri = strdup (fd->name);
+	fh->size = r_file_size (fh->uri);
+	if (!fh->size)
+		fh->size = r_io_size (r->io);
 	fh->filename = strdup (fh->uri);
 	p = strstr (fh->filename, "://");
 	if (p != NULL) {
@@ -178,21 +222,26 @@ R_API RCoreFile *r_core_file_open(RCore *r, const char *file, int mode, ut64 loa
 	r_list_append (r->files, fh);
 
 //	r_core_bin_load (r, fh->filename);
-	r_core_block_read (r, 0);
 	cp = r_config_get (r->config, "cmd.open");
 	if (cp && *cp)
 		r_core_cmd (r, cp, 0);
 	r_config_set (r->config, "file.path", file);
 	r_config_set_i (r->config, "zoom.to", loadaddr+fh->size);
 	fh->map = r_io_map_add (r->io, fh->fd->fd, mode, 0, loadaddr, fh->size);
+
+	//r_config_set_i (r->config, "io.va", 0);
+	r_core_block_read (r, 0);
+	//r_core_bin_load (r, NULL); // XXX: unnecessary call?
+	//r_core_block_read (r, 0);
 	return fh;
 }
 
 R_API void r_core_file_free(RCoreFile *cf) {
-	free (cf->uri);
-	cf->uri = NULL;
-	free (cf->filename);
-	cf->filename = NULL;
+	if (!cf) return;
+	R_FREE (cf->uri);
+	R_FREE (cf->filename);
+	R_FREE (cf->map);
+	r_io_desc_free (cf->fd);
 	cf->fd = NULL;
 }
 
@@ -221,10 +270,10 @@ R_API int r_core_file_list(RCore *core) {
 	RListIter *iter;
 	r_list_foreach (core->files, iter, f) {
 		if (f->map)
-			eprintf ("%c %d %s 0x%"PFMT64x"\n",
-				core->io->raised == f->fd->fd?'*':' ',
+			r_cons_printf ("%c %d %s 0x%"PFMT64x"\n",
+				core->io->raised == f->fd->fd?'*':'-',
 				f->fd->fd, f->uri, f->map->from);
-		else eprintf ("  %d %s\n", f->fd->fd, f->uri);
+		else r_cons_printf ("- %d %s\n", f->fd->fd, f->uri);
 		count++;
 	}
 	return count;
@@ -272,11 +321,11 @@ R_API int r_core_hash_load(RCore *r, const char *file) {
 	ctx = r_hash_new (R_TRUE, R_HASH_SHA1);
 	sha1 = r_hash_do_sha1 (ctx, buf, buf_len);
 	p = hash;
-	for (i=0; i<R_HASH_SIZE_SHA1;i++) {
+	for (i=0; i<R_HASH_SIZE_SHA1; i++) {
 		sprintf (p, "%02x", sha1[i]);
-		p+=2;
+		p += 2;
 	}
-	*p=0;
+	*p = 0;
 	r_config_set (r->config, "file.sha1", hash);
 	r_hash_free (ctx);
 	free (buf);

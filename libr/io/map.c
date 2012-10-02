@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2008-2012 - pancake */
 
 #include <stdio.h>
 #include <string.h>
@@ -32,7 +32,19 @@ R_API int r_io_map_del(struct r_io_t *io, int fd) {
 	return R_FALSE;
 }
 
-R_API RIOMap *r_io_map_add(struct r_io_t *io, int fd, int flags, ut64 delta, ut64 offset, ut64 size) {
+R_API int r_io_map_del_at(RIO *io, ut64 addr) {
+	RIOMap *map;
+	RListIter *iter;
+	r_list_foreach (io->maps, iter, map) {
+		if (map->from == addr) {
+			r_list_delete (io->maps, iter);
+			return R_TRUE;
+		}
+	}
+	return R_FALSE;
+}
+
+R_API RIOMap *r_io_map_add(RIO *io, int fd, int flags, ut64 delta, ut64 offset, ut64 size) {
 	RIOMap *im = R_NEW (RIOMap);
 	if (!im) return NULL;
 	im->fd = fd;
@@ -45,38 +57,32 @@ R_API RIOMap *r_io_map_add(struct r_io_t *io, int fd, int flags, ut64 delta, ut6
 }
 
 R_API int r_io_map_select(RIO *io, ut64 off) {
-	//ut64 delta = 0;
-	ut64 fd = -1;//io->fd;
+	int done = 0;
+	ut64 fd = -1;
+	st32 delta = 0;
 	RIOMap *im = NULL;
 	RListIter *iter;
-	r_list_foreach (io->maps, iter, im) { // _prev?
-		if (im && off >= im->from && off < im->to) {
-			//delta = off - im->from + im->delta;
+	r_list_foreach (io->maps, iter, im) {
+		if (off >= im->from && off < im->to) {
+			delta = off - im->from + im->delta;
 			fd = im->fd;
+			done = 1;
 			if (fd == io->raised)
 				break;
 		}
 	}
+	if (done == 0) {
+		r_io_set_fdn (io, fd);
+		r_io_seek (io, -1, R_IO_SEEK_SET);
+		return off;
+	}
 	if (fd != -1) {
 		r_io_set_fdn (io, fd);
-	//	eprintf ("seek ret = %llx\n", 
-	//	r_io_seek (io, delta, R_IO_SEEK_SET));
-		return R_TRUE;
+		if (io->debug) /* HACK */
+			r_io_seek (io, off, R_IO_SEEK_SET);
+		else r_io_seek (io, delta, R_IO_SEEK_SET);
+		return 0;
 	}
+	r_io_seek (io, off, R_IO_SEEK_SET);
 	return R_FALSE;
 }
-
-#if 0
-int r_io_map_read_rest(struct r_io_t *io, ut64 off, ut8 *buf, ut64 len) {
-	struct list_head *pos;
-	list_for_each_prev(pos, &io->maps) {
-		struct r_io_map_t *im = list_entry(pos, struct r_io_map_t, list);
-		if (im->file[0] != '\0' && off+len >= im->from && off < im->to) {
-			lseek(im->fd, 0, SEEK_SET);
-// XXX VERY BROKEN
-			return read(im->fd, buf+(im->from-(off+len)), len);
-		}
-	}
-	return 0;
-}
-#endif

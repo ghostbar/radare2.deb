@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2012 pancake<nopcode.org> */
 
 #include <r_reg.h>
 #include <r_util.h>
@@ -57,17 +57,15 @@ R_API void r_reg_free_internal(RReg *reg) {
 	}
 }
 
-R_API RReg *r_reg_free(RReg *reg) {
-	if (reg) {
-		int i;
-		for (i=0; i<R_REG_TYPE_LAST; i++) {
-			r_list_destroy (reg->regset[i].pool);
-			reg->regset[i].pool = NULL;
-		}
-		r_reg_free_internal (reg);
-		free (reg);
+R_API void r_reg_free(RReg *reg) {
+	int i;
+	if (!reg) return;
+	for (i=0; i<R_REG_TYPE_LAST; i++) {
+		r_list_destroy (reg->regset[i].pool);
+		reg->regset[i].pool = NULL;
 	}
-	return NULL;
+	r_reg_free_internal (reg);
+	free (reg);
 }
 
 R_API RReg *r_reg_new() {
@@ -264,20 +262,20 @@ R_API RList *r_reg_get_list(RReg *reg, int type) {
 }
 
 R_API ut64 r_reg_cmp(RReg *reg, RRegItem *item) {
+	ut64 ret, ret2;
+	int ptr = !(reg->iters%2);
 	int len = (item->size/8); // TODO: must use r_mem_bitcmp or so.. flags not correctly checked
 	int off = BITS2BYTES (item->offset);
 	RRegArena *src = r_list_head (reg->regset[item->type].pool)->data;
 	RRegArena *dst = r_list_head (reg->regset[item->type].pool)->n->data;
 	if (off+len>src->size) len = src->size-off;
-	if (off+len>dst->size) len = src->size-off;
-	if (len>0)
-	if (memcmp (dst->bytes+off, src->bytes+off, len)) {
-		ut64 ret;
-		int ptr = !(reg->iters%2);
+	if (off+len>dst->size) len = dst->size-off;
+	if (len>0 && memcmp (dst->bytes+off, src->bytes+off, len)) {
 		r_reg_arena_set (reg, ptr, 0);
 		ret = r_reg_get_value (reg, item);
 		r_reg_arena_set (reg, !ptr, 0);
-		return ret;
+		ret2 = r_reg_get_value (reg, item);
+		return ret-ret2;
 	}
 	return 0LL;
 }

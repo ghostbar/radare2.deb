@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2011 nibble<develsec.org> + pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2008-2012 nibble<develsec.org>, pancake<nopcode.org> */
 
 #include <r_anal.h>
 
@@ -77,18 +77,16 @@ R_API char *r_meta_get_string(RMeta *m, int type, ut64 addr) {
 
 R_API int r_meta_del(RMeta *m, int type, ut64 from, ut64 size, const char *str) {
 	int ret = 0;
-	RListIter it, *iter;
+	RListIter *iter, *iter_tmp;
 	RMetaItem *d;
 
-	r_list_foreach (m->data, iter, d) {
+	r_list_foreach_safe (m->data, iter, iter_tmp, d) {
 		if (d->type == type || type == R_META_TYPE_ANY) {
 			if (str != NULL && !strstr (d->str, str))
 				continue;
 			if (size==UT64_MAX || (from+size >= d->from && from <= d->to+size)) {
 				free (d->str);
-				it.n = iter->n;
 				r_list_delete (m->data, iter);
-				iter = &it;
 				ret++;
 			}
 		}
@@ -103,11 +101,13 @@ R_API int r_meta_cleanup(RMeta *m, ut64 from, ut64 to) {
 
 	if (from == 0LL && to == UT64_MAX) {
 		RMeta *m2 = r_meta_new ();
+		if (!m2) return R_FALSE;
 		r_list_free (m->data);
 		m->data = m2->data;
 		free (m2);
 		return R_TRUE;
 	}
+	/* No _safe loop necessary because we break immediately after the delete. */
 	r_list_foreach (m->data, iter, d) {
 		switch (d->type) {
 		case R_META_TYPE_CODE:
@@ -163,7 +163,7 @@ R_API int r_meta_comment_check (RMeta *m, const char *s) {
 		if (d->type == R_META_TYPE_COMMENT && (!strcmp (s, d->str)))
 			return R_TRUE;
 	}
-	
+
 	return R_FALSE;
 }
 
@@ -280,27 +280,31 @@ struct r_range_t *r_meta_ranges(RMeta *m)
 }
 #endif
 
-static void printmetaitem(RMeta *m, RMetaItem *d) {
+static void printmetaitem(RMeta *m, RMetaItem *d, int rad) {
 	char *str = r_str_unscape (d->str);
 	if (str) {
 		if (d->type=='s' && !*str)
 			return;
 		r_str_sanitize (str);
-		m->printf ("%s %d %s @ 0x%08"PFMT64x"\n",
-			r_meta_type_to_string (d->type),
-			(int)(d->to-d->from), str, d->from);
+		if (rad)
+			m->printf ("%s %d %s @ 0x%08"PFMT64x"\n",
+				r_meta_type_to_string (d->type),
+				(int)(d->to-d->from), str, d->from);
+		else
+			m->printf ("0x%08"PFMT64x" %s\n",
+				d->from, str);
 		free (str);
 	}
 }
 
 // TODO: Deprecate
-R_API int r_meta_list(RMeta *m, int type) {
+R_API int r_meta_list(RMeta *m, int type, int rad) {
 	int count = 0;
 	RListIter *iter;
 	RMetaItem *d;
 	r_list_foreach (m->data, iter, d) {
 		if (d->type == type || type == R_META_TYPE_ANY) {
-			printmetaitem (m, d);
+			printmetaitem (m, d, rad);
 			count++;
 		}
 	}

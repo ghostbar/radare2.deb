@@ -1,5 +1,4 @@
-/* radare - LGPL - Copyright 2010-2011 */
-/* - nibble<.ds@gmail.com> + pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2010-2012 - pancake, nibble */
 
 #include <r_anal.h>
 #include <r_util.h>
@@ -53,8 +52,7 @@ R_API int r_anal_bb(RAnal *anal, RAnalBlock *bb, ut64 addr, ut8 *buf, ut64 len, 
 		bb->addr = addr;
 	len -= 16; // XXX: hack to avoid segfault by x86im
 	while (idx < len) {
-		r_anal_op_free (op);
-		if (!(op = r_anal_op_new ())) {
+		if (!(op = r_anal_op_new ())) { // TODO: too slow object construction
 			eprintf ("Error: new (op)\n");
 			return R_ANAL_RET_ERROR;
 		}
@@ -77,6 +75,7 @@ R_API int r_anal_bb(RAnal *anal, RAnalBlock *bb, ut64 addr, ut8 *buf, ut64 len, 
 			bb->type = R_ANAL_BB_TYPE_HEAD;
 		switch (op->type) {
 		case R_ANAL_OP_TYPE_CMP:
+			r_anal_cond_free(bb->cond);
 			bb->cond = r_anal_cond_new_from_op (op);
 			break;
 		case R_ANAL_OP_TYPE_CJMP:
@@ -100,6 +99,7 @@ R_API int r_anal_bb(RAnal *anal, RAnalBlock *bb, ut64 addr, ut8 *buf, ut64 len, 
 			bb->type |= R_ANAL_BB_TYPE_LAST;
 			goto beach;
 		}
+		r_anal_op_free (op);
 	}
 	return bb->size;
 beach:
@@ -107,13 +107,18 @@ beach:
 	return R_ANAL_RET_END;
 }
 
+R_API inline int r_anal_bb_is_in_offset (RAnalBlock *bb, ut64 off) {
+	return (off >= bb->addr && off < bb->addr + bb->size);
+}
+
 R_API RAnalBlock *r_anal_bb_from_offset(RAnal *anal, ut64 off) {
 	RListIter *iter, *iter2;
-	RAnalFcn *fcn;
+	RAnalFunction *fcn;
 	RAnalBlock *bb;
 	r_list_foreach (anal->fcns, iter, fcn)
 		r_list_foreach (fcn->bbs, iter2, bb)
-			if (off >= bb->addr && off < bb->addr + bb->size)
+			if (r_anal_bb_is_in_offset (bb, off))
+			//if (off >= bb->addr && off < bb->addr + bb->size)
 				return bb;
 	return NULL;
 }

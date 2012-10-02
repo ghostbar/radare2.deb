@@ -1,5 +1,5 @@
-/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
-/* dietline is a lighweight and portable library similar to GNU readline */
+/* radare - LGPL - Copyright 2007-2012 pancake<nopcode.org> */
+/* dietline is a lightweight and portable library similar to GNU readline */
 
 #include <r_line.h>
 
@@ -53,15 +53,16 @@ static int r_line_readchar() {
 #else
 	do {
 		int ret = read (0, buf, 1);
-		if (ret == -1)
-			return 0; // read no char
-		if (ret == 0) // EOF
-			return -1;
-//eprintf ("(((%x)))\n", *buf);
+		if (ret == -1) return 0; // read no char
+		if (ret == 0) return -1; // eof
+//eprintf ("(((0x%x)))\n", buf[0]);
 		// TODO: add support for other invalid chars
+		if (*buf==0x1a) { // ^Z
+			kill (getpid (), SIGSTOP);
+			buf[0] = 0;
+		}
 		if (*buf==0xc2 || *buf==0xc3) {
 			read (0, buf+1, 1);
-//eprintf ("(((%x)))\n", buf[1]);
 			*buf = '\0';
 		}	
 	} while (*buf == '\0');
@@ -132,25 +133,26 @@ R_API void r_line_hist_free() {
 	I.history.index = 0;
 }
 
-/* load history from file. if file == NULL load from ~/.<prg>.history or so */
+/* load history from file. TODO: if file == NULL load from ~/.<prg>.history or so */
 R_API int r_line_hist_load(const char *file) {
 	char buf[R_LINE_BUFSIZE];
 	FILE *fd;
 
-	// TODO: use r_str_home()
-	// XXX dupped shitty code.. see hist_save ()
-	// XXX memory leak here
-	snprintf (buf, sizeof (buf)-1, "%s/%s", r_sys_getenv ("HOME"), file);
-	if (!(fd = fopen (buf, "r")))
+	char *path = r_str_home (file);
+	if (path == NULL)
 		return R_FALSE;
+	if (!(fd = fopen (path, "r"))) {
+		free (path);
+		return R_FALSE;
+	}
 
-	fgets (buf, sizeof (buf)-1, fd);
-	while (!feof (fd)) {
-		buf[strlen (buf)-1]='\0';
+	while (fgets (buf, sizeof (buf), fd) != NULL) {
+		buf[strlen (buf)-1] = 0;
 		r_line_hist_add (buf);
-		fgets (buf, sizeof (buf)-1, fd);
 	}
 	fclose (fd);
+
+	free (path);
 	return R_TRUE;
 }
 
@@ -217,7 +219,7 @@ R_API void r_line_autocomplete() {
 			// try to autocomplete argument
 			for (i=0; i<argc; i++) {
 				j = 0;
-				while (argv[i][j]==root[j]) j++;
+				while (argv[i][j]==root[j] && root[j] != '\0') j++;
 				free (root);
 				root = strdup (argv[i]);
 				if (j<strlen (root))
@@ -410,7 +412,7 @@ R_API char *r_line_readline() {
 			buf[1] = r_line_readchar();
 			if (buf[1] == -1)
 				return NULL;
-			if (buf[0]==0x5b) {
+			if (buf[0]==0x5b) { // [
 				switch (buf[1]) {
 				case 0x33: // supr
 					if (I.buffer.index<I.buffer.length)
@@ -478,12 +480,15 @@ R_API char *r_line_readline() {
 					}
 					r_cons_set_raw (1);
 					break;
-				case 0x48: // Start
+				case 0x37: // HOME xrvt-unicode
+					r_cons_readchar ();
+				case 0x48: // HOME
 					I.buffer.index = 0;
 					break;
-				case 0x34:
+				case 0x34: // END
+				case 0x38: // END xrvt-unicode
 					r_cons_readchar ();
-				case 0x46: // End
+				case 0x46: // END
 					I.buffer.index = I.buffer.length;
 					break;
 				}
@@ -564,10 +569,18 @@ R_API char *r_line_readline() {
 				}
 				printf ("\r (reverse-i-search (%s)): %s\r", I.buffer.data, gcomp_line);
 			} else {
-				printf ("\r%s%s", I.prompt, I.buffer.data);
+				int chars = R_MAX (1, strlen (I.buffer.data)); // wtf?
+				int cols = R_MAX (1, columns - r_str_ansi_len (I.prompt)-2);
+				/* print line */
 				printf ("\r%s", I.prompt);
-				for (i=0; i<I.buffer.index; i++)
-					printf ("%c", I.buffer.data[i]);
+				fwrite (I.buffer.data, 1, R_MIN (cols, chars), stdout);
+				/* place cursor */
+				printf ("\r%s", I.prompt);
+				if (I.buffer.index>cols) {
+					printf ("< ");
+					i = I.buffer.index-cols;
+				} else i=0;
+				fwrite (I.buffer.data+i, 1, I.buffer.index, stdout);
 			}
 			fflush (stdout);
 		}

@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2011 nibble<.ds@gmail.com>, pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2012 nibble<.ds@gmail.com>, pancake<nopcode.org> */
 
 #include <r_types.h>
 #include <r_util.h>
@@ -213,6 +213,8 @@ static RBinInfo* info(RBinArch *arch) {
 #if !R_BIN_PE64
 static int check(RBinArch *arch) {
 	int idx, ret = R_FALSE;
+	if (!arch || !arch->buf || !arch->buf->buf)
+		return R_FALSE;
 	idx = (arch->buf->buf[0x3c]|(arch->buf->buf[0x3d]<<8));
 	if (arch->buf->length>idx)
 		if (!memcmp (arch->buf->buf, "\x4d\x5a", 2) &&

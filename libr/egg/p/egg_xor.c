@@ -1,13 +1,17 @@
-/* radare - LGPL - Copyright 2011 pancake<@nopcode.org> */
+/* radare - LGPL - Copyright 2011-2012 - pancake */
 /* based on @santitox patch */
 #include <r_egg.h>
 
 static RBuffer *build (REgg *egg) {
 	RBuffer *buf, *sc;
 	ut8 aux[32], nkey;
-	int l, i;
+	int i;
 	char *key = r_egg_option_get (egg, "key");
 
+	if (!key || !*key) {
+		eprintf ("Invalid key (null)\n");
+		return R_FALSE;
+	}
 	nkey = r_num_math (NULL, key);
 	if (nkey == 0) {
 		eprintf ("Invalid key (%s)\n", key);
@@ -56,7 +60,6 @@ static RBuffer *build (REgg *egg) {
 		aux[5] = 0x5b; // pop ebx
 		r_buf_set_bytes (buf, aux, 6);
 
-		l = buf->length;
 		r_buf_append_bytes (buf, stub, STUBLEN);
 		
 		for (i = 0; i<sc->length; i++) {

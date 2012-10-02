@@ -91,11 +91,11 @@ static int parse(RParse *p, const char *data, char *str) {
 		strcpy (str, data);
 		return R_TRUE;
 	}
-	r_str_subchr (buf, '$', 0);
-	r_str_subchr (buf, '%', 0);
-	r_str_subchr (buf, '\t', ' ');
-	r_str_subchr (buf, '(', '[');
-	r_str_subchr (buf, ')', ']');
+	r_str_replace_char (buf, '$', 0);
+	r_str_replace_char (buf, '%', 0);
+	r_str_replace_char (buf, '\t', ' ');
+	r_str_replace_char (buf, '(', '[');
+	r_str_replace_char (buf, ')', ']');
 	ptr = strchr (buf, '[');
 	if (ptr) {
 		int n;
@@ -196,7 +196,7 @@ static int filter(RParse *p, RFlag *f, char *data, char *str, int len) {
 	return R_FALSE;
 }
 
-static int varsub(RParse *p, struct r_anal_fcn_t *f, char *data, char *str, int len) {
+static int varsub(RParse *p, RAnalFunction *f, char *data, char *str, int len) {
 	char *ptr, *ptr2;
 	int i;
 

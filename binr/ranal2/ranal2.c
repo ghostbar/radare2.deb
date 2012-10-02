@@ -2,7 +2,7 @@
 #include <r_anal.h>
 #include <r_lib.h>
 #include <r_util.h>
-#include <getopt.h>
+#include <getopt.c>
 
 /* anal callback */
 static int __lib_anal_cb(struct r_lib_plugin_t *pl, void *user, void *data) {
@@ -169,16 +169,17 @@ int main(int argc, char **argv) {
 		if (!(buf = (ut8 *)strdup (argv[optind])))
 			return 1;
 	}
-	if (bin)
+	if (bin) {
 		data = (ut8*)buf;
-	else {
+	} else {
 		ptr = buf, word = tlen = 0;
 		while (ptr[0]) {
-			if (ptr[0]!= ' ' && ptr[0]!= '\n' && ptr[0]!= '\r')
-				if (0==(++word%2))tlen++;
+			int p = *ptr;
+			if (p!= ' ' && p!= '\n' && p!= '\r')
+				if (0==(++word%2)) tlen++;
 			ptr += 1;
 		}
-		data = malloc (tlen);
+		data = malloc (tlen+1);
 		if (!data) {
 			r_anal_free (anal);
 			r_anal_op_free (op);

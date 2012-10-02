@@ -1,10 +1,13 @@
+/* radare - LGPL - Copyright 2009-2012 - pancake */
+
 #include "r_core.h"
+
+#define MAX_FORMAT 2
 
 R_API int r_core_visual_trackflags(RCore *core) {
 	char cmd[1024];
 	RListIter *iter;
 	RFlagItem *flag;
-#define MAX_FORMAT 2
 	int format = 0;
 	const char *fs = NULL;
 	char *fs2 = NULL;
@@ -25,7 +28,7 @@ R_API int r_core_visual_trackflags(RCore *core) {
 			i = j = 0;
 			r_list_foreach (core->flags->flags, iter, flag) {
 				/* filter per flag spaces */
-				if ((core->flags->space_idx != -1) && 
+				if ((core->flags->space_idx != -1) &&
 					(flag->space != core->flags->space_idx))
 					continue;
 				if (option==i) {
@@ -65,7 +68,7 @@ R_API int r_core_visual_trackflags(RCore *core) {
 					if ((i >=option-delta) && ((i<option+delta)|| \
 							((option<delta)&&(i<(delta<<1))))) {
 						r_cons_printf(" %c %02d %c %s\n",
-							(option==i)?'>':' ', j, 
+							(option==i)?'>':' ', j,
 							(i==core->flags->space_idx)?'*':' ',
 							core->flags->spaces[i]);
 						j++;
@@ -78,7 +81,7 @@ R_API int r_core_visual_trackflags(RCore *core) {
 					hit = 1;
 				}
 				r_cons_printf (" %c %02d %c %s\n",
-					(option==j)?'>':' ', j, 
+					(option==j)?'>':' ', j,
 					(i==core->flags->space_idx)?'*':' ',
 					"*");
 			}
@@ -181,6 +184,21 @@ R_API int r_core_visual_trackflags(RCore *core) {
 				r_cons_show_cursor (R_FALSE);
 			}
 			break;
+		case 'R':
+			if (menu == 1) {
+				char line[1024];
+				r_cons_show_cursor (R_TRUE);
+				r_cons_set_raw (0);
+				eprintf ("Rename function '%s' as:\n", fs2);
+				r_line_set_prompt (":> ");
+				if (r_cons_fgets (line, sizeof (line), 0, NULL) <0)
+					cmd[0]='\0';
+				snprintf (cmd, sizeof (cmd), "afr %s %s", line, fs2);
+				r_core_cmd (core, cmd, 0);
+				r_cons_set_raw (1);
+				r_cons_show_cursor (R_FALSE);
+			}
+			break;
 		case 'P':
 			if (--format<0)
 				format = MAX_FORMAT;
@@ -213,7 +231,7 @@ R_API int r_core_visual_trackflags(RCore *core) {
 			" a/d/e - add/delete/edit flag\n"
 			" +/-   - increase/decrease block size\n"
 			" o     - sort flags by offset\n"
-			" r     - rename flag\n"
+			" r/R   - rename flag / Rename function\n"
 			" n     - sort flags by name\n"
 			" p/P   - rotate print format\n"
 			" :     - enter command\n");
@@ -248,9 +266,9 @@ R_API int r_core_visual_comments (RCore *core) {
 	int i, ch, option = 0;
 	int format = 0;
 	int found = 0;
-	ut64 from, size;
+	ut64 from = 0, size = 0;
 	RListIter *iter;
-	RAnalFcn *fcn;
+	RAnalFunction *fcn;
 	RMetaItem *d;
 
 	for (;;) {
@@ -300,10 +318,10 @@ R_API int r_core_visual_comments (RCore *core) {
 		}
 
 		switch (format) {
-			case 0: sprintf (cmd, "px @ 0x%"PFMT64x":64", from); core->printidx = 0; break;
-			case 1: sprintf (cmd, "pd 12 @ 0x%"PFMT64x":64", from); core->printidx = 1; break;
-			case 2: sprintf (cmd, "ps @ 0x%"PFMT64x":64", from); core->printidx = 5; break;
-			default: format = 0; continue;
+		case 0: sprintf (cmd, "px @ 0x%"PFMT64x":64", from); core->printidx = 0; break;
+		case 1: sprintf (cmd, "pd 12 @ 0x%"PFMT64x":64", from); core->printidx = 1; break;
+		case 2: sprintf (cmd, "ps @ 0x%"PFMT64x":64", from); core->printidx = 5; break;
+		default: format = 0; continue;
 		}
 		if (*cmd) r_core_cmd (core, cmd, 0);
 
@@ -319,9 +337,9 @@ R_API int r_core_visual_comments (RCore *core) {
 			break;
 		case 'd':
 			if (mode == 0) {
-				if (p)
-					r_meta_del (core->anal->meta, R_META_TYPE_ANY, from, size, p);
+				if (p) r_meta_del (core->anal->meta, R_META_TYPE_ANY, from, size, p);
 			} else {
+				r_anal_fcn_del_locs (core->anal, from);
 				r_anal_fcn_del (core->anal, from);
 			}
 			break;
@@ -425,11 +443,9 @@ R_API void r_core_visual_config(RCore *core) {
 	RListIter *iter;
 	RConfigNode *bt;
 	char cmd[1024];
-#define MAX_FORMAT 2
 	char *fs = NULL;
 	char *fs2 = NULL;
-	int option = 0;
-	int _option = 0;
+	int option, _option = 0;
 	int delta = 9;
 	int menu = 0;
 	int i,j, ch;
@@ -438,6 +454,7 @@ R_API void r_core_visual_config(RCore *core) {
 	char old[1024];
 	old[0]='\0';
 
+	option = 0;
 	for (;;) {
 		r_cons_gotoxy (0,0);
 		r_cons_clear ();
@@ -501,7 +518,7 @@ R_API void r_core_visual_config(RCore *core) {
 				r_cons_printf ("\n Selected: %s\n\n", fs2);
 		}
 
-		if (fs&&!memcmp (fs, "asm.", 4))
+		if (fs && !memcmp (fs, "asm.", 4))
 			r_core_cmd (core, "pd 5", 0);
 		r_cons_flush ();
 		ch = r_cons_readchar ();
@@ -844,7 +861,7 @@ R_API void r_core_visual_mounts (RCore *core) {
 }
 
 #if 1
-static void var_index_show(RAnal *anal, RAnalFcn *fcn, ut64 addr, int idx) {
+static void var_index_show(RAnal *anal, RAnalFunction *fcn, ut64 addr, int idx) {
 	int i = 0;
 	RAnalVar *v;
 	RAnalVarAccess *x;
@@ -862,9 +879,15 @@ static void var_index_show(RAnal *anal, RAnalFcn *fcn, ut64 addr, int idx) {
 				}
 				if (idx == i) r_cons_printf (" * ");
 				else r_cons_printf ("   ");
-				r_cons_printf ("0x%08llx - 0x%08llx type=%s type=%s name=%s delta=%d array=%d\n",
-					v->addr, v->eaddr, r_anal_var_type_to_str (anal, v->type),
-					v->vartype, v->name, v->delta, v->array);
+				if (v->type->type == R_ANAL_TYPE_ARRAY)
+					r_cons_printf ("0x%08llx - 0x%08llx scope=%s type=%s name=%s delta=%d array=%d\n",
+						v->addr, v->eaddr, r_anal_var_scope_to_str (anal, v->scope),
+						r_anal_type_to_str (anal, v->type, ""),
+						v->name, v->delta, v->type->custom.a->count);
+				else
+					r_cons_printf ("0x%08llx - 0x%08llx scope=%s type=%s name=%s delta=%d\n",
+						v->addr, v->eaddr, r_anal_var_scope_to_str (anal, v->scope),
+						r_anal_type_to_str (anal, v->type, ""), v->name, v->delta);
 				r_list_foreach (v->accesses, iter2, x) {
 					r_cons_printf ("  0x%08llx %s\n", x->addr, x->set?"set":"get");
 				}
@@ -877,7 +900,7 @@ static void var_index_show(RAnal *anal, RAnalFcn *fcn, ut64 addr, int idx) {
 // helper
 static void function_rename(RCore *core, ut64 addr, const char *name) {
 	RListIter *iter;
-	RAnalFcn *fcn;
+	RAnalFunction *fcn;
 
 	r_list_foreach (core->anal->fcns, iter, fcn) {
 		if (fcn->addr == addr) {
@@ -897,7 +920,7 @@ static ut64 var_functions_show(RCore *core, int idx, int show) {
 	int window = 15;
 	int wdelta = (idx>5)?idx-5:0;
 	RListIter *iter;
-	RAnalFcn *fcn;
+	RAnalFunction *fcn;
 
 	r_list_foreach (core->anal->fcns, iter, fcn) {
 		if (i>=wdelta) {
@@ -909,7 +932,7 @@ static ut64 var_functions_show(RCore *core, int idx, int show) {
 			if (idx == i)
 				addr = fcn->addr;
 			if (show)
-				r_cons_printf ("%c%c 0x%08llx (%s)\n", 
+				r_cons_printf ("%c%c 0x%08llx (%s)\n",
 					(seek == fcn->addr)?'>':' ',
 					(idx==i)?'*':' ',
 					fcn->addr, fcn->name);
@@ -919,19 +942,22 @@ static ut64 var_functions_show(RCore *core, int idx, int show) {
 	return addr;
 }
 
-/* Like emenu but for real */
-R_API void r_core_visual_anal(RCore *core) {
-	int option = 0;
-	int _option = 0;
-	int ch, level = 0;
-	char old[1024], *oprofile;
-	ut64 addr = core->offset;
-	old[0]='\0';
-	RAnalFcn *fcn = r_anal_fcn_find (core->anal, core->offset, R_ANAL_FCN_TYPE_NULL);
+static int level = 0;
+static ut64 addr = 0;
+static int option = 0;
 
-	for (;;) {
-		r_cons_gotoxy (0,0);
-		r_cons_clear ();
+static void r_core_visual_anal_refresh (RCore *core) {
+	ut64 addr = core->offset;
+	char old[1024];
+	old[0]='\0';
+	int cols = r_cons_get_size (NULL);
+	RAnalFunction *fcn = r_anal_fcn_find (core->anal, core->offset, R_ANAL_FCN_TYPE_NULL); // once
+	char *oprofile;
+
+	cols -= 50;
+	if (cols> 60) cols = 60;
+	r_cons_clear ();
+	if (cols>10) {
 		r_cons_printf ("Visual code analysis manipulation\n");
 
 		if (!level)
@@ -941,39 +967,58 @@ R_API void r_core_visual_anal(RCore *core) {
 		r_config_set (core->config, "asm.profile", "simple");
 		r_core_cmdf (core, "pd @ 0x%"PFMT64x":32", addr);
 		r_config_set (core->config, "asm.profile", oprofile);
+		free (oprofile);
 
-		r_cons_column (32);
-		switch (level) {
-		case 0:
-			r_cons_printf ("-[ functions ]---------------- \n"
-				"(a) add     (x)xrefs    (q)quit\n"
-				"(m) modify  (c)calls    (g)go\n"
-				"(d) delete  (v)variables\n");
-			addr = var_functions_show (core, option, 1);
-			break;
-		case 1:
-			r_cons_printf ("-[ variables ]---------------- 0x%08"PFMT64x"\n"
-				"(a) add     (x)xrefs     (q)quit\n"
-				"(m) modify  (c)calls     (g)go\n"
-				"(d) delete  (v)variables\n", addr);
-			var_index_show (core->anal, fcn, addr, option);
-			break;
-		case 2:
-			r_cons_printf ("-[ calls ]----------------------- 0x%08"PFMT64x" (TODO)\n", addr);
+		r_cons_column (cols); //32);
+	}
+	switch (level) {
+	case 0:
+		r_cons_printf ("-[ functions ]---------------- \n"
+			"(a) add     (x)xrefs    (q)quit  \n"
+			"(m) modify  (c)calls    (g)go    \n"
+			"(d) delete  (v)variables         \n");
+		addr = var_functions_show (core, option, 1);
+		break;
+	case 1:
+		r_cons_printf ("-[ variables ]---------------- 0x%08"PFMT64x"\n"
+			"(a) add     (x)xrefs     (q)quit \n"
+			"(m) modify  (c)calls     (g)go   \n"
+			"(d) delete  (v)variables         \n", addr);
+		var_index_show (core->anal, fcn, addr, option);
+		break;
+	case 2:
+		r_cons_printf ("-[ calls ]----------------------- 0x%08"PFMT64x" (TODO)\n", addr);
 #if 0
-			sprintf(old, "aCf@0x%08llx", addr);
-			cons_flush();
-			radare_cmd(old, 0);
+		sprintf(old, "aCf@0x%08llx", addr);
+		cons_flush();
+		radare_cmd(old, 0);
 #endif
-			break;
-		case 3:
-			r_cons_printf ("-[ xrefs ]----------------------- 0x%08"PFMT64x"\n", addr);
-			sprintf (old, "arl~0x%08"PFMT64x, addr);
-			r_core_cmd0 (core, old);
-			//cons_printf("\n");
-			break;
-		}
-		r_cons_flush ();
+		break;
+	case 3:
+		r_cons_printf ("-[ xrefs ]----------------------- 0x%08"PFMT64x"\n", addr);
+		sprintf (old, "arl~0x%08"PFMT64x, addr);
+		r_core_cmd0 (core, old);
+		//cons_printf("\n");
+		break;
+	}
+	r_cons_flush ();
+}
+
+/* Like emenu but for real */
+R_API void r_core_visual_anal(RCore *core) {
+	char old[218];
+	RConsEvent olde;
+	int _option = 0;
+	int ch; //, level = 0;
+
+	olde = core->cons->event_resize;
+	core->cons->event_resize = (RConsEvent)
+		r_core_visual_anal_refresh;
+	level = 0;
+	addr = core->offset;
+
+	for (;;) {
+		r_core_visual_anal_refresh (core);
 // show indexable vars
 		ch = r_cons_readchar ();
 		ch = r_cons_arrow_to_hjkl (ch); // get ESC+char, return 'hjkl' char
@@ -1019,7 +1064,7 @@ eprintf ("TODO: Add new function manually\n");
 			if (!r_cons_fgets (old, sizeof (old), 0, NULL)) break;
 			//old[strlen (old)-1] = 0;
 			function_rename (core, addr, old);
-		
+
 			r_cons_set_raw (R_TRUE);
 			r_cons_show_cursor (R_FALSE);
 			break;
@@ -1051,7 +1096,7 @@ eprintf ("TODO: Add new function manually\n");
 			break;
 		case 'g': // go!
 			r_core_seek (core, addr, SEEK_SET);
-			return;
+			goto beach;
 		case ' ':
 		case 'l':
 			level = 1;
@@ -1064,11 +1109,14 @@ eprintf ("TODO: Add new function manually\n");
 			break;
 		case 'q':
 			if (level==0)
-				return;
-			level = 0;
+				goto beach;
 			break;
 		}
 	}
+beach:
+	core->cons->event_resize = olde;
+	level = 0;
+
 }
 #endif
 
@@ -1082,7 +1130,7 @@ R_API void r_core_seek_next(RCore *core, const char *type) {
 		else eprintf ("Invalid opcode\n");
 	} else
 	if (strstr (type, "fun")) {
-		RAnalFcn *fcni;
+		RAnalFunction *fcni;
 		r_list_foreach (core->anal->fcns, iter, fcni) {
 			if (fcni->addr < next && fcni->addr > core->offset)
 				next = fcni->addr;
@@ -1114,7 +1162,7 @@ R_API void r_core_seek_previous (RCore *core, const char *type) {
 		eprintf ("TODO: r_core_seek_previous (opc)\n");
 	} else
 	if (strstr (type, "fun")) {
-		RAnalFcn *fcni;
+		RAnalFunction *fcni;
 		r_list_foreach (core->anal->fcns, iter, fcni) {
 			if (fcni->addr > next && fcni->addr < core->offset)
 				next = fcni->addr;
@@ -1156,8 +1204,7 @@ R_API void r_core_visual_define (RCore *core) {
 		" S  - set strings in current block\n"
 		" f  - analyze function\n"
 		" u  - undefine metadata here\n"
-		" q  - quit/cancel operation\n"
-		"TODO: add support for data, string, code ..\n");
+		" q  - quit/cancel operation\n");
 	r_cons_flush ();
 
 	// get ESC+char, return 'hjkl' char
@@ -1194,17 +1241,24 @@ R_API void r_core_visual_define (RCore *core) {
 	case 'd': // TODO: check
 		r_meta_add (core->anal->meta, R_META_TYPE_DATA, off, off+core->blocksize, "");
 		break;
-	case 'c': // TODO: check 
+	case 'c': // TODO: check
 		r_meta_add (core->anal->meta, R_META_TYPE_CODE, off, off+core->blocksize, "");
 		break;
 	case 'u':
-		r_meta_del (core->anal->meta, R_META_TYPE_ANY, off, 1, "");
 		r_flag_unset_i (core->flags, off, NULL);
-		r_anal_fcn_del (core->anal, off);
+		{
+			// rm bbs
+			RAnalFunction *f = r_anal_fcn_find (core->anal, off, 0);
+			r_anal_fcn_del_locs (core->anal, off);
+			if (f) r_meta_del (core->anal->meta, R_META_TYPE_ANY, off, f->size, "");
+			r_anal_fcn_del (core->anal, off);
+		}
 		break;
 	case 'f':
+		r_cons_break(NULL,NULL);
 		r_core_anal_fcn (core, off, -1, R_ANAL_REF_TYPE_NULL,
 				r_config_get_i (core->config, "anal.depth"));
+		r_cons_break_end();
 		break;
 	case 'q':
 	default:

@@ -4,6 +4,7 @@
 #include "bin_mach0.c"
 
 static int check(RBinArch *arch) {
+	if (arch && arch->buf && arch->buf->buf)
 	if (!memcmp (arch->buf->buf, "\xfe\xed\xfa\xcf", 4) ||
 		!memcmp (arch->buf->buf, "\xcf\xfa\xed\xfe", 4))
 		return R_TRUE;
@@ -12,7 +13,7 @@ static int check(RBinArch *arch) {
 
 static RBuffer* create(RBin* bin, const ut8 *code, int codelen, const ut8 *data, int datalen) {
 	ut64 filesize, codeva, datava;
-	ut32 ncmds, cmdsize, magiclen, headerlen;
+	ut32 ncmds, magiclen, headerlen;
 	ut64 p_codefsz=0, p_codeva=0, p_codesz=0, p_codepa=0;
 	ut64 p_datafsz=0, p_datava=0, p_datasz=0, p_datapa=0;
 	ut64 p_cmdsize=0, p_entry=0, p_tmp=0;
@@ -37,16 +38,14 @@ static RBuffer* create(RBin* bin, const ut8 *code, int codelen, const ut8 *data,
 
 	if (data && datalen>0) {
 		ncmds = 3;
-		cmdsize = 0;
 	} else {
 		ncmds = 2;
-		cmdsize = 0;
 	}
 	
 	/* COMMANDS */
 	D (ncmds); // ncmds
 	p_cmdsize = buf->length;
-	D (-1); // cmdsize
+	D (-1); // headsize // cmdsize?
 	D (0);//0x85); // flags
 	D (0); // reserved -- only found in x86-64
 

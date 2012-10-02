@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2012 pancake<nopcode.org> */
 
 #include <r_debug.h>
 #include <r_anal.h>
@@ -16,13 +16,14 @@ static int r_debug_recoil(RDebug *dbg) {
 		ut64 addr = r_reg_get_value (dbg->reg, ri);
 		recoil = r_bp_recoil (dbg->bp, addr);
 		eprintf ("[R2] Breakpoint recoil at 0x%"PFMT64x" = %d\n", addr, recoil);
+		if (recoil<1) recoil = 1; // XXX Hack :D
 		if (recoil) {
 			dbg->reason = R_DBG_REASON_BP;
 			r_reg_set_value (dbg->reg, ri, addr-recoil);
 			r_debug_reg_sync (dbg, R_REG_TYPE_GPR, R_TRUE);
 			//eprintf ("[BP Hit] Setting pc to 0x%"PFMT64x"\n", (addr-recoil));
 			return R_TRUE;
-		}
+		} 
 	} else eprintf ("r_debug_recoil: Cannot get program counter\n");
 	return R_FALSE;
 }
@@ -58,6 +59,7 @@ R_API RDebug *r_debug_new(int hard) {
 }
 
 R_API struct r_debug_t *r_debug_free(struct r_debug_t *dbg) {
+	if (!dbg) return NULL;
 	// TODO: free it correctly.. we must ensure this is an instance and not a reference..
 	//r_bp_free(&dbg->bp);
 	//r_reg_free(&dbg->reg);
@@ -105,6 +107,8 @@ R_API int r_debug_set_arch(RDebug *dbg, int arch, int bits) {
 				dbg->bits = R_SYS_BITS_64;
 				break;
 			}
+			if (!(dbg->h->bits & dbg->bits))
+				dbg->bits = dbg->h->bits;
 			dbg->arch = arch;
 			return R_TRUE;
 		}
@@ -226,21 +230,29 @@ R_API int r_debug_wait(RDebug *dbg) {
 
 // XXX: very experimental
 R_API int r_debug_step_soft(RDebug *dbg) {
+	int ret;
 	ut8 buf[32];
 	RAnalOp op;
 	ut64 pc0, pc1, pc2;
 	if (r_debug_is_dead (dbg))
 		return R_FALSE;
 	pc0 = r_debug_reg_get (dbg, dbg->reg->name[R_REG_NAME_PC]);
-	int ret = r_anal_op (dbg->anal, &op, pc0, buf, sizeof (buf));
+	dbg->iob.read_at (dbg->iob.io, pc0, buf, sizeof (buf));
+	ret = r_anal_op (dbg->anal, &op, pc0, buf, sizeof (buf));
+//eprintf ("read from pc0 = 0x%llx\n", pc0);
 	pc1 = pc0 + op.length;
+//eprintf ("oplen = %d\n", op.length);
+//eprintf ("breakpoint at pc1 = 0x%llx\n", pc1);
 	// XXX: Does not works for 'ret'
-	pc2 = op.jump?op.jump:0;
+	pc2 = op.jump? op.jump: 0;
+//eprintf ("breakpoint 2 at pc2 = 0x%llx\n", pc2);
 
 	r_bp_add_sw (dbg->bp, pc1, 4, R_BP_PROT_EXEC);
-	if (pc2) r_bp_add_sw (dbg->bp, pc2, 4, R_BP_PROT_EXEC);
+	//if (pc2) r_bp_add_sw (dbg->bp, pc2, 4, R_BP_PROT_EXEC);
 	r_debug_continue (dbg);
-	r_debug_wait (dbg);
+//eprintf ("wait\n");
+	//r_debug_wait (dbg);
+//eprintf ("del\n");
 	r_bp_del (dbg->bp, pc1);
 	if (pc2) r_bp_del (dbg->bp, pc2);
 
@@ -252,7 +264,9 @@ R_API int r_debug_step_hard(RDebug *dbg) {
 		return R_FALSE;
 	if (!dbg->h->step (dbg))
 		return R_FALSE;
-	return r_debug_wait (dbg);
+	r_debug_wait (dbg);
+	/* return value ignored? */
+	return R_TRUE;
 }
 
 // TODO: count number of steps done to check if no error??
@@ -300,7 +314,9 @@ R_API int r_debug_step_over(RDebug *dbg, int steps) {
 			r_bp_add_sw (dbg->bp, bpaddr, 1, R_BP_PROT_EXEC);
 			ret = r_debug_continue (dbg);
 			r_bp_del (dbg->bp, bpaddr);
-		} else ret = r_debug_step (dbg, 1);
+		} else {
+			ret = r_debug_step (dbg, 1);
+		}
 	} else eprintf ("Undefined debugger backend\n");
 	return ret;
 }
@@ -341,26 +357,31 @@ R_API int r_debug_continue_until_nontraced(RDebug *dbg) {
 	return R_FALSE;
 }
 
+/* optimization: avoid so many reads */
 R_API int r_debug_continue_until_optype(RDebug *dbg, int type, int over) {
+	int (*step)(RDebug *d, int n);
 	int ret, n = 0;
+	ut64 pc = 0;
 	RAnalOp op;
 	ut8 buf[64];
-	ut64 pc = 0;
+
 	if (r_debug_is_dead (dbg))
 		return R_FALSE;
-	if (dbg->anal) {
-		do {
-			if (over) ret = r_debug_step_over (dbg, 1);
-			else ret = r_debug_step (dbg, 1);
-			if (!ret) {
+	if (dbg->anal && dbg->reg) {
+		const char *pcreg = dbg->reg->name[R_REG_NAME_PC];
+		step = over? r_debug_step_over: r_debug_step;
+		for (;;) {
+			pc = r_debug_reg_get (dbg, pcreg);
+			dbg->iob.read_at (dbg->iob.io, pc, buf, sizeof (buf));
+			ret = r_anal_op (dbg->anal, &op, pc, buf, sizeof (buf));
+			if (ret>0 && op.type&type)
+				break;
+			if (!step (dbg, 1)) {
 				eprintf ("r_debug_step: failed\n");
 				break;
 			}
-			pc = r_debug_reg_get (dbg, dbg->reg->name[R_REG_NAME_PC]);
-			dbg->iob.read_at (dbg->iob.io, pc, buf, sizeof (buf));
-			r_anal_op (dbg->anal, &op, pc, buf, sizeof (buf));
 			n++;
-		} while (!(op.type&type));
+		}
 	} else eprintf ("Undefined pointer at dbg->anal\n");
 	return n;
 }
@@ -434,9 +455,9 @@ R_API int r_debug_kill(struct r_debug_t *dbg, boolt thread, int sig) {
 	return ret;
 }
 
-R_API RList *r_debug_frames (RDebug *dbg) {
+R_API RList *r_debug_frames (RDebug *dbg, ut64 at) {
 	if (dbg && dbg->h && dbg->h->frames)
-		return dbg->h->frames (dbg);
+		return dbg->h->frames (dbg, at);
 	return NULL;
 }
 

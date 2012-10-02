@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2011 pancake<@nopcode.org> */
+/* radare - LGPL - Copyright 2011-2012 pancake<@nopcode.org> */
 
 #include <r_bin.h>
 #include <cxx/demangle.h>
@@ -87,8 +87,8 @@ R_API int r_bin_demangle_type (const char *str) {
 
 R_API char *r_bin_demangle (RBin *bin, const char *str) {
 	int type;
-	if (bin && bin->curarch.curplugin && bin->curarch.curplugin->demangle_type)
-		type = bin->curarch.curplugin->demangle_type (str);
+	if (bin && bin->cur.curplugin && bin->cur.curplugin->demangle_type)
+		type = bin->cur.curplugin->demangle_type (str);
 	else type = r_bin_demangle_type (str);
 	switch (type) {
 	case R_BIN_NM_JAVA: return r_bin_demangle_java (str);

@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2011-2012 pancake<nopcode.org> */
 /* vala extension for libr (radare2) */
 // TODO: add support for Genie
 // TODO: add cache directory (~/.r2/cache)
@@ -15,7 +15,7 @@ static int r_vala_file(RLang *lang, const char *file) {
 	if (!strstr (file, ".vala"))
 		sprintf (name, "%s.vala", file);
 	else strcpy (name, file);
-	if (!r_file_exist (name)) {
+	if (!r_file_exists (name)) {
 		eprintf ("file not found (%s)\n", name);
 		return R_FALSE;
 	}
@@ -76,6 +76,7 @@ static struct r_lang_plugin_t r_lang_plugin_vala = {
 	.help = NULL,
 	.run = vala_run,
 	.init = (void*)init,
+	.fini = NULL,
 	.run_file = (void*)r_vala_file,
 	.set_argv = NULL,
 };

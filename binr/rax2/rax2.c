@@ -1,38 +1,33 @@
-/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2012 pancake<nopcode.org> */
 
 #include <r_util.h>
 
-static int flags = 0;
+static ut64 flags = 0;
 
-static int format_output (char mode, ut64 n);
+static RNum *num;
 static int help ();
 static int rax (char *str, int len, int last);
 static int use_stdin ();
 
-static int format_output (char mode, ut64 n) {
+static int format_output (char mode, const char *s) {
+	ut64 n;
 	char *str = (char*) &n;
 	char strbits[65];
+	n = r_num_math (num, s);
 
 	if (flags & 2)
 		r_mem_copyendian ((ut8*) str, (ut8*) str, 4, 0);
 	switch (mode) {
-	case 'I':
-		printf ("%"PFMT64d"\n", n);
-		break;
-	case '0':
-		printf ("0x%"PFMT64x"\n", n);
-		break;
-	case 'F':
-		printf ("%ff\n", (float)(ut32)n);
-		break;
+	case 'I': printf ("%"PFMT64d"\n", n); break;
+	case '0': printf ("0x%"PFMT64x"\n", n); break;
+	case 'F': printf ("%ff\n", (float)(ut32)n); break;
+	case 'f': printf ("%.01lf\n", num->fvalue); break;
+	case 'O': printf ("%"PFMT64o"\n", n); break;
 	case 'B':
 		if (n) {
 			r_num_to_bits (strbits, n);
 			printf ("%sb\n", strbits);
 		} else printf ("0b\n");
-		break;
-	case 'O':
-		printf ("%"PFMT64o"\n", n);
 		break;
 	}
 	return R_TRUE;
@@ -52,10 +47,14 @@ static int help () {
 		"  hex   ->  oct           ;  rax2 Ox12 (O is a letter)\n"
 		"  bin   ->  hex           ;  rax2 1100011b\n"
 		"  hex   ->  bin           ;  rax2 Bx63\n"
+		"  raw   ->  hex           ;  rax2 -S < /binfile\n"
+		"  hex   ->  raw           ;  rax2 -s 414141\n"
 		"  -e    swap endianness   ;  rax2 -e 0x33\n"
+		"  -d    force integer     ;  rax2 -d 3 -> 3 instead of 0x3\n"
+		"  -f    floating point    ;  rax2 -f 6.3+2.1\n"
 		"  -b    binstr -> bin     ;  rax2 -b 01000101 01110110\n"
-		"  -s    hexstr -> bin     ;  rax2 -s 43 4a 50\n"
-		"  -S    bin -> hexstr     ;  rax2 -S C  J  P\n"
+		"  -s    hexstr -> raw     ;  rax2 -s 43 4a 50\n"
+		"  -S    raw -> hexstr     ;  rax2 -S C  J  P\n"
 		"  -v    version           ;  rax2 -V\n"
 		"  -x    hash string       ;  rax2 -x linux osx\n"
 		"  -k    keep base         ;  rax2 -k 33+3 -> 36\n"
@@ -65,37 +64,28 @@ static int help () {
 
 static int rax (char *str, int len, int last) {
 	float f;
-	char *p, *buf, out_mode = '0';
+	char *p, *buf, out_mode = (flags&128)?'I':'0';
 	int i;
 	if (!len)
 		len = strlen (str);
 
+	if ((flags & 4))
+		goto dotherax;
 	if (*str=='-') {
 		switch (str[1]) {
-		case 's':
-			flags ^= 1;
-			break;
-		case 'e':
-			flags ^= 2;
-			break;
-		case 'S':
-			flags ^= 4;
-			break;
-		case 'b':
-			flags ^= 8;
-			break;
-		case 'x':
-			flags ^= 16;
-			break;
-		case 'k':
-			flags ^= 32;
-			break;
-		case 'v':
-			printf ("rax2 v"R2_VERSION"\n");
-			break;
-		case '\0':
-			return use_stdin ();
+		case 's': flags ^= 1; break;
+		case 'e': flags ^= 2; break;
+		case 'S': flags ^= 4; break;
+		case 'b': flags ^= 8; break;
+		case 'x': flags ^= 16; break;
+		case 'k': flags ^= 32; break;
+		case 'f': flags ^= 64; break;
+		case 'd': flags ^=128; break;
+		case 'v': printf ("rax2 v"R2_VERSION"\n"); break;
+		case '\0': return use_stdin ();
 		default:
+			if (str[1]>='0' && str[1]<='9')
+				return format_output (out_mode, str);
 			printf ("Usage: rax2 [options] [expression]\n");
 			return help ();
 		}
@@ -109,6 +99,7 @@ static int rax (char *str, int len, int last) {
 	if (*str=='h' || *str=='?')
 		return help ();
 
+	dotherax:
 	if (flags & 1) {
 		ut64 n = ((strlen (str))>>1)+1;
 		buf = malloc (sizeof (char) * n);
@@ -140,6 +131,9 @@ static int rax (char *str, int len, int last) {
 	}
 
 #define KB (flags&32)
+	if (flags & 64) {
+		out_mode = 'f';
+	} else
 	if (KB)
 		out_mode = 'I';
 	if (str[0]=='0' && str[1]=='x') {
@@ -168,17 +162,19 @@ static int rax (char *str, int len, int last) {
 	}
 	while ((p = strchr (str, ' '))) {
 		*p = 0;
-		format_output (out_mode, r_num_math (NULL, str));
+		format_output (out_mode, str); //r_num_math (NULL, str));
 		str = p+1;
 	}
 	if (*str)
-		format_output (out_mode, r_num_math (NULL, str));
+		format_output (out_mode, str); //r_num_math (NULL, str));
 	return R_TRUE;
 }
 
+static char buf[254096]; // TODO: remove this limit
+
 static int use_stdin () {
-	char buf[4096]; // TODO: remove this limit
 	while (!feof (stdin)) {
+		//int n = fread (buf, 1, sizeof (buf)-1, stdin);
 		int n = read (0, buf, sizeof (buf));
 		if (n<1) break;
 		buf[n] = 0;
@@ -186,8 +182,7 @@ static int use_stdin () {
 		if (feof (stdin)) break;
 		if ((flags & 4) && strlen (buf) < sizeof (buf)) // -S
 			buf[strlen (buf)] = '\0';
-		else
-			buf[strlen (buf)-1] = '\0';
+		else buf[strlen (buf)-1] = '\0';
 		if (!rax (buf, n, 0)) break;
 	}
 	return 0;
@@ -195,6 +190,7 @@ static int use_stdin () {
 
 int main (int argc, char **argv) {
 	int i;
+	num = r_num_new (NULL, NULL);
 	if (argc == 1)
 		return use_stdin ();
 	for (i=1; i<argc; i++)

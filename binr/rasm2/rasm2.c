@@ -1,9 +1,8 @@
-/* radare - LGPL - Copyright 2009-2011 nibble<.ds@gmail.com> */
+/* radare - LGPL - Copyright 2009-2012 nibble<.ds@gmail.com> */
 
 #include <stdio.h>
 #include <string.h>
-#include <getopt.h>
-
+#include <getopt.c> /* getopt.h is not portable :D */
 #include <r_types.h>
 #include <r_asm.h>
 #include <r_util.h>
@@ -32,8 +31,8 @@ static int rasm_show_help() {
 		" -f           Read data from file\n"
 		" -F [in:out]  Specify input and/or output filters (att2intel, x86.pseudo, ...)\n"
 		" -o [offset]  Set start address for code (0x%08"PFMT64x")\n"
-		" -a [arch]    Set architecture plugin\n"
-		" -b [bits]    Set architecture bits\n"
+		" -a [arch]    Set assemble/disassemble plugin\n"
+		" -b [bits]    Set cpu register size in bits (16, 32, 64)\n"
 		" -s [syntax]  Select syntax (intel, att)\n"
 		" -B           Binary input/output (-l is mandatory for binary input)\n"
 		" -l [int]     Input/Output length\n"
@@ -76,7 +75,7 @@ static int rasm_disasm(char *buf, ut64 offset, ut64 len, int ascii, int bin, int
 	if (hex) {
 		RAsmOp op;
 		r_asm_set_pc (a, offset);
-		while (r_asm_disassemble (a, &op, data+ret, len-ret) != -1) {
+		while (len-ret > 0 && r_asm_disassemble (a, &op, data+ret, len-ret) != -1) {
 			printf ("0x%08"PFMT64x"  %d %12s %s\n", 
 				a->pc, op.inst_len, op.buf_hex, op.buf_asm);
 			ret += op.inst_len;
@@ -221,8 +220,9 @@ int main(int argc, char *argv[]) {
 		eprintf ("Error: Cannot find asm.x86 plugin\n");
 		return 0;
 	}
-	if (!r_asm_set_bits (a, bits))
-		eprintf ("WARNING: cannot set asm backend to %d bits\n", bits);
+	r_asm_set_bits (a, bits);
+	//if (!r_asm_set_bits (a, bits))
+	//	eprintf ("WARNING: cannot set asm backend to %d bits\n", bits);
 
 	if (filters) {
 		char *p = strchr (filters, ':');

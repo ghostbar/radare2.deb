@@ -10,10 +10,12 @@ OBJ+=emit_arm.o
 OBJ+=emit_x64.o
 OBJ+=emit_trace.o
 
+foo:
+	for a in ${LIBSO} ${LIBAR} all ; do ${MAKE} $$a ; done
+
+P=p/
 include ${STATIC_EGG_PLUGINS}
 OBJ+=$(subst ..,p/..,$(subst egg_,p/egg_,$(STATIC_OBJ)))
-
-foo: ${LIBSO} ${LIBAR} 
 
 #plugins plugins:
 # Do not build plugins. all are static @cd p && ${MAKE} all

@@ -1,7 +1,7 @@
-/* radare - LGPL - Copyright 2011 pancake<@nopcode.org> */
+/* radare - LGPL - Copyright 2011-2012 pancake<@nopcode.org> */
 #include <r_egg.h>
 #include <r_bin.h>
-#include <getopt.h>
+#include <getopt.c>
 
 static int usage () {
 	printf ("ragg2 [options] [file|-]\n"
@@ -24,7 +24,7 @@ static int usage () {
 	" -w [off:hex]    patch hexpairs at given offset\n"
 	" -p [padding]    add padding after compilation (padding=n10s32)\n"
 	"                 ntas : begin nop, trap, 'a', sequence\n"
-	"                 NTAS : same as above, but at beginning\n"
+	"                 NTAS : same as above, but at the end\n"
 	" -s              show assembler\n"
 	" -r              show raw bytes instead of hexpairs\n"
 	" -x              execute\n"
@@ -137,8 +137,10 @@ int main(int argc, char **argv) {
 			ut32 off, n;
 			char *p = strchr (optarg, ':');
 			if (p) {
+				*p = 0;
 				off = r_num_get (NULL, optarg);
 				n = r_num_get (NULL, p+1);
+				*p = ':';
 				// TODO: honor endianness here
 				r_egg_patch (egg, off, (const ut8*)&n, 4);
 			} else eprintf ("Missing colon in -d\n");

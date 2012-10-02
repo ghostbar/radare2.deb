@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2012 pancake<nopcode.org> */
 
 #include <r_debug.h>
 #include <r_cons.h>
@@ -19,9 +19,11 @@ R_API int r_debug_reg_sync(struct r_debug_t *dbg, int type, int write) {
 		/* read registers from debugger backend to dbg->regs */
 		if (dbg && dbg->h && dbg->h->reg_read) {
 			size = dbg->h->reg_read (dbg, type, buf, sizeof (buf));
-			if (size == 0)
+			if (size == 0) {
 				eprintf ("r_debug_reg: error reading registers pid=%d\n", dbg->pid);
-			else ret = r_reg_set_bytes (dbg->reg, type, buf, size);
+			} else {
+				ret = r_reg_set_bytes (dbg->reg, type, buf, size);
+			}
 		} else eprintf ("r_debug_reg: cannot read registers\n");
 	}
 	return ret;
@@ -38,7 +40,8 @@ R_API int r_debug_reg_list(struct r_debug_t *dbg, int type, int size, int rad) {
 	if (!dbg || !dbg->reg)
 		return R_FALSE;
 	head = r_reg_get_list (dbg->reg, type);
-	if (dbg->h && dbg->h->bits & R_SYS_BITS_64) {
+	//if (dbg->h && dbg->h->bits & R_SYS_BITS_64) {
+	if (dbg->bits & R_SYS_BITS_64) {
 		fmt = "%s = 0x%016"PFMT64x"%s";
 		fmt2 = "%4s 0x%016"PFMT64x"%s";
 		cols = 3;

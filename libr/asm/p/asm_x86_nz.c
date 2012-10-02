@@ -1,4 +1,4 @@
-/* * Copyright (C) 2008-2011 - pancake <nopcode.org> */
+/* Copyright (C) 2008-2012 - pancake */
 
 #include <stdio.h>
 #include <string.h>
@@ -17,15 +17,16 @@ BLA:
 	Add support for AND, OR, ..
         0x100000ec5    1    4883e4f0         and rsp, 0xfffffffffffffff0
 #endif
+
 static int jop (ut64 addr, ut8 *data, ut8 a, ut8 b, const char *arg) {
 	ut32 dst32;
 	int l = 0;
-	int d, num = getnum (arg);
+	int num = getnum (arg);
 	if (!isnum (arg))
 		return 0;
 	dst32 = num - addr;
-	d = num - addr; // obey sign
 #if 0
+	d = num - addr; // obey sign
 	if (d>-127 && d<127) {
 		d-=2;
 		data[l++] = a;
@@ -38,6 +39,16 @@ static int jop (ut64 addr, ut8 *data, ut8 a, ut8 b, const char *arg) {
 	dst32 -= 6;
 	memcpy (data+l, &dst32, 4);
 	return 6;
+}
+
+static int bits8 (const char *p) {
+	const char *b8r[] = { "al", "cl", "dl", "bl", NULL };
+	int i;
+	if (strlen (p) == 2)
+		for (i=0; b8r[i]; i++)
+			if (!strcmp (b8r[i], p))
+				return i;
+	return -1;
 }
 
 static ut8 getreg(const char *str) {
@@ -56,6 +67,7 @@ static ut8 getreg(const char *str) {
 }
 
 static int getnum(const char *s) {
+	if (!s) return 0;
 	if (*s=='$')
 		s++;
 	if (*s=='0' && s[1]=='x') {
@@ -86,6 +98,11 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 		data[l++] = 0xf3;
 		memmove (op, op+4, strlen (op+4)+1);
 	}
+
+	if (!strcmp (str, "outsd")) { data[0] = 0x6f; return 1; }
+	if (!strcmp (str, "outsb")) { data[0] = 0x6e; return 1; }
+	if (!strcmp (str, "insb")) { data[0] = 0x6c; return 1; }
+	if (!strcmp (str, "hlt")) { data[0] = 0xf4; return 1; }
 
 	if (!strcmp (str, "call $$")) {
 		memcpy (data, "\xE8\xFF\xFF\xFF\xFF\xC1", 6);
@@ -321,28 +338,57 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 			return l;
 		} else
 		if (!strcmp (op, "call")) {
-			ut64 dst = r_num_math (NULL, arg);
-			ut32 addr = dst;
-			ut8 *ptr = (ut8 *)&addr;
-
-			if (dst == 0) {
-				data[l++] = '\xff';
-				data[l] = getreg (arg) | 0xd0;
-				if (data[l] == 0xff) {
-					//eprintf ("Invalid argument for 'call' (%s)\n", arg);
-					return 0;
+			if (arg[0] == '[' && arg[strlen (arg)-1] == ']') {
+				if (!memcmp (arg+1, "rip", 3)) {
+					ut64 dst = r_num_math (NULL, arg+4);
+					ut32 addr = dst;
+					ut8 *ptr = (ut8 *)&addr;
+					data[l++] = 0xff;
+					data[l++] = 0x1d;
+					data[l++] = ptr[0];
+					data[l++] = ptr[1];
+					data[l++] = ptr[2];
+					data[l++] = ptr[3];
+					return l;
+				} else {
+					ut64 dst = r_num_math (NULL, arg+1);
+					ut32 addr = dst;
+					ut8 *ptr = (ut8 *)&addr;
+					if (dst != 0) {
+						data[l++] = 0xff;
+						data[l++] = 0x15;
+						data[l++] = ptr[0];
+						data[l++] = ptr[1];
+						data[l++] = ptr[2];
+						data[l++] = ptr[3];
+						return l;
+					}
+					return -1;
 				}
-				l++;
+			} else {
+				ut64 dst = r_num_math (NULL, arg);
+				ut32 addr = dst;
+				ut8 *ptr = (ut8 *)&addr;
+
+				if (dst == 0) {
+					data[l++] = '\xff';
+					data[l] = getreg (arg) | 0xd0;
+					if (data[l] == 0xff) {
+						//eprintf ("Invalid argument for 'call' (%s)\n", arg);
+						return 0;
+					}
+					l++;
+					return l;
+				}
+				addr = addr - offset - 5;
+
+				data[l++] = 0xe8;
+				data[l++] = ptr[0];
+				data[l++] = ptr[1];
+				data[l++] = ptr[2];
+				data[l++] = ptr[3];
 				return l;
 			}
-			addr = addr - offset - 5;
-
-			data[l++] = 0xe8;
-			data[l++] = ptr[0];
-			data[l++] = ptr[1];
-			data[l++] = ptr[2];
-			data[l++] = ptr[3];
-			return l;
 		} else if (!strcmp (op, "inc")) {
 			data[l++] = 0x40 | getreg (arg);
 			return l;
@@ -440,7 +486,9 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 			}
 			dst = r_num_math (NULL, arg);
 			if (dst == 0) {
-				data[l++] = getreg (arg) | 0x58;
+				ut8 r = getreg (arg);
+				if (r==(ut8)-1) return 0;
+				data[l++] = r | 0x58;
 				return l;
 			}
 			eprintf ("Invalid pop syntax\n");
@@ -518,18 +566,27 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 			} else eprintf ("Invalid args for lea?\n");
 			return l;
 		} else if (!strcmp (op, "mov")) {
-			char *delta = NULL;
-			int pfx, arg0;
-			int argk = (*arg == '[');
 			ut64 dst;
-			ut32 addr;
 			ut8 *ptr;
-			dst = r_num_math (NULL, arg2);
-			addr = dst;
+			ut32 addr;
+			int pfx, arg0;
+			char *delta = NULL;
+			int argk = (*arg == '[');
+			addr = dst = r_num_math (NULL, arg2);
 			ptr = (ut8 *)&addr;
+
 			if (!arg || !arg2) {
 				eprintf ("No args for mov?\n");
 				return 0;
+			}
+			{
+				int b0 = bits8 (arg);
+				int b1 = bits8 (arg2);
+				if (b0!=-1 && b1!=-1) {
+					data[0] = 0x8a;
+					data[1] = 0xc0 | (b0 <<3)| b1;
+					return 2;
+				}
 			}
 
 			if (argk) {
@@ -577,7 +634,7 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 						if (r==4) { //ESP
 							data[l++] = getreg (arg)<<3 | r | 0x40;
 							data[l++] = 0x24;
-						} else if (r== 5) { // EBP
+						} else if (r==5) { // EBP
 							data[l++] = getreg (arg)<<3 | r | 0x40;
 							data[l++] = 0;
 						} else data[l++] = getreg (arg) | r | 0x40;
@@ -590,7 +647,18 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 						} else if (r== 5) { // EBP
 							data[l++] = getreg (arg)<<3 | r | 0x40;
 							data[l++] = 0;
-						} else data[l++] = getreg (arg)<<3 | r;
+						} else {
+							if (r == 0xff) {
+								ut32 n;
+								ut8 *N = (ut8*)&n;
+								data[l++] = getreg (arg)<<3|5;
+								n = getnum (arg2);
+								data[l++] = N[0];
+								data[l++] = N[1];
+								data[l++] = N[2];
+								data[l++] = N[3];
+							} else data[l++] = getreg (arg)<<3 | r;
+						}
 					}
 				}
 				return l;
@@ -680,61 +748,90 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 			}
 			return l;
 		} else if (!strcmp (op, "jmp")) {
-			ut64 dst = r_num_get (NULL, arg) - offset;
-			ut32 addr = dst;
-			ut8 *ptr = (ut8 *)&addr;
-
-			if (dst+offset == 0) {
-				data[l++] = '\xff';
-				data[l] = getreg (arg) | 0xe0;
-				if (data[l] != 0xff)
-					return 2;
-				l++;
-				if (arg[0] == '[' && arg[strlen (arg)] == ']') {
-					data[l] = getreg (arg+1) | 0x20;
-					if (data[l] != 0xff)
+			if (arg[0] == '[' && arg[strlen (arg)-1] == ']') {
+				if (!memcmp (arg+1, "rip", 3)) {
+					ut64 dst = r_num_math (NULL, arg+4);
+					ut32 addr = dst;
+					ut8 *ptr = (ut8 *)&addr;
+					data[l++] = 0xff;
+					data[l++] = 0x25;
+					data[l++] = ptr[0];
+					data[l++] = ptr[1];
+					data[l++] = ptr[2];
+					data[l++] = ptr[3];
+					return l;
+				} else {
+					ut64 dst = r_num_math (NULL, arg+1);
+					ut32 addr = dst;
+					ut8 *ptr = (ut8 *)&addr;
+					if (dst != 0) {
+						data[l++] = 0xff;
+						data[l++] = 0x25;
+						data[l++] = ptr[0];
+						data[l++] = ptr[1];
+						data[l++] = ptr[2];
+						data[l++] = ptr[3];
 						return l;
-					l++;
+					}
+					return -1;
 				}
-#if 0
-				if (!strcmp(arg, "esp")) { data[1]='\x24'; data[2]='\x24'; } else
-				if (!strcmp(arg, "ebp")) { data[1]='\x24'; data[2]='\x24'; } else
-				if (strstr(arg, "[eax")) { data[1]='\x60'; data[2]=(char)r_num_math (NULL, arg+4); } else
-				if (strstr(arg, "[ebx")) { data[1]='\x63'; data[2]=(char)r_num_math (NULL, arg+4); } else
-				if (strstr(arg, "[ecx")) { data[1]='\x61'; data[2]=(char)r_num_math (NULL, arg+4); } else
-				if (strstr(arg, "[edx")) { data[1]='\x62'; data[2]=(char)r_num_math (NULL, arg+4); } else
-				if (strstr(arg, "[esi")) { data[1]='\x66'; data[2]=(char)r_num_math (NULL, arg+4); } else
-				if (strstr(arg, "[edi")) { data[1]='\x67'; data[2]=(char)r_num_math (NULL, arg+4); } else
-				if (strstr(arg, "[esi")) { data[1]='\x67'; data[2]=(char)r_num_math (NULL, arg+4); } else
-				if (strstr(arg, "[ebp")) { data[1]='\x65'; data[2]=(char)r_num_math (NULL, arg+4); } 
-				else {
-					if (!strcmp(arg, "[esp")) { data[1]='\x64'; data[2]='\x24'; data[3]=(char)r_num_math (NULL, arg+4); }
-						else return 0;
-					return 4;
-				}
-#endif
-			}
-
-			dst -= offset;
-	// 7C90EAF5   .- E9 42158783   JMP     0018003C
-	// RELATIVE LONG JUMP (nice coz is 4 bytes, not 5) 
-
-			if (dst>-0x80 && dst<0x7f) {
-				/* relative address */
-				addr -= 2;
-				addr -= offset;
-				data[l++] = 0xeb;
-				data[l++] = (char)dst;
-				return l;
 			} else {
-				/* absolute address */
-				addr-=5;
-				data[l++]= 0xe9;
-				data[l++] = ptr[0];
-				data[l++] = ptr[1];
-				data[l++] = ptr[2];
-				data[l++] = ptr[3];
-				return l;
+				ut64 dst = r_num_get (NULL, arg) - offset;
+				ut32 addr = dst;
+				ut8 *ptr = (ut8 *)&addr;
+
+				if (dst+offset == 0) {
+					data[l++] = '\xff';
+					data[l] = getreg (arg) | 0xe0;
+					if (data[l] != 0xff)
+						return 2;
+					if (arg[0] == '[' && arg[strlen (arg)-1] == ']') {
+						data[l] = getreg (arg+1) | 0x20;
+						if (data[l] != 0xff)
+							return l+1;
+						l++;
+					}
+					return -1;
+#if 0
+					if (!strcmp(arg, "esp")) { data[1]='\x24'; data[2]='\x24'; } else
+					if (!strcmp(arg, "ebp")) { data[1]='\x24'; data[2]='\x24'; } else
+					if (strstr(arg, "[eax")) { data[1]='\x60'; data[2]=(char)r_num_math (NULL, arg+4); } else
+					if (strstr(arg, "[ebx")) { data[1]='\x63'; data[2]=(char)r_num_math (NULL, arg+4); } else
+					if (strstr(arg, "[ecx")) { data[1]='\x61'; data[2]=(char)r_num_math (NULL, arg+4); } else
+					if (strstr(arg, "[edx")) { data[1]='\x62'; data[2]=(char)r_num_math (NULL, arg+4); } else
+					if (strstr(arg, "[esi")) { data[1]='\x66'; data[2]=(char)r_num_math (NULL, arg+4); } else
+					if (strstr(arg, "[edi")) { data[1]='\x67'; data[2]=(char)r_num_math (NULL, arg+4); } else
+					if (strstr(arg, "[esi")) { data[1]='\x67'; data[2]=(char)r_num_math (NULL, arg+4); } else
+					if (strstr(arg, "[ebp")) { data[1]='\x65'; data[2]=(char)r_num_math (NULL, arg+4); } 
+					else {
+						if (!strcmp(arg, "[esp")) { data[1]='\x64'; data[2]='\x24'; data[3]=(char)r_num_math (NULL, arg+4); }
+							else return 0;
+						return 4;
+					}
+#endif
+				}
+
+				dst -= offset;
+		// 7C90EAF5   .- E9 42158783   JMP     0018003C
+		// RELATIVE LONG JUMP (nice coz is 4 bytes, not 5) 
+
+				if (dst>-0x80 && dst<0x7f) {
+					/* relative address */
+					addr -= 2;
+					addr -= offset;
+					data[l++] = 0xeb;
+					data[l++] = (char)dst;
+					return l;
+				} else {
+					/* absolute address */
+					addr-=5;
+					data[l++]= 0xe9;
+					data[l++] = ptr[0];
+					data[l++] = ptr[1];
+					data[l++] = ptr[2];
+					data[l++] = ptr[3];
+					return l;
+				}
 			}
 		} else
 // SPAGUETTI

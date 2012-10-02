@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2011 nibble<.ds@gmail.com>, pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2008-2012 - nibble, pancake */
 // TODO: review the rest of strtab index out of range
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,9 +45,8 @@ static int Elf_(r_bin_elf_init_ehdr)(struct Elf_(r_bin_elf_obj_t) *bin) {
 
 static int Elf_(r_bin_elf_init_phdr)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	int phdr_size, len;
-	if (bin->ehdr.e_phnum == 0) {
+	if (bin->ehdr.e_phnum == 0)
 		return R_FALSE;
-	}
 	if (bin->phdr) return R_TRUE;
 	phdr_size = bin->ehdr.e_phnum * sizeof (Elf_(Phdr));
 	if ((bin->phdr = (Elf_(Phdr) *)malloc (phdr_size)) == NULL) {
@@ -56,9 +55,9 @@ static int Elf_(r_bin_elf_init_phdr)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	}
 	len = r_buf_fread_at (bin->b, bin->ehdr.e_phoff, (ut8*)bin->phdr,
 		#if R_BIN_ELF64
-		bin->endian?"2I6L":"2i6l",
+		bin->endian? "2I6L": "2i6l",
 		#else
-		bin->endian?"8I":"8i",
+		bin->endian? "8I": "8i",
 		#endif
 		bin->ehdr.e_phnum);
 	if (len == -1) {
@@ -94,9 +93,11 @@ static int Elf_(r_bin_elf_init_shdr)(struct Elf_(r_bin_elf_obj_t) *bin) {
 
 static int Elf_(r_bin_elf_init_strtab)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	int sz;
-	if (bin->strtab) return R_FALSE;
+	if (bin->strtab || !bin->shdr) return R_FALSE;
 	bin->shstrtab_section =
 	bin->strtab_section = &bin->shdr[bin->ehdr.e_shstrndx];
+	if (bin->strtab_section == NULL)
+		return R_FALSE;
 	bin->shstrtab_size =
 	bin->strtab_size = bin->strtab_section->sh_size;
 	sz = sizeof (struct r_bin_elf_section_t) + bin->strtab_section->sh_size;
@@ -180,7 +181,7 @@ static int Elf_(r_bin_elf_init)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	bin->strtab_size = 0;
 	bin->strtab_section = NULL;
 	if (!Elf_(r_bin_elf_init_ehdr) (bin)) {
-		eprintf ("Warning: File is not ELF\n");
+		//eprintf ("Warning: File is not ELF\n");
 		return R_FALSE;
 	}
 	Elf_(r_bin_elf_init_phdr) (bin);
@@ -280,11 +281,16 @@ static ut64 Elf_(get_import_addr)(struct Elf_(r_bin_elf_obj_t) *bin, int sym) {
 
 ut64 Elf_(r_bin_elf_get_baddr)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	int i;
-	if (!bin->phdr)
+	if (!bin->phdr) {
+		//eprintf ("r_bin_elf: canot get_baddr() because no phdr found\n");
 		return 0;
+	}
+	/* hopefully.. the first PT_LOAD is base */
 	for (i = 0; i < bin->ehdr.e_phnum; i++)
-		if (bin->phdr[i].p_type == PT_LOAD && bin->phdr[i].p_offset == 0)
-			return (ut64)bin->phdr[i].p_vaddr;
+		if (bin->phdr[i].p_type == PT_LOAD)
+			return (ut64)(bin->phdr[i].p_vaddr -
+				bin->phdr[i].p_offset);
+		//eprintf ("oh fuck .. cant find any valid ptload?\n");
 	return 0;
 }
 
@@ -293,7 +299,7 @@ ut64 Elf_(r_bin_elf_get_init_offset)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	ut8 buf[512];
 
 	if (r_buf_read_at (bin->b, entry+16, buf, sizeof (buf)) == -1) {
-		eprintf ("Error: read (entry)\n");
+		eprintf ("Error: read (init_offset)\n");
 		return 0;
 	}
 	if (buf[0] == 0x68) { // push // x86 only
@@ -308,7 +314,7 @@ ut64 Elf_(r_bin_elf_get_fini_offset)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	ut8 buf[512];
 
 	if (r_buf_read_at (bin->b, entry+11, buf, sizeof (buf)) == -1) {
-		eprintf ("Error: read (entry)\n");
+		eprintf ("Error: read (get_fini)\n");
 		return 0;
 	}
 	if (*buf == 0x68) { // push // x86/32 only
@@ -338,7 +344,7 @@ ut64 Elf_(r_bin_elf_get_main_offset)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	ut8 buf[512];
 
 	if (r_buf_read_at (bin->b, entry, buf, sizeof (buf)) == -1) {
-		eprintf ("Error: read (entry)\n");
+		eprintf ("Error: read (main)\n");
 		return 0;
 	}
 	// TODO: Use arch to identify arch before memcmp's
@@ -412,10 +418,9 @@ int Elf_(r_bin_elf_has_va)(struct Elf_(r_bin_elf_obj_t) *bin) {
 // TODO: do not strdup here
 char* Elf_(r_bin_elf_get_arch)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	switch (bin->ehdr.e_machine) {
-	case EM_AVR:
-		return strdup ("avr");
-	case EM_68K:
-		return strdup ("m68k");
+	case EM_ARC: return strdup ("arc");
+	case EM_AVR: return strdup ("avr");
+	case EM_68K: return strdup ("m68k");
 	case EM_MIPS:
 	case EM_MIPS_RS3_LE:
 	case EM_MIPS_X:
@@ -429,13 +434,12 @@ char* Elf_(r_bin_elf_get_arch)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	case EM_PPC:
 	case EM_PPC64:
 		return strdup ("ppc");
-	case EM_SH:
-		return strdup ("sh");
-	default:
-		return strdup ("x86");
+	case EM_SH: return strdup ("sh");
+	default: return strdup ("x86");
 	}
 }
 
+// TODO: do not strdup here
 char* Elf_(r_bin_elf_get_machine_name)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	switch (bin->ehdr.e_machine) {
 	case EM_NONE:        return strdup ("No machine");
@@ -824,9 +828,13 @@ struct r_bin_elf_section_t* Elf_(r_bin_elf_get_sections)(struct Elf_(r_bin_elf_o
 	if ((ret = malloc ((bin->ehdr.e_shnum + 1) * sizeof (struct r_bin_elf_section_t))) == NULL)
 		return NULL;
 	for (i = 0; i < bin->ehdr.e_shnum; i++) {
+		if (bin->shdr == NULL) {
+			free (ret);
+			return NULL;
+		}
 		ret[i].offset = bin->shdr[i].sh_offset;
 		ret[i].rva = bin->shdr[i].sh_addr > bin->baddr?
-			bin->shdr[i].sh_addr-bin->baddr:bin->shdr[i].sh_addr;
+			bin->shdr[i].sh_addr-bin->baddr: bin->shdr[i].sh_addr;
 		ret[i].size = bin->shdr[i].sh_size;
 		ret[i].align = bin->shdr[i].sh_addralign;
 		ret[i].flags = bin->shdr[i].sh_flags;
@@ -849,7 +857,7 @@ struct r_bin_elf_symbol_t* Elf_(r_bin_elf_get_symbols)(struct Elf_(r_bin_elf_obj
 	struct r_bin_elf_symbol_t *ret = NULL;
 	char *strtab;
 	ut64 sym_offset = 0, data_offset = 0, toffset;
-	int tsize, nsym, ret_ctr, i, j, k, len;
+	int shdr_size, tsize, nsym, ret_ctr, i, j, k, len;
 
 	if (!bin->shdr || bin->ehdr.e_shnum == 0)
 		return NULL;
@@ -860,14 +868,19 @@ struct r_bin_elf_symbol_t* Elf_(r_bin_elf_get_symbols)(struct Elf_(r_bin_elf_obj
 		if ((data_offset = Elf_(r_bin_elf_get_section_offset)(bin, ".rodata")) == -1)
 			data_offset = 0;
 	}
+	shdr_size = bin->ehdr.e_shnum * sizeof (Elf_(Shdr));
 	for (i = 0; i < bin->ehdr.e_shnum; i++)
 		if ((type == R_BIN_ELF_IMPORTS &&
 				bin->shdr[i].sh_type == (bin->ehdr.e_type == ET_REL ? SHT_SYMTAB : SHT_DYNSYM)) ||
 			(type == R_BIN_ELF_SYMBOLS  &&
 			 	bin->shdr[i].sh_type == (Elf_(r_bin_elf_get_stripped) (bin) ? SHT_DYNSYM : SHT_SYMTAB))) {
+			if (bin->shdr[i].sh_link > shdr_size) {
+				/* oops. fix out of range pointers */
+				continue;
+			}
 			strtab_section = &bin->shdr[bin->shdr[i].sh_link];
 			if ((strtab = (char *)malloc (8+strtab_section->sh_size)) == NULL) {
-				perror ("malloc (syms strtab)");
+				eprintf ("malloc (syms strtab)");
 				return NULL;
 			}
 			if (r_buf_read_at (bin->b, strtab_section->sh_offset, (ut8*)strtab, strtab_section->sh_size) == -1) {
@@ -876,7 +889,7 @@ struct r_bin_elf_symbol_t* Elf_(r_bin_elf_get_symbols)(struct Elf_(r_bin_elf_obj
 			}
 
 			if ((sym = (Elf_(Sym) *)malloc (1+bin->shdr[i].sh_size)) == NULL) {
-				perror ("malloc (syms)");
+				eprintf ("malloc (syms)");
 				return NULL;
 			}
 			nsym = (int)(bin->shdr[i].sh_size/sizeof (Elf_(Sym)));
@@ -901,7 +914,7 @@ struct r_bin_elf_symbol_t* Elf_(r_bin_elf_get_symbols)(struct Elf_(r_bin_elf_obj
 					tsize = 16;
 				} else if (type == R_BIN_ELF_SYMBOLS && sym[k].st_shndx != STN_UNDEF &&
 						ELF_ST_TYPE(sym[k].st_info) != STT_SECTION && ELF_ST_TYPE(sym[k].st_info) != STT_FILE) {
-					int idx = sym[k].st_shndx;
+					//int idx = sym[k].st_shndx;
 					tsize = sym[k].st_size;
 					toffset = (ut64)sym[k].st_value; //-sym_offset; // + (ELF_ST_TYPE(sym[k].st_info) == STT_FUNC?sym_offset:data_offset);
 				} else continue;
@@ -961,8 +974,14 @@ struct r_bin_elf_symbol_t* Elf_(r_bin_elf_get_symbols)(struct Elf_(r_bin_elf_obj
 				ret[ret_ctr].last = 0;
 				ret_ctr++;
 			}
-			if ((ret = realloc (ret, (ret_ctr + 1) * sizeof (struct r_bin_elf_symbol_t))) == NULL)
+			{
+			ut8 *p = realloc (ret, (ret_ctr+1)* sizeof (struct r_bin_elf_symbol_t));
+			if (!p) {
+				free (ret);
 				return NULL;
+			}
+			ret = (struct r_bin_elf_symbol_t *) p;
+			}
 			ret[ret_ctr].last = 1; // ugly dirty hack :D
 			break;
 		}
@@ -1025,11 +1044,7 @@ struct Elf_(r_bin_elf_obj_t)* Elf_(r_bin_elf_new)(const char* file) {
 }
 
 struct Elf_(r_bin_elf_obj_t)* Elf_(r_bin_elf_new_buf)(struct r_buf_t *buf) {
-	struct Elf_(r_bin_elf_obj_t) *bin;
-// TODO: use R_NEW here
-	if (!(bin = malloc (sizeof (struct Elf_(r_bin_elf_obj_t)))))
-		return NULL;
-	memset (bin, 0, sizeof (struct Elf_(r_bin_elf_obj_t)));
+	struct Elf_(r_bin_elf_obj_t) *bin = R_NEW0 (struct Elf_(r_bin_elf_obj_t));
 	bin->b = buf;
 	bin->size = buf->length;
 	if (!Elf_(r_bin_elf_init) (bin))

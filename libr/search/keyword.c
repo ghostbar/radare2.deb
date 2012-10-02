@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2010-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2010-2012 pancake<nopcode.org> */
 
 #include <r_search.h>
 
@@ -9,6 +9,7 @@ R_API RSearchKeyword* r_search_keyword_new(const ut8 *kw, int kwlen, const ut8 *
 	if (bm == NULL)
 		bm = (const ut8*) "";
 	if ((k = R_NEW (RSearchKeyword))) {
+		k->type = R_SEARCH_KEYWORD_TYPE_BINARY;
 		k->icase = 0;
 		memcpy (k->keyword, kw, kwlen);
 		k->keyword_length = kwlen;
@@ -40,7 +41,10 @@ R_API RSearchKeyword* r_search_keyword_new_str(const char *kw, const char *bmhex
 		}
 	}
 	ks = r_search_keyword_new ((ut8 *)kw, strlen (kw), bm, bmlen, data);
-	if (ks) ks->icase = icase;
+	if (ks) {
+		ks->icase = icase;
+		ks->type = R_SEARCH_KEYWORD_TYPE_STRING;
+	}
 	free (bm);
 	return ks;
 }
@@ -69,11 +73,14 @@ R_API RSearchKeyword* r_search_keyword_new_hexmask(const char *kwstr, const char
 	ut8 *kw, *bm;
 	if (kwstr != NULL) {
 		int len = strlen (kwstr);
-		kw = malloc (len);
-		bm = malloc (len);
+		kw = malloc (len+2);
+		bm = malloc (len+2);
 		if (kw != NULL && bm != NULL) {
-			if ((len = r_hex_str2binmask (kwstr, (ut8*)kw, (ut8*)bm))>0)
-				ks = r_search_keyword_new (kw, len, bm, len, data);
+			len = r_hex_str2binmask (kwstr, (ut8*)kw, (ut8*)bm);
+			if (len<0)
+				len = -len+1;
+			if (len>0) 
+				ks = r_search_keyword_new (kw, R_ABS (len), bm, len, data);
 		}
 		free (kw);
 		free (bm);
