@@ -1,3 +1,11 @@
+radare2 (0.9.2-1) UNRELEASED; urgency=low
+
+  * New upstream release
+  * Update debian/copyright
+  * Bump Debian Standards Version 3.9.2 -> 3.9.3
+
+ -- Sebastian Reichel <sre@debian.org>  Tue, 02 Oct 2012 15:57:03 +0200
+
 radare2 (0.9-3) unstable; urgency=low
 
   * Add Patch from Julian Taylor to fix FTBFS when
