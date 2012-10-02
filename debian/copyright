@@ -5,8 +5,9 @@ Source: http://radare.org/
 
 Files: *
 Copyright: 2007-2009, th0rpe
-           2007-2011, pancake
-           2008-2011, nibble
+           2007-2012, pancake
+           2008-2012, nibble
+           2009-2012, Anton Kochkov
 License: LGPL-3
  On Debian systems, the complete text of the LGPL-3 can be found in
  /usr/share/common-licenses/LGPL-3.
@@ -18,6 +19,9 @@ Files: r2rc/r2rc.c libr/asm/arch/include/opintl.h libr/asm/arch/include/elf-bfd.
  libr/asm/arch/mips/gnu/mips16-opc.c libr/asm/arch/mips/gnu/mips-dis.c
  libr/asm/arch/mips/gnu/mips-opc.c libr/asm/arch/ppc/gnu/ppc-dis.c
  libr/asm/arch/ppc/gnu/ppc-opc.c libr/asm/arch/dalvik/opcode.h
+ libr/asm/arch/arc/gnu/arc-dis.c libr/asm/arch/arc/gnu/arc-dis.h
+ libr/asm/arch/arc/gnu/arc-ext.c libr/asm/arch/arc/gnu/arc-ext.h
+ libr/asm/arch/arc/gnu/arc-opc.c libr/asm/arch/arc/gnu/arc.h
  libr/asm/p/asm_msil.c  libr/syscall/fastcall.h
 Copyright: 2009-2011, pancake
            2009-2010, nibble
@@ -27,6 +31,26 @@ License: GPL-3+
  On Debian systems, the complete text of the GPL-3 can be found in
  /usr/share/common-licenses/GPL-3.
 
+Files: libr/asm/arch/dcpu16/asm.c
+Copyright: 2012, Karl Hobley <turbodog10@yahoo.co.uk>
+License: Expat
+ Permission is hereby granted, free of charge, to any person obtaining a copy of
+ this software and associated documentation files (the "Software"), to deal in
+ the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do
+ so, subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be included in all
+ copies or substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE.
 
 Files: libr/fs/p/grub/fs/* libr/fs/p/grub/kern/* libr/fs/p/grub/partmap/*
 Copyright: 1999-2010, Free Software Foundation, Inc.
@@ -35,6 +59,9 @@ License: GPL-3+
  On Debian systems, the complete text of the GPL-3 can be found in
  /usr/share/common-licenses/GPL-3.
 
+Files: libr/util/base85.c
+Copyright: 2011, Remy Oukaour
+License: Expat
 
 Files: rsc2/rsc2.c libr/asm/arch/include/ansidecl.h
  libr/asm/arch/include/dis-asm.h libr/asm/arch/include/symcat.h
@@ -62,7 +89,7 @@ License: GPL-2+
  /usr/share/common-licenses/GPL-2.
 
 
-Files: libr/asm/arch/x86/udis86/*
+Files: shlr/udis86/*
 Copyright: 2002-2006, Vivek Mohan
 License: BSD-2-clause
  Redistribution and use in source and binary forms, with or without modification,
@@ -85,6 +112,49 @@ License: BSD-2-clause
  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+Files: libr/include/getopt.c
+Copyright: 1987-1994, The Regents of the University of California
+License: BSD-4-clause
+
+Files: libr/asm/arch/m68k/m68k_disasm/m68k_disasm.c libr/asm/arch/m68k/m68k_disasm/m68k_disasm.h
+Copyright: 1999-2002, Frank Wille
+           1994, Christian E. Hopps
+License: BSD-4-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+ 1. Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+ 2. Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+ 3. All advertising materials mentioning features or use of this software
+    must display the following acknowledgement:
+    This product includes software developed by the Christian E. Hopps.
+ 4. The name of the author may not be used to endorse or promote products
+    derived from this software without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE AUTHOR ''AS IS'' AND ANY
+ EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Files: libr/asm/arch/z80/z80asm.c libr/asm/arch/z80/z80asm.h libr/asm/arch/z80/expressions.c
+Copyright: 2002-2009, Bas Wijnen <wijnen@debian.org>
+           2005, Jan Wilmans <jw@dds.nl>
+License: GPL-3+
+
+Files: libr/asm/arch/z80/disasm.c
+Copyright: 1992, Markus Fritze
+License: Freeware
+ This Product is Freeware, it may not be used as basis for commercial software!
+ I take no liability for damages, which arise because of direct, or indirect
+ use of this software.
 
 Files: libr/magic/*
 Copyright: 1986-1995, Ian F. Darwin
@@ -218,6 +288,11 @@ License: public-domain
  your bug fixes (if any).
 
 
+Files: libr/anal/cparse/*.c libr/anal/cparse/*.h
+Copyright: 2001, Brian Raiter <breadbox@muppetlabs.com>
+License: GPL-2+
+
+
 Files: libr/util/ht.c libr/util/ht64.c libr/db/sdb/src/ht.c
 Copyright: 2009, Intel Corporation
            1988-2004, Keith Packard
@@ -244,7 +319,6 @@ License: MIT
  institutions shall not be used in advertising or
  promote the sale, use or other dealings in this
  prior written authorization from the
-
 
 Files: debian/*
 Copyright: 2010-2011, Sebastian Reichel <sre@debian.org>
