@@ -1,10 +1,13 @@
 #ifndef _INCLUDE_R_LIST_H_
 #define _INCLUDE_R_LIST_H_
 
+#include <r_types.h>
 #include <r_flist.h>
 
 // TODO: implement r_list_foreach_prev
 
+#ifndef _INCLUDE_R_LIST_HEAD_H_
+#define _INCLUDE_R_LIST_HEAD_H_
 typedef void (*RListFree)(void *ptr);
 
 typedef struct r_list_iter_t {
@@ -13,8 +16,8 @@ typedef struct r_list_iter_t {
 } RListIter;
 
 typedef struct r_list_t {
-	struct r_list_iter_t *head;
-	struct r_list_iter_t *tail;
+	RListIter *head;
+	RListIter *tail;
 	RListFree free;
 } RList;
 
@@ -25,13 +28,19 @@ typedef struct r_oflist_t {
 	ROFList_Parent super; // super class
 	RFList *array; // statical readonly cache of linked list as a pointer array
 } ROFList;
+#endif
 
 #ifdef R_API
 #define R_LIST_NEW(x,y) x=r_list_new();x->free=(RListFree)y
 #define r_list_foreach(list, it, pos) \
 	if (list) for (it = list->head; it && (pos = it->data); it = it->n)
+/* Safe when calling r_list_delete() while iterating over the list. */
+#define r_list_foreach_safe(list, it, tmp, pos) \
+	if (list) for (it = list->head; it && (pos = it->data) && ((tmp = it->n) || 1); it = tmp)
 #define r_list_foreach_prev(list, it, pos) \
-	if(list) for (it = list->tail; it && (pos = it->data); it = it->p)
+	if (list) for (it = list->tail; it && (pos = it->data); it = it->p)
+#ifndef _R_LIST_C_
+#define r_list_push(x,y) r_list_append(x,y)
 #define r_list_iterator(x) (x)?(x)->head:NULL
 #define r_list_empty(x) (x==NULL || (x->head==NULL && x->tail==NULL))
 #define r_list_head(x) x->head
@@ -44,7 +53,11 @@ typedef struct r_oflist_t {
 #define r_list_iter_cur(x) x->p
 #define r_list_iter_unref(x) x
 #define r_list_iter_free(x) x
+#endif
 R_API RList *r_list_new();
+//R_API void r_list_iter_free (RListIter *x);
+R_API RListIter *r_list_iter_get_next(RListIter *list);
+R_API void *r_list_iter_get_data(RListIter *list);
 R_API RListIter *r_list_append(RList *list, void *data);
 R_API RListIter *r_list_prepend(RList *list, void *data);
 R_API int r_list_length(RList *list);
@@ -66,7 +79,6 @@ R_API void r_list_join (RList *list1, RList *list2);
 R_API void *r_list_get_n (RList *list, int n);
 R_API int r_list_del_n (RList *list, int n);
 R_API void *r_list_get_top (RList *list);
-#define r_list_push(x,y) r_list_append(x,y)
 R_API void *r_list_pop (RList *list);
 R_API void r_list_reverse (RList *list);
 R_API RList *r_list_clone (RList *list);

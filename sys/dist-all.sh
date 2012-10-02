@@ -5,7 +5,7 @@ sys/install.sh
 make dist
 
 cd r2-bindings
-./configure --prefix=/usr
+./configure --prefix=/usr --enable-devel
 make mrproper
 cd python
 make

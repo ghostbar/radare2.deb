@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2012 - pancake */
 
 #include "r_types.h"
 #include "r_util.h"
@@ -69,12 +69,14 @@ main () {
 }
 #endif
 
-R_API void r_str_subchr (char *s, int a, int b) {
+R_API int r_str_replace_char (char *s, int a, int b) {
+	int ret = 0;
 	char *o = s;
 	for (; *o; s++, o++) {
 		if (*o==a) {
 			if (b) {
 				*s = b;
+				ret++;
 				continue;
 			}
 			o++;
@@ -82,6 +84,7 @@ R_API void r_str_subchr (char *s, int a, int b) {
 		*s = *o;
 	}
 	*s = 0;
+	return ret;
 }
 
 // TODO: do not use toupper.. must support modes to also append lowercase chars like in r1
@@ -182,19 +185,24 @@ R_API void r_str_case(char *str, int up) {
 }
 
 R_API char *r_str_home(const char *str) {
-	int lhome, lstr;
+	size_t length;
 	char *dst;
 	char *home = r_sys_getenv (R_SYS_HOME);
 	if (home == NULL)
 		return NULL;
-	lhome = strlen (home);
-	lstr = strlen (str);
-	dst = (char *)malloc (lhome + lstr + 2);
-	memcpy (dst, home, lhome+1);
-	if (str && *str) {
-		memcpy (dst+lhome, R_SYS_DIR, strlen (R_SYS_DIR));
-		memcpy (dst+lhome+strlen (R_SYS_DIR), str, lstr+1);
+	length = strlen (home) + 1;
+	if (str) {
+		length += strlen (R_SYS_DIR) + strlen (str);
 	}
+	dst = (char *)malloc (length);
+	if (dst == NULL)
+		goto fail;
+	strcpy (dst, home);
+	if (str) {
+		strcat (dst, R_SYS_DIR);
+		strcat (dst, str);
+	}
+fail:
 	free (home);
 	return dst;
 }
@@ -236,25 +244,43 @@ R_API int r_str_split(char *str, char ch) {
 }
 
 R_API int r_str_word_set0(char *str) {
+	int quote = 0;
 	int i;
 	char *p;
 	if (!*str)
 		return 0;
-	/* TODO: sync with r1 code */
-	for (i=1, p=str; *p; p++)
+	for (i=1, p=str; *p; p++) {
+		if (*p=='\"') {
+			if (quote) {
+				quote = 0;
+				*p='\0';
+				// FIX: i++;
+				continue;
+			} else {
+				quote = 1;
+				strcpy (p, p+1);
+			}
+		}
+		if (quote) continue;
 		if (*p==' ') {
+			char *q = p-1;
+			if (p>str && *q=='\\') {
+				strcpy (q,p);
+				continue;
+			}
 			i++;
 			*p='\0';
 		} // s/ /\0/g
+	}
 	return i;
 }
 
-R_API char *r_str_word_get0(char *str, int idx) {
+R_API const char *r_str_word_get0(const char *str, int idx) {
 	int i;
-	char *ptr = str;
+	const char *ptr = str;
 	if (ptr == NULL)
 		return (char *)nullstr;
-	for (i=0;*ptr && i != idx;i++)
+	for (i=0; *ptr && i != idx; i++)
 		ptr = ptr + strlen(ptr) + 1;
 	return ptr;
 }
@@ -324,7 +350,7 @@ R_API char *r_str_newf(const char *fmt, ...) {
 	char string[1024];
 	va_list ap;
 	va_start (ap, fmt);
-	vsnprintf (string, 1023, fmt, ap);
+	vsnprintf (string, sizeof (string), fmt, ap);
 	fmt = r_str_new (string);
 	va_end (ap);
 	return (char*)fmt;
@@ -384,10 +410,19 @@ R_API char *r_str_trim(char *str) {
 	return str;
 }
 
+/* strcpy() copies more than one byte at once which might cause problems when
+ * copying into the same buffer. TODO: memmove()? */
 R_API void r_str_cpy(char *dst, const char *src) {
 	int i;
 	for (i=0; src[i]; i++)
 		dst[i] = src[i];
+	dst[i] = 0;
+}
+
+R_API void r_str_ncpy(char *dst, const char *src, int n) {
+	int i;
+	for (i=0; src[i] && n>0; i++, n--)
+		dst[i] = IS_PRINTABLE (src[i])? src[i]: '.';
 	dst[i] = 0;
 }
 
@@ -514,28 +549,34 @@ R_API void *r_str_free(void *ptr) {
 }
 
 R_API char* r_str_replace(char *str, const char *key, const char *val, int g) {
-	int off;
+	int off, i;
 	int klen = strlen (key);
 	int vlen = strlen (val);
 	int slen = strlen (str);
-	char *old, *p = str;
-	for (;;) {
+	char *new, *old, *p = str;
+	for (i=0; i<slen; ) {
 		p = (char *)r_mem_mem (
-			(const ut8*)str, slen,
+			(const ut8*)str+i, slen-i,
 			(const ut8*)key, klen);
-		if (p) {
-			old = strdup (p+klen);
-			slen += (vlen-klen)+1;
-			off = (int)(size_t)(p-str);
-			str = realloc (str, slen);
-			p = str+off;
-			memcpy (p, val, vlen);
-			memcpy (p+vlen, old, strlen (old));
-			p[vlen] = 0;
+		if (!p) break; // || !p[klen]) break;
+		old = strdup (p+klen);
+		slen += (vlen-klen)+1;
+		off = (int)(size_t)(p-str);
+		new = realloc (str, slen);
+		if (!new) {
+			eprintf ("realloc fail\n");
+			free (str);
 			free (old);
-			if (g) continue;
-			else break;
-		} else break;
+			str = NULL;
+			break;
+		}
+		str = new;
+		p = str+off;
+		memcpy (p, val, vlen);
+		memcpy (p+vlen, old, strlen (old)+1);
+		i += off+vlen;
+		free (old);
+		if (!g) break;
 	}
 	return str;
 }
@@ -692,6 +733,18 @@ R_API int r_str_ansi_filter(char *str, int len) {
 	return j;
 }
 
+R_API void r_str_filter_zeroline(char *str, int len) {
+	int i;
+	for (i=0; str[i] && i<len; i++) {
+		// TODO: honor newlines?
+		if (str[i]=='\n' || str[i]=='\r')
+			break;
+		if (!IS_PRINTABLE (str[i]))
+			break;
+	}
+	str[i] = 0;
+}
+
 R_API void r_str_filter(char *str, int len) {
 	int i;
 	for (i=0; i<len; i++)
@@ -739,9 +792,10 @@ R_API char **r_str_argv(const char *_str, int *_argc) {
 	int argc = 0;
 	int escape = 0;
 	int quote = 0;
-	char *optr, *ptr, *str = strdup (_str);
-	char **argv = (char **)malloc (MAXARG*sizeof(char*));
+	char **argv, *optr, *ptr, *str = strdup (_str);
 
+	if (!str) return NULL;
+	argv = (char **)malloc (MAXARG*sizeof(char*));
 	optr = ptr = (char *)r_str_chop_ro (str);
 	for (; *ptr && argc<MAXARG; ptr++) {
 		switch (*ptr) {
@@ -795,29 +849,93 @@ R_API void r_str_argv_free(char **argv) {
 	free (argv);
 }
 
-#if 0
-/* XXX this is necessary ??? */
-// TODO: make it dynamic
-static int bprintf_init = 0;
-static char bprintf_buf[4096];
-
-// XXX overflow
-R_API int r_bprintf(const char *fmt, ...) {
-	va_list ap;
-	if (bprintf_init==0)
-		*bprintf_buf = 0;
-	va_start(ap, fmt);
-	r_str_concatf(bprintf_buf, fmt, ap);
-	va_end(ap);
-	return strlen(bprintf_buf);
+R_API const char *r_str_lastbut (const char *s, char ch, const char *but) {
+	int _b = 0;
+	ut8 *b = (ut8*)&_b;
+	const char *p, *lp = NULL;
+	const int bsz = sizeof (_b);
+	if (strlen (but) >= bsz) {
+		eprintf ("r_str_lastbut: but string too long\n");
+		return NULL;
+	}
+	for (p=s; *p; p++) {
+		char *isbut = but? strchr (but, *p): NULL;
+		//isbut = NULL;
+		if (isbut) {
+			int idx = (int)(size_t)(isbut-but);
+			if (R_BIT_CHK (b, idx)) {
+				_b = R_BIT_UNSET (b, idx);
+			} else {
+				_b = R_BIT_SET (b, idx);
+			}
+			continue;
+		}
+		if (*p == ch) {
+			if (!_b)
+				lp = p;
+		}
+	}
+	return lp;
 }
 
-R_API char *r_bprintf_get() {
-	char *s;
-	if (bprintf_init==0)
-		*bprintf_buf = 0;
-	s = strdup(bprintf_buf);
-	bprintf_buf[0]='\0';
-	return s;
-}
+// TODO: if unix.. move to .h? static inline
+R_API const char *r_str_casestr(const char *a, const char *b) {
+#if __WINDOWS__ || defined(__QNX__)
+	size_t hay_len = strlen(a);
+	size_t needle_len = strlen(b);
+	while (hay_len >= needle_len) {
+		if (strncasecmp(a, b, needle_len) == 0)
+			return (const char *) a;
+		a++;
+		hay_len--;
+	}
+	return NULL;
+#else
+	return strcasestr (a, b);
 #endif
+}
+
+R_API int r_str_write (int fd, const char *b) {
+	return write (fd, b, strlen (b));
+}
+
+R_API void r_str_range_foreach(const char *r, RStrRangeCallback cb, void *u) {
+	const char *p = r;
+	for (; *r; r++) {
+		if (*r == ',') {
+			cb (u, atoi (p));
+			p = r+1;
+		}
+		if (*r == '-') {
+			if (p != r) {
+				int from = atoi (p);
+				int to = atoi (r+1);
+				for (; from<=to; from++)
+					cb (u, from);
+			} else fprintf (stderr, "Invalid range\n");
+			for (r++; *r && *r!=','&& *r!='-'; r++);
+			p = r;
+		}
+	}
+	if (*p) cb (u, atoi (p));
+}
+
+// convert from html escaped sequence "foo%20bar" to "foo bar"
+// TODO: find better name.. unencode? decode
+R_API void r_str_unescape (char *s) {
+	int n;
+	char *d;
+	for (d=s; *s; s++, d++) {
+#if 0
+		if (*s == '+') {
+			*d = ' ';
+		} else
+#endif
+		if (*s == '%') {
+			sscanf (s+1, "%02x", &n);
+			*d = n;
+			s+=2;
+		} else *d = *s;
+	}
+	*d = 0;
+}

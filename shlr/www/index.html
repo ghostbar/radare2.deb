@@ -1,0 +1,414 @@
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<title>r2w2</title>
+<!--
+	<meta content="yes" name="apple-mobile-web-app-capable" />
+	<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+-->
+	<link rel=Stylesheet href="style.css" type="text/css" />
+	<meta name="viewport" content="width=340px, initial-scale=1" />
+	<script src="script.js"></script>
+<script>
+function Ajax (method, uri, body, fn) {
+        var x = new XMLHttpRequest ();
+        x.open (method, uri, false);
+        x.onreadystatechange = function (y) {
+                if (fn) fn (x.responseText);
+        }
+        x.send (body);
+}
+
+function cmd(c, cb) {
+	Ajax ('GET', "/cmd/"+c, '', function (x) {
+		if (cb) cb (x);
+		else {
+			x = filter_asm (x);
+			document.getElementById ('output').innerHTML = x;
+		}
+	});
+}
+
+function about() { cmd ("?V", function (version) { alert ("r2w v"+version); }); }
+
+function panel_functions_load() {
+	Ajax ('GET', "/cmd/afl", '', function (x) {
+		var arr = x.split ("\n");
+		x = ''
+		for (var i in arr) {
+			var line = arr[i].replace (/\s+/g,' ').split (' ');
+			var addr = line[0];
+			var name = line[3];
+			if (!addr) continue;
+			x += "<a onclick=\"cmd('pdr@"+addr+"')\">"+addr+"</a> "+name+"\n";
+		}
+		popup_show ("Functions", x);
+		document.getElementById('output').innerHTML = x;
+	});
+}
+
+function runcmd(x) {
+	popup_hide ();
+	cmd (x, function() { cmd (display)});
+}
+
+function setmode (x) {
+	popup_hide();
+	display = x;
+	if (backward) display = "pd";
+	switch (x) {
+	case "pd": x = "b 256;"+x; break;
+	case "px": x = "b 1024;"+x; break;
+	}
+	cmd (x);
+}
+
+function runprompt (t, c) {
+	popup_hide ();
+	var msg = prompt (t);
+	if (msg) cmd ('"'+c+msg+'"', function (x) {cmd (display);});
+}
+
+function toggle(x) {
+	popup_hide();
+	display = "pd";
+	cmd ("e "+x, function (y) {
+		var b = y.indexOf ("true")!=-1?  "false": "true";
+		cmd ("e "+x+"=" + b, function (z) { cmd ("pd"); });
+	});
+}
+
+var nl = "<br />";
+var nl2 = "<br /><br />";
+function show_popup_about () {
+	var txt =
+	"<table class='popup_content'><tr><td valign=top>"+
+		"Display"+
+		"<hr size=1/>"+
+		"<a href=\"javascript:setmode('pd')\" />pd</a>"+
+		"&nbsp;"+
+		"<a href=\"javascript:setmode('pdf')\" />pdf</a>"+
+		"&nbsp;"+
+		"<a href=\"javascript:setmode('px')\" />px</a>"+
+		"&nbsp;"+
+		"<a href=\"javascript:setmode('pxw')\" />pxw</a>"+
+		"<br /><br />"+
+		"Listings"+
+		"<hr size=1/>"+
+		"<a href=\"javascript:setmode('i',1)\" />file info</a><br />"+
+		"<a href=\"javascript:setmode('is',1)\" />symbols</a><br />"+
+		"<a href=\"javascript:setmode('ii',1)\" />imports</a><br />"+
+		"<a href=\"javascript:setmode('afl',1)\" />functions</a><br />"+
+		"<a href=\"javascript:setmode('iz',1)\" />strings</a><br />"+
+		"<br />"+
+		"Flags"+
+		"<hr size=1/>"+
+		"<a href=\"javascript:setmode('fs',1)\" />flagspaces</a><br />"+
+		"<a href=\"javascript:setmode('f',1)\" />flags</a><br />"+
+		"<a href=\"javascript:runprompt('Flag','f ')\" />set flag</a><br />"+
+		"<a href=\"javascript:runprompt('Flag','f-')\" />unset flag</a><br />"+
+	"</td><td valign=top>"+
+		"Places"+
+		"<hr size=1/>"+
+		"<a href=\"javascript:popup_hide();seek('entry0')\" />entry0</a>&nbsp;"+
+		"<a href=\"javascript:popup_hide();seek('main')\" />main</a><br />"+
+		"<br />"+
+		"Settings"+
+		"<hr size=1/>"+
+		"<a href=\"javascript:toggle('asm.offset')\" />asm.offset</a><br />"+
+		"<a href=\"javascript:toggle('asm.lines')\" />asm.lines</a><br />"+
+		"<a href=\"javascript:toggle('asm.pseudo')\" />asm.pseudo</a><br />"+
+		"<a href=\"javascript:toggle('asm.bytes')\" />asm.bytes</a><br />"+
+		"<a href=\"javascript:toggle('cfg.bigendian')\" />cfg.bigendian</a><br />"+
+/*
+asm.arch
+asm.bits
+a
+*/
+		"&nbsp;"+
+		"<br />"+
+		"Actions"+
+		"<hr size=1/>"+
+		"<a href=\"javascript:runprompt('Comment','CC ')\" />set comment</a><br />"+
+		"<a href=\"javascript:runcmd('af')\" />analyze function</a><br />"+
+		"<a href=\"javascript:runcmd('aa');\">full analyze</a><br />"+
+		"<a href=\"javascript:runcmd('ap');\">analyze preludes</a><br />"+
+		"<a href=\"/graph/\">function graph</a>"+nl2+
+		"&nbsp;"+
+	"</td></tr></table>"+
+		"";
+	popup_show ("", txt);
+}
+
+function handleKeyPress(e, form) {
+	var key = e.keyCode || e.which;
+	if (key==13) {
+		input_activate ();
+	}
+}
+
+function seek(x,back) {
+	next_curoff = prev_curoff = x;
+	cmd ("s "+x, function (x) {
+		if (display[0]=='f') display="pd";
+		cmd (display);
+		window.scrollTo (0,0);
+	});
+}
+
+var prev_curoff = 0;
+var prev_lastoff = 0;
+var next_curoff = 0;
+var next_lastoff = 0;
+var backward = false;
+var display = "pd";
+
+function less () {
+	backward = true;
+	cmd ("b", function (block) {
+		cmd ("s "+prev_curoff+"-"+block+";"+display, function (x) {
+			x = filter_asm (x);
+			var body = document.getElementById ('output').innerHTML;
+			document.getElementById ('output').innerHTML = x + body;
+		});
+	});
+}
+
+function hasmore(x) {
+	var a = document.getElementById ("more");
+	var b = document.getElementById ("less");
+	if (x) {
+		a.style.visibility=b.style.visibility="visible";
+	} else {
+		a.style.visibility=b.style.visibility="hidden";
+	}
+}
+
+function more () {
+	backward = false;
+	cmd ("?v $l @ "+next_lastoff, function (oplen) {
+		if (display == "px") oplen = 16;
+		cmd (display+" @ "+next_lastoff+"+"+oplen, function (x) {
+			x = filter_asm (x);
+			document.getElementById('output').innerHTML += x;
+		});
+	});
+}
+
+function filter_asm(x) {
+	var curoff = backward? prev_curoff: next_curoff;;
+	var lastoff = backward? prev_lastoff: next_lastoff;;
+	var lines = x.split (/\n/g);
+	cmd ("s", function (x) { curoff = x; });
+	for (var i=lines.length-1;i>0;i--)  {
+		var a = lines[i].match (/0x([a-fA-F0-9]*)/);
+		if (a && a.length>0) {
+			lastoff = a[0].replace (/:/g, "");
+			break;
+		}
+	}
+	if (display == "afl") {
+		hasmore (false);
+		var z = "";
+		for (var i=0;i<lines.length;i++)  {
+			var row = lines[i].replace (/\ +/g," ").split (/ /g);
+			z += row[0]+ "  "+row[3]+"\n";
+		}
+		x = z;
+	} else
+	if (display[0] == 'f') {
+		hasmore (false);
+		if (display[1] == 's') {
+			var z = "";
+			for (var i=0; i<lines.length; i++)  {
+				var row = lines[i].replace (/\ +/g," ").split (/ /g);
+				var mark = row[1]=='*'? '*': ' ';
+				var space = row[2]? row[2]: row[1];
+				if (!space) continue;
+				z += row[0]+ " "+mark+" <a href=\"javascript:runcmd('fs "+
+					space+"')\">"+space+"</a>\n";
+			}
+			x = z;
+		} else {
+		}
+	} else
+	if (display[0] == "i") {
+		hasmore (false);
+		if (display[1]) {
+			var z = "";
+			for (var i=0;i<lines.length;i++)  {
+				var elems = lines[i].split (/ /g);
+				var name = "";
+				var addr = "";
+				for (var j=0;j<elems.length;j++)  {
+					var kv = elems[j].split (/=/);
+					if (kv[0] == "addr") addr = kv[1];
+					if (kv[0] == "name") name = kv[1];
+					if (kv[0] == "string") name = kv[1];
+				}
+				z += addr+ "  "+name+"\n";
+			}
+			x = z;
+		}
+	} else hasmore (true);
+
+	x = x.replace (/0x([a-zA-Z0-9]*)/g, "<a href='javascript:seek(\"0x$1\")'>0x$1</a>");
+	if (display[0]=='p' && display[1]=='d') {
+		x = x.replace (/;(\s+)/g, ";");
+		x = x.replace (/;(.*)/g, "// <span style='color:yellow'>$1</span>");
+		x = x.replace (/(fcn|imp|loc).(.*)/g, "<a href='javascript:seek(\"$1.$2\")'>$1.$2</a>");
+		x = x.replace (/(bl|call)/g, "<b style='color:green'>call</b>");
+		x = x.replace (/(jmp|jnz|jg|je|jl|jz)/g, "<b style='color:green'>$1</b>");
+		x = x.replace (/ret/g, "<b style='color:red'>ret</b>");
+		x = x.replace (/(push|pop)/g, "<b style='color:magenta'>$1</b>");
+		x = x.replace (/mov/g, "<b style='color:yellow'>mov</b>");
+		x = x.replace (/(test|cmp)/g, "<b style='color:green'>$1</b>");
+		x = x.replace (/nop/g, "<b style='color:blue'>nop</b>");
+	}
+	if (backward) {
+		prev_curoff = curoff;
+		prev_lastoff = lastoff;
+	} else {
+		next_curoff = curoff;
+		next_lastoff = lastoff;
+		if (!prev_curoff)
+			prev_curoff = next_curoff;
+	}
+	return x;
+}
+
+function input_activate () {
+	var txt = document.getElementById('input').value;
+	//if (txt.length == 0) show_popup_commands (); else
+	if (txt.length == 0) show_popup_about (); else
+	Ajax ('GET', '/cmd/'+txt, '', function (x) {
+		x = filter_asm (x);
+		document.getElementById('output').innerHTML = x;
+		document.getElementById('input').value = '';
+		if (x=="") cmd (display);
+	});
+}
+
+function css(selector, property, value) {
+	for (var i=0; i<document.styleSheets.length; i++) {
+		try {
+			document.styleSheets[i].insertRule (
+				selector+ ' {'+property+':'+value+'}',
+				document.styleSheets[i].cssRules.length);
+		} catch (err) {
+			try {
+				document.styleSheets[i].addRule(
+					selector, property+':'+value);
+			} catch(err) {}
+		}
+	}
+}
+
+/* probably unnecesary */
+window.onorientationchange = function() {
+	var header = document.getElementById ('header');
+	var orientation = window.orientation;
+	switch (orientation) {
+	case 0:
+		css ('.header', 'width', '220px');
+		css ('input', 'width', '190px');
+		css ('.console', 'width', '320px');
+		document.body.setAttribute ("class","portrait");
+		break; 
+	case -90: 
+	case 90:
+		css ('.header', 'width', '480');
+		css ('input', 'width', '360');
+		css ('.console', 'width', '470');
+		document.body.setAttribute("class","landscape");
+		break;
+	}
+}
+
+function popup_hide () {
+	var p = document.getElementById ("popup");
+	var b = document.getElementById ("popup_background");
+	p.style.visibility="hidden";
+	b.style.visibility="hidden";
+}
+
+function popup_show (title, body) {
+	var p = document.getElementById ("popup");
+	var t = document.getElementById ("popup_title");
+	var c = document.getElementById ("popup_content");
+	var b = document.getElementById ("popup_background");
+	if (title)
+		t.innerHTML = title;
+	if (body) {
+		var top = document.body.scrollTop+10;
+		c.innerHTML = body;
+		p.style.visibility =
+		b.style.visibility = "visible";
+		//c.style.top = top; /* XXX doesnt works */
+		css ('.popup', 'top', top+"px"); //'220px');
+	}
+	b.height = 100;
+}
+
+function init() {
+	var input = document.getElementById ('input');
+	input.addEventListener ("activate", function (x) {
+		input_activate();
+	}, false);
+	cmd (display);
+}
+
+</script>
+</head>
+<body onload="init()">
+<div class=popup_background id="popup_background" style="visibility:hidden"></div>
+
+<div id="popup" style="visibility:hidden">
+<table class=popup>
+<tr>
+	<td style="text-align:left; width:100%">
+	<div class=popup_title id="popup_title"></div>
+</td><td style="text-align:right">
+	<input type="button" class="button" value="x" onclick="popup_hide()">
+	</td>
+</tr>
+<tr>
+	<td colspan=2 valign="top" style="light">
+<div class="popup_content" id="popup_content">
+This is the r2w2 ui. A rewrite in pure C/js of the original r2w written in python.
+<br /><br />
+This interface aims to run on every modern browser; from Android/iPhone/iPad to desktop browsers (Chromium, Firefox, ..)
+<br /><br />
+The UI is under heavy development. This is the first release and there will probably be lot of bugs and caveats. Feel free to report on <a href="http://github.com/radare/radare2">github</a> patches, ideas or bug reports.
+<br /><br />
+Enjoy!
+	</div>
+	</td>
+</tr>
+</table>
+</div>
+
+<div style="position:fixed; top:0px;left:0px;background-color:red;border:0px">
+<table class=header>
+<tr>
+	<td style="text-align:left;vertical-align:top">
+	<a href="javascript:show_popup_about ()"><img border=0 src="rlogo2.png" /></a>
+</td> <td align="right" style="width:100%">
+	<input style="width:100%" onkeypress="handleKeyPress(event)" id="input">
+</td> </tr> 
+</table>
+
+</div>
+
+<div class="console" style="top:25px !important; position:absolute;z-index:-99">
+<div id="less">
+	<a href='javascript:less()'>... prev</a>
+</div>
+<p id="output"></p>
+<div id="more">
+	<a href='javascript:more()'>... next</a>
+</div>
+</div>
+</body>
+</html>
+

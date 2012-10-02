@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2008-2012 pancake<nopcode.org> */
 
 #include "r_io.h"
 #include "r_lib.h"
@@ -16,16 +16,17 @@ typedef struct {
 #define RIOMALLOC_SZ(x) (((RIOMalloc*)x->data)->size)
 #define RIOMALLOC_BUF(x) (((RIOMalloc*)x->data)->buf)
 
-static int __write(struct r_io_t *io, RIODesc *fd, const ut8 *buf, int count) {
+static int __write(RIO *io, RIODesc *fd, const ut8 *buf, int count) {
 	if (fd == NULL || fd->data == NULL)
 		return -1;
-	if (io->off+count >= RIOMALLOC_SZ (fd))
+	if (io->off+count > RIOMALLOC_SZ (fd))
 		return -1;
 	memcpy (RIOMALLOC_BUF (fd)+io->off, buf, count);
 	return count;
 }
 
-static int __read(struct r_io_t *io, RIODesc *fd, ut8 *buf, int count) {
+static int __read(RIO *io, RIODesc *fd, ut8 *buf, int count) {
+	memset (buf, 0xff, count);
 	if (fd == NULL || fd->data == NULL)
 		return -1;
 	if (io->off>= RIOMALLOC_SZ (fd))
@@ -65,24 +66,23 @@ static int __plugin_open(struct r_io_t *io, const char *pathname) {
 	);
 }
 
-static inline int getmalfd (RIOMalloc *mal) {
-	return 0xfffff & (int)(size_t)mal->buf;
-}
-
 static RIODesc *__open(struct r_io_t *io, const char *pathname, int rw, int mode) {
 	if (__plugin_open (io, pathname)) {
 		RIOMalloc *mal = R_NEW (RIOMalloc);
-		mal->fd = getmalfd (mal);
+		mal->fd = -1; /* causes r_io_desc_new() to set the correct fd */
 		if (!memcmp (pathname, "hex://", 6)) {
 			mal->size = strlen (pathname);
 			mal->buf = malloc (mal->size);
 			memset (mal->buf, 0, mal->size);
 			mal->size = r_hex_str2bin (pathname+6, mal->buf);
 		} else {
-			mal->size = atoi (pathname+9);
+			mal->size = r_num_math (NULL, pathname+9);
 			if ((mal->size)>0) {
 				mal->buf = malloc (mal->size);
 				memset (mal->buf, '\0', mal->size);
+			} else {
+				eprintf ("Cannot allocate (%s) 0 bytes\n", pathname+9);
+				return NULL;
 			}
 		}
 		if (mal->buf != NULL)

@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2008-2012 pancake<nopcode.org> */
 
 #include <r_cons.h>
 #include <stdio.h>
@@ -119,6 +119,7 @@ R_API RCons *r_cons_new () {
 	if (!SetConsoleCtrlHandler ((PHANDLER_ROUTINE)__w32_control, TRUE))
 		eprintf ("r_cons: Cannot set control console handler\n");
 #endif
+	I.pager = NULL; /* no pager by default */
 	//r_cons_palette_init(NULL);
 	r_cons_reset ();
 	return &I;
@@ -223,7 +224,15 @@ R_API void r_cons_flush() {
 		return;
 	r_cons_filter ();
 	if (I.is_interactive) {
-		if (I.buffer_len > CONS_MAX_USER) {
+		/* Use a pager if the output doesn't fit on the terminal window. */
+		if (I.pager && *(I.pager)
+				&& I.buffer_len > 0
+				&& r_str_char_count (I.buffer, '\n') >= I.rows) {
+			I.buffer[I.buffer_len-1] = 0;
+			r_sys_cmd_str_full(I.pager, I.buffer, NULL, NULL, NULL);
+			r_cons_reset ();
+
+		} else if (I.buffer_len > CONS_MAX_USER) {
 			if (!r_cons_yesno ('n',"Do you want to print %d bytes? (y/N)",
 					I.buffer_len)) {
 				r_cons_reset ();
@@ -312,23 +321,25 @@ R_API void r_cons_visual_write (char *buffer) {
 }
 
 R_API void r_cons_printf(const char *format, ...) {
-	int len;
+	size_t size, written;
 	va_list ap;
 
 	if (strchr (format, '%')) {
+		palloc (MOAR);
+		size = I.buffer_sz-I.buffer_len; /* remaining space in I.buffer */
+
 		va_start (ap, format);
-#if OLD
-	char buf[CONS_BUFSZ];
-		len = vsnprintf (buf, CONS_BUFSZ-1, format, ap);
-		if (len>0)
-			r_cons_memcat (buf, len);
-#else
-		palloc (MOAR); // use proper palloc here
-		len = vsnprintf (I.buffer+I.buffer_len, I.buffer_sz-I.buffer_len-1, format, ap);
-		if (len>0)
-			I.buffer_len += len;
-#endif
+		written = vsnprintf (I.buffer+I.buffer_len, size, format, ap);
 		va_end (ap);
+
+		if (written>=size) { /* not all bytes were written */
+			palloc (written);
+
+			va_start (ap, format);
+			written = vsnprintf (I.buffer+I.buffer_len, written, format, ap);
+			va_end (ap);
+		}
+		I.buffer_len += written;
 	} else r_cons_strcat (format);
 }
 
@@ -341,7 +352,7 @@ R_API int r_cons_get_column() {
 
 /* final entrypoint for adding stuff in the buffer screen */
 R_API void r_cons_memcat(const char *str, int len) {
-	if (len>0) {
+	if (str && len>0) {
 		palloc (len+1);
 		memcpy (I.buffer+I.buffer_len, str, len+1);
 		I.buffer_len += len;
@@ -363,8 +374,9 @@ R_API void r_cons_strcat(const char *str) {
 }
 
 R_API void r_cons_newline() {
-	if (I.is_html) r_cons_strcat ("<br />\n");
-	else r_cons_strcat ("\n");
+	r_cons_strcat ("\n");
+	//if (I.is_html) r_cons_strcat ("<br />\n");
+	//else r_cons_strcat ("\n");
 }
 
 R_API int r_cons_get_size(int *rows) {
@@ -414,7 +426,11 @@ R_API void r_cons_show_cursor (int cursor) {
  * If you doesn't use this order you'll probably loss your terminal properties.
  *
  */
+static int oldraw = -1;
 R_API void r_cons_set_raw(int is_raw) {
+	if (oldraw != -1)
+		if (is_raw == oldraw)
+			return;
 #if __UNIX__
 	if (is_raw) tcsetattr (0, TCSANOW, &I.term_raw);
 	else tcsetattr (0, TCSANOW, &I.term_buf);
@@ -425,6 +441,7 @@ R_API void r_cons_set_raw(int is_raw) {
 #warning No raw console supported for this platform
 #endif
 	fflush (stdout);
+	oldraw = is_raw;
 }
 
 R_API void r_cons_invert(int set, int color) {
@@ -461,4 +478,15 @@ R_API void r_cons_column(int c) {
 	// align current buffer N chars right
 	r_cons_strcat_justify (b, c, 0);
 	r_cons_gotoxy (0, 0);
+}
+
+static int lasti = 0; /* last interactive mode */
+
+R_API void r_cons_set_interactive(int x) {
+	lasti = r_cons_singleton ()->is_interactive;
+	r_cons_singleton ()->is_interactive = x;
+}
+
+R_API void r_cons_set_last_interactive() {
+	r_cons_singleton ()->is_interactive = lasti;
 }

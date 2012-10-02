@@ -14,7 +14,7 @@
 #define __KFBSD__ 0
 #endif
 
-#if defined(__linux__) || defined(__APPLE__) || defined(__GNU__) || defined(__ANDROID__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__GNU__) || defined(__ANDROID__) || defined(__QNX__)
   #define __BSD__ 0
   #define __UNIX__ 1
 #endif
@@ -92,6 +92,7 @@ typedef void (*PrintfCallback)(const char *str, ...);
 
 #define BITS2BYTES(x) ((x/8)+((x%8)?1:0))
 #define ZERO_FILL(x) memset (x, 0, sizeof (x))
+#define R_NEWS0(x,y) (x*)memset (malloc(sizeof(x)*y), 0, sizeof(x)*y);
 #define R_NEWS(x,y) (x*)malloc(sizeof(x)*y)
 #define R_NEW(x) (x*)malloc(sizeof(x))
 #define R_NEW0(x) (x*)calloc(1,sizeof(x))
@@ -101,8 +102,9 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #define IS_WHITESPACE(x) (x==' '||x=='\t')
 #define R_MEM_ALIGN(x) ((void *)(size_t)(((ut64)(size_t)x) & 0xfffffffffffff000LL))
 
-#define BIT_SET(x,y) (x[y>>4] |= (1<<(y&0xf)))
-#define BIT_CHK(x,y) ((x[y>>4] & (1<<(y&0xf))))
+#define R_BIT_SET(x,y) (x[y>>4] |= (1<<(y&0xf)))
+#define R_BIT_UNSET(x,y) (x[y>>4] &= ~(1<<(y&0xf)))
+#define R_BIT_CHK(x,y) ((x[y>>4] & (1<<(y&0xf))))
 
 #if __UNIX__
 #include <sys/types.h>
@@ -177,6 +179,9 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #elif __arm__
 #define R_SYS_ARCH "arm"
 #define R_SYS_BITS R_SYS_BITS_32
+#elif __arc__
+#define R_SYS_ARCH "arc"
+#define R_SYS_BITS R_SYS_BITS_32
 #elif __sparc__
 #define R_SYS_ARCH "sparc"
 #define R_SYS_BITS R_SYS_BITS_32
@@ -203,21 +208,25 @@ enum {
 	R_SYS_ARCH_BF = 0x400,
 	R_SYS_ARCH_SH = 0x800,
 	R_SYS_ARCH_AVR = 0x1000,
-	R_SYS_ARCH_DALVIK = 0x2000
+	R_SYS_ARCH_DALVIK = 0x2000,
+	R_SYS_ARCH_Z80 = 0x4000,
+	R_SYS_ARCH_ARC = 0x8000
 };
 
 /* os */
-#if __APPLE__
+#if defined (__QNX__)
+#define R_SYS_OS "qnx"
+#elif defined (__APPLE__)
 #define R_SYS_OS "darwin"
-#elif __linux__
+#elif defined (__linux__)
 #define R_SYS_OS "linux"
-#elif __WIN32__ || __CYGWIN__ || MINGW32
+#elif defined (__WIN32__) || defined (__CYGWIN__) || defined (MINGW32)
 #define R_SYS_OS "windows"
-#elif __NetBSD__ 
+#elif defined (__NetBSD__ )
 #define R_SYS_OS "netbsd"
-#elif __OpenBSD__
+#elif defined (__OpenBSD__)
 #define R_SYS_OS "openbsd"
-#elif __FreeBSD__ || __FreeBSD_kernel__
+#elif defined (__FreeBSD__) || defined (__FreeBSD_kernel__)
 #define R_SYS_OS "freebsd"
 #else
 #define R_SYS_OS "unknown"

@@ -1,4 +1,5 @@
-/* radare - LGPL - Copyright 2011 pancake<@nopcode.org> */
+/* radare - LGPL - Copyright 2011-2012 - pancake */
+
 #include <r_egg.h>
 #include "../config.h"
 
@@ -54,11 +55,15 @@ R_API char *r_egg_to_string (REgg *egg) {
 }
 
 R_API void r_egg_free (REgg *egg) {
+	if (!egg) return;
 	r_buf_free (egg->src);
 	r_buf_free (egg->buf);
 	r_buf_free (egg->bin);
+	r_list_free(egg->list);
 	r_asm_free (egg->rasm);
 	r_syscall_free (egg->syscall);
+	r_pair_free(egg->pair);
+	r_list_free (egg->plugins);
 	r_list_free (egg->patches);
 	free (egg);
 }
@@ -333,7 +338,7 @@ R_API int r_egg_padding (REgg *egg, const char *pad) {
 		} else memset (xx, byte, n);
 		if (f>='a' && f<='z')
 			r_buf_prepend_bytes (egg->bin, xx, n);
-		else r_buf_prepend_bytes (egg->bin, xx, n);
+		else r_buf_append_bytes (egg->bin, xx, n);
 		free (xx);
 	}
 	free (o);

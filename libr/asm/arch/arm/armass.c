@@ -1,8 +1,9 @@
-/* radare - LGPL - Copyright 2010-2011 pancake<@nopcode.org> */
+/* radare - LGPL - Copyright 2010-2012 pancake<@nopcode.org> */
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <r_util.h>
 
 // TODO: only lo registers accessible in thumb arm
 
@@ -11,7 +12,7 @@ typedef struct {
 	int o;
 	char op[128];
 	char opstr[128];
-	char *a[16];
+	char *a[16]; /* only 15 arguments can be used! */
 } ArmOpcode;
 
 typedef struct {
@@ -74,12 +75,12 @@ static ArmOp ops[] = {
 	{ "mvn", 0, TYPE_MOV },
 	{ "svc", 0xf, TYPE_SWI }, // ???
 
-	{ "and", 0x0, TYPE_TST },
-	{ "ands", 0x1000, TYPE_TST },
-	{ "eor", 0x2000, TYPE_TST },
-	{ "eors", 0x3000, TYPE_TST },
-	{ "orr", 0x0, TYPE_TST },
-	{ "bic", 0x0, TYPE_TST },
+	{ "and", 0x0000, TYPE_ARI },
+	{ "ands", 0x1000, TYPE_ARI },
+	{ "eor", 0x2000, TYPE_ARI },
+	{ "eors", 0x3000, TYPE_ARI },
+	{ "orr", 0x0, TYPE_ARI },
+	{ "bic", 0x0, TYPE_ARI },
 
 	{ "cmp", 0x4001, TYPE_TST },
 	{ "cmn", 0x0, TYPE_TST },
@@ -148,11 +149,60 @@ static int getlist(char *op) {
 	return list;
 }
 
-static int getshift(const char *str) {
-	if (!str) return 0;
-	while (str && *str && !atoi (str))
-		str++;
-	return atoi (str)>>1;
+static ut32 getshift(const char *str) {
+	char type[128];
+	char arg[128];
+	char *space;
+	ut32 i=0, shift=0;
+	const char *shifts[] = {
+		"LSL", "LSR", "ASR", "ROR",
+		0, "RRX" // alias for ROR #0
+	};
+
+	strncpy (type, str, sizeof (type)-1);
+
+	// handle RRX alias case
+	if (!strcasecmp (type, shifts[5])) {
+		shift = 6;
+	}
+	// all other shift types
+	else {
+		// split the string into type and arg
+		space = strchr (type, ' ');
+		if (!space)
+			return 0;
+		*space = 0;
+		strncpy (arg, ++space, sizeof(arg)-1);
+
+		for (i=0; shifts[i]; i++) {
+			if (!strcasecmp (type, shifts[i])) {
+				shift = 1;
+				break;
+			}
+		}
+		if (!shift)
+			return 0;
+		shift = (i*2);
+
+		if ((i = getreg (arg)) != -1) {
+			shift |= 1;
+			i = i<<4;
+		}
+		else {
+			i = getnum (arg);
+			// ensure only the bottom 5 bits are used
+			i &= 0x1f;
+			if (!i)
+				i = 32;
+			i = (i*8);
+		}
+	}
+
+	i += shift;
+	i = i << 4;
+	r_mem_copyendian ((ut8*)&shift, (const ut8*)&i, sizeof (ut32), 0);
+
+	return shift;
 }
 
 static void arm_opcode_parse(ArmOpcode *ao, const char *str) {
@@ -161,7 +211,7 @@ static void arm_opcode_parse(ArmOpcode *ao, const char *str) {
 	strncpy (ao->op, str, sizeof (ao->op)-1);
 	strcpy (ao->opstr, str);
 	ao->a[0] = strchr (ao->op, ' ');
-	for (i=0; i<16; i++) {
+	for (i=0; i<15; i++) {
 		if (ao->a[i]) {
 			*ao->a[i] = 0;
 			ao->a[i+1] = strchr (++ao->a[i], ',');
@@ -493,6 +543,8 @@ static int arm_assemble(ArmOpcode *ao, const char *str) {
 				ao->o |= getreg (ao->a[1])<<8;
 				ret = getreg (ao->a[2]);
 				ao->o |= (ret!=-1)? ret<<24 : 2 | getnum(ao->a[2])<<24;
+				if (ao->a[3])
+					ao->o |= getshift (ao->a[3]);
 				break;
 			case TYPE_MOV:
 				ao->o |= getreg (ao->a[0])<<20;
@@ -504,7 +556,8 @@ static int arm_assemble(ArmOpcode *ao, const char *str) {
 				//ao->o |= getreg(ao->a[0])<<20; // ???
 				ao->o |= getreg (ao->a[0])<<8;
 				ao->o |= getreg (ao->a[1])<<24;
-				ao->o |= getshift (ao->a[2])<<16; // shift
+				if (ao->a[2])
+					ao->o |= getshift (ao->a[2]);
 				break;
 			}
 			return 1;

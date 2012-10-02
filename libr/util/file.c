@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2012 pancake<nopcode.org> */
 
 #include "r_types.h"
 #include "r_util.h"
@@ -19,7 +19,14 @@ R_API const char *r_file_basename (const char *path) {
 	return path;
 }
 
-R_API boolt r_file_exist(const char *str) {
+R_API boolt r_file_is_directory(const char *str) {
+	struct stat buf;
+	if (stat (str, &buf)==-1)
+		return R_FALSE;
+	return ((S_IFDIR &buf.st_mode))? R_TRUE: R_FALSE;
+}
+
+R_API boolt r_file_exists(const char *str) {
 	struct stat buf;
 	if (stat (str, &buf)==-1)
 		return R_FALSE;
@@ -44,6 +51,7 @@ R_API char *r_file_abspath(const char *file) {
 		ret = r_str_dup_printf ("%s/%s", cwd, file);
 #endif
 	free (cwd);
+// TODO: remove // and ./
 	return ret? ret: strdup (file);
 }
 
@@ -59,7 +67,7 @@ R_API char *r_file_path(const char *bin) {
 			if (ptr) {
 				*ptr = '\0';
 				snprintf (file, sizeof (file), "%s/%s", str, bin);
-				if (r_file_exist (file)) {
+				if (r_file_exists (file)) {
 					free (path);
 					free (path_env);
 					return strdup (file);
@@ -78,13 +86,17 @@ R_API char *r_file_slurp(const char *str, int *usz) {
 	char *ret;
 	FILE *fd;
 	long sz;
-	if (!r_file_exist (str))
+	if (!r_file_exists (str))
 		return NULL;
 	fd = fopen (str, "rb");
 	if (fd == NULL)
 		return NULL;
 	fseek (fd, 0, SEEK_END);
 	sz = ftell (fd);
+	if (sz <0) {
+		fclose (fd);
+		return NULL;
+	}
 	fseek (fd, 0, SEEK_SET);
 	ret = (char *)malloc (sz+1);
 	rsz = fread (ret, 1, sz, fd);
@@ -134,6 +146,7 @@ R_API char *r_file_slurp_range(const char *str, ut64 off, int sz, int *osz) {
 	FILE *fd = fopen (str, "rb");
 	if (fd == NULL)
 		return NULL;
+	// XXX handle out of bound reads (eof)
 	fseek (fd, off, SEEK_SET);
 	ret = (char *)malloc (sz+1);
 	if (ret != NULL) {
@@ -147,30 +160,29 @@ R_API char *r_file_slurp_range(const char *str, ut64 off, int sz, int *osz) {
 }
 
 R_API char *r_file_slurp_random_line(const char *file) {
-	int i, lines = 0;
+	char *ptr = NULL, *str;
+	int sz, i, lines = 0;
 	struct timeval tv;
-	int sz;
-	char *ptr = NULL;
-	char *str = r_file_slurp (file, &sz);
-	if (str) {
+
+	if ((str = r_file_slurp (file, &sz))) {
 		gettimeofday (&tv,NULL);
 		srand (getpid()+tv.tv_usec);
 		for (i=0; str[i]; i++)
 			if (str[i]=='\n')
 				lines++;
-		if (lines<1)
-			return NULL;
-		lines = (rand()%lines);
-		for (i=0; str[i] && lines; i++)
-			if (str[i]=='\n')
-				lines--;
-		ptr = str+i;
-		for (i=0; ptr[i]; i++)
-			if (ptr[i]=='\n') {
-				ptr[i]='\0';
-				break;
-			}
-		ptr = strdup (ptr);
+		if (lines>0) {
+			lines = (rand()%lines);
+			for (i=0; str[i] && lines; i++)
+				if (str[i]=='\n')
+					lines--;
+			ptr = str+i;
+			for (i=0; ptr[i]; i++)
+				if (ptr[i]=='\n') {
+					ptr[i]='\0';
+					break;
+				}
+			ptr = strdup (ptr);
+		}
 		free (str);
 	}
 	return ptr;
@@ -247,7 +259,7 @@ R_API RMmap *r_file_mmap (const char *file, boolt rw) {
 #if __UNIX__
 		m->buf = mmap (NULL, m->len, rw?PROT_READ|PROT_WRITE:PROT_READ,
 				MAP_SHARED, fd, (off_t)0);
-		if (!m->buf) {
+		if (m->buf == MAP_FAILED) {
 			free (m);
 			m = NULL;
 		}
@@ -287,6 +299,7 @@ R_API RMmap *r_file_mmap (const char *file, boolt rw) {
 }
 
 R_API void r_file_mmap_free (RMmap *m) {
+	if (!m) return;
 #if __UNIX__
 	munmap (m->buf, m->len);
 #elif __WINDOWS__
@@ -312,19 +325,16 @@ R_API char *r_file_temp (const char *prefix) {
 R_API int r_file_mkstemp (const char *prefix, char **oname) {
 	int h;
 	char *path = r_file_tmpdir ();
-	char *name = malloc (1024);
+	char name[1024];
 #if __WINDOWS__
 	if (GetTempFileName (path, prefix, 0, name))
 		h = open (name, O_RDWR|O_EXCL|O_BINARY);
 	else h = -1;
 #else
-	h = snprintf (name, 1024, "%s/%sXXXXXX", path, prefix);
-	if (h<1024)
-		h = mkstemp (name);
-	else h = -1;
+	snprintf (name, sizeof (name), "%s/%sXXXXXX", path, prefix);
+	h = mkstemp (name)!=-1? R_TRUE: R_FALSE;
 #endif
-	if (oname && h!=-1) *oname = name;
-	else free (name);
+	if (oname) *oname = h? strdup (name): NULL;
 	free (path);
 	return h;
 }
@@ -333,10 +343,15 @@ R_API char *r_file_tmpdir() {
 #if __WINDOWS__
 	char *path = r_sys_getenv ("TEMP");
 	if (!path) path = strdup ("C:\\WINDOWS\\Temp\\");
+#elif __ANDROID__
+	char *path = strdup ("/data/data/org.radare.installer/radare2/tmp");
 #else
 	char *path = r_sys_getenv ("TMPDIR");
 	if (!path) path = strdup ("/tmp");
 #endif
+	if (!r_file_is_directory (path)) {
+		eprintf ("Cannot find temporary directory '%s'\n", path);
+	}
 	return path;
 }
 

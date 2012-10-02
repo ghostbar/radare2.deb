@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2012 pancake<nopcode.org> */
 
 #include <r_cmd.h>
 #include <r_util.h>
@@ -19,6 +19,8 @@ R_API RCmd *r_cmd_new () {
 }
 
 R_API RCmd *r_cmd_free(RCmd *cmd) {
+	if (!cmd) return NULL;
+	r_list_free(cmd->plist);
 	free (cmd);
 	return NULL;
 }
@@ -67,14 +69,12 @@ R_API int r_cmd_call(struct r_cmd_t *cmd, const char *input) {
 	int ret = -1;
 	RListIter *iter;
 	RCmdPlugin *cp;
-	
+
 	if (!input || !*input) {
 		if (cmd->nullcallback != NULL)
 			ret = cmd->nullcallback (cmd->data);
 	} else {
-		iter = r_list_iterator (cmd->plist);
-		while (r_list_iter_next (iter)) {
-			cp = (RCmdPlugin*) r_list_iter_get (iter);
+		r_list_foreach (cmd->plist, iter, cp) {
 			if (cp->call (cmd->data, input))
 				return R_TRUE;
 		}

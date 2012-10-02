@@ -1,3 +1,5 @@
+ifeq (${_INCLUDE_MK_GCC_},)
+_INCLUDE_MK_GCC_=1
 CC?=gcc
 LINK=
 RANLIB=ranlib
@@ -19,7 +21,7 @@ ARCH=$(shell uname -m)
 #CFLAGS+=-arch ${ARCH}
 #LDFLAGS+=-arch ${ARCH}
 LDFLAGS_LIB=-dynamiclib
-LDFLAGS_SONAME=-Wl,-install_name,
+LDFLAGS_SONAME=-Wl,-install_name,${LIBDIR}/
 else
 LDFLAGS_LIB=-shared
 #ifneq (${NAME},)
@@ -29,3 +31,4 @@ LDFLAGS_SONAME=-Wl,-soname=
 endif
 
 CC_LIB=${CC} ${LDFLAGS_LIB} -o ${LIBSO}
+endif

@@ -31,15 +31,21 @@
 #define CONS_PALETTE_SIZE 22
 #define CONS_COLORS_SIZE 21
 
+#define R_CONS_GREP_WORDS 10
+#define R_CONS_GREP_WORD_SIZE 64
+
 typedef struct r_cons_grep_t {
-	char strings[10][64];
+	char strings[R_CONS_GREP_WORDS][R_CONS_GREP_WORD_SIZE];
 	int nstrings;
 	char *str;
 	int counter;
 	int line;
 	int tokenfrom;
 	int tokento;
+	int amp;
 	int neg;
+	int begin;
+	int end;
 } RConsGrep;
 
 typedef void (*RConsEvent)(void *);
@@ -71,6 +77,9 @@ typedef struct r_cons_t {
 	LPDWORD term_raw, term_buf;
 #endif
 	RNum *num;
+	/* Pager (like more or less) to use if the output doesn't fit on the
+	 * current window. If NULL or "" no pager is used. */
+	char *pager;
 } RCons;
 
 // XXX THIS MUST BE A SINGLETON AND WRAPPED INTO RCons */
@@ -99,8 +108,9 @@ typedef struct r_cons_t {
 
 #define R_CONS_KEY_ESC 0x1b
 
-#define Color_INVERT         "\x1b[7m"
-#define Color_INVERT_RESET   "\x1b[27m"
+#define Color_BLINK        "\x1b[5m"
+#define Color_INVERT       "\x1b[7m"
+#define Color_INVERT_RESET "\x1b[27m"
 /* plain colors */
 #define Color_BLACK    "\x1b[30m"
 #define Color_BGBLACK  "\x1b[40m"
@@ -186,6 +196,8 @@ R_API int  r_cons_stdout_set_fd(int fd);
 R_API void r_cons_gotoxy(int x, int y);
 R_API void r_cons_show_cursor (int cursor);
 R_API void r_cons_set_raw(int b);
+R_API void r_cons_set_interactive(int b);
+R_API void r_cons_set_last_interactive();
 
 /* output */
 R_API void r_cons_printf(const char *format, ...);
@@ -213,6 +225,10 @@ R_API int r_cons_html_print(const char *ptr);
 
 // TODO: use gets() .. MUST BE DEPRECATED
 R_API int r_cons_fgets(char *buf, int len, int argc, const char **argv);
+R_API char *r_cons_hud(RList *list, const char *prompt);
+R_API char *r_cons_hud_path(const char *path, int dir);
+R_API char *r_cons_hud_string(const char *s);
+R_API char *r_cons_hud_file(const char *f);
 
 R_API const char *r_cons_get_buffer();
 R_API void r_cons_grep(const char *str);
@@ -224,6 +240,7 @@ R_API int r_cons_yesno(int def, const char *fmt, ...);
 R_API void r_cons_set_cup(int enable);
 R_API void r_cons_column(int c);
 R_API int r_cons_get_column();
+R_API char *r_cons_message(const char *msg);
 #endif
 
 #endif

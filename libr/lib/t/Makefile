@@ -1,4 +1,7 @@
 BINDEPS=r_lib r_util
+LDFLAGS=-L..
+
+include ../../config.mk
 
 all: plugin.${EXT_SO} test-plugin${EXT_EXE}
 

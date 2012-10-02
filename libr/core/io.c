@@ -1,25 +1,54 @@
-/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2012 - pancake */
 
 #include "r_core.h"
 
+R_API int r_core_dump(RCore *core, const char *file, ut64 addr, ut64 size) {
+	ut64 i;
+	ut8 *buf;
+	int bs = core->blocksize;
+	FILE *fd;
+	r_sys_truncate (file, 0);
+	fd = fopen (file, "wb");
+	if (!fd) {
+		eprintf ("Cannot open '%s' for writing\n", file);
+		return R_FALSE;
+	}
+	buf = malloc (bs);
+	r_cons_break (NULL, NULL);
+	for (i=0; i<size; ) {
+		if (r_cons_singleton ()->breaked)
+			break;
+		if ((i+bs)>size)
+			bs = size-i;
+		r_io_read_at (core->io, addr+i, buf, bs);
+		if (fwrite (buf, bs, 1, fd) <1) {
+			eprintf ("write error\n");
+			break;
+		}
+		i += bs;
+	}
+	eprintf ("dumped 0x%"PFMT64x" bytes\n", i);
+	r_cons_break_end ();
+	fclose (fd);
+	free (buf);
+	return R_TRUE;
+}
+
 R_API int r_core_write_op(RCore *core, const char *arg, char op) {
+	int i, j, len, ret = R_FALSE;
 	char *str;
 	ut8 *buf;
-	int i, j, ret, len;
 
 	// XXX we can work with config.block instead of dupping it
 	buf = (ut8 *)malloc (core->blocksize);
-	str = (char *)malloc (strlen(arg));
-	if (buf == NULL || str == NULL) {
-		free (buf);
-		free (str);
-		return R_FALSE;
-	}
+	str = (char *)malloc (strlen (arg));
+	if (buf == NULL || str == NULL)
+		goto beach;
 	memcpy (buf, core->block, core->blocksize);
 	len = r_hex_str2bin (arg, (ut8 *)str);
 	if (len==-1) {
 		eprintf ("Invalid hexpair string\n");
-		return R_FALSE;
+		goto beach;
 	}
 
 	if (op=='2' || op=='4') {
@@ -54,7 +83,9 @@ R_API int r_core_write_op(RCore *core, const char *arg, char op) {
 	}
 
 	ret = r_core_write_at (core, core->offset, buf, core->blocksize);
+beach:
 	free (buf);
+	free (str);
 	return ret;
 }
 
@@ -93,7 +124,7 @@ R_API boolt r_core_seek(RCore *core, ut64 addr, boolt rb) {
 			}
 		}
 	}
-	return (ret==-1)?R_FALSE:R_TRUE;
+	return (ret==-1)? R_FALSE: R_TRUE;
 }
 
 R_API int r_core_write_at(RCore *core, ut64 addr, const ut8 *buf, int size) {
@@ -106,7 +137,8 @@ R_API int r_core_write_at(RCore *core, ut64 addr, const ut8 *buf, int size) {
 		if (addr >= core->offset && addr <= core->offset+core->blocksize)
 			r_core_block_read (core, 0);
 	}
-	return (ret==-1)?R_FALSE:R_TRUE;
+	core->file->size = r_io_size (core->io);
+	return (ret==-1)? R_FALSE: R_TRUE;
 }
 
 R_API int r_core_block_read(RCore *core, int next) {
@@ -128,8 +160,16 @@ R_API int r_core_read_at(RCore *core, ut64 addr, ut8 *buf, int size) {
 	int ret;
 	if (!core->io || !core->file || size<1)
 		return R_FALSE;
+#if 0
 	r_io_set_fd (core->io, core->file->fd); // XXX ignore ret? -- ultra slow method.. inverse resolution of io plugin brbrb
 	ret = r_io_read_at (core->io, addr, buf, size);
+	if (addr>=core->offset && addr<=core->offset+core->blocksize)
+		r_core_block_read (core, 0);
+#else
+	r_io_set_fd (core->io, core->file->fd); // XXX ignore ret? -- ultra slow method.. inverse resolution of io plugin brbrb
+	//ret = r_io_read_at (core->io, addr, buf, size);
+	r_io_seek (core->io, addr, R_IO_SEEK_SET);
+	ret = r_io_read (core->io, buf, size);
 	if (ret != size) {
 		if (ret<size && ret>0)
 			memset (buf+ret, 0xff, size-ret);
@@ -137,5 +177,6 @@ R_API int r_core_read_at(RCore *core, ut64 addr, ut8 *buf, int size) {
 	}
 	if (addr>=core->offset && addr<=core->offset+core->blocksize)
 		r_core_block_read (core, 0);
-	return (ret!=UT64_MAX);
+#endif
+	return (ret==size); //UT64_MAX);
 }

@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2012 pancake */
 
 #include <r_flags.h>
 #include <r_util.h>
@@ -60,6 +60,7 @@ R_API int r_flag_sort(RFlag *f, int namesort) {
 }
 
 R_API RFlag * r_flag_free(RFlag *f) {
+	if (!f) return NULL;
 	r_list_free (f->flags);
 	free (f);
 	return NULL;
@@ -153,6 +154,12 @@ R_API int r_flag_unset_i(RFlag *f, ut64 addr, RFlagItem *p) {
 	RFlagItem *item;
 	RListIter *iter;
 
+#if USE_BTREE
+	/* XXX */
+	btree_del (f->tree, item, cmp, NULL);
+	btree_del (f->ntree, item, ncmp, NULL);
+#endif
+	/* No _safe loop necessary because we return immediately after the delete. */
 	r_list_foreach (f->flags, iter, item) {
 		if (item->offset == addr) {
 			r_list_delete (f->flags, iter);

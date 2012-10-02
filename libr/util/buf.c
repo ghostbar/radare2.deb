@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2012 - pancake */
 
 #include "r_types.h"
 #include "r_util.h"
@@ -21,6 +21,21 @@ R_API RBuffer *r_buf_new() {
 		b->length = 0;
 		b->cur = 0;
 		b->base = 0LL;
+		b->mmap = NULL;
+	}
+	return b;
+}
+
+R_API RBuffer *r_buf_mmap (const char *file, int rw) {
+	RBuffer *b = r_buf_new ();
+	if (!b) return NULL;
+	b->mmap = r_file_mmap (file, rw);
+	if (b->mmap && b->mmap->len>0) {
+		b->buf = b->mmap->buf;
+		b->length = b->mmap->len;
+	} else {
+		r_buf_free (b);
+		return NULL; /* we just freed b, don't return it */
 	}
 	return b;
 }
@@ -115,7 +130,7 @@ R_API int r_buf_append_buf(RBuffer *b, RBuffer *a) {
 static int r_buf_cpy(RBuffer *b, ut64 addr, ut8 *dst, const ut8 *src, int len, int write) {
 	int end;
 	addr = (addr==R_BUF_CUR)? b->cur: addr-b->base;
-	if (dst == NULL || addr > b->length)
+	if (len<1 || dst == NULL || addr > b->length)
 		return -1;
  	end = (int)(addr+len);
 	if (end > b->length)
@@ -182,8 +197,13 @@ R_API int r_buf_fwrite_at (RBuffer *b, ut64 addr, ut8 *buf, const char *fmt, int
 	return r_buf_fcpy_at (b, addr, buf, fmt, n, R_TRUE);
 }
 
-R_API void r_buf_deinit(struct r_buf_t *b) {
-	free (b->buf);
+R_API void r_buf_deinit(RBuffer *b) {
+	if (b->mmap) {
+		r_file_mmap_free (b->mmap);
+		b->mmap = NULL;
+	} else {
+		free (b->buf);
+	}
 }
 
 R_API void r_buf_free(struct r_buf_t *b) {

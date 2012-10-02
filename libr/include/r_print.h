@@ -9,6 +9,7 @@
 #define R_PRINT_FLAGS_ADDRMOD 0x00000002
 #define R_PRINT_FLAGS_CURSOR  0x00000004
 #define R_PRINT_FLAGS_HEADER  0x00000008
+#define R_PRINT_FLAGS_SPARSE  0x00000010
 
 typedef int (*RPrintZoomCallback)(void *user, int mode, ut64 addr, ut8 *bufz, ut64 size);
 typedef const char *(*RPrintNameCallback)(void *user, ut64 addr);
@@ -37,6 +38,7 @@ typedef struct r_print_t {
 	int ocur;
 	int flags;
 	int addrmod;
+	int col;
 	RPrintZoom *zoom;
 	RPrintNameCallback offname;
 } RPrint;
@@ -50,21 +52,28 @@ R_API void r_print_unset_flags(RPrint *p, int flags);
 R_API void r_print_addr(RPrint *p, ut64 addr);
 R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int base, int step);
 R_API void r_print_hexpairs(RPrint *p, ut64 addr, const ut8 *buf, int len);
+R_API void r_print_hexdiff(RPrint *p, ut64 aa, const ut8* a, ut64 ba, const ut8 *b, int len, int scndcol);
 R_API void r_print_bytes(RPrint *p, const ut8* buf, int len, const char *fmt);
+R_API void r_print_fill(RPrint *p, const ut8 *arr, int size);
 R_API void r_print_byte(RPrint *p, const char *fmt, int idx, ut8 ch);
 R_API void r_print_c(RPrint *p, const ut8 *str, int len);
 R_API void r_print_raw(RPrint *p, const ut8* buf, int len);
 R_API void r_print_cursor(RPrint *p, int cur, int set);
+R_API void r_print_cursor_range(RPrint *p, int cur, int to, int set);
 R_API void r_print_set_cursor(RPrint *p, int curset, int ocursor, int cursor);
-R_API void r_print_code(RPrint *p, ut64 addr, ut8 *buf, int len);
+R_API void r_print_code(RPrint *p, ut64 addr, ut8 *buf, int len, char lang);
 R_API void r_print_format(RPrint *p, ut64 seek, const ut8* buf, int len, const char *fmt);
 // XXX . change wide, zeroend, urlencode for option flags
 R_API int r_print_string(RPrint *p, ut64 seek, const ut8 *str, int len, int wide, int zeroend, int urlencode);
-R_API int r_print_date_dos(struct r_print_t *p, ut8 *buf, int len);
-R_API int r_print_date_w32(struct r_print_t *p, const ut8 *buf, int len);
-R_API int r_print_date_unix(struct r_print_t *p, const ut8 *buf, int len);
+R_API int r_print_date_dos(RPrint *p, ut8 *buf, int len);
+R_API int r_print_date_w32(RPrint *p, const ut8 *buf, int len);
+R_API int r_print_date_unix(RPrint *p, const ut8 *buf, int len);
 R_API void r_print_zoom(RPrint *p, void *user, RPrintZoomCallback cb, ut64 from, ut64 to, int len, int maxlen);
 R_API void r_print_progressbar(RPrint *pr, int pc, int _cols);
+
+// WIP
+R_API int r_print_unpack7bit(const char *src, char *dest);
+R_API int r_print_pack7bit(const char *src, char *dest);
 #endif
 
 #endif

@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2012 pancake<nopcode.org> */
 
 #include "r_core.h"
 
@@ -19,7 +19,7 @@ static int __lib_cmd_cb(struct r_lib_plugin_t *pl, void *user, void *data) {
 	struct r_cmd_plugin_t *hand = (struct r_cmd_plugin_t *)data;
 	struct r_core_t *core = (struct r_core_t *)user;
 	//printf(" * Added CMD handler\n");
-	r_cmd_plugin_add (core->cmd, hand);
+	r_cmd_plugin_add (core->rcmd, hand);
 	return R_TRUE;
 }
 

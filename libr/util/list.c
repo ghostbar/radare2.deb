@@ -1,6 +1,44 @@
-/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2012 pancake<nopcode.org> */
+// TODO: RRef - reference counting
 
+#include <stdio.h>
+
+#define _R_LIST_C_
 #include "r_util.h"
+
+inline RListIter *r_list_iter_new () {
+	return malloc (sizeof (RListIter));
+}
+
+void r_list_iter_free (RListIter *list) {
+	/* do nothing? */
+}
+
+RListIter *r_list_iter_get_next(RListIter *list) {
+	return list->n;
+}
+void *r_list_iter_get_data(RListIter *list) {
+	return list->data;
+}
+
+RListIter *r_list_append(RList *list, void *data);
+RListIter *r_list_iterator (RList *list) {
+	return list? list->head: NULL;
+}
+
+RListIter *r_list_push (RList *list, void *item) {
+	return r_list_append (list, item);
+}
+
+void *r_list_get (RList *list) {
+	printf ("XXX: dynamic r_list_get is broken, use _get_next\n");
+	return NULL;
+}
+
+RListIter *r_list_get_next (RListIter *list) {
+	return list->n;
+}
+
 
 R_API void r_list_init(RList *list) {
 	list->head = NULL;
@@ -122,7 +160,6 @@ R_API void r_list_destroy (RList *list) {
 
 R_API void r_list_free (RList *list) {
 	if (list) {
-		list->free = NULL;
 		r_list_destroy (list);
 		free (list);
 	}

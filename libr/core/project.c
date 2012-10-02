@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2010-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2010-2012 pancake<nopcode.org> */
 
 #include <r_types.h>
 #include <r_list.h>
@@ -18,7 +18,6 @@ static char *r_core_project_file(const char *file) {
 	return strdup (file);
 }
 
-//TODO: Don't try mkdir rdb if mdkir .radare2 fails. (Maybe R_TRUFAE??)
 static int r_core_project_init() {
 	int ret;
 	char *str = r_str_home (".radare2");
@@ -99,7 +98,7 @@ R_API int r_core_project_save(RCore *core, const char *file) {
 		r_io_section_list (core->io, core->offset, 1);
 		r_cons_flush ();
 		r_str_write (fd, "# meta\n");
-		r_meta_list (core->anal->meta, R_META_TYPE_ANY);
+		r_meta_list (core->anal->meta, R_META_TYPE_ANY, 1);
 		r_cons_flush ();
 		r_core_cmd (core, "ar*", 0);
 		r_cons_flush ();

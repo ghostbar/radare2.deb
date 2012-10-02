@@ -27,7 +27,7 @@ R_API RFlag * r_flag_free(RFlag *f) {
 		RList *list = r_hashtable64_lookup (f->ht_name, item->namehash);
 		r_list_free (list);
 		list = r_hashtable64_lookup (f->ht_off, item->offset);
-		r_list_free (list);
+		// XXX: segfault sometimes wtf -- r_list_free (list);
 	}
 	r_hashtable64_free (f->ht_off);
 	r_hashtable64_free (f->ht_name);
@@ -118,6 +118,7 @@ R_API int r_flag_set(RFlag *f, const char *name, ut64 off, ut32 size, int dup) {
 			/* remove old entry */
 			list2 = r_hashtable64_lookup (f->ht_off, item->offset);
 			if (list2)
+			/* No _safe loop necessary because we break immediately after the delete. */
 			r_list_foreach (list2, iter2, item2) {
 				if (item->namehash != item2->namehash)
 					continue;
@@ -204,9 +205,9 @@ R_API int r_flag_rename(RFlag *f, RFlagItem *item, const char *name) {
 }
 
 R_API int r_flag_unset_i(RFlag *f, ut64 off, RFlagItem *p) {
-	RFlagItem *item = r_flag_get_i (f, off);
-	eprintf ("TODO: r_flag_unset_i\n");
-	if (item) {
+	RFlagItem *flag = r_flag_get_i (f, off);
+	if (flag) {
+		r_flag_unset (f, flag->name, NULL); //, flag);
 		return R_TRUE;
 	}
 	return R_FALSE;
@@ -232,6 +233,7 @@ R_API int r_flag_unset_glob(RFlag *f, const char *glob) {
 static void unflag(RFlag *f, ut64 namehash) {
 	RFlagItem *item;
 	RListIter *iter;
+	/* No _safe loop necessary because we return immediately after the delete. */
 	r_list_foreach (f->flags, iter, item) {
 		if (item->namehash == namehash) {
 			r_list_delete (f->flags, iter);
@@ -256,6 +258,7 @@ R_API int r_flag_unset(RFlag *f, const char *name, RFlagItem *p) {
 		list2 = r_hashtable64_lookup (f->ht_off, off);
 		if (list2) {
 			/* delete flag by name */
+			/* No _safe loop necessary because we break immediately after the delete. */
 			r_list_foreach (list2, iter2, item2) {
 				if (hash == item2->namehash) {
 					r_list_delete (list2, iter2);

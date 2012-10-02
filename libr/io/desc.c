@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2012 pancake<nopcode.org> */
 
 #include <r_io.h>
 // TODO: to be deprecated.. this is slow and boring
@@ -23,16 +23,23 @@ R_API RIODesc *r_io_desc_new(RIOPlugin *plugin, int fd, const char *name, int fl
 	}
 	desc->plugin = plugin;
 	desc->flags = flags;
-	desc->fd = (fd == -1)? ((int) ((size_t) desc) & 0xffffff): fd;
+	if (fd == -1) {
+		ut8 *p = (ut8 *)&(desc->fd);
+		desc->fd = ((int) ((size_t) desc) & 0xffffff);
+		desc->fd = p[0]^p[1]^p[2]^p[3];
+	} else desc->fd = fd;
 	desc->data = data;
 	return desc;
 }
 
 R_API void r_io_desc_free(RIODesc *desc) {
+	if (!desc) return;
 	if (desc->plugin && desc->plugin->close)
 		desc->plugin->close (desc);
-	free (desc->name);
-	free (desc);
+	if (desc->name) {
+		free (desc->name);
+		desc->name = NULL;
+	}
 }
 
 R_API void r_io_desc_add(RIO *io, RIODesc *desc) {
@@ -42,6 +49,7 @@ R_API void r_io_desc_add(RIO *io, RIODesc *desc) {
 R_API int r_io_desc_del(struct r_io_t *io, int fd) {
 	RListIter *iter;
 	RIODesc *d;
+	/* No _safe loop necessary because we return immediately after the delete. */
 	r_list_foreach (io->desc, iter, d) {
 		if (d->fd == fd) {
 			r_list_delete (io->desc, iter);

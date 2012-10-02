@@ -2,7 +2,7 @@ include ../config.mk
 
 NAME=r_socket
 #DEPS=r_util
-OBJ=socket.o proc.o http.o
+OBJ=socket.o proc.o http.o http_server.o
 ifeq (${HAVE_LIB_SSL},1)
 CFLAGS+=${SSL_CFLAGS}
 LDFLAGS+=${SSL_LDFLAGS}
@@ -16,9 +16,15 @@ endif
 ifeq (${OSTYPE},solaris)
 LDFLAGS+=-lsocket
 endif
+ifeq (${OSTYPE},qnx)
+LDFLAGS+=-lsocket
+endif
 # windows
 ifeq (${OSTYPE},windows)
 LDFLAGS=-lwsock32
 endif
 
 include ../rules.mk
+
+test:
+	gcc -DMAIN -g -ggdb *.c -I ../include/ `pkg-config openssl --libs` -lr_util

@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2010-2011 pancake<@nopcode.org> */
+/* radare - LGPL - Copyright 2010-2012 pancake<@nopcode.org> */
 
 #include <r_egg.h>
 
@@ -96,7 +96,7 @@ static char *find_include(const char *prefix, const char *file) {
 	char *pfx, *ret, *env = r_sys_getenv (R_EGG_INCDIR_ENV);
 	//eprintf ("find_include (%s,%s)\n", prefix, file);
 	if (!prefix) prefix = "";
-	else if (*prefix=='$') {
+	if (*prefix=='$') {
 		char *out = r_sys_getenv (prefix+1);
 		pfx = out? out: strdup ("");
 	} else {
@@ -109,14 +109,13 @@ static char *find_include(const char *prefix, const char *file) {
 	//	eprintf ("MUST FIND IN PATH (%s)\n", env);
 		str = env;
 		while (str) {
-			if (ptr) {
+			if (ptr)
 				*ptr = 0;
-			}
 			ret = r_str_concatf (NULL, "%s/%s", pfx, file);
 			{
 				char *filepath = r_str_concatf (NULL, "%s/%s/%s", str, pfx, file);
 				// eprintf ("try (%s)\n", filepath);
-				if (r_file_exist (filepath)) {
+				if (r_file_exists (filepath)) {
 					free (env);
 					free (pfx);
 					return filepath;
@@ -196,8 +195,8 @@ static char *get_end_frame_label(REgg *egg) {
 
 static void rcc_pusharg(REgg *egg, char *str) {
 	REggEmit *e = egg->emit;
-	char buf[64], *p;
-	p = r_egg_mkvar (egg, buf, str, 0);
+	char buf[64], *p = r_egg_mkvar (egg, buf, str, 0);
+	if (!p) return;
 	// TODO: free (ctxpush[context]);
 	ctxpush[context] = strdup (p); // INDEX IT WITH NARGS OR CONTEXT?!?
 	nargs++;

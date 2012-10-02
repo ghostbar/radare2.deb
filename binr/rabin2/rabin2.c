@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2011 nibble<.ds@gmail.com> */
+/* radare - LGPL - Copyright 2009-2012 - nibble, pancake */
 
 /* TODO:
  * Use -v to show version information.. not -V .. like the rest of tools
@@ -8,7 +8,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <getopt.h>
+#include <getopt.c>
 
 #include <r_core.h>
 
@@ -30,6 +30,8 @@
 #define ACTION_LISTARCHS 0x04000
 #define ACTION_CREATE    0x08000
 #define ACTION_CLASSES   0x10000
+#define ACTION_DWARF     0x20000
+#define ACTION_SIZE      0x40000
 
 static struct r_lib_t *l;
 static struct r_bin_t *bin = NULL;
@@ -46,11 +48,12 @@ static char *name = NULL;
 static int rabin_show_help() {
 	printf ("rabin2 [options] [file]\n"
 		" -A              list archs\n"
-		" -a [arch]       set arch (x86, arm, .. accepts underscore for bits x86_32)\n"
+		" -a [arch]       set arch (x86, arm, .. or <arch>_<bits>)\n"
 		" -b [bits]       set bits (32, 64 ...)\n"
 		" -B [addr]       override baddr\n"
 		" -c [fmt:C:D]    create [elf,mach0,pe] with Code and Data hexpairs (see -a)\n"
 		" -C              list classes\n"
+		" -d              show debug/dwarf information\n"
 		" -p [patchfile]  patch file (see man rabin2)\n"
 		" -e              entrypoint\n"
 		" -f [str]        select sub-bin named str\n"
@@ -58,7 +61,6 @@ static int rabin_show_help() {
 		" -s              symbols (exports)\n"
 		" -S              sections\n"
 		" -M              main (show address of main symbol)\n"
-		" -z              strings\n"
 		" -I              binary info\n"
 		" -H              header fields\n"
 		" -l              linked libraries\n"
@@ -72,6 +74,8 @@ static int rabin_show_help() {
 		" -@ [addr]       show section, symbol or import at addr\n"
 		" -n [str]        show section, symbol or import named str\n"
 		" -x              extract bins contained in file\n"
+		" -Z              size of binary\n"
+		" -z              strings\n"
 		" -V              show version information\n"
 		" -h              this help\n");
 	return 1;
@@ -85,42 +89,49 @@ static int rabin_extract(int all) {
 	if (all) {
 		for (i=0; i<bin->narch; i++) {
 			r_bin_select_idx (bin, i);
-			if (bin->curarch.info == NULL) {
+			if (bin->cur.o->info == NULL) {
 				eprintf ("No extract info found.\n");
 			} else {
-				path = strdup (bin->curarch.file);
+				path = strdup (bin->cur.file);
 				if ((ptr = strrchr (path, '/'))) {
 					*ptr = '\0';
-					ptr = ptr+1;
-				}
-				else ptr = bin->curarch.file;
-				snprintf (outpath, sizeof (outpath), "%s/%s", output, path);
+					ptr++;
+				} else ptr = bin->cur.file;
+/*
+				if (output)
+					snprintf (outpath, sizeof (outpath), "%s/%s", output, path);
+				else snprintf (outpath, sizeof (outpath), "./%s", path);
+*/
+				snprintf (outpath, sizeof (outpath), "%s.fat", ptr);
 				if (!r_sys_rmkdir (outpath)) {
 					eprintf ("Error creating dir structure\n");
 					return R_FALSE;
 				}
 				snprintf (outfile, sizeof (outfile), "%s/%s.%s_%i",
-						outpath, ptr, bin->curarch.info->arch,
-						bin->curarch.info->bits);
-				if (!r_file_dump (outfile, bin->curarch.buf->buf, bin->curarch.size)) {
+						outpath, ptr, bin->cur.o->info->arch,
+						bin->cur.o->info->bits);
+				snprintf (outfile, sizeof (outfile), "%s/%s.%s_%i",
+						outpath, ptr, bin->cur.o->info->arch,
+						bin->cur.o->info->bits);
+				if (!r_file_dump (outfile, bin->cur.buf->buf, bin->cur.size)) {
 					eprintf ("Error extracting %s\n", outfile);
 					return R_FALSE;
-				} else printf ("%s created (%i)\n", outfile, bin->curarch.size);
+				} else printf ("%s created (%i)\n", outfile, bin->cur.size);
 			}
 		}
 	} else { /* XXX: Use 'output' for filename? */
-		if (bin->curarch.info == NULL) {
+		if (bin->cur.o->info == NULL) {
 			eprintf ("No extract info found.\n");
 		} else {
-			if ((ptr = strrchr (bin->curarch.file, '/')))
-				ptr = ptr+1;
-			else ptr = bin->curarch.file;
+			if ((ptr = strrchr (bin->cur.file, '/')))
+				ptr++;
+			else ptr = bin->cur.file;
 			snprintf (outfile, sizeof (outfile), "%s.%s_%i", ptr,
-					bin->curarch.info->arch, bin->curarch.info->bits);
-			if (!r_file_dump (outfile, bin->curarch.buf->buf, bin->curarch.size)) {
+					bin->cur.o->info->arch, bin->cur.o->info->bits);
+			if (!r_file_dump (outfile, bin->cur.buf->buf, bin->cur.size)) {
 				eprintf ("Error extracting %s\n", outfile);
 				return R_FALSE;
-			} else printf ("%s created (%i)\n", outfile, bin->curarch.size);
+			} else printf ("%s created (%i)\n", outfile, bin->cur.size);
 		}
 	}
 	return R_TRUE;
@@ -146,7 +157,7 @@ static int rabin_dump_symbols(int len) {
 
 		if (!(buf = malloc (len)) || !(ret = malloc (len*2+1)))
 			return R_FALSE;
-		r_buf_read_at (bin->curarch.buf, symbol->offset, buf, len);
+		r_buf_read_at (bin->cur.buf, symbol->offset, buf, len);
 		r_hex_bin2str (buf, len, ret);
 		printf ("%s %s\n", symbol->name, ret);
 		free (buf);
@@ -171,7 +182,7 @@ static int rabin_dump_sections(char *scnname) {
 			if (!(buf = malloc (section->size)) ||
 					!(ret = malloc (section->size*2+1)))
 				return R_FALSE;
-			r_buf_read_at (bin->curarch.buf, section->offset, buf, section->size);
+			r_buf_read_at (bin->cur.buf, section->offset, buf, section->size);
 			if (output) {
 				r_file_dump (output, buf, section->size);
 			} else {
@@ -203,7 +214,7 @@ static int rabin_do_operation(const char *op) {
 
 	if ((ptr = strchr (arg, '/'))) {
 		ptr[0] = '\0';
-		ptr = ptr + 1;
+		ptr++;
 		if ((ptr2 = strchr (ptr, '/'))) {
 			ptr2[0] = '\0';
 			ptr2++;
@@ -244,7 +255,6 @@ static int rabin_do_operation(const char *op) {
 	}
 
 	free (arg);
-
 	return R_TRUE;
 }
 
@@ -303,97 +313,56 @@ int main(int argc, char **argv) {
 		r_lib_opendir (l, LIBDIR"/radare2/");
 	}
 
-	while ((c = getopt (argc, argv, "Af:a:B:b:c:CMm:n:@:VisSzIHelRwO:o:p:rvLhx")) != -1) {
+	while ((c = getopt (argc, argv, "Af:a:B:b:c:CdMm:n:@:VisSIHelRwO:o:p:rvLhxzZ")) != -1) {
 		switch(c) {
-		case 'A':
-			action |= ACTION_LISTARCHS;
-			break;
-		case 'a':
-			if (optarg) arch = strdup (optarg);
-			break;
+		case 'A': action |= ACTION_LISTARCHS; break;
+		case 'a': if (optarg) arch = strdup (optarg); break;
 		case 'c':
+			if (!optarg) {
+				eprintf ("Missing argument for -c");
+				return 1;
+			}
 			action = ACTION_CREATE;
 			create = strdup (optarg);
 			break;
-		case 'C':
-			action |= ACTION_CLASSES;
-			break;
-		case 'f':
-			if (optarg) arch_name = strdup (optarg);
-			break;
-		case 'b':
-			bits = r_num_math (NULL, optarg);
-			break;
+		case 'C': action |= ACTION_CLASSES; break;
+		case 'f': if (optarg) arch_name = strdup (optarg); break;
+		case 'b': bits = r_num_math (NULL, optarg); break;
 		case 'm':
 			at = r_num_math (NULL, optarg);
 			action |= ACTION_SRCLINE;
 			break;
-		case 'i':
-			action |= ACTION_IMPORTS;
-			break;
-		case 's':
-			action |= ACTION_SYMBOLS;
-			break;
-		case 'S':
-			action |= ACTION_SECTIONS;
-			break;
-		case 'z':
-			action |= ACTION_STRINGS;
-			break;
-		case 'I':
-			action |= ACTION_INFO;
-			break;
-		case 'H':
-			action |= ACTION_FIELDS;
-			break;
-		case 'e':
-			action |= ACTION_ENTRIES;
-			break;
-		case 'M':
-			action |= ACTION_MAIN;
-			break;
-		case 'l':
-			action |= ACTION_LIBS;
-			break;
-		case 'R':
-			action |= ACTION_RELOCS;
-			break;
-		case 'x':
-			action |= ACTION_EXTRACT;
-			break;
-		case 'w':
-			rw = R_TRUE;
-			break;
+		case 'i': action |= ACTION_IMPORTS; break;
+		case 's': action |= ACTION_SYMBOLS; break;
+		case 'S': action |= ACTION_SECTIONS; break;
+		case 'z': action |= ACTION_STRINGS; break;
+		case 'Z': action |= ACTION_SIZE; break;
+		case 'I': action |= ACTION_INFO; break;
+		case 'H': action |= ACTION_FIELDS; break;
+		case 'd': action |= ACTION_DWARF; break;
+		case 'e': action |= ACTION_ENTRIES; break;
+		case 'M': action |= ACTION_MAIN; break;
+		case 'l': action |= ACTION_LIBS; break;
+		case 'R': action |= ACTION_RELOCS; break;
+		case 'x': action |= ACTION_EXTRACT; break;
+		case 'w': rw = R_TRUE; break;
 		case 'O':
 			op = optarg;
 			action |= ACTION_OPERATION;
-			if (optind==argc)
-				return rabin_do_operation (op);
+			if (optind==argc) {
+				eprintf ("Missing filename\n");
+				return 1;
+			}
+			//	return rabin_do_operation (op);
 			break;
-		case 'o':
-			output = optarg;
-			break;
-		case 'r':
-			rad = R_TRUE;
-			break;
-		case 'v':
-			va = R_TRUE;
-			break;
-		case 'L':
-			r_bin_list (bin);
-			return 1;
-		case 'B':
-			gbaddr = r_num_math (NULL, optarg);
-			break;
-		case '@':
-			at = r_num_math (NULL, optarg);
-			break;
-		case 'n':
-			name = optarg;
-			break;
-		case 'V':
-			printf ("rabin2 v"R2_VERSION"\n");
-			return 0;
+		case 'o': output = optarg; break;
+		case 'r': rad = R_TRUE; break;
+		case 'v': va = R_TRUE; break;
+		case 'L': r_bin_list (bin); return 1;
+		case 'B': gbaddr = r_num_math (NULL, optarg); break;
+		case '@': at = r_num_math (NULL, optarg); break;
+		case 'n': name = optarg; break;
+		case 'V': printf ("rabin2 v"R2_VERSION"\n"); return 0;
 		case 'h':
 		default:
 			action |= ACTION_HELP;
@@ -401,7 +370,7 @@ int main(int argc, char **argv) {
 	}
 
 	file = argv[optind];
-	if (action == ACTION_HELP || action == ACTION_UNK || file == NULL)
+	if (action & ACTION_HELP || action == ACTION_UNK || file == NULL)
 		return rabin_show_help ();
 
 	if (arch) {
@@ -469,7 +438,7 @@ int main(int argc, char **argv) {
 	}
 
 	if (gbaddr != 0LL)
-		bin->curarch.baddr = gbaddr;
+		bin->cur.o->baddr = gbaddr;
 
 	RCore core;
 	core.bin = bin;
@@ -501,6 +470,10 @@ int main(int argc, char **argv) {
 		r_core_bin_info (&core, R_CORE_BIN_ACC_LIBS, rad, va, NULL, 0);
 	if (action&ACTION_RELOCS)
 		r_core_bin_info (&core, R_CORE_BIN_ACC_RELOCS, rad, va, NULL, 0);
+	if (action&ACTION_DWARF)
+		r_core_bin_info (&core, R_CORE_BIN_ACC_DWARF, rad, va, NULL, 0);
+	if (action&ACTION_SIZE)
+		r_core_bin_info (&core, R_CORE_BIN_ACC_SIZE, rad, va, NULL, 0);
 	if (action&ACTION_SRCLINE)
 		rabin_show_srcline (at);
 	if (action&ACTION_EXTRACT)

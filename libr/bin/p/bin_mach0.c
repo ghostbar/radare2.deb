@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2011 pancake<@nopcode.org> */
+/* radare - LGPL - Copyright 2009-2012 - pancake */
 
 #include <r_types.h>
 #include <r_util.h>
@@ -31,8 +31,7 @@ static RList* entries(RBinArch *arch) {
 	ret->free = free;
 	if (!(entry = MACH0_(r_bin_mach0_get_entrypoint) (arch->bin_obj)))
 		return ret;
-	if ((ptr = R_NEW (RBinAddr))) {
-		memset (ptr, '\0', sizeof (RBinAddr));
+	if ((ptr = R_NEW0 (RBinAddr))) {
 		ptr->offset = entry->offset;
 		ptr->rva = entry->addr;
 		r_list_append (ret, ptr);
@@ -86,7 +85,7 @@ static RList* symbols(RBinArch *arch) {
 		strncpy (ptr->bind, "NONE", R_BIN_SIZEOF_STRINGS);
 		strncpy (ptr->type, "FUNC", R_BIN_SIZEOF_STRINGS); //XXX Get the right type
 		if (symbols[i].type == R_BIN_MACH0_SYMBOL_TYPE_LOCAL)
-			strncat (ptr->type, "_LOCAL", R_BIN_SIZEOF_STRINGS);
+			strncat (ptr->type, "_LOCAL", sizeof (ptr->type)-strlen (ptr->type)-1);
 		ptr->rva = symbols[i].addr;
 		ptr->offset = symbols[i].offset;
 		ptr->size = symbols[i].size;
@@ -146,11 +145,9 @@ static RList* libs(RBinArch *arch) {
 
 static RBinInfo* info(RBinArch *arch) {
 	char *str;
-	RBinInfo *ret = NULL;
+	RBinInfo *ret = R_NEW0 (RBinInfo);
+	if (!ret) return NULL;
 
-	if ((ret = R_NEW (RBinInfo)) == NULL)
-		return NULL;
-	memset (ret, '\0', sizeof (RBinInfo));
 	strncpy (ret->file, arch->file, R_BIN_SIZEOF_STRINGS);
 	strncpy (ret->rpath, "NONE", R_BIN_SIZEOF_STRINGS);
 	if ((str = MACH0_(r_bin_mach0_get_class) (arch->bin_obj))) {
@@ -158,7 +155,7 @@ static RBinInfo* info(RBinArch *arch) {
 		free (str);
 	}
 	strncpy (ret->rclass, "mach0", R_BIN_SIZEOF_STRINGS);
-	/* TODO get os*/
+	/* TODO get os */
 	strncpy (ret->os, "darwin", R_BIN_SIZEOF_STRINGS);
 	strncpy (ret->subsystem, "darwin", R_BIN_SIZEOF_STRINGS);
 	if ((str = MACH0_(r_bin_mach0_get_cputype) (arch->bin_obj))) {
@@ -183,9 +180,11 @@ static RBinInfo* info(RBinArch *arch) {
 
 #if !R_BIN_MACH064
 static int check(RBinArch *arch) {
-	if (!memcmp (arch->buf->buf, "\xce\xfa\xed\xfe", 4) ||
-		!memcmp (arch->buf->buf, "\xfe\xed\xfa\xce", 4))
-		return R_TRUE;
+	if (arch && arch->buf && arch->buf->buf) {
+		if (!memcmp (arch->buf->buf, "\xce\xfa\xed\xfe", 4) ||
+			!memcmp (arch->buf->buf, "\xfe\xed\xfa\xce", 4))
+			return R_TRUE;
+	}
 	return R_FALSE;
 }
 
@@ -206,9 +205,9 @@ static RBuffer* create(RBin* bin, const ut8 *code, int codelen, const ut8 *data,
 	ut32 p_datafsz = 0, p_datava = 0, p_datasz = 0, p_datapa = 0;
 	ut32 p_cmdsize = 0, p_entry = 0, p_tmp = 0;
 	ut32 baddr = 0x1000;
-	int is_arm = !strcmp (bin->curarch.info->arch, "arm");
+	int is_arm = !strcmp (bin->cur.o->info->arch, "arm");
 	RBuffer *buf = r_buf_new ();
-	if (bin->curarch.info->bits == 64) {
+	if (bin->cur.o->info->bits == 64) {
 		eprintf ("TODO: Please use mach064 instead of mach0\n");
 		return 0;
 	}
@@ -363,13 +362,29 @@ static RBinAddr* binsym(RBinArch *arch, int sym) {
 	switch (sym) {
 	case R_BIN_SYM_MAIN:
 		addr = MACH0_(r_bin_mach0_get_main) (arch->bin_obj);
-		if (!addr || !(ret = R_NEW (RBinAddr)))
+		if (!addr || !(ret = R_NEW0 (RBinAddr)))
 			return NULL;
-		memset (ret, '\0', sizeof (RBinAddr));
 		ret->offset = ret->rva = addr;
 		break;
 	}
 	return ret;
+}
+
+static int size(RBinArch *arch) {
+	ut64 off = 0;
+	ut64 len = 0;
+	if (!arch->o->sections) {
+		RListIter *iter;
+		RBinSection *section;
+		arch->o->sections = sections (arch);
+		r_list_foreach (arch->o->sections, iter, section) {
+			if (section->offset > off) {
+				off = section->offset;
+				len = section->size;
+			}
+		}
+	}
+	return off+len;
 }
 
 struct r_bin_plugin_t r_bin_plugin_mach0 = {
@@ -387,6 +402,7 @@ struct r_bin_plugin_t r_bin_plugin_mach0 = {
 	.symbols = &symbols,
 	.imports = &imports,
 	.strings = NULL,
+	.size = &size,
 	.info = &info,
 	.fields = NULL,
 	.libs = &libs,

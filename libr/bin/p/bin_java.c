@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2011 */
+/* radare - LGPL - Copyright 2009-2012 */
 /* authors: pancake, nibble */
 
 #include <r_types.h>
@@ -134,6 +134,7 @@ static RBinInfo* info(RBinArch *arch) {
 static int check(RBinArch *arch) {
 	int off, ret = R_FALSE;
 
+	if (arch && arch->buf && arch->buf->buf)
 	if (!memcmp (arch->buf->buf, "\xca\xfe\xba\xbe", 4)) {
 		ret = R_TRUE;
 		memcpy (&off, arch->buf->buf+4*sizeof(int), sizeof(int));
@@ -169,6 +170,21 @@ static RBinAddr* binsym(RBinArch *arch, int sym) {
 		break;
 	}
 	return ret;
+}
+
+static RList* lines(RBinArch *arch) {
+	int i;
+	char *file = strdup (arch->file);
+	RList *list = r_list_new ();
+	RBinJavaObj *b = arch->bin_obj;
+	file = r_str_replace (file, ".class", ".java", 0);
+	for (i=0; i<b->lines.count; i++) {
+		RBinDwarfRow *row = R_NEW (RBinDwarfRow);
+		r_bin_dwarf_line_new (row, b->lines.addr[i], file, b->lines.line[i]);
+		r_list_append (list, row);
+	}
+	free (file);
+	return list;
 }
 
 static RList* sections(RBinArch *arch) {
@@ -227,6 +243,7 @@ struct r_bin_plugin_t r_bin_plugin_java = {
 	.libs = NULL,
 	.relocs = NULL,
 	.meta = NULL,
+	.lines = &lines,
 	.write = NULL,
 	.classes = classes,
 	.demangle_type = retdemangle

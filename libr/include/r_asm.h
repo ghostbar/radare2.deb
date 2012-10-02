@@ -1,10 +1,10 @@
-/* radare - LGPL - Copyright 2009-2011 nibble<.ds@gmail.com>, pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2012 nibble<.ds@gmail.com>, pancake<nopcode.org> */
 
 #ifndef _INCLUDE_R_ASM_H_
 #define _INCLUDE_R_ASM_H_
 
 #include <r_types.h>
-#include <r_bin.h> // only for binding, no hard dep required 
+#include <r_bin.h> // only for binding, no hard dep required
 #include <list.h>
 #include <r_util.h>
 #include <r_parse.h>
@@ -27,6 +27,8 @@
 #define R_ASM_ARCH_OBJD R_SYS_ARCH_OBJD
 #define R_ASM_ARCH_BF R_SYS_ARCH_BF
 #define R_ASM_ARCH_SH R_SYS_ARCH_SH
+#define R_ASM_ARCH_Z80 R_SYS_ARCH_Z80
+#define R_ASM_ARCH_ARC R_SYS_ARCH_ARC
 
 #define R_ASM_GET_OFFSET(x,y,z) \
 	(x && x->binb.bin && x->binb.get_offset)? \
@@ -48,7 +50,8 @@ enum {
 };
 
 typedef struct r_asm_op_t {
-	int  inst_len; // rename to size or length
+	int inst_len; // rename to size or length
+	int payload; // size of payload (opsize = (intstlen-payload))
 	// But this is pretty slow..so maybe we should add some accessors
 	ut8  buf[R_ASM_BUFSIZE];
 	char buf_asm[R_ASM_BUFSIZE];
@@ -57,8 +60,8 @@ typedef struct r_asm_op_t {
 } RAsmOp;
 
 typedef struct r_asm_code_t {
-	int  len;
-	ut8  *buf;
+	int len;
+	ut8 *buf;
 	char *buf_hex;
 	char *buf_asm;
 	RList *equs; // TODO: must be a hash
@@ -97,8 +100,8 @@ typedef struct r_asm_plugin_t {
 	int *bits;
 	int (*init)(void *user);
 	int (*fini)(void *user);
-	int (*disassemble)(RAsm *a, struct r_asm_op_t *op, const ut8 *buf, ut64 len);
-	int (*assemble)(RAsm *a, struct r_asm_op_t *op, const char *buf);
+	int (*disassemble)(RAsm *a, RAsmOp *op, const ut8 *buf, ut64 len);
+	int (*assemble)(RAsm *a, RAsmOp *op, const char *buf);
 	RAsmModifyCallback modify;
 	int (*set_subarch)(RAsm *a, const char *buf);
 } RAsmPlugin;
@@ -117,25 +120,26 @@ R_API int r_asm_set_bits(RAsm *a, int bits);
 R_API int r_asm_set_big_endian(RAsm *a, int boolean);
 R_API int r_asm_set_syntax(RAsm *a, int syntax);
 R_API int r_asm_set_pc(RAsm *a, ut64 pc);
-R_API int r_asm_disassemble(RAsm *a, struct r_asm_op_t *op, const ut8 *buf, ut64 len);
-R_API int r_asm_assemble(RAsm *a, struct r_asm_op_t *op, const char *buf);
-R_API struct r_asm_code_t* r_asm_mdisassemble(RAsm *a, ut8 *buf, ut64 len);
+R_API int r_asm_disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, ut64 len);
+R_API int r_asm_assemble(RAsm *a, RAsmOp *op, const char *buf);
+R_API RAsmCode* r_asm_mdisassemble(RAsm *a, ut8 *buf, ut64 len);
 R_API RAsmCode* r_asm_mdisassemble_hexstr(RAsm *a, const char *hexstr);
-R_API struct r_asm_code_t* r_asm_massemble(RAsm *a, const char *buf);
-R_API struct r_asm_code_t* r_asm_assemble_file(RAsm *a, const char *file);
+R_API RAsmCode* r_asm_massemble(RAsm *a, const char *buf);
+R_API RAsmCode* r_asm_assemble_file(RAsm *a, const char *file);
 R_API int r_asm_filter_input(RAsm *a, const char *f);
 R_API int r_asm_filter_output(RAsm *a, const char *f);
 R_API char *r_asm_describe(RAsm *a, const char* str);
 
 /* code.c */
 R_API RAsmCode *r_asm_code_new();
-R_API void* r_asm_code_free(struct r_asm_code_t *acode);
+R_API void* r_asm_code_free(RAsmCode *acode);
 R_API int r_asm_code_set_equ (RAsmCode *code, const char *key, const char *value);
 R_API char *r_asm_code_equ_replace (RAsmCode *code, char *str);
 
 // accessors, to make bindings happy
 R_API char *r_asm_op_get_hex(RAsmOp *op);
 R_API char *r_asm_op_get_asm(RAsmOp *op);
+R_API int r_asm_op_get_size(RAsmOp *op);
 
 /* plugin pointers */
 extern RAsmPlugin r_asm_plugin_bf;
@@ -148,6 +152,7 @@ extern RAsmPlugin r_asm_plugin_x86_olly;
 extern RAsmPlugin r_asm_plugin_x86_nasm;
 extern RAsmPlugin r_asm_plugin_arm;
 extern RAsmPlugin r_asm_plugin_armthumb;
+extern RAsmPlugin r_asm_plugin_arm_winedbg;
 extern RAsmPlugin r_asm_plugin_csr;
 extern RAsmPlugin r_asm_plugin_m68k;
 extern RAsmPlugin r_asm_plugin_ppc;
@@ -157,6 +162,10 @@ extern RAsmPlugin r_asm_plugin_avr;
 extern RAsmPlugin r_asm_plugin_dalvik;
 extern RAsmPlugin r_asm_plugin_msil;
 extern RAsmPlugin r_asm_plugin_sh;
+extern RAsmPlugin r_asm_plugin_z80;
+extern RAsmPlugin r_asm_plugin_m68k;
+extern RAsmPlugin r_asm_plugin_arc;
+extern RAsmPlugin r_asm_plugin_dcpu16;
 #endif
 
 #endif

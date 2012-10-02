@@ -6,14 +6,14 @@ include $(LIBR)/../config-user.mk
 include $(LIBR)/../global.mk
 include $(LIBR)/../mk/${COMPILER}.mk
 
-CFLAGS+=-DUSE_RIO=${USE_RIO}
 CFLAGS+=${CFLAGS_APPEND}
+CFLAGS+=${CPPFLAGS}
 
 ifeq ($(WITHPIC),1)
-LDFLAGS+=$(subst r_,-lr_,$(DEPS))
 LDFLAGS+=$(subst r_,-L$(LIBR)/,$(DEPS))
-LDFLAGS+=$(subst r_,-lr_,$(BINDEPS))
+LDFLAGS+=$(subst r_,-lr_,$(DEPS))
 LDFLAGS+=$(subst r_,-L$(LIBR)/,$(BINDEPS))
+LDFLAGS+=$(subst r_,-lr_,$(BINDEPS))
 CFLAGS+=${PIC_CFLAGS}
 LDFLAGS+=${PIC_CFLAGS}
 else
@@ -21,7 +21,7 @@ ifneq ($(DEPS),)
 LDFLAGS+=$(shell echo ${DEPS} | sed -e 's:r_\([^ ]\+\):$(LIBR)/\1/libr_\1.${EXT_AR}:g')
 endif
 ifneq ($(BINDEPS),)
-LDLIBS+=$(shell echo "${BINDEPS} " | sed -e 's:r_\([^ ]\+\):$(LIBR)/\1/libr_\1.${EXT_AR}:g')
+LDLIBS+=$(shell echo "${BINDEPS} " | sed -e 's:r_\([^ ]*\):$(LIBR)/\1/libr_\1.${EXT_AR}:g')
 endif
 
 #link dependencies of individual r_ libs
@@ -88,6 +88,13 @@ EXT_SO=dll
 EXT_EXE=.exe
 TH_LIBS=
 endif
+ifeq (${OSTYPE},qnx)
+CFLAGS+=-D__UNIX__=1
+EXT_AR=a
+EXT_SO=so
+EXT_EXE=
+TH_LIBS=
+endif
 ifeq (${OSTYPE},gnulinux)
 CFLAGS+=-D__UNIX__=1
 EXT_AR=a
@@ -132,4 +139,7 @@ libname=-shared -o $1.${EXT_SO}
 else
 libname=-shared -o $1.${EXT_SO} ${LDFLAGS_SONAME}$1.${EXT_SO}.${LIBVERSION}
 endif
+endif
+
+# -- singleton
 endif

@@ -24,11 +24,6 @@
 #define R_BIN_MACH0_SYMBOL_TYPE_EXT 0
 #define R_BIN_MACH0_SYMBOL_TYPE_LOCAL 1
 
-#if __WINDOWS__
-typedef int int32_t;
-typedef short int16_t;
-#endif
-
 typedef int	cpu_type_t;
 typedef int	cpu_subtype_t;
 typedef int	vm_prot_t;
@@ -247,6 +242,14 @@ struct mach_header_64 {
 #define CPU_SUBTYPE_VAX8650	((cpu_subtype_t) 10)
 #define CPU_SUBTYPE_VAX8800	((cpu_subtype_t) 11)
 #define CPU_SUBTYPE_UVAXIII	((cpu_subtype_t) 12)
+
+/* ARM subtypes */
+#define CPU_SUBTYPE_ARM_ALL             ((cpu_subtype_t) 0)
+#define CPU_SUBTYPE_ARM_V4T             ((cpu_subtype_t) 5)
+#define CPU_SUBTYPE_ARM_V6              ((cpu_subtype_t) 6)
+#define CPU_SUBTYPE_ARM_V5TEJ           ((cpu_subtype_t) 7)
+#define CPU_SUBTYPE_ARM_XSCALE          ((cpu_subtype_t) 8)
+#define CPU_SUBTYPE_ARM_V7              ((cpu_subtype_t) 9)
 
 /*
  * 680x0 subtypes
@@ -1482,11 +1485,11 @@ struct nlist {
 #ifndef __LP64__
 		char *n_name;	/* for use when in-core */
 #endif
-		int32_t n_strx;	/* index into the string table */
+		st32 n_strx;	/* index into the string table */
 	} n_un;
 	ut8 n_type;		/* type flag, see below */
 	ut8 n_sect;		/* section number or NO_SECT */
-	int16_t n_desc;		/* see <mach-o/stab.h> */
+	st16 n_desc;		/* see <mach-o/stab.h> */
 	ut32 n_value;	/* value of this symbol (or stab offset) */
 };
 

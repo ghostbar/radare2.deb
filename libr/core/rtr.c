@@ -1,4 +1,4 @@
-/* radare - Copyright 2009-2011 pancake+nibble */
+/* radare - Copyright 2009-2012 pancake+nibble */
 
 #include "r_core.h"
 #include "r_socket.h"
@@ -6,6 +6,117 @@
 #define endian core->assembler->big_endian
 #define rtr_n core->rtr_n
 #define rtr_host core->rtr_host
+
+static RSocket *s = NULL;
+
+static void http_break (void *u) {
+	RCore *core = (RCore*)u;
+	const char *port = r_config_get (core->config, "http.port");
+	RSocket* s = r_socket_new (0);
+	eprintf ("Shutting down http server...\n");
+	r_socket_connect (s, "localhost", port, R_SOCKET_PROTO_TCP);
+	r_socket_free (s);
+	s = NULL;
+}
+
+#if 0
+SECURITY IMPLICATIONS
+- no ssl
+- no auth
+- commands can be executed by anyone
+- default is to listen on localhost
+- can access full filesystem
+- follow symlinks
+#endif
+
+R_API int r_core_rtr_http(RCore *core, int launch) {
+	RSocketHTTPRequest *rs;
+	int x = r_config_get_i (core->config, "scr.html");
+	int y = r_config_get_i (core->config, "scr.color");
+	int z = r_config_get_i (core->config, "asm.bytes");
+	int u = r_config_get_i (core->config, "scr.interactive");
+	int v = r_config_get_i (core->config, "asm.cmtright");
+	const char *port = r_config_get (core->config, "http.port");
+	s = r_socket_new (R_FALSE);
+	s->local = !r_config_get_i (core->config, "http.public");
+	if (!r_socket_listen (s, port, NULL)) {
+		eprintf ("Cannot listen on http.port\n");
+		return 1;
+	}
+	if (launch) {
+		char cmd[128];
+		const char *browser = r_config_get (core->config, "http.browser");
+		snprintf (cmd, sizeof (cmd), "%s http://localhost:%d/",
+			browser, atoi (port));
+		r_sys_cmd (cmd);
+	}
+	r_config_set (core->config, "asm.cmtright", "false");
+	r_config_set (core->config, "scr.html", "true");
+	r_config_set (core->config, "scr.color", "false");
+	r_config_set (core->config, "asm.bytes", "false");
+	r_config_set (core->config, "scr.interactive", "false");
+	eprintf ("Starting http server...\n");
+	eprintf ("http://localhost:%d/\n", atoi (port));
+	while (!r_cons_singleton ()->breaked) {
+		r_cons_break (http_break, core);
+		rs = r_socket_http_accept (s);
+		if (!rs) {
+			r_sys_usleep (200);
+			continue;
+		}
+		if (!strcmp (rs->method, "GET")) {
+			if (!memcmp (rs->path, "/cmd/", 5)) {
+				char *out, *cmd = rs->path+5;
+				r_str_unescape (cmd);
+				out = r_core_cmd_str_pipe (core, cmd);
+				if (out) {
+					r_str_unescape (out);
+					r_socket_http_response (rs, 200, out, 0);
+					free (out);
+				} else r_socket_http_response (rs, 200, "oops", 0);
+			} else {
+				const char *root = r_config_get (core->config, "http.root");
+				char path[1024];
+				// fix crosspath
+				if (rs->path [strlen (rs->path)-1] == '/')
+					rs->path = r_str_concat (rs->path, "index.html");
+				snprintf (path, sizeof (path), "%s/%s", root, rs->path);
+				if (r_file_exists (path)) {
+					int sz = 0;
+					char *f = r_file_slurp (path, &sz);
+					if (f) {
+						r_socket_http_response (rs, 200, f, sz);
+						free (f);
+					} else r_socket_http_response (rs, 403, "Permission denied", 0);
+				} else {
+					// TODO: directory listing?
+					r_socket_http_response (rs, 404, "File not found\n", 0);
+				}
+			}
+#if 0
+		} else 
+		if (!strcmp (rs->method, "POST")) {
+			char *buf = malloc (rs->data_length+ 50);
+			strcpy (buf, "<html><body><h2>XSS test</h2>\n");
+			r_str_unescape ((char *)rs->data);
+			strcat (buf, (char*)rs->data);
+			r_socket_http_response (rs, 200, buf, 0);
+			free (buf);
+#endif
+		} else {
+			r_socket_http_response (rs, 404, "Invalid protocol", 0);
+		}
+		r_socket_http_close (rs);
+	}
+	r_socket_free (s);
+	r_cons_break_end ();
+	r_config_set_i (core->config, "scr.html", x);
+	r_config_set_i (core->config, "scr.color", y);
+	r_config_set_i (core->config, "asm.bytes", z);
+	r_config_set_i (core->config, "scr.interactive", u);
+	r_config_set_i (core->config, "asm.cmtright", v);
+	return 0;
+}
 
 R_API void r_core_rtr_help(RCore *core) {
 	r_cons_printf (
@@ -15,7 +126,10 @@ R_API void r_core_rtr_help(RCore *core) {
 	" =! cmd             ; run command via r_io_system\n"
 	" =+ [proto://]host  ; add host (default=rap://, tcp://, udp://)\n"
 	" =-[fd]             ; remove all hosts or host 'fd'\n"
-	" ==[fd]             ; open remote session with host 'fd', 'q' to quit\n");
+	" ==[fd]             ; open remote session with host 'fd', 'q' to quit\n"
+	"http server:\n"
+	" =h                 ; listen for http connections\n"
+	" =H                 ; launch browser and listen for http\n");
 }
 
 R_API void r_core_rtr_pushout(RCore *core, const char *input) {
@@ -40,7 +154,7 @@ R_API void r_core_rtr_pushout(RCore *core, const char *input) {
 		eprintf ("Error: radare_cmd_str returned NULL\n");
 		return;
 	}
-	
+
 	switch (rtr_host[rtr_n].proto) {
 	case RTR_PROT_RAP:
 		eprintf ("Error: Cannot use '=<' to a rap connection.\n");
@@ -96,15 +210,13 @@ R_API void r_core_rtr_add(RCore *core, const char *_input) {
 		eprintf ("Error: Port is not specified\n");
 		return;
 	}
-	ptr[0] = '\0';
-	ptr = ptr+1;
+	*ptr++ = '\0';
 
 	if (!(file = strchr (ptr, '/'))) {
 		eprintf("Error: Missing '/'\n");
 		return;
 	}
-	file[0] = '\0';
-	file = file+1;
+	*file++ = 0;
 	port = ptr;
 
 	fd = r_socket_new (R_FALSE);
@@ -193,14 +305,15 @@ R_API void r_core_rtr_session(RCore *core, const char *input) {
 
 	if (input[0] >= '0' && input[0] <= '9') {
 		fd = r_num_math (core->num, input);
-		//for (rtr_n = 0; rtr_host[rtr_n].fd->fd != fd && rtr_n < RTR_MAX_HOSTS; rtr_n++);
+		for (rtr_n = 0; rtr_host[rtr_n].fd->fd != fd && rtr_n < RTR_MAX_HOSTS; rtr_n++);
 	}
 
 	for (;;) {
 		if (rtr_host[rtr_n].fd)
 			snprintf (prompt, sizeof (prompt),
 				"fd:%d> ", rtr_host[rtr_n].fd->fd);
-		r_line_singleton ()->prompt = prompt;
+		free (r_line_singleton ()->prompt);
+		r_line_singleton ()->prompt = strdup (prompt);
 		if ((r_cons_fgets (buf, sizeof (buf), 0, NULL))) {
 			if (*buf == 'q')
 				break;

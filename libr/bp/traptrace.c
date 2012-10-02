@@ -53,7 +53,7 @@ R_API ut64 r_bp_traptrace_next(RBreakpoint *bp, ut64 addr) {
 		if (addr>=trace->addr && addr<=trace->addr_end) {
 			delta = (int)(addr-trace->addr);
 			for (i=delta; i<trace->length; i++) {
-				if (BIT_CHK (trace->bits, i))
+				if (R_BIT_CHK (trace->bits, i))
 					return addr+i;
 			}
 		}
@@ -109,14 +109,14 @@ R_API int r_bp_traptrace_add(RBreakpoint *bp, ut64 from, ut64 to) {
 
 R_API int r_bp_traptrace_free_at(RBreakpoint *bp, ut64 from) {
 	int ret = R_FALSE;
-	RListIter *iter = r_list_iterator (bp->traces);
-	while (r_list_iter_next (iter)) {
-		RBreakpointTrace *trace = r_list_iter_get (iter);
+	RListIter *iter, *iter_tmp;
+	RBreakpointTrace *trace;
+	r_list_foreach_safe (bp->traces, iter, iter_tmp, trace) {
 		if (from>=trace->addr && from<=trace->addr_end) {
 			bp->iob.write_at (bp->iob.io, trace->addr,
 				trace->buffer, trace->length);
 			r_bp_traptrace_free (trace);
-			r_list_delete (bp->traces, r_list_iter_cur (iter));
+			r_list_delete (bp->traces, iter);
 			ret = R_TRUE;
 		}
 	}
@@ -130,7 +130,7 @@ R_API void r_bp_traptrace_list(RBreakpoint *bp) {
 	r_list_foreach (bp->traces, iter, trace) {
 		RBreakpointTrace *trace = r_list_iter_get (iter);
 		for (i=0; i<trace->bitlen; i++) {
-			if (BIT_CHK (trace->bits, i))
+			if (R_BIT_CHK (trace->bits, i))
 				eprintf ("  - 0x%08"PFMT64x"\n", trace->addr+(i<<4));
 		}
 	}
@@ -144,10 +144,10 @@ R_API int r_bp_traptrace_at(RBreakpoint *bp, ut64 from, int len) {
 	// TODO: do we really need len?
 		if (from>=trace->addr && from+len<=trace->addr_end) {
 			delta = (int) (from-trace->addr);
-			if (BIT_CHK (trace->bits, delta))
+			if (R_BIT_CHK (trace->bits, delta))
 			if (trace->traps[delta]==0x00)
 				return R_FALSE; // already traced..debugger should stop
-			BIT_SET (trace->bits, delta);
+			R_BIT_SET (trace->bits, delta);
 			return R_TRUE;
 		}
 	}

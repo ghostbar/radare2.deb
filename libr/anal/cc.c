@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2011 -- pancake@nopcode.org */
+/* radare - LGPL - Copyright 2011-2012 - pancake */
 
 // moved from core/cmd.c // the loop that does the funny trick ..
 #if 0
@@ -39,7 +39,7 @@ R_API void r_anal_cc_reset (RAnalCC *cc) {
 //XXX: may overflow. this is vulnerable. needs fix
 R_API char *r_anal_cc_to_string (RAnal *anal, RAnalCC* cc) {
 	RSyscallItem *si;
-	RAnalFcn *fcn;
+	RAnalFunction *fcn;
 	char str[1024], buf[64];
 	int i, eax = 0; // eax = arg0
 
@@ -185,7 +185,7 @@ typedef struct {
   - type of value (int, ptr, flt)
   - name of reg ("eax", ..)
   - index of arg (0, 1, 2)
-  - 
+  -
 
 RTL = push 3; push 2; push 1; call foo == foo(1,2,3)
 LTR = push 1; push 2; push 3; call foo == foo(1,2,3)
@@ -209,7 +209,7 @@ Calling conventions:
 x86: cdecl, fastcall, stdcall
   cdecl: push args in the stack (right-to-left order)
        - return value in eax
-        
+
   push eax
   push 123
   push byte[ebp+30]
@@ -287,7 +287,7 @@ arm:
   r0 : return value
 
 mips:
-  first 4 arguments as registers $a0-$a3 
+  first 4 arguments as registers $a0-$a3
   next args in stack.
   return value in $v0 and $v1
 

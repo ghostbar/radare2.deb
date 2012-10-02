@@ -32,6 +32,7 @@ typedef struct r_config_t {
 	int last_notfound;
 	int n_nodes;
 	void *user;
+	RNum *num;
 	PrintfCallback printf;
 	RList *nodes;
 	RHashTable *ht;
@@ -42,10 +43,10 @@ R_API RConfig *r_config_new(void *user);
 R_API int r_config_free(RConfig *cfg);
 R_API void r_config_lock(RConfig *cfg, int l);
 R_API int r_config_eval(RConfig *cfg, const char *str);
-R_API struct r_config_node_t *r_config_set_i(RConfig *cfg, const char *name, const ut64 i);
-R_API struct r_config_node_t *r_config_set_cb(RConfig *cfg, const char *name, const char *value, int (*callback)(void *user, void *data));
-R_API struct r_config_node_t *r_config_set_i_cb(RConfig *cfg, const char *name, int ivalue, int (*callback)(void *user, void *data));
-R_API struct r_config_node_t *r_config_set(RConfig *cfg, const char *name, const char *value);
+R_API RConfigNode *r_config_set_i(RConfig *cfg, const char *name, const ut64 i);
+R_API RConfigNode *r_config_set_cb(RConfig *cfg, const char *name, const char *value, int (*callback)(void *user, void *data));
+R_API RConfigNode *r_config_set_i_cb(RConfig *cfg, const char *name, int ivalue, int (*callback)(void *user, void *data));
+R_API RConfigNode *r_config_set(RConfig *cfg, const char *name, const char *value);
 R_API int r_config_rm(RConfig *cfg, const char *name);
 R_API ut64 r_config_get_i(RConfig *cfg, const char *name);
 R_API const char *r_config_get(RConfig *cfg, const char *name);
@@ -54,6 +55,7 @@ R_API void r_config_list(RConfig *cfg, const char *str, int rad);
 R_API RConfigNode *r_config_node_get(RConfig *cfg, const char *name);
 R_API RConfigNode *r_config_node_new(const char *name, const char *value);
 R_API int r_config_swap(RConfig *cfg, const char *name);
+R_API int r_config_readonly (RConfig *cfg, const char *key);
 #endif
 
 #endif

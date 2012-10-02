@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2011 pancake<nopcode.org> nibble <.ds@gmail.com> */
+/* radare - LGPL - Copyright 2008-2012 pancake<nopcode.org> nibble <.ds@gmail.com> */
 
 #include "r_io.h"
 
@@ -9,10 +9,12 @@ R_API void r_io_section_init(RIO *io) {
 	io->sections = r_list_new ();
 }
 
+#if 0
 static int cmpaddr (void *_a, void *_b) {
 	RIOSection *a = _a, *b = _b;
 	return (a->vaddr > b->vaddr);
 }
+#endif
 
 R_API RIOSection *r_io_section_get_name(RIO *io, const char *name) {
 	RListIter *iter;
@@ -27,7 +29,13 @@ R_API RIOSection *r_io_section_get_name(RIO *io, const char *name) {
 
 R_API void r_io_section_add(RIO *io, ut64 offset, ut64 vaddr, ut64 size, ut64 vsize, int rwx, const char *name) {
 	int update = 0;
-	RIOSection *s = r_io_section_get_name (io, name);
+	RIOSection *s;
+
+	if (size==0 || size>0xf00000) {
+		//eprintf ("Invalid size (0x%08"PFMT64x") for section at 0x%08"PFMT64x"\n", size, vaddr);
+		return;
+	}
+	s = r_io_section_get_name (io, name);
 	if (s == NULL) {
 		s = R_NEW (RIOSection);
 		s->id = io->next_section_id++;
@@ -52,7 +60,6 @@ R_API void r_io_section_add(RIO *io, ut64 offset, ut64 vaddr, ut64 size, ut64 vs
 R_API RIOSection *r_io_section_get_i(RIO *io, int idx) {
 	RListIter *iter;
 	RIOSection *s;
-
 	r_list_foreach (io->sections, iter, s) {
 		if (s->id == idx)
 			return s;
@@ -73,8 +80,8 @@ R_API void r_io_section_list(RIO *io, ut64 offset, int rad) {
 	if (io->va || io->debug)
 		offset = r_io_section_vaddr_to_offset (io, offset);
 	r_list_foreach (io->sections, iter, s) {
-		if (rad) io->printf ("S 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" %s %d\n",
-			s->offset, s->vaddr, s->size, s->vsize, s->name, s->rwx);
+		if (rad) io->printf ("S 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" %s %s\n",
+			s->offset, s->vaddr, s->size, s->vsize, s->name, r_str_rwx_i (s->rwx));
 		else io->printf ("[%.2d] %c 0x%08"PFMT64x" %s va=0x%08"PFMT64x" sz=0x%08"PFMT64x" vsz=%08"PFMT64x" %s\n",
 			s->id, (offset>=s->offset && offset<s->offset+s->size)?'*':'.',
 			s->offset, r_str_rwx_i (s->rwx), s->vaddr, s->size, s->vsize, s->name);
@@ -187,6 +194,8 @@ R_API ut64 r_io_section_vaddr_to_offset(RIO *io, ut64 vaddr) {
 
 	r_list_foreach (io->sections, iter, s) {
 		if (vaddr >= s->vaddr && vaddr < s->vaddr + s->vsize) {
+			if (s->vaddr == 0) // hack
+				return vaddr;
 	//		eprintf ("SG: %llx phys=%llx %s\n", vaddr, vaddr-s->vaddr+s->offset, s->name);
 			return (vaddr - s->vaddr + s->offset);
 		}
@@ -195,14 +204,16 @@ R_API ut64 r_io_section_vaddr_to_offset(RIO *io, ut64 vaddr) {
 }
 
 R_API ut64 r_io_section_offset_to_vaddr(RIO *io, ut64 offset) {
-	RListIter *iter;
 	RIOSection *s;
-
+	RListIter *iter;
 	r_list_foreach (io->sections, iter, s) {
-		if (offset >= s->offset && offset < s->offset + s->size)
+		if (offset >= s->offset && offset < s->offset + s->size) {
+			if (s->vaddr == 0) // hack
+				return offset;
 			return (s->vaddr + offset - s->offset);
+		}
 	}
-	return -1;
+	return UT64_MAX;
 }
 
 R_API ut64 r_io_section_next(RIO *io, ut64 o) {

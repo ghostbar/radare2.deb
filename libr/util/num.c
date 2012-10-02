@@ -1,6 +1,8 @@
-/* radare - LGPL - Copyright 2007-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2012 pancake<nopcode.org> */
 
 #include "r_util.h"
+#define R_NUM_USE_CALC 1
+
 
 #define __htonq(x) (\
         (((x) & 0xff00000000000000LL) >> 56)  | \
@@ -60,6 +62,7 @@ R_API RNum *r_num_new(RNumCallback cb, void *ptr) {
 /* old get_offset */
 R_API ut64 r_num_get(RNum *num, const char *str) {
 	int i, j;
+	ut32 s, a;
 	char lch, len;
 	ut64 ret = 0LL;
 
@@ -75,10 +78,16 @@ R_API ut64 r_num_get(RNum *num, const char *str) {
 	if (str[0]=='\'' && str[2]=='\'')
 		return (ut64)str[1];
 
+	len = strlen (str);
+	if (len>3 && str[4] == ':')
+		if (sscanf (str, "%04x", &s)==1)
+			if (sscanf (str+5, "%04x", &a)==1)
+				return (ut64) ((s<<16) | a);
+	if (sscanf (str, "0x%04x:0x%04x", &s, &a) == 2)
+		return (ut64) ((s<<16) |a);
 	if (str[0]=='0' && str[1]=='x') {
 		sscanf (str, "0x%"PFMT64x"", &ret);
 	} else {
-		len = strlen (str);
 		lch = str[len>0?len-1:0];
 		if (*str=='0' && lch != 'b' && lch != 'h')
 			lch = 'o';
@@ -96,9 +105,6 @@ R_API ut64 r_num_get(RNum *num, const char *str) {
 				else if (str[i]!='0') break;
 			}
 			break;
-		default:
-			sscanf (str, "%"PFMT64d"", &ret);
-			break;
 		case 'K': case 'k':
 			sscanf (str, "%"PFMT64d"", &ret);
 			ret *= 1024;
@@ -110,6 +116,9 @@ R_API ut64 r_num_get(RNum *num, const char *str) {
 		case 'G': case 'g':
 			sscanf (str, "%"PFMT64d"", &ret);
 			ret *= 1024*1024*1024;
+			break;
+		default:
+			sscanf (str, "%"PFMT64d"", &ret);
 			break;
 		}
 	}
@@ -133,6 +142,7 @@ R_API ut64 r_num_op(char op, ut64 a, ut64 b) {
 	return b;
 }
 
+#if !R_NUM_USE_CALC
 R_API static ut64 r_num_math_internal(RNum *num, char *s) {
 	ut64 ret = 0LL;
 	char *p = s;
@@ -152,11 +162,20 @@ R_API static ut64 r_num_math_internal(RNum *num, char *s) {
 			break;
 		}
 	}
-
 	return r_num_op (op, ret, r_num_get (num, p));
 }
+#endif
 
 R_API ut64 r_num_math(RNum *num, const char *str) {
+#if R_NUM_USE_CALC
+	ut64 ret;
+	const char *err = NULL;
+	if (!str) return 0LL;
+	ret = r_num_calc (num, str, &err);
+	if (err) eprintf ("r_num_calc error: (%s) in (%s)\n", err, str);
+	else if (num) num->value = ret;
+	return ret;
+#else
 	ut64 ret = 0LL;
 	char op = '+';
 	int len;
@@ -209,6 +228,7 @@ R_API ut64 r_num_math(RNum *num, const char *str) {
 		num->value = ret;
 	free (os);
 	return ret;
+#endif
 }
 
 R_API int r_num_is_float(struct r_num_t *num, const char *str) {

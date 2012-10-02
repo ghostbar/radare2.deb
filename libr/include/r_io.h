@@ -4,7 +4,6 @@
 #include <r_types.h>
 #include <r_util.h>
 #include <r_socket.h>
-#include <list.h>
 
 #define R_IO_READ  4
 #define R_IO_WRITE 2
@@ -68,10 +67,11 @@ typedef struct r_io_undo_t {
 	RList *w_list;
 	int w_init;
 	/* seek stuff */
-	ut64 seek[R_IO_UNDOS];
-	int fd[R_IO_UNDOS]; // XXX: Must be RIODesc*
 	int idx;
-	int limit;
+	int undos; /* available undos */
+	int redos; /* available redos */
+	ut64 seek[R_IO_UNDOS];
+	/*int fd[R_IO_UNDOS]; // XXX: Must be RIODesc* */
 } RIOUndo;
 
 typedef struct r_io_undo_w_t {
@@ -87,6 +87,7 @@ typedef struct r_io_t {
 	int enforce_rwx;
 	int enforce_seek;
 	int cached;
+	int bits;
 	int cached_read;
 	ut64 off;
 	int debug;
@@ -99,14 +100,15 @@ typedef struct r_io_t {
 	ut8 *write_mask_buf;
 	int write_mask_len;
 	struct r_io_plugin_t *plugin;
-	struct r_io_undo_t undo;
+	RIOUndo undo;
+	//RList *iolist;
 	struct list_head io_list;
 	RList *sections;
 	int next_section_id;
 	/* maps */
 	RList *maps; /*<RIOMap>*/
 	RList *desc;
-	struct list_head cache;
+	RList *cache;
 	//XXX: Need by rap
 	void *user;
 	int (*core_cmd_cb)(void *user, const char *str);
@@ -121,9 +123,9 @@ typedef struct r_io_plugin_t {
         char *name;
         char *desc;
         void *widget;
-	int (*listener)(RIODesc *io);
+		int (*listener)(RIODesc *io);
         int (*init)();
-	struct r_io_undo_t undo;
+		RIOUndo undo;
         struct debug_t *debug; // ???
         int (*system)(RIO *io, RIODesc *fd, const char *);
         RIODesc* (*open)(RIO *io, const char *, int rw, int mode);
@@ -133,12 +135,13 @@ typedef struct r_io_plugin_t {
         int (*close)(RIODesc *desc);
         int (*resize)(RIO *io, RIODesc *fd, ut64 size);
         int (*accept)(RIO *io, RIODesc *desc, int fd);
+        int (*create)(RIO *io, const char *file, int mode, int type);
         int (*plugin_open)(RIO *io, const char *);
         //int (*plugin_fd)(RIO *, int);
 } RIOPlugin;
 
 typedef struct r_io_list_t {
-	struct r_io_plugin_t *plugin;
+	RIOPlugin *plugin;
 	struct list_head list;
 } RIOList;
 
@@ -158,7 +161,7 @@ typedef struct r_io_bind_t {
 
 /* sections */
 typedef struct r_io_section_t {
-	char name[256];
+	char name[64];
 	ut64 offset;
 	ut64 vaddr;
 	ut64 size;
@@ -172,7 +175,6 @@ typedef struct r_io_cache_t {
 	ut64 to;
 	int size;
 	ut8 *data;
-	struct list_head list;
 } RIOCache;
 
 // XXX: HACK this must be io->desc_new() maybe?
@@ -203,15 +205,15 @@ R_API RIO *r_io_new();
 R_API RIO *r_io_free(RIO *io);
 R_API int r_io_plugin_init(RIO *io);
 R_API void r_io_raise (RIO *io, int fd);
-R_API int r_io_plugin_open(RIO *io, int fd, struct r_io_plugin_t *plugin);
-R_API int r_io_plugin_close(RIO *io, int fd, struct r_io_plugin_t *plugin);
+R_API int r_io_plugin_open(RIO *io, int fd, RIOPlugin *plugin);
+R_API int r_io_plugin_close(RIO *io, int fd, RIOPlugin *plugin);
 R_API int r_io_plugin_generate(RIO *io);
-R_API int r_io_plugin_add(RIO *io, struct r_io_plugin_t *plugin);
+R_API int r_io_plugin_add(RIO *io, RIOPlugin *plugin);
 R_API int r_io_plugin_list(RIO *io);
 R_API int r_io_is_listener(RIO *io);
 // TODO: _del ??
-R_API struct r_io_plugin_t *r_io_plugin_resolve(RIO *io, const char *filename);
-R_API struct r_io_plugin_t *r_io_plugin_resolve_fd(RIO *io, int fd);
+R_API RIOPlugin *r_io_plugin_resolve(RIO *io, const char *filename);
+R_API RIOPlugin *r_io_plugin_resolve_fd(RIO *io, int fd);
 
 /* io/io.c */
 R_API int r_io_set_write_mask(RIO *io, const ut8 *buf, int len);
@@ -230,26 +232,28 @@ R_API ut64 r_io_seek(RIO *io, ut64 offset, int whence);
 R_API int r_io_system(RIO *io,  const char *cmd);
 R_API int r_io_close(RIO *io, RIODesc *fd);
 R_API ut64 r_io_size(RIO *io); //, int fd);
-R_API int r_io_resize(struct r_io_t *io, ut64 newsize);
+R_API int r_io_resize(RIO *io, ut64 newsize);
 R_API int r_io_accept(RIO *io, int fd);
 R_API int r_io_shift(RIO *io, ut64 start, ut64 end, st64 move);
+R_API int r_io_create (RIO *io, const char *file, int mode, int type);
 
 /* io/cache.c */
 R_API int r_io_cache_invalidate(RIO *io, ut64 from, ut64 to);
 R_API void r_io_cache_commit(RIO *io);
 R_API void r_io_cache_enable(RIO *io, int read, int write);
 R_API void r_io_cache_init(RIO *io);
-R_API int r_io_cache_list(struct r_io_t *io, int rad);
-R_API void r_io_cache_reset(struct r_io_t *io, int set);
+R_API int r_io_cache_list(RIO *io, int rad);
+R_API void r_io_cache_reset(RIO *io, int set);
 R_API int r_io_cache_write(RIO *io, ut64 addr, const ut8 *buf, int len);
 R_API int r_io_cache_read(RIO *io, ut64 addr, ut8 *buf, int len);
 
 /* io/bind.c */
-R_API int r_io_bind(RIO *io, struct r_io_bind_t *bnd);
+R_API int r_io_bind(RIO *io, RIOBind *bnd);
 
 /* io/map.c */
 R_API void r_io_map_init(RIO *io);
 R_API RIOMap *r_io_map_add(RIO *io, int fd, int flags, ut64 delta, ut64 offset, ut64 size);
+R_API int r_io_map_del_at(RIO *io, ut64 addr);
 R_API int r_io_map_del(RIO *io, int fd);
 R_API int r_io_map(RIO *io, const char *file, ut64 offset);
 R_API int r_io_map_select(RIO *io, ut64 off);
@@ -268,7 +272,7 @@ R_API struct r_io_section_t *r_io_section_get(RIO *io, ut64 offset);
 R_API ut64 r_io_section_get_offset(RIO *io, ut64 offset);
 R_API ut64 r_io_section_get_vaddr(RIO *io, ut64 offset);
 R_API int r_io_section_get_rwx(RIO *io, ut64 offset);
-R_API int r_io_section_overlaps(RIO *io, struct r_io_section_t *s);
+R_API int r_io_section_overlaps(RIO *io, RIOSection *s);
 R_API ut64 r_io_section_vaddr_to_offset(RIO *io, ut64 vaddr);
 R_API ut64 r_io_section_offset_to_vaddr(RIO *io, ut64 offset);
 R_API ut64 r_io_section_next(RIO *io, ut64 o);
@@ -280,7 +284,6 @@ R_API int r_io_undo_init(RIO *io);
 R_API void r_io_undo_enable(RIO *io, int seek, int write);
 /* seek undo */
 R_API ut64 r_io_sundo(RIO *io, ut64 offset);
-R_API ut64 r_io_sundo_last(RIO *io);
 R_API ut64 r_io_sundo_redo(RIO *io);
 R_API void r_io_sundo_push(RIO *io, ut64 off);
 R_API void r_io_sundo_reset(RIO *io);
@@ -290,7 +293,7 @@ R_API void r_io_wundo_new(RIO *io, ut64 off, const ut8 *data, int len);
 R_API void r_io_wundo_clear(RIO *io);
 R_API int r_io_wundo_size(RIO *io);
 R_API void r_io_wundo_list(RIO *io);
-R_API int r_io_wundo_set_t(RIO *io, struct r_io_undo_w_t *u, int set) ;
+R_API int r_io_wundo_set_t(RIO *io, RIOUndoWrite *u, int set) ;
 R_API void r_io_wundo_set_all(RIO *io, int set);
 R_API int r_io_wundo_set(RIO *io, int n, int set);
 
@@ -300,27 +303,29 @@ R_API void r_io_desc_fini(RIO *io);
 R_API RIODesc *r_io_desc_new(RIOPlugin *plugin, int fd, const char *name, int flags, int mode, void *data);
 R_API void r_io_desc_free(RIODesc *desc);
 //R_API void r_io_desc_add(RIO *io, RIODesc *desc);
-R_API int r_io_desc_del(struct r_io_t *io, int fd);
+R_API int r_io_desc_del(RIO *io, int fd);
 R_API RIODesc *r_io_desc_get(RIO *io, int fd);
 R_API void r_io_desc_add(RIO *io, RIODesc *desc); //int fd, const char *file, int flags, struct r_io_plugin_t *plugin);
 R_API int r_io_desc_del(RIO *io, int fd);
-R_API struct r_io_desc_t *r_io_desc_get(RIO *io, int fd);
+R_API RIODesc *r_io_desc_get(RIO *io, int fd);
 //R_API int r_io_desc_generate(RIO *io);
 
 /* plugins */
-extern struct r_io_plugin_t r_io_plugin_procpid;
-extern struct r_io_plugin_t r_io_plugin_malloc;
-extern struct r_io_plugin_t r_io_plugin_ptrace;
-extern struct r_io_plugin_t r_io_plugin_w32dbg;
-extern struct r_io_plugin_t r_io_plugin_mach;
-extern struct r_io_plugin_t r_io_plugin_debug;
-extern struct r_io_plugin_t r_io_plugin_shm;
-extern struct r_io_plugin_t r_io_plugin_gdb;
-extern struct r_io_plugin_t r_io_plugin_rap;
-extern struct r_io_plugin_t r_io_plugin_http;
-extern struct r_io_plugin_t r_io_plugin_haret;
-extern struct r_io_plugin_t r_io_plugin_bfdbg;
-extern struct r_io_plugin_t r_io_plugin_w32;
+extern RIOPlugin r_io_plugin_procpid;
+extern RIOPlugin r_io_plugin_malloc;
+extern RIOPlugin r_io_plugin_ptrace;
+extern RIOPlugin r_io_plugin_w32dbg;
+extern RIOPlugin r_io_plugin_mach;
+extern RIOPlugin r_io_plugin_debug;
+extern RIOPlugin r_io_plugin_shm;
+extern RIOPlugin r_io_plugin_gdb;
+extern RIOPlugin r_io_plugin_rap;
+extern RIOPlugin r_io_plugin_http;
+extern RIOPlugin r_io_plugin_haret;
+extern RIOPlugin r_io_plugin_bfdbg;
+extern RIOPlugin r_io_plugin_w32;
+extern RIOPlugin r_io_plugin_ewf;
+extern RIOPlugin r_io_plugin_zip;
 #endif
 
 #if 0

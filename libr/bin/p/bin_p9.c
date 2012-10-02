@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2011 nibble<.ds@gmail.com>, pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2012 nibble<.ds@gmail.com>, pancake<nopcode.org> */
 
 #include <r_types.h>
 #include <r_util.h>
@@ -7,7 +7,9 @@
 #include "../format/p9/p9bin.h"
 
 static int check(RBinArch *arch) {
-	return (r_bin_p9_get_arch(arch->buf->buf, NULL, NULL));
+	if (arch && arch->buf && arch->buf->buf)
+		return (r_bin_p9_get_arch (arch->buf->buf, NULL, NULL));
+	return R_FALSE;
 }
 
 static int load(RBinArch *arch) {
@@ -45,7 +47,7 @@ static RList* sections(RBinArch *arch) {
 	RList *ret = NULL;
 	RBinSection *ptr = NULL;
 	ut64 textsize, datasize, symssize, spszsize, pcszsize;
-	int big_endian = arch->info->big_endian;
+	int big_endian = arch->o->info->big_endian;
 
 	if (!(ret = r_list_new ()))
 		return NULL;
@@ -161,6 +163,20 @@ static RBinInfo* info(RBinArch *arch) {
 	return ret;
 }
 
+int size(RBinArch *arch) {
+	ut64 text, data, syms, spsz;
+	int big_endian;
+	if (!arch->o->info)
+		arch->o->info = info (arch);
+	big_endian = arch->o->info->big_endian;
+	// TODO: reuse section list
+	text = r_mem_get_num (arch->buf->buf+4, 4, big_endian);
+	data = r_mem_get_num (arch->buf->buf+8, 4, big_endian);
+	syms = r_mem_get_num (arch->buf->buf+16, 4, big_endian);
+	spsz = r_mem_get_num (arch->buf->buf+24, 4, big_endian);
+	return text+data+syms+spsz+(6*4);
+}
+
 #if !R_BIN_P9
 
 /* inspired in http://www.phreedom.org/solar/code/tinype/tiny.97/tiny.asm */
@@ -188,6 +204,7 @@ struct r_bin_plugin_t r_bin_plugin_p9 = {
 	.init = NULL,
 	.fini = NULL,
 	.load = &load,
+	.size = &size,
 	.destroy = &destroy,
 	.check = &check,
 	.baddr = &baddr,
