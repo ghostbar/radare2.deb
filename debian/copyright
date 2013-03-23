@@ -71,14 +71,14 @@ Files: rsc2/rsc2.c libr/asm/arch/include/ansidecl.h
  libr/asm/arch/include/elf/external.h libr/asm/arch/include/libiberty.h
  libr/meta/tmp/data.c libr/asm/arch/include/bfd.h libr/asm/arch/x86/ollyasm/disasm.c
  libr/asm/arch/x86/ollyasm/assembl.c libr/asm/arch/x86/ollyasm/disasm.h
- libr/asm/arch/x86/ollyasm/asmserv.c libr/asm/arch/arm/gnu/arm-dis.c
+ libr/asm/arch/x86/ollyasm/asmserv.c libr/asm/arch/arm/gnu/*
  libr/asm/arch/psosvm/vmas/vmas.c libr/asm/arch/java/javasm/javasm.c
  libr/bin/format/java/java.c libr/flags/old_flags.c libr/search/old_xrefs.c
  libr/hash/md4.c libr/hash/crc32.c libr/hash/hamdist.c
  libr/bin/mangling/cxx/ansidecl.h libr/bin/mangling/cxx/cp-demangle.c
  libr/bin/mangling/cxx/cp-demangle.h libr/bin/mangling/cxx/demangle.h
  libr/bin/mangling/cxx/liberty.h libr/asm/arch/sh/sh-dis.c
- libr/asm/arch/sh/sh-opc.h
+ libr/asm/arch/sh/sh-opc.h libr/asm/arch/arm/aarch64/*
 Copyright: 2006-2010, pancake
            2009,      skurz0
            1989-2010, Free Software Foundation, Inc.
