@@ -30,7 +30,7 @@ override_dh_makeshlibs:
 
 override_dh_strip:
 	dh_strip -pradare2 #--dbg-package=radare2-dbg
-	dh_strip -plibradare2-0.9 --dbg-package=libradare2-0.9-dbg
+	dh_strip -plibradare2-0.9.4 --dbg-package=libradare2-0.9.4-dbg
 
 override_dh_auto_clean:
 	touch config-user.mk libr/config.mk
