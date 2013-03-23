@@ -9,7 +9,7 @@ Build-Depends: debhelper (>= 9),
                libmagic-dev,
                valabind,
                valac
-Standards-Version: 3.9.3
+Standards-Version: 3.9.4
 Homepage: http://www.radare.org
 Vcs-Browser: http://git.debian.org/?p=collab-maint/radare2.git
 Vcs-Git: git://git.debian.org/collab-maint/radare2.git
