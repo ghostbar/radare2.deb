@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2006-2012 - pancake */
+/* radare - LGPL - Copyright 2006-2013 - pancake */
 
 #include <errno.h>
 #include <r_types.h>
@@ -12,6 +12,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#if EMSCRIPTEN
+/* no network */
+R_API RSocket *r_socket_new (int is_ssl) { return NULL; }
+#else
 #if __UNIX__
 #include <sys/un.h>
 #include <netinet/in.h>
@@ -101,7 +105,7 @@ R_API RSocket *r_socket_new (int is_ssl) {
 	return s;
 }
 
-R_API int r_socket_connect (RSocket *s, const char *host, const char *port, int proto) {
+R_API int r_socket_connect (RSocket *s, const char *host, const char *port, int proto, int timeout) {
 #if __WINDOWS__
 	struct sockaddr_in sa;
 	struct hostent *he;
@@ -124,7 +128,7 @@ R_API int r_socket_connect (RSocket *s, const char *host, const char *port, int 
 
 	sa.sin_addr = *((struct in_addr *)he->h_addr);
 	sa.sin_port = htons (atoi (port));
-
+#warning TODO: implement connect timeout on w32
 	if (connect (s->fd, (const struct sockaddr*)&sa, sizeof (struct sockaddr))) {
 		close (s->fd);
 		return R_FALSE;
@@ -132,7 +136,7 @@ R_API int r_socket_connect (RSocket *s, const char *host, const char *port, int 
 	return R_TRUE;
 #elif __UNIX__
 	if (proto==0) proto= R_SOCKET_PROTO_TCP;
-	int gai;
+	int gai, ret;
 	struct addrinfo hints, *res, *rp;
 	signal (SIGPIPE, SIG_IGN);
 	if (proto == R_SOCKET_PROTO_UNIX) {
@@ -140,26 +144,58 @@ R_API int r_socket_connect (RSocket *s, const char *host, const char *port, int 
 			return R_FALSE;
 	} else {
 		memset (&hints, 0, sizeof (struct addrinfo));
-		hints.ai_family = AF_UNSPEC;		/* Allow IPv4 or IPv6 */
+		hints.ai_family = AF_UNSPEC; /* Allow IPv4 or IPv6 */
 		hints.ai_protocol = proto;
 		gai = getaddrinfo (host, port, &hints, &res);
 		if (gai != 0) {
-			eprintf ("Error in getaddrinfo: %s\n", gai_strerror (gai));
+			//eprintf ("Error in getaddrinfo: %s\n", gai_strerror (gai));
 			return R_FALSE;
 		}
 		for (rp = res; rp != NULL; rp = rp->ai_next) {
 			s->fd = socket (rp->ai_family, rp->ai_socktype, rp->ai_protocol);
 			if (s->fd == -1)
 				continue;
-			if (connect (s->fd, rp->ai_addr, rp->ai_addrlen) != -1)
-				break;
+			if (timeout>0)
+				r_socket_block_time (s, 1, timeout);
+				//fcntl (s->fd, F_SETFL, O_NONBLOCK, 1);
+			ret = connect (s->fd, rp->ai_addr, rp->ai_addrlen);
+			if (timeout<1) {
+				if (ret == -1) {
+					close (s->fd);
+					return R_FALSE;
+				}
+				return R_TRUE;
+			}
+			if (timeout>0) {
+				struct timeval tv;
+				fd_set fdset;
+				FD_ZERO (&fdset);
+				FD_SET (s->fd, &fdset);
+				tv.tv_sec = timeout;
+				tv.tv_usec = 0;
+				if (select (s->fd + 1, NULL, &fdset, NULL, &tv) == 1) {
+					int so_error;
+					socklen_t len = sizeof so_error;
+					ret = getsockopt (s->fd, SOL_SOCKET,
+						SO_ERROR, &so_error, &len);
+			//		fcntl (s->fd, F_SETFL, O_NONBLOCK, 0);
+//					r_socket_block_time (s, 0, 0);
+					freeaddrinfo (res);
+					return R_TRUE;
+				} else {
+					freeaddrinfo (res);
+					close (s->fd);
+					return R_FALSE;
+				}
+			}
 			close (s->fd);
-		}
-		if (rp == NULL) {
-			eprintf ("Could not connect\n");
-			return R_FALSE;
+			s->fd = -1;
 		}
 		freeaddrinfo (res);
+		if (rp == NULL) {
+			eprintf ("Could not resolve address\n");
+			return R_FALSE;
+		}
 	}
 #endif
 #if HAVE_LIB_SSL
@@ -182,6 +218,7 @@ R_API int r_socket_connect (RSocket *s, const char *host, const char *port, int 
 
 R_API int r_socket_close (RSocket *s) {
 	int ret = R_FALSE;
+	if (!s) return R_FALSE;
 	if (s->fd != -1) {
 #if __WINDOWS__
 		WSACleanup ();
@@ -192,8 +229,10 @@ R_API int r_socket_close (RSocket *s) {
 #endif
 	}
 #if HAVE_LIB_SSL
-	if (s->is_ssl && s->sfd)
-		SSL_shutdown (s->sfd);
+	if (s->is_ssl && s->sfd) {
+		SSL_free (s->sfd);
+		s->sfd = NULL;
+	}
 #endif
 	return ret;
 }
@@ -214,7 +253,6 @@ R_API int r_socket_free (RSocket *s) {
 
 R_API int r_socket_listen (RSocket *s, const char *port, const char *certfile) {
 	int optval = 1;
-	struct sockaddr_in sa;
 	struct linger linger = { 0 };
 
 	if ((s->fd = socket (AF_INET, SOCK_STREAM, IPPROTO_TCP))<0)
@@ -222,20 +260,24 @@ R_API int r_socket_listen (RSocket *s, const char *port, const char *certfile) {
 	linger.l_onoff = 1;
 	linger.l_linger = 1;
 	setsockopt (s->fd, SOL_SOCKET, SO_LINGER, (const char *)&linger, sizeof (linger));
-	setsockopt(s->fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval);
-	memset (&sa, 0, sizeof (sa));
-	sa.sin_family = AF_INET;
-	sa.sin_addr.s_addr = htonl (s->local? INADDR_LOOPBACK: INADDR_ANY);
-	sa.sin_port = htons (atoi (port));
+	{ // fix close after write bug //
+	int x = 1500;
+	setsockopt (s->fd, SOL_SOCKET, SO_SNDBUF, (const char *)&x, sizeof (int));
+	}
+	setsockopt (s->fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval);
+	memset (&s->sa, 0, sizeof (s->sa));
+	s->sa.sin_family = AF_INET;
+	s->sa.sin_addr.s_addr = htonl (s->local? INADDR_LOOPBACK: INADDR_ANY);
+	s->sa.sin_port = htons (atoi (port)); // WTF we should honor etc/services
 
-	if (bind (s->fd, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+	if (bind (s->fd, (struct sockaddr *)&s->sa, sizeof(s->sa)) < 0) {
 		close (s->fd);
 		return R_FALSE;
 	}
 #if __UNIX_
 	signal (SIGPIPE, SIG_IGN);
 #endif
-	if (listen (s->fd, 1) < 0) {
+	if (listen (s->fd, 32) < 0) {
 		close (s->fd);
 		return R_FALSE;
 	}
@@ -261,14 +303,19 @@ R_API int r_socket_listen (RSocket *s, const char *port, const char *certfile) {
 }
 
 R_API RSocket *r_socket_accept(RSocket *s) {
-	RSocket *sock = R_NEW (RSocket);
-	sock->is_ssl = s->is_ssl;
-	sock->fd = accept (s->fd, NULL, NULL);
+	RSocket *sock;
+	socklen_t salen = sizeof (s->sa);
+	if (!s) return NULL;
+	sock = R_NEW (RSocket);
+	if (!sock) return NULL;
+	//signal (SIGPIPE, SIG_DFL);
+	sock->fd = accept (s->fd, (struct sockaddr *)&s->sa, &salen);
 	if (sock->fd == -1) {
 		free (sock);
 		return NULL;
 	}
 #if HAVE_LIB_SSL
+	sock->is_ssl = s->is_ssl;
 	if (sock->is_ssl) {
 		sock->sfd = NULL;
 		sock->ctx = NULL;
@@ -285,21 +332,30 @@ R_API RSocket *r_socket_accept(RSocket *s) {
 		BIO_set_ssl (sbio, sock->sfd, BIO_CLOSE);
 		BIO_push (sock->bio, sbio);
 	}
+#else
+	sock->is_ssl = 0;
 #endif
 	return sock;
 }
 
 R_API int r_socket_block_time (RSocket *s, int block, int sec) {
-	struct timeval sv;
+	if (!s) return R_FALSE;
 #if __UNIX__
-	fcntl (s->fd, F_SETFL, O_NONBLOCK, !block);
+	{
+	int flags = fcntl (s->fd, F_GETFL, 0);
+	fcntl (s->fd, F_SETFL, block?
+			(flags & ~O_NONBLOCK):
+			(flags | O_NONBLOCK));
+	}
 #elif __WINDOWS__
 	ioctlsocket (s->fd, FIONBIO, (u_long FAR*)&block);
 #endif
 	if (sec > 0) {
-		sv.tv_sec = sec;
-		sv.tv_usec = 0;
-		if (setsockopt (s->fd, SOL_SOCKET, SO_RCVTIMEO, (char *)&sv, sizeof (sv)) < 0)
+		struct timeval tv;
+		tv.tv_sec = sec;
+		tv.tv_usec = 0;
+		if (setsockopt (s->fd, SOL_SOCKET, SO_RCVTIMEO,
+				(char *)&tv, sizeof (tv)) < 0)
 			return R_FALSE;
 	}
 	return R_TRUE;
@@ -332,7 +388,7 @@ R_API int r_socket_ready(RSocket *s, int secs, int usecs) {
 	FD_SET (s->fd, &rfds);
 	tv.tv_sec = secs;
 	tv.tv_usec = usecs;
-	if (select (1, &rfds, NULL, NULL, &tv) == -1)
+	if (select (s->fd+1, &rfds, NULL, NULL, &tv) == -1)
 		return -1;
 	return FD_ISSET (0, &rfds);
 #else
@@ -366,22 +422,26 @@ R_API char *r_socket_to_string(RSocket *s) {
 /* Read/Write functions */
 R_API int r_socket_write(RSocket *s, void *buf, int len) {
 	int ret, delta = 0;
+#if __UNIX__
+	signal (SIGPIPE, SIG_IGN);
+#endif
 	for (;;) {
+		int b = 1500; //65536; // Use MTU 1500?
+		if (b>len) b = len;
 #if HAVE_LIB_SSL
 		if (s->is_ssl)
 			if (s->bio)
-				ret = BIO_write (s->bio, buf+delta, len);
+				ret = BIO_write (s->bio, buf+delta, b);
 			else
-				ret = SSL_write (s->sfd, buf+delta, len);
+				ret = SSL_write (s->sfd, buf+delta, b);
 		else
 #endif
-			ret = send (s->fd, buf+delta, len, 0);
-		if (ret == 0)
-			return -1;
+			ret = send (s->fd, buf+delta, b, 0);
+		//if (ret == 0) return -1;
+		if (ret<1) break;
 		if (ret == len)
 			return len;
-		if (ret<0)
-			break;
+		usleep (100); // take breath, wtf
 		delta += ret;
 		len -= ret;
 	}
@@ -406,6 +466,7 @@ R_API void r_socket_printf(RSocket *s, const char *fmt, ...) {
 }
 
 R_API int r_socket_read(RSocket *s, unsigned char *buf, int len) {
+	if (!s) return -1;
 #if HAVE_LIB_SSL
 	if (s->is_ssl)
 		if (s->bio)
@@ -425,7 +486,7 @@ R_API int r_socket_read_block(RSocket *s, unsigned char *buf, int len) {
 	int r, ret = 0;
 	for (ret=0;ret<len;) {
 		r = r_socket_read (s, buf+ret, len-ret);
-		if (r==-1)
+		if (r<1) //==-1)
 			break;
 		ret += r;
 	}
@@ -441,20 +502,21 @@ R_API int r_socket_gets(RSocket *s, char *buf,  int size) {
 
 	while (i<size) {
 		ret = r_socket_read (s, (ut8 *)buf+i, 1);
-		if (ret==0)
-			break;
+		if (ret==0) {
+			if (i>0) return i;
+			return -1;
+		}
 		if (ret<0) {
 			r_socket_close (s);
-			return i;
+			return i==0?-1: i;
 		}
-		if (buf[i]=='\r'||buf[i]=='\n') {
+		if (buf[i]=='\r' || buf[i]=='\n') {
 			buf[i]='\0';
 			break;
 		}
 		i += ret;
 	}
 	buf[i]='\0';
-
 	return i;
 }
 
@@ -463,3 +525,4 @@ R_API RSocket *r_socket_new_from_fd (int fd) {
 	s->fd = fd;
 	return s;
 }
+#endif

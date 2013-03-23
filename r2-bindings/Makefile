@@ -1,4 +1,5 @@
 -include config.mk
+PREFIX?=/usr
 PYTHON2_CONFIG=python2.7-config
 PYTHON3_CONFIG=python3.2-config
 
@@ -10,7 +11,7 @@ endif
 
 W32PY="${HOME}/.wine/drive_c/Python27/"
 
-ifneq ($(shell grep valac supported.langs),)
+ifneq ($(shell grep valac supported.langs 2>/dev/null),)
 INSTALL_TARGETS=install-vapi
 else
 INSTALL_TARGETS=
@@ -19,17 +20,17 @@ endif
 LANGS=
 # Experimental:
 # LANGS+=gir
-ALANGS=gir python ruby perl lua go java guile php5
+ALANGS=awk gir python ruby perl lua go java guile php5
 .PHONY: ${ALANGS}
 
 define ADD_lang
-ifneq ($(shell grep $(1) supported.langs),)
+ifneq ($(shell grep $(1) supported.langs 2>/dev/null),)
 LANGS+=$(1)
 INSTALL_TARGETS+=install-$(1)
 endif
 endef
 
-ifneq ($(shell grep python supported.langs),)
+ifneq ($(shell grep python supported.langs 2>/dev/null),)
 INSTALL_EXAMPLE_TARGETS+=install-python-examples
 endif
 
@@ -38,7 +39,7 @@ $(foreach p,${ALANGS},$(eval $(call ADD_lang,$(p))))
 .PHONY: ${INSTALL_TARGETS} ${INSTALL_EXAMPLE_TARGETS} ${LANG}
 
 ifeq ($(DEVEL_MODE),1)
-LANGS=$(shell cat supported.langs)
+LANGS=$(shell cat supported.langs 2>/dev/null)
 all: supported.langs 
 	@for a in ${LANGS} ; do \
 		[ $$a = valac ] && continue; \
@@ -100,6 +101,8 @@ vdoc:
 	-rm -rf vdoc
 	cat vapi/r_*.vapi > libr.vapi
 	valadoc --package-version=${VERSION} --package-name=libr -o vdoc libr.vapi
+	sed -e 's,font-family:.*,font-family:monospace;,' vdoc/style.css > vdoc/.style.css
+	mv vdoc/.style.css vdoc/style.css
 	-rm -f libr.vapi
 	# rsync -avz vdoc/* pancake@radare.org:/srv/http/radareorg/vdoc/
 
@@ -149,6 +152,7 @@ purge-python:
 	rm -rf ${PYTHON_INSTALL_DIR}
 
 install-python:
+	[ -e python/_r_core.${SOEXT} ] && true
 	E=${SOEXT} ; [ `uname` = Darwin ] && E=so ; \
 	echo "Installing python${PYTHON_VERSION} r2 modules in ${PYTHON_INSTALL_DIR}" ; \
 	mkdir -p ${PYTHON_INSTALL_DIR} ; \
@@ -196,6 +200,12 @@ install-perl:
 install-vapi:
 	mkdir -p ${DESTDIR}${PREFIX}/share/vala/vapi
 	${INSTALL_DATA} vapi/*.vapi vapi/*.deps ${DESTDIR}${PREFIX}/share/vala/vapi
+
+AWKDIR=${DESTDIR}${PREFIX}/lib/radare2/${VERSION}/awk
+install-awk:
+	mkdir -p ${AWKDIR}
+	sed -e 's,@AWKDIR@,${AWKDIR},g' < awk/r2awk > ${DESTDIR}${PREFIX}/bin/r2awk
+	cp -f awk/* ${AWKDIR}/
 
 install-gir:
 	cd gir && ${MAKE} install

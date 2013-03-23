@@ -1,10 +1,15 @@
+include ../../../global.mk
 include ../../config.mk
 
 CFLAGS+=-I../../include
 
 HOST_CC=gcc
 
+ifeq ($(HAVE_CPARSE),1)
 all: tree.o
+else
+all:
+endif
 
 tree.o: lex.yy.o
 

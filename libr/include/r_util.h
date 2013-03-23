@@ -7,6 +7,7 @@
 #include <r_list.h> // radare linked list
 #include <r_flist.h> // radare fixed pointer array iterators
 #include <list.h> // kernel linked list
+#include <r_th.h>
 /* profiling */
 #include <sys/time.h>
 #ifdef HAVE_LIB_GMP
@@ -64,6 +65,7 @@ typedef struct r_mem_pool_factory_t {
 
 typedef struct r_mmap_t {
 	ut8 *buf;
+	ut64 base;
 	int len;
 	int fd;
 	int rw;
@@ -82,17 +84,11 @@ typedef struct r_buf_t {
 } RBuffer;
 
 /* r_cache */
-// TOTHINK: move into a separated library?
-typedef struct r_cache_item_t {
-	ut64 addr;
-	char *str;
-	struct list_head list;
-} RCacheItem;
 
 typedef struct r_cache_t {
-	ut64 start;
-	ut64 end;
-	struct list_head items;
+	ut64 base;
+	ut8 *buf;
+	ut64 len;
 } RCache;
 
 typedef struct r_prof_t {
@@ -101,7 +97,7 @@ typedef struct r_prof_t {
 } RProfile;
 
 /* numbers */
-#define R_NUMCALC_STRSZ 128
+#define R_NUMCALC_STRSZ 4096
 
 typedef struct {
 	double d;
@@ -124,6 +120,7 @@ typedef struct r_num_calc_t {
 	const char *calc_err;
 	int calc_i;
 	const char *calc_buf;
+	int calc_len;
 } RNumCalc;
 
 typedef struct r_num_t {
@@ -158,37 +155,7 @@ enum {
 	R_SYS_BITS_64 = 8,
 };
 
-
-/** hashtable **/
-typedef struct r_hashtable_entry_t {
-	ut32 hash;
-	void *data;
-} RHashTableEntry;
-
-typedef struct r_hashtable_t {
-	RHashTableEntry *table;
-	ut32 size;
-	ut32 rehash;
-	ut32 max_entries;
-	ut32 size_index;
-	ut32 entries;
-	ut32 deleted_entries;
-} RHashTable;
-
-typedef struct r_hashtable64_entry_t {
-	ut64 hash;
-	void *data;
-} RHashTable64Entry;
-
-typedef struct r_hashtable64_t {
-	RHashTable64Entry *table;
-	ut64 size;
-	ut64 rehash;
-	ut64 max_entries;
-	ut64 size_index;
-	ut64 entries;
-	ut64 deleted_entries;
-} RHashTable64;
+#include "ht.h"
 
 /* r_mixed */
 
@@ -231,6 +198,7 @@ typedef struct r_graph_t {
 	RList *roots; // <RGraphNode>
 	RListIter *cur; // ->data = RGraphNode*
 	RList *nodes; // <RGraphNode>
+	PrintfCallback printf;
 	int level;
 } RGraph;
 
@@ -249,8 +217,11 @@ R_API void r_graph_push (RGraph *t, ut64 addr, void *data);
 R_API RGraphNode* r_graph_pop(RGraph *t);
 
 R_API int r_file_size(const char *str);
+R_API char *r_file_root(const char *root, const char *path);
 R_API boolt r_file_is_directory(const char *str);
-R_API RMmap *r_file_mmap (const char *file, boolt rw);
+R_API RMmap *r_file_mmap (const char *file, boolt rw, ut64 base);
+R_API int r_file_mmap_read (const char *file, ut64 addr, ut8 *buf, int len);
+R_API int r_file_mmap_write(const char *file, ut64 addr, const ut8 *buf, int len);
 R_API void r_file_mmap_free (RMmap *m);
 
 // TODO: find better names and write vapis
@@ -263,11 +234,14 @@ R_API void r_file_mmap_free (RMmap *m);
 #define ut8p_lq(x) ((x)[7]|((x)[6]<<8)|((x)[5]<<16)|((x)[4]<<24)|((x)[3]<<32)|((x)[2]<<40)|((x)[1]<<48)|((x)[0]<<56))
 
 R_API RNum *r_num_new(RNumCallback cb, void *ptr);
+R_API int r_num_conditional(RNum *num, const char *str);
 R_API ut64 r_num_calc (RNum *num, const char *str, const char **err);
 R_API const char *r_num_calc_index (RNum *num, const char *p);
+R_API ut64 r_num_chs (int cylinder, int head, int sector, int sectorsize);
 
 #define R_BUF_CUR -1
 R_API RBuffer *r_buf_new();
+R_API RBuffer *r_buf_file (const char *file);
 R_API RBuffer *r_buf_mmap (const char *file, int rw);
 R_API int r_buf_set_bits(RBuffer *b, int bitoff, int bitsize, ut64 value);
 R_API int r_buf_set_bytes(RBuffer *b, const ut8 *buf, int length);
@@ -285,7 +259,7 @@ R_API int r_buf_write_at(RBuffer *b, ut64 addr, const ut8 *buf, int len);
 R_API int r_buf_fwrite_at (RBuffer *b, ut64 addr, ut8 *buf, const char *fmt, int n);
 R_API void r_buf_free(RBuffer *b);
 
-R_API ut64 r_mem_get_num(ut8 *b, int size, int endian);
+R_API ut64 r_mem_get_num(const ut8 *b, int size, int endian);
 
 /* MEMORY POOL */
 R_API RMemoryPool* r_mem_pool_deinit(RMemoryPool *pool);
@@ -304,10 +278,9 @@ R_API void r_poolfactory_free(RPoolFactory *pf);
 R_API int r_mem_count(const ut8 **addr);
 R_API RCache* r_cache_new();
 R_API void r_cache_free(RCache *c);
-R_API char *r_cache_get(RCache *c, ut64 addr);
-R_API int r_cache_set(RCache *c, ut64 addr, char *str);
-R_API int r_cache_validate(RCache *c, ut64 from, ut64 to);
-R_API int r_cache_invalidate(RCache *c, ut64 from, ut64 to);
+R_API const ut8* r_cache_get(RCache *c, ut64 addr, int *len);
+R_API int r_cache_set(RCache *c, ut64 addr, const ut8 *buf, int len);
+R_API void r_cache_flush (RCache *c);
 
 R_API void r_prof_start(RProfile *p);
 R_API double r_prof_end(RProfile *p);
@@ -329,6 +302,7 @@ R_API ut64 r_num_get(RNum *num, const char *str);
 R_API int r_num_to_bits(char *out, ut64 num);
 R_API int r_num_rand(int max);
 R_API void r_num_irand();
+R_API ut16 r_num_ntohs (ut16 foo);
 
 /* TODO ..use as uppercase maybe? they are macros! */
 #define R_BETWEEN(x,y,z) (((y)>=(x)) && ((y)<=(z)))
@@ -346,7 +320,9 @@ R_API int r_name_filter(char *name, int len);
 
 R_API void r_base64_encode(ut8 *bout, const ut8 *bin, int len);
 R_API int r_base64_decode(ut8 *bout, const ut8 *bin, int len);
+
 /* strings */
+#define r_str_array(x,y) ((y>=0 && y<(sizeof(x)/sizeof(*x)))?x[y]:"")
 R_API void r_str_unescape (char *s);
 R_API void r_str_filter_zeroline(char *str, int len);
 R_API int r_str_write (int fd, const char *b);
@@ -403,8 +379,11 @@ R_API int r_str_re_match(const char *str, const char *reg);
 R_API int r_str_re_replace(const char *str, const char *reg, const char *sub);
 R_API int r_str_escape(char *buf);
 R_API char *r_str_unscape(char *buf);
+R_API void r_str_uri_decode(char *buf);
+R_API char *r_str_uri_encode (const char *buf);
 R_API char *r_str_home(const char *str);
 R_API int r_str_nlen (const char *s, int n);
+R_API char *r_str_prefix(char *ptr, const char *string);
 R_API char *r_str_concat(char *ptr, const char *string);
 R_API char *r_str_concatf(char *ptr, const char *fmt, ...);
 R_API char *r_str_concatch(char *x, char y);
@@ -534,23 +513,10 @@ R_API int r_big_divisible_ut(RNumBig *n, ut32 v);
 R_API void r_big_mod(RNumBig *c, RNumBig *a, RNumBig *b);
 #endif
 
-R_API RHashTable* r_hashtable_new(void);
-R_API void r_hashtable_free(RHashTable *ht);
-R_API void *r_hashtable_lookup(RHashTable *ht, ut32 hash);
-R_API boolt r_hashtable_insert(RHashTable *ht, ut32 hash, void *data);
-R_API void r_hashtable_remove(RHashTable *ht, ut32 hash);
-
-R_API RHashTable64* r_hashtable64_new(void);
-R_API void r_hashtable64_free(RHashTable64 *ht);
-R_API void *r_hashtable64_lookup(RHashTable64 *ht, ut64 hash);
-R_API boolt r_hashtable64_insert(RHashTable64 *ht, ut64 hash, void *data);
-R_API void r_hashtable64_remove(RHashTable64 *ht, ut64 hash);
-
 /* uleb */
 R_API const ut8 *r_uleb128 (const ut8 *data, ut32 *v);
 R_API const ut8 *r_leb128 (const ut8 *data, st32 *v);
 #endif
-
 
 /* constr */
 typedef struct r_constr_t {
@@ -564,5 +530,49 @@ R_API void r_constr_free (RConstr *c);
 R_API const char *r_constr_get (RConstr *c, const char *str);
 R_API const char *r_constr_append (RConstr *c, const char *str);
 R_API const char *r_constr_add (RConstr *c, const char *str);
+
+/* sandbox */
+R_API int r_sandbox_enable (int e);
+R_API int r_sandbox_system (const char *x, int fork);
+R_API int r_sandbox_creat (const char *path, int mode);
+R_API int r_sandbox_open (const char *path, int mode, int perm);
+R_API FILE *r_sandbox_fopen (const char *path, const char *mode);
+R_API int r_sandbox_chdir (const char *path);
+R_API int r_sandbox_check_path (const char *path);
+R_API int r_sandbox_kill(int pid, int sig);
+
+/* strpool */
+#define R_STRPOOL_INC 1024
+
+typedef struct {
+	char *str;
+	int len;
+	int size;
+} RStrpool;
+
+R_API RStrpool* r_strpool_new (int sz);
+R_API char *r_strpool_alloc (RStrpool *p, int l);
+R_API int r_strpool_append(RStrpool *p, const char *s);
+R_API void r_strpool_free (RStrpool *p);
+R_API int r_strpool_fit(RStrpool *p);
+R_API char *r_strpool_get(RStrpool *p, int index);
+R_API char *r_strpool_get_i(RStrpool *p, int index);
+R_API int r_strpool_get_index(RStrpool *p, const char *s);
+R_API char *r_strpool_next(RStrpool *p, int index);
+R_API char *r_strpool_slice (RStrpool *p, int index);
+R_API char *r_strpool_empty (RStrpool *p);
+
+typedef struct r_strht_t {
+	RStrpool *sp;
+	RHashTable *ht;
+	RList *ls;
+} RStrHT;
+
+R_API RStrHT *r_strht_new();
+R_API void r_strht_free(RStrHT *s);
+R_API const char *r_strht_get(RStrHT *s, const char *key);
+R_API int r_strht_set(RStrHT *s, const char *key, const char *val);
+R_API void r_strht_clear(RStrHT *s);
+R_API void r_strht_del(RStrHT *s, const char *key);
 
 #endif

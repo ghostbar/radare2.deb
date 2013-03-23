@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 #include "r_types.h"
 #include "r_util.h"
@@ -29,15 +29,23 @@ R_API RBuffer *r_buf_new() {
 R_API RBuffer *r_buf_mmap (const char *file, int rw) {
 	RBuffer *b = r_buf_new ();
 	if (!b) return NULL;
-	b->mmap = r_file_mmap (file, rw);
+	b->mmap = r_file_mmap (file, rw, 0);
 	if (b->mmap && b->mmap->len>0) {
 		b->buf = b->mmap->buf;
 		b->length = b->mmap->len;
-	} else {
-		r_buf_free (b);
-		return NULL; /* we just freed b, don't return it */
+		return b;
 	}
-	return b;
+	r_buf_free (b);
+	return NULL; /* we just freed b, don't return it */
+}
+
+R_API RBuffer *r_buf_file (const char *file) {
+	RBuffer *b = r_buf_new ();
+	if (!b) return NULL;
+	b->buf = (ut8*)r_file_slurp (file, &b->length);
+	if (b->buf) return b;
+	r_buf_free (b);
+	return NULL; /* we just freed b, don't return it */
 }
 
 R_API int r_buf_set_bits(RBuffer *b, int bitoff, int bitsize, ut64 value) {
@@ -47,10 +55,8 @@ R_API int r_buf_set_bits(RBuffer *b, int bitoff, int bitsize, ut64 value) {
 }
 
 R_API int r_buf_set_bytes(RBuffer *b, const ut8 *buf, int length) {
-	if (b->buf)
-		free (b->buf);
-	if (length<0)
-		return R_FALSE;
+	if (b->buf) free (b->buf);
+	if (length<0) return R_FALSE;
 	if (!(b->buf = malloc (length+1)))
 		return R_FALSE;
 	memcpy (b->buf, buf, length);
@@ -129,6 +135,7 @@ R_API int r_buf_append_buf(RBuffer *b, RBuffer *a) {
 
 static int r_buf_cpy(RBuffer *b, ut64 addr, ut8 *dst, const ut8 *src, int len, int write) {
 	int end;
+	if (!b) return 0;
 	addr = (addr==R_BUF_CUR)? b->cur: addr-b->base;
 	if (len<1 || dst == NULL || addr > b->length)
 		return -1;
@@ -182,6 +189,7 @@ static int r_buf_fcpy_at (RBuffer *b, ut64 addr, ut8 *buf, const char *fmt, int 
 }
 
 R_API int r_buf_read_at(RBuffer *b, ut64 addr, ut8 *buf, int len) {
+	if (!b) return 0;
 	return r_buf_cpy (b, addr, buf, b->buf, len, R_FALSE);
 }
 
@@ -190,6 +198,7 @@ R_API int r_buf_fread_at (RBuffer *b, ut64 addr, ut8 *buf, const char *fmt, int 
 }
 
 R_API int r_buf_write_at(RBuffer *b, ut64 addr, const ut8 *buf, int len) {
+	if (!b) return 0;
 	return r_buf_cpy (b, addr, b->buf, buf, len, R_TRUE);
 }
 

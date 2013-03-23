@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 #include <r_core.h>
 
@@ -9,35 +9,44 @@ R_API ut64 r_core_file_resize(struct r_core_t *core, ut64 newsize) {
 }
 
 // TODO: add support for args
-R_API int r_core_file_reopen(RCore *core, const char *args) {
+R_API int r_core_file_reopen(RCore *core, const char *args, int perm) {
 	char *path;
-	RCoreFile *file;
-	int ret = R_FALSE;
-	int newpid, perm;
+	ut64 addr = 0; // XXX ? check file->map ?
+	RCoreFile *file, *ofile = core->file;
+	int newpid, ret = R_FALSE;
+	if (r_sandbox_enable (0)) {
+		eprintf ("Cannot reopen in sandbox\n");
+		return R_FALSE;
+	}
 	if (!core->file) {
 		eprintf ("No file opened to reopen\n");
 		return R_FALSE;
 	}
 	newpid = core->file->fd->fd;
-	perm = core->file->rwx;
-	ut64 addr = 0; // XXX ? check file->map ?
+	if (!perm) perm = core->file->rwx;
 	path = strdup (core->file->uri);
 	if (r_config_get_i (core->config, "cfg.debug"))
-		r_debug_kill (core->dbg, R_FALSE, 9); // KILL
-	r_core_file_close (core, core->file);
+		r_debug_kill (core->dbg, 0, R_FALSE, 9); // KILL
 	file = r_core_file_open (core, path, perm, addr);
 	if (file) {
-		eprintf ("File %s reopened\n", path);
+		eprintf ("File %s reopened in %s mode\n", path,
+			perm&R_IO_WRITE?"read-write": "read-only");
 		ret = R_TRUE;
+		// close old file
+		//r_core_file_close (core, core->file);
+		r_core_file_close_fd (core, newpid);
+		core->file = file;
+	} else {
+		eprintf ("Oops. Cannot reopen file.\n");
+		core->file = ofile; // XXX: not necessary?
 	}
-	// close old file
-	r_core_file_close_fd (core, newpid);
 	// TODO: in debugger must select new PID
 	if (r_config_get_i (core->config, "cfg.debug")) {
 		if (core->file && core->file->fd)
 			newpid = core->file->fd->fd;
 		r_debug_select (core->dbg, newpid, newpid);
 	}
+	r_core_block_read (core, 0);
 	free (path);
 	return ret;
 }
@@ -49,9 +58,11 @@ R_API int r_core_file_reopen(RCore *core, const char *args) {
 R_API void r_core_sysenv_help() {
 	r_cons_printf (
 	"Usage: !<cmd>\n"
-	"  !ls                   ; execute 'ls' in shell\n"
-	"  .!rabin2 -ri ${FILE}  ; run each output line as a r2 cmd\n"
-	"  !echo $SIZE           ; display file size\n"
+	"  !                       list all historic commands\n"
+	"  !ls                     execute 'ls' in shell\n"
+	"  !!ls~txt                printo utput of 'ls' and grep for 'txt'\n"
+	"  .!rabin2 -rvi ${FILE}   run each output line as a r2 cmd\n"
+	"  !echo $SIZE             display file size\n"
 	"Environment:\n"
 	"  FILE       file name\n"
 	"  SIZE       file size\n"
@@ -82,7 +93,7 @@ R_API void r_core_sysenv_end(RCore *core, const char *cmd) {
 }
 
 R_API char *r_core_sysenv_begin(RCore *core, const char *cmd) {
-	char buf[64], *ret;
+	char buf[64], *ret, *f;
 #if DISCUSS
 	// EDITOR      cfg.editor (vim or so)
 	CURSOR      cursor position (offset from curseek)
@@ -97,8 +108,7 @@ R_API char *r_core_sysenv_begin(RCore *core, const char *cmd) {
 	ret = strdup (cmd);
 	if (strstr (cmd, "BLOCK")) {
 		// replace BLOCK in RET string
-		char *f = r_file_temp ("r2block");
-		if (f) {
+		if ((f = r_file_temp ("r2block"))) {
 			if (r_file_dump (f, core->block, core->blocksize))
 				r_sys_setenv ("BLOCK", f);
 			free (f);
@@ -127,22 +137,27 @@ R_API char *r_core_sysenv_begin(RCore *core, const char *cmd) {
 }
 
 R_API int r_core_bin_load(RCore *r, const char *file) {
-	int va = r->io->va || r->io->debug;
+	int i, va = r->io->va || r->io->debug;
+	RListIter *iter;
+	ut64 offset;
+	RIOMap *im;
 
 	if (file == NULL || !r->file || !*file) {
 		if (!r->file || !r->file->filename)
 			return R_FALSE;
 		file = r->file->filename;
 	}
-	if (r_bin_load (r->bin, file, R_FALSE)) {
-		if (r->bin->narch>1) {
-			int i;
+	while (*file==' ') file++;
+	/* TODO: fat bins are loaded multiple times, this is a problem that must be fixed . see '-->' marks. */
+	/* r_bin_select, r_bin_select_idx and r_bin_load end up loading the bin */
+	if (r_bin_load (r->bin, file, R_FALSE)) { // --->
+		if (r->bin->narch>1 && r_config_get_i (r->config, "scr.prompt")) {
 			RBinObject *o = r->bin->cur.o;
 			eprintf ("NOTE: Fat binary found. Selected sub-bin is: -a %s -b %d\n",
 					r->assembler->cur->arch, r->assembler->bits);
 			eprintf ("NOTE: Use -a and -b to select sub binary in fat binary\n");
 			for (i=0; i<r->bin->narch; i++) {
-				r_bin_select_idx (r->bin, i);
+				r_bin_select_idx (r->bin, i); // -->
 				if (o->info) {
 					eprintf ("  $ r2 -a %s -b %d %s  # 0x%08"PFMT64x"\n", 
 							o->info->arch,
@@ -151,37 +166,33 @@ R_API int r_core_bin_load(RCore *r, const char *file) {
 							r->bin->cur.offset);
 				} else eprintf ("No extract info found.\n");
 			}
+			r_bin_select (r->bin, r->assembler->cur->arch, r->assembler->bits, NULL); // -->
 		}
-		r_bin_select (r->bin, r->assembler->cur->arch, r->assembler->bits, NULL);//"x86_32");
-		{
-		RIOMap *im;
-		RListIter *iter;
 		/* Fix for fat bins */
 		r_list_foreach (r->io->maps, iter, im) {
-			im->delta = r->bin->cur.offset;
-			im->to = im->from + r->bin->cur.size;
-		}
+			if (r->bin->cur.size > 0) {
+				im->delta = r->bin->cur.offset;
+				im->to = im->from + r->bin->cur.size;
+			}
 		}
 	} else if (!r_bin_load (r->bin, file, R_TRUE))
 		return R_FALSE;
-	r->file->obj = r_bin_get_object (r->bin, 0);
-	if (r->file->obj->info != NULL) {
-		r_config_set_i (r->config, "io.va", r->file->obj->info->has_va);
-	} else r_config_set_i (r->config, "io.va", 0);
-	{
-		ut64 offset = r_bin_get_offset (r->bin);
-		r_core_bin_info (r, R_CORE_BIN_ACC_ALL, R_CORE_BIN_SET, va, NULL, offset);
-	}
+	r->file->obj = r_bin_get_object (r->bin);
+
+	r_config_set_i (r->config, "io.va", 
+		(r->file->obj->info)? r->file->obj->info->has_va: 0);
+	offset = r_bin_get_offset (r->bin);
+	r_core_bin_info (r, R_CORE_BIN_ACC_ALL, R_CORE_BIN_SET, va, NULL, offset);
 	if (r_config_get_i (r->config, "file.analyze"))
 		r_core_cmd0 (r, "aa");
 	return R_TRUE;
 }
 
 R_API RCoreFile *r_core_file_open(RCore *r, const char *file, int mode, ut64 loadaddr) {
-	RCoreFile *fh;
 	const char *cp;
-	char *p;
+	RCoreFile *fh;
 	RIODesc *fd;
+	char *p;
 	if (!strcmp (file, "-")) {
 		file = "malloc://512";
 		mode = 4|2;
@@ -221,7 +232,6 @@ R_API RCoreFile *r_core_file_open(RCore *r, const char *file, int mode, ut64 loa
 	fh->size = r_io_size (r->io);
 	r_list_append (r->files, fh);
 
-//	r_core_bin_load (r, fh->filename);
 	cp = r_config_get (r->config, "cmd.open");
 	if (cp && *cp)
 		r_core_cmd (r, cp, 0);
@@ -229,10 +239,7 @@ R_API RCoreFile *r_core_file_open(RCore *r, const char *file, int mode, ut64 loa
 	r_config_set_i (r->config, "zoom.to", loadaddr+fh->size);
 	fh->map = r_io_map_add (r->io, fh->fd->fd, mode, 0, loadaddr, fh->size);
 
-	//r_config_set_i (r->config, "io.va", 0);
 	r_core_block_read (r, 0);
-	//r_core_bin_load (r, NULL); // XXX: unnecessary call?
-	//r_core_block_read (r, 0);
 	return fh;
 }
 
@@ -270,9 +277,10 @@ R_API int r_core_file_list(RCore *core) {
 	RListIter *iter;
 	r_list_foreach (core->files, iter, f) {
 		if (f->map)
-			r_cons_printf ("%c %d %s 0x%"PFMT64x"\n",
+			r_cons_printf ("%c %d %s @ 0x%"PFMT64x" ; %s\n",
 				core->io->raised == f->fd->fd?'*':'-',
-				f->fd->fd, f->uri, f->map->from);
+				f->fd->fd, f->uri, f->map->from,
+				f->fd->flags & R_IO_WRITE? "rw": "r");
 		else r_cons_printf ("- %d %s\n", f->fd->fd, f->uri);
 		count++;
 	}
@@ -295,10 +303,10 @@ R_API int r_core_file_close_fd(RCore *core, int fd) {
 }
 
 R_API int r_core_hash_load(RCore *r, const char *file) {
-	ut8 *buf = NULL;
-	int i, buf_len = 0;
 	const ut8 *md5, *sha1;
 	char hash[128], *p;
+	int i, buf_len = 0;
+	ut8 *buf = NULL;
 	RHash *ctx;
 	ut64 limit;
 

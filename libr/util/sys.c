@@ -14,6 +14,7 @@
 # include <signal.h>
 #elif __WINDOWS__
 # include <io.h>
+# include <winbase.h>
 #endif
 
 /* TODO: import stuff fron bininfo/p/bininfo_addr2line */
@@ -24,14 +25,14 @@ R_API ut64 r_sys_now(void) {
 	gettimeofday (&now, NULL);
 	ret = now.tv_sec;
 	ret <<= 32;
-	ret |= now.tv_usec;
+	ret += now.tv_usec;
 	//(sizeof (now.tv_sec) == 4
 	return ret;
 }
 
 R_API int r_sys_truncate(const char *file, int sz) {
 #if __WINDOWS__
-	int fd = open (file, O_RDWR);
+	int fd = r_sandbox_open (file, O_RDWR, 0644);
 	if (!fd) return R_FALSE;
 	ftruncate (fd, sz);
 	close (fd);
@@ -44,7 +45,8 @@ R_API int r_sys_truncate(const char *file, int sz) {
 R_API RList *r_sys_dir(const char *path) {
 	struct dirent *entry;
 	DIR *dir;
-	if (!path) return NULL;
+	if (!path || (r_sandbox_enable (0) && !r_sandbox_check_path (path)))
+		return NULL;
 	dir = opendir (path);
 	if (dir) {
 		RList *list = r_list_new ();
@@ -70,14 +72,18 @@ R_API char *r_sys_cmd_strf(const char *fmt, ...) {
 	return ret;
 }
 
+#ifdef __MAC_10_7
+#define APPLE_WITH_BACKTRACE 1
+#endif
+#ifdef __IPHONE_4_0
+#define APPLE_WITH_BACKTRACE 1
+#endif
+
 R_API void r_sys_backtrace(void) {
-#if __linux__ && __GNU_LIBRARY__
+#if (__linux__ && __GNU_LIBRARY__) || (__APPLE__ && APPLE_WITH_BACKTRACE)
         void *array[10];
-        size_t size;
-        char **strings;
-        size_t i;
-        size = backtrace (array, 10);
-        strings = backtrace_symbols (array, size);
+        size_t i, size = backtrace (array, 10);
+        char **strings = backtrace_symbols (array, size);
         printf ("Backtrace %zd stack frames.\n", size);
         for (i = 0; i < size; i++)
                 printf ("%s\n", strings[i]);
@@ -123,6 +129,7 @@ R_API int r_sys_usleep(int usecs) {
 
 R_API int r_sys_setenv(const char *key, const char *value) {
 #if __UNIX__
+	if (!key) return 0;
 	if (value == NULL) {
 		unsetenv (key);
 		return 0;
@@ -148,7 +155,7 @@ static void signal_handler(int signum) {
 	cmd = malloc (len);
 	snprintf (cmd, len, crash_handler_cmd, getpid ());
 	r_sys_backtrace ();
-	exit (system (cmd));
+	exit (r_sys_cmd (cmd));
 }
 
 static int checkcmd(const char *c) {
@@ -217,7 +224,7 @@ R_API char *r_sys_getdir(void) {
 }
 
 R_API int r_sys_chdir(const char *s) {
-	return chdir (s)==0;
+	return r_sandbox_chdir (s)==0;
 }
 
 #if __UNIX__
@@ -253,7 +260,7 @@ R_API int r_sys_cmd_str_full(const char *cmd, const char *input, char **output, 
 		if (output) { dup2 (sh_out[1], 1); close (sh_out[0]); close (sh_out[1]); }
 		if (sterr) dup2 (sh_err[1], 2); else close (2);
 		close (sh_err[0]); close (sh_err[1]); 
-		exit (execl ("/bin/sh", "sh", "-c", cmd, (char*)NULL));
+		exit (r_sandbox_system (cmd, 0));
 	default:
 		outputptr = strdup ("");
 		if (!outputptr)
@@ -322,6 +329,7 @@ R_API int r_sys_cmd_str_full(const char *cmd, const char *input, char **output, 
 		}
 		return R_TRUE;
 	}
+	free(outputptr);
 	return R_FALSE;
 }
 #elif __WINDOWS__
@@ -352,19 +360,19 @@ R_API int r_sys_cmdf (const char *fmt, ...) {
 }
 
 R_API int r_sys_cmd (const char *str) {
-/* TODO: implement for other systems */
 #if __FreeBSD__
 	/* freebsd system() is broken */
-	int fds[2];
-	int st,pid;
-	char *argv[] = { "/bin/sh", "-c", str, NULL};
-	pipe (fds);
-	/* not working ?? */
-	//pid = rfork(RFPROC|RFCFDG);
+	int st, pid, fds[2];
+	if (pipe (fds))
+		return -1;
 	pid = vfork ();
+	if (pid == -1)
+		return -1;
 	if (pid == 0) {
 		dup2 (1, fds[1]);
-		execv (argv[0], argv);
+		// char *argv[] = { "/bin/sh", "-c", str, NULL};
+		// execv (argv[0], argv);
+		r_sandbox_system (str, 0);
 		_exit (127); /* error */
 	} else {
 		dup2 (1, fds[0]);
@@ -372,7 +380,7 @@ R_API int r_sys_cmd (const char *str) {
 	}
 	return WEXITSTATUS (st);
 #else
-	return system (str);
+	return r_sandbox_system (str, 1);
 #endif
 }
 
@@ -410,20 +418,20 @@ R_API void r_sys_perror(const char *fun) {
 #elif __WINDOWS__
 	char *lpMsgBuf;
 	LPVOID lpDisplayBuf;
-	DWORD dw = GetLastError(); 
+	DWORD dw = GetLastError (); 
 
 	FormatMessage ( FORMAT_MESSAGE_ALLOCATE_BUFFER | 
 			FORMAT_MESSAGE_FROM_SYSTEM |
 			FORMAT_MESSAGE_IGNORE_INSERTS,
 			NULL,
 			dw,
-			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			MAKELANGID (LANG_NEUTRAL, SUBLANG_DEFAULT),
 			(LPTSTR) &lpMsgBuf,
 			0, NULL );
 
 	lpDisplayBuf = (LPVOID)LocalAlloc (LMEM_ZEROINIT, 
-			(lstrlen((LPCTSTR)lpMsgBuf)+
-			lstrlen((LPCTSTR)fun)+40)*sizeof (TCHAR)); 
+			(lstrlen ((LPCTSTR)lpMsgBuf)+
+			lstrlen ((LPCTSTR)fun)+40)*sizeof (TCHAR)); 
 	eprintf ("%s: %s\n", fun, lpMsgBuf);
 
 	LocalFree (lpMsgBuf);
@@ -431,6 +439,7 @@ R_API void r_sys_perror(const char *fun) {
 #endif
 }
 
+// TODO: use array :P
 R_API int r_sys_arch_id(const char *arch) {
 	if (!strcmp (arch, "x86")) return R_SYS_ARCH_X86;
 	if (!strcmp (arch, "arm")) return R_SYS_ARCH_ARM;
@@ -445,6 +454,11 @@ R_API int r_sys_arch_id(const char *arch) {
 	if (!strcmp (arch, "bf")) return R_SYS_ARCH_BF;
 	if (!strcmp (arch, "sh")) return R_SYS_ARCH_SH;
 	if (!strcmp (arch, "avr")) return R_SYS_ARCH_AVR;
+	if (!strcmp (arch, "dalvik")) return R_SYS_ARCH_DALVIK;
+	if (!strcmp (arch, "z80")) return R_SYS_ARCH_Z80;
+	if (!strcmp (arch, "arc")) return R_SYS_ARCH_ARC;
+	if (!strcmp (arch, "i8080")) return R_SYS_ARCH_I8080;
+	if (!strcmp (arch, "rar")) return R_SYS_ARCH_RAR;
 	return 0;
 }
 
@@ -462,20 +476,26 @@ R_API const char *r_sys_arch_str(int arch) {
 	if (arch & R_SYS_ARCH_BF) return "bf";
 	if (arch & R_SYS_ARCH_SH) return "sh";
 	if (arch & R_SYS_ARCH_AVR) return "avr";
+	if (arch & R_SYS_ARCH_DALVIK) return "dalvik";
+	if (arch & R_SYS_ARCH_Z80) return "z80";
+	if (arch & R_SYS_ARCH_ARC) return "arc";
+	if (arch & R_SYS_ARCH_I8080) return "i8080";
+	if (arch & R_SYS_ARCH_RAR) return "rar";
 	return "none";
 }
 
 R_API int r_sys_run(const ut8 *buf, int len) {
+	const int sz = 4096;
 	int ret, (*cb)();
-	ut8 *ptr, *p = malloc ((4096+len)<<1);
+	ut8 *ptr, *p = malloc ((sz+len)<<1);
 	ptr = (ut8*)R_MEM_ALIGN (p);
 	if (!ptr) {
 		free (p);
 		return R_FALSE;
 	}
-	memcpy (ptr, buf, 4096);
-	r_mem_protect (ptr, 4096, "rx");
-	r_mem_protect (ptr, 4096, "rwx"); // try, ignore if fail
+	memcpy (ptr, buf, sz);
+	r_mem_protect (ptr, sz, "rx");
+	r_mem_protect (ptr, sz, "rwx"); // try, ignore if fail
 	cb = (void*)ptr;
 	ret = cb ();
 	free (p);

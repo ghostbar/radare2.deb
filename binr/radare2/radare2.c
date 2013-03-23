@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 #define USE_THREADS 1
 
@@ -20,10 +20,11 @@ static int main_help(int line) {
 		printf ("Usage: r2 [-dDwntLqv] [-P patch] [-p prj] [-a arch] [-b bits] [-i file]\n"
 			"          [-s addr] [-B blocksize] [-c cmd] [-e k=v] [file]\n");
 	if (line != 1) printf (
-		" -a [arch]    set asm.arch eval var\n"
-		" -b [bits]    set asm.bits eval var\n"
+		" -a [arch]    set asm.arch\n"
+		" -b [bits]    set asm.bits\n"
 		" -B [size]    initial block size\n"
 		" -c 'cmd..'   execute radare command\n"
+		" -C           file is host:port (alias for -c+=http://%%s/cmd/)\n"
 		" -d           use 'file' as a program to debug\n"
 		" -D [backend] enable debug mode (e cfg.debug=true)\n"
 		" -e k=v       evaluate config var\n"
@@ -58,18 +59,24 @@ static int main_help(int line) {
 }
 
 static int main_version() {
-	const char *gittip = R2_GITTIP;
-	printf ("radare2 "R2_VERSION" @ "R_SYS_OS"-"R_SYS_ENDIAN"-"R_SYS_ARCH"-%d build "R2_BIRTH"\n", R_SYS_BITS&8?64:32);
-	if (*gittip)
-		printf ("commit: %s\n", gittip);
+	printf ("radare2 "R2_VERSION" @ "R_SYS_OS"-"R_SYS_ENDIAN"-"
+		R_SYS_ARCH"-%d build "R2_BIRTH"\n", R_SYS_BITS&8?64:32);
+	if (*R2_GITTIP)
+		printf ("commit: %s\n", R2_GITTIP);
 	return 0;
 }
 
 static void list_io_plugins(RIO *io) {
+	char str[4];
 	struct list_head *pos;
 	list_for_each_prev(pos, &io->io_list) {
 		struct r_io_list_t *il = list_entry(pos, struct r_io_list_t, list);
-		printf (" %-10s %s\n", il->plugin->name, il->plugin->desc);
+		// read, write, debug, proxy
+		str[0] = 'r';
+		str[1] = il->plugin->write? 'w': '_';
+		str[2] = il->plugin->debug? 'd': '_';
+		str[3] = 0;
+		printf ("%s  %-11s %s\n", str, il->plugin->name, il->plugin->desc);
 	}
 }
 
@@ -111,6 +118,7 @@ int main(int argc, char **argv) {
 	//int threaded = R_FALSE;
 	int has_project = R_FALSE;
  	int ret, i, c, perms = R_IO_READ;
+	int do_connect = 0;
 	int run_anal = 1;
 	int run_rc = 1;
 	int help = 0;
@@ -124,7 +132,7 @@ int main(int argc, char **argv) {
 	const char *asmarch = NULL;
 	const char *asmbits = NULL;
 	ut64 mapaddr = 0LL;
-	int quite = R_FALSE;
+	int quiet = R_FALSE;
 	int is_gdb = R_FALSE;
 	RList *cmds = r_list_new ();
 	RList *evals = r_list_new ();
@@ -137,12 +145,15 @@ int main(int argc, char **argv) {
 		return main_help (1);
 	r_core_init (&r);
 
-	while ((c = getopt (argc, argv, "wfhm:e:nNdqvs:p:b:B:a:Lui:l:P:c:D:"
+	while ((c = getopt (argc, argv, "Cwfhm:e:nNdqvs:p:b:B:a:Lui:l:P:c:D:"
 #if USE_THREADS
 "t"
 #endif
 			))!=-1) {
 		switch (c) {
+		case 'C':
+			do_connect = R_TRUE;
+			break;
 #if USE_THREADS
 		case 't':
 			threaded = R_TRUE;
@@ -154,15 +165,20 @@ int main(int argc, char **argv) {
 			break;
 		case 'm': mapaddr = r_num_math (r.num, optarg); break;
 		case 'q':
+			r_config_set (r.config, "scr.interactive", "false");
 			r_config_set (r.config, "scr.prompt", "false");
-			quite = R_TRUE;
+			quiet = R_TRUE;
 			break;
 		case 'p': r_config_set (r.config, "file.project", optarg); break;
 		case 'P': patchfile = optarg; break;
 		case 'c': r_list_append (cmds, optarg); break;
 		case 'i': cmdfile[cmdfilei++] = optarg; break;
 		case 'l': r_lib_open (r.lib, optarg); break;
+#if DEBUGGER
 		case 'd': debug = 1; break;
+#else
+		case 'd': eprintf ("Sorry. No compiler backend available.\n"); return 1;
+#endif
 		case 'e': r_config_eval (r.config, optarg); 
 			  r_list_append (evals, optarg); break;
 		case 'H':
@@ -182,6 +198,14 @@ int main(int argc, char **argv) {
 	}
 	if (help>1) return main_help (2);
 	else if (help) return main_help (0);
+
+	if (do_connect) {
+		const char *uri = argv[optind];
+		if (!strncmp (uri, "http://", 7))
+			r_core_cmdf (&r, "=+%s", uri);
+		else r_core_cmdf (&r, "=+http://%s/cmd/", argv[optind]);
+		return 0;
+	}
 
 	// DUP
 	if (asmarch) r_config_set (r.config, "asm.arch", asmarch);
@@ -284,14 +308,30 @@ int main(int argc, char **argv) {
 		} //else rabin_delegate (NULL);
 	} // else eprintf ("Metadata loaded from 'file.project'\n");
 #endif
+	if (mapaddr)
+		r_core_seek (&r, mapaddr, 1);
+
+	r_list_foreach (evals, iter, cmdn) {
+		r_config_eval (r.config, cmdn); 
+		r_cons_flush ();
+	}
 
 	has_project = r_core_project_open (&r, r_config_get (r.config, "file.project"));
 	if (run_anal) {
 #if USE_THREADS
 		if (!rabin_th)	
 #endif
-			if (!r_core_bin_load (&r, NULL))
+		{
+			const char *filepath = NULL;
+			if (debug) {
+				// XXX: this is incorrect for PIE binaries
+				filepath = strstr (file, "://");
+				if (filepath) filepath += 3;
+				else filepath = file;
+			}
+			if (!r_core_bin_load (&r, filepath))
 				r_config_set (r.config, "io.va", "false");
+		}
 	}
 	if (run_rc) {
 		char *homerc = r_str_home (".radare2rc");
@@ -303,6 +343,9 @@ int main(int argc, char **argv) {
 	if (asmarch) r_config_set (r.config, "asm.arch", asmarch);
 	if (asmbits) r_config_set (r.config, "asm.bits", asmbits);
 
+	debug = r.file && r.file->fd && r.file->fd->plugin && \
+		r.file->fd->plugin->debug != NULL;
+	r_config_set_i (r.config, "cfg.debug", debug);
 	if (debug) {
 		int pid, *p = r.file->fd->data;
 		if (!p) {
@@ -310,7 +353,7 @@ int main(int argc, char **argv) {
 			return 1;
 		}
 		pid = *p; // 1st element in debugger's struct must be int
-		r_core_cmd (&r, "e io.ffio=true", 0);
+		r_config_set (r.config, "io.ffio", "true");
 		if (is_gdb) r_core_cmd (&r, "dh gdb", 0);
 		else r_core_cmdf (&r, "dh %s", debugbackend);
 		r_core_cmdf (&r, "dpa %d", pid);
@@ -344,11 +387,6 @@ int main(int argc, char **argv) {
 	if (fullfile) r_core_block_size (&r, r.file->size);
 	else if (bsize) r_core_block_size (&r, bsize);
 
-	if (r_config_get_i (r.config, "scr.prompt"))
-	if (run_rc && r_config_get_i (r.config, "cfg.fortunes")) {
-		r_core_cmd (&r, "fo", 0);
-		r_cons_flush ();
-	}
 	r_core_seek (&r, r.offset, 1); // read current block
 
 	/* check if file.sha1 has changed */
@@ -371,20 +409,25 @@ int main(int argc, char **argv) {
 		free (path);
 	}
 
-/////
+#if 1
 	r_list_foreach (evals, iter, cmdn) {
 		r_config_eval (r.config, cmdn); 
 		r_cons_flush ();
 	}
 	r_list_free (evals);
-/////
+#endif
+
 	/* run -i and -c flags */
 	cmdfile[cmdfilei] = 0;
 	for (i=0; i<cmdfilei; i++) {
-		int ret = r_core_cmd_file (&r, cmdfile[i]);
+		if (!r_file_exists (cmdfile[i])) {
+			eprintf ("Script '%s' not found.\n", cmdfile[i]);
+			return 1;
+		}
+		ret = r_core_cmd_file (&r, cmdfile[i]);
 		if (ret ==-2)
 			eprintf ("Cannot open '%s'\n", cmdfile[i]);
-		if (ret<0 || (ret==0 && quite))
+		if (ret<0 || (ret==0 && quiet))
 			return 0;
 	}
 
@@ -393,10 +436,15 @@ int main(int argc, char **argv) {
 		r_core_cmd0 (&r, cmdn);
 		r_cons_flush ();
 	}
-	if ((cmdfile[0] || !r_list_empty (cmds)) && quite)
+	if ((cmdfile[0] || !r_list_empty (cmds)) && quiet)
 		return 0;
 	r_list_free (cmds);
 /////
+	if (r_config_get_i (r.config, "scr.prompt"))
+	if (run_rc && r_config_get_i (r.config, "cfg.fortunes")) {
+		r_core_cmd (&r, "fo", 0);
+		r_cons_flush ();
+	}
 
 	if (patchfile) {
 		r_core_patch (&r, patchfile);
@@ -425,7 +473,7 @@ int main(int argc, char **argv) {
 		if (debug) {
 			if (r_cons_yesno ('y', "Do you want to quit? (Y/n)")) {
 				if (r_cons_yesno ('y', "Do you want to kill the process? (Y/n)"))
-					r_debug_kill (r.dbg, R_FALSE, 9); // KILL
+					r_debug_kill (r.dbg, 0, R_FALSE, 9); // KILL
 			} else continue;
 		}
 		prj = r_config_get (r.config, "file.project");

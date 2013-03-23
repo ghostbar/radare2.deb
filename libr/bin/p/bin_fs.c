@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2011 -- pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2011-2012 - pancake */
 
 #include <r_types.h>
 #include <r_util.h>
@@ -58,6 +58,7 @@ static RBinInfo* info(RBinArch *arch) {
 	if (!(ret = R_NEW (RBinInfo)))
 		return NULL;
 	memset (ret, '\0', sizeof (RBinInfo));
+	ret->lang = NULL;
 	strncpy (ret->file, arch->file, R_BIN_SIZEOF_STRINGS-1);
 	strncpy (ret->rpath, "NONE", R_BIN_SIZEOF_STRINGS-1);
 	strncpy (ret->type, "fs", sizeof (ret->type)-1); // asm.arch
@@ -75,7 +76,6 @@ static RBinInfo* info(RBinArch *arch) {
 	ret->dbg_info = 0;
 	return ret;
 }
-
 
 static int check(RBinArch *arch) {
 	char *p;

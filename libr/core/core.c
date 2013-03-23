@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 #include <r_core.h>
 #include <r_socket.h>
@@ -14,29 +14,50 @@ static int core_cmd_callback (void *user, const char *cmd) {
 	return r_core_cmd0 (core, cmd);
 }
 
+static ut64 getref (RCore *core, int n, char t, int type) {
+	RAnalFunction *fcn = r_anal_fcn_find (core->anal, core->offset, 0);
+	if (fcn) {
+		RList *list = t=='r'? fcn->refs: fcn->xrefs;
+		RListIter *iter;
+		RAnalRef *r;
+		int i=0;
+		r_list_foreach (list, iter, r) {
+			if (r->type == type) {
+				if (i == n)
+					return r->addr;
+				i++;
+			}
+		}
+	}
+	return UT64_MAX;
+}
+
 static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 	RCore *core = (RCore *)userptr; // XXX ?
+	RAnalFunction *fcn;
 	RFlagItem *flag;
 	RAnalOp op;
 	ut64 ret = 0;
 	*ok = 0;
-	if (str[0]=='[') {
+	if (*str=='[') {
 		int refsz = (core->assembler->bits & R_SYS_BITS_64)? 8: 4;
-		const char *p = strchr (str+1, ':');
+		const char *p = strchr (str+5, ':');
 		ut64 n;
-// TODO: honor endian
+		// TODO: honor endian
 		if (p) {
 			refsz = atoi (str+1);
 			str = p;
 		}
-// push state
-{
-const char *q = r_num_calc_index (core->num, NULL);
-		n = r_num_math (core->num, str+1);
-r_num_calc_index (core->num, q);
-}
-// pop state
-		
+		// push state
+		{
+			char *o = strdup (str+1);
+			const char *q = r_num_calc_index (core->num, NULL);
+			r_str_replace_char (o, ']', 0);
+			n = r_num_math (core->num, o);
+			r_num_calc_index (core->num, q);
+			free (o);
+		}
+		// pop state
 		switch (refsz) {
 		case 8: {
 			ut64 num = 0;
@@ -65,8 +86,12 @@ r_num_calc_index (core->num, q);
 	} else
 	if (str[0]=='$') {
 		*ok = 1;
-		r_anal_op (core->anal, &op, core->offset, core->block, core->blocksize);
+		// TODO: group analop-dependant vars after a char, so i can filter
+		r_anal_op (core->anal, &op, core->offset,
+			core->block, core->blocksize);
 		switch (str[1]) {
+		case '.': // can use pc, sp, a0, a1, ...
+			return r_debug_reg_get (core->dbg, str+2);
 		case '{':
 			{
 				char *ptr, *bptr = strdup (str+2);
@@ -87,9 +112,30 @@ r_num_calc_index (core->num, q);
 		case 'l': return op.length;
 		case 'b': return core->blocksize;
 		case 's': return core->file->size;
+		case 'w': {
+			int bits = r_config_get_i (core->config, "asm.bits");
+			return bits/8;
+			} break;
+		case 'S': {
+			RIOSection *s = r_io_section_get (core->io, 
+				r_io_section_vaddr_to_offset (core->io, core->offset));
+			return s? (str[2]=='S'?s->size: s->offset): 0;
+			}
 		case '?': return core->num->value;
 		case '$': return core->offset;
 		case 'o': return core->io->off;
+		case 'C': return getref (core, atoi (str+2), 'r', R_ANAL_REF_TYPE_CALL);
+		case 'J': return getref (core, atoi (str+2), 'r', R_ANAL_REF_TYPE_CODE);
+		case 'D': return getref (core, atoi (str+2), 'r', R_ANAL_REF_TYPE_DATA);
+		case 'X': return getref (core, atoi (str+2), 'x', R_ANAL_REF_TYPE_CALL);
+		case 'I':
+			  fcn = r_anal_fcn_find (core->anal, core->offset, 0);
+			  if (fcn) return fcn->ninstr;
+			  return 0;
+		case 'F':
+			  fcn = r_anal_fcn_find (core->anal, core->offset, 0);
+			  if (fcn) return fcn->size;
+			  return 0;
 		}
 	} else
 	if (*str>'A') {
@@ -111,8 +157,9 @@ R_API RCore *r_core_new() {
 #define CMDS (sizeof (radare_argv)/sizeof(const char*))
 static const char *radare_argv[] = {
 	"?", "?v",
-	"dH", "ds", "dso", "dsl", "dc", "dd", "dm", "db", "db-", "dp", "dr", "dcu",
-	"S", 
+	"dH", "ds", "dso", "dsl", "dc", "dd", "dm", "db", "db-",
+        "dp", "dr", "dcu", "dmd", "dmp", "dml",
+	"S",
 	"s", "s+", "s++", "s-", "s--", "s*", "sa", "sb", "sr",
 	"!", "!!", 
 	"#sha1", "#crc32", "#pcprint", "#sha256", "#sha512", "#md4", "#md5", 
@@ -121,21 +168,22 @@ static const char *radare_argv[] = {
 	"aa", "ab", "af", "ar", "ag", "at", "a?", 
 	"af", "afc", "afi", "afb", "afr", "afs", "af*", 
 	"aga", "agc", "agd", "agl", "agfl",
-	"e", "e-", "e*", "e!",
+	"e", "e-", "e*", "e!", "e?",
 	"i", "ii", "iI", "is", "iS", "iz",
 	"q", 
 	"f", "fl", "fr", "f-", "f*", "fs", "fS", "fr", "fo", "f?",
 	"m", "m*", "ml", "m-", "my", "mg", "md", "mp", "m?",
-	"o", "o-",
-	"x",
+	"o", "o-", "x",
 	".", ".!", ".(", "./",
 	"r", "r+", "r-",
 	"b", "bf", "b?",
 	"/", "//", "/a", "/c", "/m", "/x", "/v",
 	"y", "yy", "y?",
 	"wx", "ww", "wf", "w?",
-	"p6d", "p6e", "p8", "pb", "pc", "pd", "pD", "px", "pX", "po",
-	"pm", "pr", "pt", "ps", "pz", "pu", "pU", "p?",
+	"p6d", "p6e", "p8", "pb", "pc",
+	"pd", "pda", "pdj", "pdb", "pdr", "pdf", "pdi", "pdl",
+	"pD", "px", "pX", "po",
+	"pm", "pr", "pt", "ptd", "ptn", "pt?", "ps", "pz", "pu", "pU", "p?",
 	NULL
 };
 
@@ -167,28 +215,24 @@ static int autocomplete(RLine *line) {
 		     !memcmp (line->buffer.data, ". ", 2) ||
 		     !memcmp (line->buffer.data, "tf ", 3) ||
 		     !memcmp (line->buffer.data, "pm ", 3) ||
+		     !memcmp (line->buffer.data, "dml ", 4) ||
 		     !memcmp (line->buffer.data, "/m ", 3)) {
 			// XXX: SO MANY FUCKING MEMORY LEAKS
 			char *str, *p, *path;
+			int n = 0, i = 0;
 			RList *list;
-			int n, i = 0;
-			int sdelta = (line->buffer.data[1]==' ')?2:3;
-			if (!line->buffer.data[sdelta]) {
-				path = r_sys_getdir ();
-			} else {
-				path = strdup (line->buffer.data+sdelta);
-			}
+			int sdelta = (line->buffer.data[1]==' ')? 2:
+				(line->buffer.data[2]==' ')? 3:4;
+			path = line->buffer.data[sdelta]?
+				strdup (line->buffer.data+sdelta):
+				r_sys_getdir ();
 			p = r_str_lchr (path, '/');
 			if (p) {
 				if (p==path) path = "/";
-				else if (p!=path+1)
-					*p = 0;
+				else if (p!=path+1) *p = 0;
 				p++;
 			}
-			if (p) {
-				if (*p) n = strlen (p);
-				else p = "";
-			}
+			if (p) { if (*p) n = strlen (p); else p = ""; }
 			if (*path=='~') {
 				char *lala = r_str_home (path+1);
 				free (path);
@@ -202,11 +246,6 @@ static int autocomplete(RLine *line) {
 				free (path);
 				path = o;
 			}
-#if 0
-printf ("DIR(%s)\n", path);
-printf ("FILE(%s)\n", p);
-printf ("FILEN %d\n", n);
-#endif
  			list = p? r_sys_dir (path): NULL;
 			if (list) {
 				char buf[4096];
@@ -234,7 +273,7 @@ printf ("FILEN %d\n", n);
 		    (!memcmp (line->buffer.data, "afi ", 4)) ||
 		    (!memcmp (line->buffer.data, "afb ", 4)) ||
 		    (!memcmp (line->buffer.data, "afc ", 4)) ||
-		    (!memcmp (line->buffer.data, "aga ", 4)) ||
+		    (!memcmp (line->buffer.data, "aga ", 5)) ||
 		    (!memcmp (line->buffer.data, "agc ", 4)) ||
 		    (!memcmp (line->buffer.data, "agl ", 4)) ||
 		    (!memcmp (line->buffer.data, "agd ", 4)) ||
@@ -264,12 +303,33 @@ printf ("FILEN %d\n", n);
 			line->completion.argc = i;
 			line->completion.argv = tmp_argv;
 		} else
-		if (!memcmp (line->buffer.data, "e ", 2)) {
+		if (!memcmp (line->buffer.data, "-", 1)) {
+			int count;
+			char **keys = r_cmd_alias_keys(core->rcmd, &count);
+			char *data = line->buffer.data;
+			if (keys) {
+				int i, j;
+				for (i=j=0; i<count; i++) {
+					if (!memcmp (keys[i], data, line->buffer.index)) {
+						tmp_argv[j++] = keys[i];
+					}
+				}
+				tmp_argv[j] = NULL;
+				line->completion.argc = j;
+				line->completion.argv = tmp_argv;
+			} else {
+				line->completion.argc = 0;
+				line->completion.argv = NULL;
+			}
+		} else
+		if ( (!memcmp (line->buffer.data, "e ", 2))
+		   ||(!memcmp (line->buffer.data, "e? ", 3))) {
+			int m = (line->buffer.data[1] == '?')? 3: 2;
+			int i = 0, n = strlen (line->buffer.data+m);
 			RConfigNode *bt;
 			RListIter *iter;
-			int i = 0, n = strlen (line->buffer.data+2);
 			r_list_foreach (core->config->nodes, iter, bt) {
-				if (!memcmp (bt->name, line->buffer.data+2, n)) {
+				if (!memcmp (bt->name, line->buffer.data+m, n)) {
 					tmp_argv[i++] = bt->name;
 					if (i==TMP_ARGV_SZ)
 						break;
@@ -338,11 +398,34 @@ static const char *r_core_print_offname(void *p, ut64 addr) {
 	return NULL;
 }
 
+static int __disasm(void *_core, ut64 addr) {
+	RCore *core = _core;
+	ut8 buf[32], *oblock;
+	int len;
+	oblock = core->block;
+	r_io_read_at (core->io, addr, (ut8*)buf, sizeof (buf));
+	len = r_core_print_disasm_instructions (core, sizeof (buf), 1);
+	core->block = oblock;
+	return len;
+}
+
 R_API int r_core_init(RCore *core) {
 	static int singleton = R_TRUE;
+	core->print = r_print_new ();
+	core->http_up = R_FALSE;
+	core->print->user = core;
+	core->print->offname = r_core_print_offname;
+	core->print->printf = (void *)r_cons_printf;
+	core->print->write = (void *)r_cons_memcat;
+	core->print->user = core;
+	core->print->disasm = __disasm;
 	core->rtr_n = 0;
 	core->blocksize_max = R_CORE_BLOCKSIZE_MAX;
+	core->watchers = r_list_new ();
+	core->watchers->free = (RListFree)r_core_cmpwatch_free;
+	core->log = r_core_log_new ();
 	core->vmode = R_FALSE;
+	core->section = NULL;
 	core->ffio = 0;
 	core->oobi = NULL;
 	core->oobi_len = 0;
@@ -383,10 +466,6 @@ R_API int r_core_init(RCore *core) {
 		/* XXX memory leak */
 		return R_FALSE;
 	}
-	core->print = r_print_new ();
-	core->print->user = core;
-	core->print->offname = r_core_print_offname;
-	core->print->printf = (void *)r_cons_printf;
 	core->lang = r_lang_new ();
 	r_lang_define (core->lang, "RCore", "core", core);
 	r_lang_set_user_ptr (core->lang, core);
@@ -394,6 +473,7 @@ R_API int r_core_init(RCore *core) {
 	r_anal_set_user_ptr (core->anal, core);
 	core->anal->meta->printf = (void *) r_cons_printf;
 	core->assembler = r_asm_new ();
+	core->assembler->num = core->num;
 	r_asm_set_user_ptr (core->assembler, core);
 	core->parser = r_parse_new ();
 	r_parse_set_user_ptr (core->parser, core);
@@ -419,6 +499,8 @@ R_API int r_core_init(RCore *core) {
 	r_core_cmd_init (core);
 	core->flags = r_flag_new ();
 	core->dbg = r_debug_new (R_TRUE);
+	core->dbg->graph->printf = (PrintfCallback)r_cons_printf;
+	core->dbg->printf = (PrintfCallback)r_cons_printf;
 	core->dbg->anal = core->anal; // XXX: dupped instance.. can cause lost pointerz
 	//r_debug_use (core->dbg, "native");
 	r_reg_arena_push (core->dbg->reg); // create a 2 level register state stack
@@ -429,7 +511,6 @@ R_API int r_core_init(RCore *core) {
 	core->dbg->bp->printf = r_cons_printf;
 	r_debug_io_bind (core->dbg, core->io);
 	r_core_config_init (core);
-	// XXX fix path here
 
 	/* load plugins */
 	r_core_loadlibs (core);
@@ -455,6 +536,7 @@ R_API RCore *r_core_fini(RCore *c) {
 	r_core_file_free (c->file);
 	c->file = NULL;
 	r_list_free (c->files);
+	r_list_free (c->watchers);
 	free (c->num);
 	r_cmd_free (c->rcmd);
 	r_anal_free (c->anal);
@@ -505,17 +587,36 @@ R_API int r_core_prompt(RCore *r, int sync) {
 	char prompt[32];
 	const char *cmdprompt = r_config_get (r->config, "cmd.prompt");
 
+	// hacky fix fo rio
+	r_core_block_read (r, 0);
 	if (cmdprompt && *cmdprompt)
 		r_core_cmd (r, cmdprompt, 0);
 
 	if (!r_line_singleton ()->echo)
 		*prompt = 0;
+	// TODO: also in visual prompt and disasm/hexdump ?
+	if (r_config_get_i (r->config, "asm.segoff")) {
+		ut32 a, b;
+		a = ((r->offset >>16)<<12);
+		b = (r->offset & 0xffff);
 #if __UNIX__
-	else if (r_config_get_i (r->config, "scr.color"))
-		snprintf (prompt, sizeof (prompt),
-			Color_YELLOW"[0x%08"PFMT64x"]> "Color_RESET, r->offset);
+		if (r_config_get_i (r->config, "scr.color"))
+			snprintf (prompt, sizeof (prompt),
+				Color_YELLOW"[%04x:%04x]> "
+				Color_RESET, a, b);
+		else
 #endif
-	else sprintf (prompt, "[0x%08"PFMT64x"]> ", r->offset);
+		sprintf (prompt, "[%04x:%04x]> ", a, b);
+	} else {
+#if __UNIX__
+		if (r_config_get_i (r->config, "scr.color"))
+			snprintf (prompt, sizeof (prompt),
+				Color_YELLOW"[0x%08"PFMT64x"]> "
+				Color_RESET, r->offset);
+		else
+#endif
+		sprintf (prompt, "[0x%08"PFMT64x"]> ", r->offset);
+	}
 	r_line_set_prompt (prompt);
 	ret = r_cons_fgets (line, sizeof (line), 0, NULL);
 	if (ret == -2) return R_CORE_CMD_EXIT;
@@ -539,7 +640,7 @@ R_API int r_core_block_size(RCore *core, int bsize) {
 		return R_FALSE;
 	if (bsize<1)
 		bsize = 1;
-	else if (bsize>core->blocksize_max) {
+	else if (core->blocksize_max && bsize>core->blocksize_max) {
 		eprintf ("bsize is bigger than io.maxblk. dimmed to 0x%x > 0x%x\n",
 			bsize, core->blocksize_max);
 		bsize = core->blocksize_max;
@@ -547,12 +648,14 @@ R_API int r_core_block_size(RCore *core, int bsize) {
 	bump = realloc (core->block, bsize+1);
 	if (bump == NULL) {
 		eprintf ("Oops. cannot allocate that much (%u)\n", bsize);
-		return R_FALSE;
+		ret = R_FALSE;
+	} else {
+		ret = R_TRUE;
+		core->block = bump;
+		core->blocksize = bsize;
+		memset (core->block, 0xff, core->blocksize);
+		r_core_block_read (core, 0);
 	}
-	core->block = bump;
-	core->blocksize = bsize;
-	memset (core->block, 0xff, core->blocksize);
-	r_core_block_read (core, 0);
 	return ret;
 }
 
@@ -617,14 +720,22 @@ R_API RAnalOp *r_core_op_anal(RCore *core, ut64 addr) {
 	return op;
 }
 
+static void rap_break (void *u) {
+	RIORap *rior = (RIORap*) u;
+	if (u) {
+		r_socket_free (rior->fd);
+		rior->fd = NULL;
+	}
+}
+
 // TODO: move into core/io/rap? */
+// TODO: use static buffer instead of mallocs all the time. it's network!
 R_API int r_core_serve(RCore *core, RIODesc *file) {
 	ut8 cmd, flg, *ptr = NULL, buf[1024];
-	int i, j, pipefd;
-	ut64 x;
 	RSocket *c, *fd;
+	int i, pipefd;
 	RIORap *rior;
-	RListIter *iter;
+	ut64 x;
 
 	rior = (RIORap *)file->data;
 	if (rior == NULL|| rior->fd == NULL) {
@@ -637,20 +748,24 @@ R_API int r_core_serve(RCore *core, RIODesc *file) {
 			r_config_get (core->config, "rap.loop"));
 #if __UNIX__
 	// XXX: ugly workaround
-	signal (SIGINT, SIG_DFL);
-	signal (SIGPIPE, SIG_DFL);
+	//signal (SIGINT, exit);
+	//signal (SIGPIPE, SIG_DFL);
 #endif
 reaccept:
 	core->io->plugin = NULL;
-	while ((c = r_socket_accept (fd))) {
+	r_cons_break (rap_break, rior);
+	while (!core->cons->breaked) {
+		c = r_socket_accept (fd);
+		if (!c) break;
+		if (core->cons->breaked)
+			return -1;
 		if (c == NULL) {
 			eprintf ("rap: cannot accept\n");
 			r_socket_close (c);
 			return -1;
 		}
-
 		eprintf ("rap: client connected\n");
-		for (;;) {
+		for (;!core->cons->breaked;) {
 			if (!r_socket_read (c, &cmd, 1)) {
 				eprintf ("rap: connection closed\n");
 				if (r_config_get_i (core->config, "rap.loop")) {
@@ -692,6 +807,7 @@ reaccept:
 				r_socket_write (c, buf, 5);
 				r_socket_flush (c);
 
+#if 0
 				/* Write meta info */
 				RMetaItem *d;
 				r_list_foreach (core->anal->meta->data, iter, d) {
@@ -709,6 +825,7 @@ reaccept:
 					r_socket_write (c, buf, i);
 					r_socket_flush (c);
 				}
+#endif
 #if 0
 				RIOSection *s;
 				r_list_foreach_prev (core->io->sections, iter, s) {
@@ -722,6 +839,7 @@ reaccept:
 					r_socket_flush (c);
 				}
 #endif
+#if 0
 				int fs = -1;
 				RFlagItem *flag;
 				r_list_foreach_prev (core->flags->flags, iter, flag) {
@@ -753,7 +871,9 @@ reaccept:
 				i = 0;
 				r_socket_write (c, (ut8 *)&i, 4);
 				r_socket_flush (c);
+#endif
 				free (ptr);
+				ptr = NULL;
 				break;
 			case RMT_READ:
 				r_socket_read_block (c, (ut8*)&buf, 4);
@@ -819,6 +939,7 @@ reaccept:
 				r_socket_read (c, ptr, x);
 				r_core_write_at (core, core->offset, ptr, x);
 				free (ptr);
+				ptr = NULL;
 				break;
 			case RMT_SEEK:
 				r_socket_read_block (c, buf, 9);
@@ -864,7 +985,7 @@ reaccept:
 					system ((const char*)ptr+6);
 					r_cons_pipe_close (pipefd);
 					{
-						FILE *fd = fopen((char*)buf, "r");
+						FILE *fd = r_sandbox_fopen((char*)buf, "r");
 						 i = 0;
 						if (fd == NULL) {
 							eprintf("Cannot open tmpfile\n");
@@ -888,6 +1009,7 @@ reaccept:
 					if (ptr) {
 						memcpy (ptr+5, out, i);
 						free (out);
+						ptr = NULL;
 					}
 					}
 					//unlink((char*)buf);
@@ -912,6 +1034,7 @@ reaccept:
 				return -1;
 			}
 		}
+		r_cons_break_end ();
 		eprintf ("client: disconnected\n");
 	}
 	return -1;

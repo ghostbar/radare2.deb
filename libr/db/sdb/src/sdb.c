@@ -1,4 +1,4 @@
-/* Copyleft 2011-2012 - sdb (aka SimpleDB) - pancake<nopcode.org> */
+/* Copyleft 2011-2013 - sdb - pancake */
 
 #include <stdio.h>
 #include <string.h>
@@ -431,60 +431,102 @@ int sdb_finish (Sdb *s) {
 	return 1; // XXX: 
 }
 
+// TODO: return char *
 int sdb_query (Sdb *s, const char *cmd) {
-	int save = 0;
-	ut64 n;
+	char *p, *eq, *ask = strchr (cmd, '?');
 	const char *p2;
-	char *p, *eq;
+	int i, save = 0;
+	ut64 n;
+
 	switch (*cmd) {
+	case '[': // inc
+		p = strchr (cmd, ']');
+		if (p) {
+			*p = 0;
+			eq = strchr (p+1, '=');
+			if (cmd[1]) {
+				i = atoi (cmd+1);
+				if (eq) {
+					*eq = 0;
+					if (eq[1]) {
+						sdb_aset (s, p+1, i, eq+1);
+					} else {
+						sdb_adel (s, p+1, i);
+					}
+				} else {
+					char *val = sdb_aget (s, p+1, i);
+					printf ("%s\n", val);
+					free (val);
+				}
+			} else {
+				if (eq) {
+					char *q, *out = strdup (eq+1);
+					*eq = 0;
+					// TODO: define new printable separator character
+					for (q=out;*q;q++) if (*q==',') *q = SDB_RS;
+					sdb_set (s, p+1, out, 0);
+					free (out);
+				} else {
+					int hasnext = 1;
+					char *ptr, *list = sdb_get (s, p+1, 0);
+					ptr = list;
+					hasnext = list && *list;
+					while (hasnext) {
+						char *str = sdb_astring (ptr, &hasnext);
+						printf ("%s\n", str);
+						ptr = (char *)sdb_anext (str);
+					}
+					free (list);
+				}
+			}
+		} else fprintf (stderr, "Missing ']'.\n");
+		break;
 	case '+': // inc
-		if ((eq = strchr (cmd+1, '?'))) {
-			*eq = 0;
-			n = sdb_json_inc (s, cmd+1, eq+1, 1, 0);
-			save = 1;
-			printf ("%"ULLFMT"d\n", n);
-		} else {
-			n = sdb_inc (s, cmd+1, 1, 0);
-			save = 1;
-			printf ("%"ULLFMT"d\n", n);
-		}
+		n = ask? 
+			sdb_json_inc (s, cmd+1, ask, 1, 0):
+			sdb_inc (s, cmd+1, 1, 0);
+		printf ("%"ULLFMT"d\n", n);
+		save = 1;
 		break;
 	case '-': // dec
-		if ((eq = strchr (cmd+1, '?'))) {
-			*eq = 0;
-			n = sdb_json_dec (s, cmd+1, eq+1, 1, 0);
-			save = 1;
-			printf ("%"ULLFMT"d\n", n);
-		} else {
-			n = sdb_dec (s, cmd+1, 1, 0);
-			save = 1;
-			printf ("%"ULLFMT"d\n", n);
-		}
+		n = ask? 
+			sdb_json_dec (s, cmd+1, ask, 1, 0):
+			sdb_dec (s, cmd+1, 1, 0);
+		printf ("%"ULLFMT"d\n", n);
+		save = 1;
 		break;
 	default:
-		/* spaghetti */
-		if ((eq = strchr (cmd, '?'))) {
-			char *path = eq+1;
-			*eq = 0;
-			if ((eq = strchr (path+1, '='))) {
-				save = 1;
-				*eq = 0;
-				sdb_json_set (s, cmd, path, eq+1, 0);
-			} else
-			if ((p = sdb_json_get (s, cmd, path, 0))) {
-				printf ("%s\n", p);
-				free (p);
+		eq = strchr (cmd, '=');
+		if (eq && ask>eq) ask = NULL;
+		if (eq) {
+			// 1 0 kvpath=value
+			// 1 1 kvpath?jspath=value
+			save = 1;
+			*eq++ = 0;
+			if (ask) {
+				// sdbjsonset
+				*ask++ = 0;
+				sdb_json_set (s, cmd, ask, eq, 0);
+			} else {
+				// sdbset
+				sdb_set (s, cmd, eq, 0);
 			}
 		} else {
-			if ((eq = strchr (cmd, '='))) {
-				save = 1;
-				*eq = 0;
-				sdb_set (s, cmd, eq+1, 0);
-			} else
-			if ((p2 = sdb_getc (s, cmd, 0)))
-				printf ("%s\n", p2);
+			// 0 1 kvpath?jspath
+			// 0 0 kvpath
+			if (ask) {
+				// sdbjsonget
+				*ask++ = 0;
+				if ((p = sdb_json_get (s, cmd, ask, 0))) {
+					printf ("%s\n", p);
+					free (p);
+				}
+			} else {
+				// sdbget
+				if ((p2 = sdb_getc (s, cmd, 0)))
+					printf ("%s\n", p2);
+			}
 		}
 	}
 	return save;
 }
-

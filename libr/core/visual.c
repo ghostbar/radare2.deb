@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 #include "r_core.h"
 
@@ -23,14 +23,15 @@ static int marks_init = 0;
 static ut64 marks[UT8_MAX+1];
 
 static int r_core_visual_hud(RCore *core) {
+	const char *f = R2_LIBDIR"/radare2/"R2_VERSION"/hud/main";
+	char *homehud = r_str_home("/.radare2/hud");
 	char *res = NULL;
 	char *p = 0;
+
 	r_cons_show_cursor (R_TRUE);
-	char *homehud = r_str_home("/.radare2/hud");
 	if (homehud)
 		res = r_cons_hud_file (homehud);
 	if (!res) {
-		const char *f = R2_LIBDIR"/radare2/"R2_VERSION"/hud/main";
 		if (r_file_exists (f))
 			res = r_cons_hud_file (f);
 		else r_cons_message ("Cannot find hud file");
@@ -63,7 +64,7 @@ static void r_core_visual_mark_seek(RCore *core, ut8 ch) {
 static void r_core_visual_mark(RCore *core, ut8 ch) {
 	if (!marks_init) {
 		int i;
-		for (i=0;i<UT8_MAX;i++)
+		for (i=0; i<UT8_MAX; i++)
 			marks[i] = 0;
 		marks_init = 1;
 	}
@@ -87,6 +88,7 @@ R_API void r_core_visual_prompt (RCore *core) {
 #endif
 	r_cons_show_cursor (R_TRUE);
 	r_cons_fgets (buf, sizeof (buf), 0, NULL);
+	r_line_hist_add (buf);
 	r_core_cmd (core, buf, 0);
 	r_cons_any_key ();
 	r_cons_clear00 ();
@@ -204,7 +206,7 @@ static void visual_search (RCore *core) {
 R_API int r_core_visual_cmd(RCore *core, int ch) {
 	RAsmOp op;
 	char buf[4096];
-	int i, cols = core->print->cols;
+	int i, ret, offscreen, cols = core->print->cols;
 	ch = r_cons_arrow_to_hjkl (ch);
 	ch = visual_nkey (core, ch);
 	if (ch<2) return 1;
@@ -213,6 +215,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 	if (ch>='0'&& ch<='9') {
 		r_io_sundo_push (core->io, core->offset);
 		r_core_seek (core, core->asmqjmps[ch-'0'], 1);
+		r_core_block_read (core, 1);
 	} else
 	switch (ch) {
 	case 9: // tab
@@ -248,15 +251,20 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		break;
 	case 'f':
 		{
+		int range;
 		char name[256], *n;
 		r_line_set_prompt ("flag name: ");
 		if (r_cons_fgets (name, sizeof (name), 0, NULL) >=0 && *name) {
-			int range = curset? (R_ABS (cursor-ocursor)+1): 1;
-			if (range<1) range=1;
 			n = r_str_chop (name);
-			if (*n) r_flag_set (core->flags, n, core->offset + cursor, range, 1);
-		}
-		}
+			if (*name=='-') {
+				if (*n) r_flag_unset (core->flags, n+1, NULL);
+			} else {
+				range = curset? (R_ABS (cursor-ocursor)+1): 1;
+				if (range<1) range = 1;
+				if (*n) r_flag_set (core->flags, n,
+					core->offset + cursor, range, 1);
+			}
+		} }
 		break;
 	case 'F':
 		r_flag_unset_i (core->flags, core->offset + cursor, NULL);
@@ -266,6 +274,14 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		break;
 	case 'N':
 		r_core_seek_previous (core, r_config_get (core->config, "scr.nkey"));
+		break;
+	case 'A':
+		{ int oc = curset;
+		ut64 off = curset? core->offset+cursor : core->offset;
+		curset = 0;
+		r_core_visual_asm (core, off);
+		curset = oc;
+		}
 		break;
 	case 'a':
 		if (core->file && !(core->file->rwx & 2)) {
@@ -289,6 +305,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		r_cons_set_raw (R_TRUE);
 		break;
 	case 'i':
+	case 'I':
 		if (core->file && !(core->file->rwx & 2)) {
 			r_cons_printf ("\nFile has been opened in read-only mode. Use -w flag\n");
 			r_cons_any_key ();
@@ -297,6 +314,21 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		r_cons_show_cursor (R_TRUE);
 		r_cons_flush ();
 		r_cons_set_raw (0);
+		if (ch=='I') {
+			strcpy (buf, "wow ");
+			r_line_set_prompt ("insert hexpair block: ");
+			if (r_cons_fgets (buf+4, sizeof (buf)-3, 0, NULL) <0)
+				buf[0]='\0';
+			char *p = strdup (buf);
+			int cur = core->print->cur;
+			if (cur>=core->blocksize)
+				cur = core->print->cur-1;
+			snprintf (buf, sizeof (buf), "%s @ $$0!%i", p,
+				core->blocksize-cursor);
+			r_core_cmd (core, buf, 0);
+			free (p);
+			break;
+		}
 		if (core->print->col==2) {
 			strcpy (buf, "w ");
 			r_line_set_prompt ("insert string: ");
@@ -308,11 +340,9 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 			if (r_cons_fgets (buf+3, sizeof (buf)-4, 0, NULL) <0)
 				buf[0]='\0';
 		}
-		if (*buf) {
-			if (curset) r_core_seek (core, core->offset + cursor, 0);
-			r_core_cmd (core, buf, 1);
-			if (curset) r_core_seek (core, core->offset - cursor, 1);
-		}
+		if (curset) r_core_seek (core, core->offset + cursor, 0);
+		r_core_cmd (core, buf, 1);
+		if (curset) r_core_seek (core, core->offset - cursor, 1);
 		r_cons_set_raw (1);
 		r_cons_show_cursor (R_FALSE);
 		break;
@@ -382,8 +412,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		r_io_sundo_push (core->io, core->offset);
 		break;
 	case 'G':
-{
-		int ret = 0;
+		ret = 0;
 		if (core->io->va) {
 			ut64 offset = r_io_section_get_vaddr (core->io, 0);
 			if (offset == UT64_MAX) {
@@ -399,7 +428,6 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		}
 		if (ret != -1)
 			r_io_sundo_push (core->io, core->offset);
-}
 		break;
 	case 'h':
 		if (curset) {
@@ -439,13 +467,11 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		if (curset) {
 			if (ocursor==-1) ocursor=cursor;
 			cursor++;
-			{
-				int offscreen = (core->cons->rows-3)*cols;
-				if (cursor>=offscreen) {
-					r_core_seek (core, core->offset+cols, 1);
-					cursor-=cols;
-					ocursor-=cols;
-				}
+			offscreen = (core->cons->rows-3)*cols;
+			if (cursor>=offscreen) {
+				r_core_seek (core, core->offset+cols, 1);
+				cursor-=cols;
+				ocursor-=cols;
 			}
 		} else r_core_seek_delta (core, 2);
 		break;
@@ -456,13 +482,11 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 					&op, core->block+cursor, 32);
 			cursor += cols;
 			ocursor = -1;
-			{
-				int offscreen = (core->cons->rows-3)*cols;
-				if (cursor>=offscreen) {
-					//ut64 x = core->offset + cols;
-					r_core_seek (core, core->offset+cols, 1);
-					cursor-=cols;
-				}
+			offscreen = (core->cons->rows-3)*cols;
+			if (cursor>=offscreen) {
+				//ut64 x = core->offset + cols;
+				r_core_seek (core, core->offset+cols, 1);
+				cursor-=cols;
 			}
 		} else {
 			if (core->printidx == 1 || core->printidx == 2) {
@@ -480,13 +504,11 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		if (curset) {
 			if (ocursor==-1) ocursor = cursor;
 			cursor += cols;
-			{
-				int offscreen = (core->cons->rows-3)*cols;
-				if (cursor>=offscreen) {
-					r_core_seek (core, core->offset+cols, 1);
-					cursor-=cols;
-					ocursor-=cols;
-				}
+			offscreen = (core->cons->rows-3)*cols;
+			if (cursor>=offscreen) {
+				r_core_seek (core, core->offset+cols, 1);
+				cursor-=cols;
+				ocursor-=cols;
 			}
 		} else r_core_seek (core, core->offset+obs, 1);
 		break;
@@ -503,7 +525,6 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 			}
 		} else {
 			if (core->printidx == 1 || core->printidx == 2) {
-				int i;
 				cols = core->inc;
 				for (i = 0; i < R_CORE_ASMSTEPS; i++)
 					if (core->offset == core->asmsteps[i].offset)
@@ -546,10 +567,12 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 			r_config_set_i (core->config, "scr.cols", scrcols+2);
 		}
 		break;
+#if 0
 	case 'I':
 		r_core_cmd (core, "dsp", 0);
 		r_core_cmd (core, ".dr*", 0);
 		break;
+#endif
 	case 's':
 		if (curset) {
 			// dcu 0xaddr
@@ -603,8 +626,8 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 			int cur = core->print->cur;
 			if (cur>=core->blocksize)
 				cur = core->print->cur-1;
-			if (ocursor==-1) sprintf (buf, "wos 01 @ $$+%i:1",cursor);
-			else sprintf (buf, "wos 01 @ $$+%i:%i", cursor<ocursor?
+			if (ocursor==-1) sprintf (buf, "wos 01 @ $$+%i!1",cursor);
+			else sprintf (buf, "wos 01 @ $$+%i!%i", cursor<ocursor?
 				cursor:ocursor, R_ABS (ocursor-cursor)+1);
 			r_core_cmd (core, buf, 0);
 		} else {
@@ -617,8 +640,8 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 			int cur = core->print->cur;
 			if (cur>=core->blocksize)
 				cur = core->print->cur-1;
-			if (ocursor==-1) sprintf (buf, "woa 01 @ $$+%i:1", cursor);
-			else sprintf (buf, "woa 01 @ $$+%i:%i",
+			if (ocursor==-1) sprintf (buf, "woa 01 @ $$+%i!1", cursor);
+			else sprintf (buf, "woa 01 @ $$+%i!%i",
 				cursor<ocursor? cursor: ocursor, R_ABS (ocursor-cursor)+1);
 			r_core_cmd (core, buf, 0);
 		} else {
@@ -655,7 +678,23 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 	case 'N': r_core_seek_delta (core, 0-(int)core->blocksize); break;
 #endif
 	case ':':
-		r_core_visual_prompt (core);
+		{
+			ut64 addr = core->offset;
+			ut64 bsze = core->blocksize;
+			if (curset) {
+				if (ocursor != -1) {
+					r_core_block_size (core, cursor-ocursor);
+					r_core_seek (core, core->offset + ocursor, 1);
+				} else {
+					r_core_seek (core, core->offset + cursor, 1);
+				}
+			}
+			r_core_visual_prompt (core);
+			if (curset) {
+				r_core_seek (core, addr, 1);
+				r_core_block_size (core, bsze);
+			}
+		}
 		break;
 	case '_':
 		if (r_config_get_i (core->config, "hud.once"))
@@ -736,36 +775,37 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		r_cons_clear00 ();
 		r_cons_printf (
 		"Visual mode help:\n"
-		" >||<     seek aligned to block size\n"
-		" hjkl     move around (or HJKL)\n"
-		" pP       rotate print modes\n"
+		" _        enter the hud\n"
+		" .        seek to program counter\n"
+		" /        in cursor mode search in current block\n"
+		" :cmd     run radare command\n"
+		" ;[-]cmt  add/remove comment\n"
 		" /*+-[]   change block size, [] = resize scr.cols\n"
-		" cC       toggle cursor and colors\n"
-		" gG       go seek to begin and end of file (0-$s)\n"
+		" >||<     seek aligned to block size\n"
+		" iaA      (i)nsert hex, (a)ssemble code, visual (A)ssembler\n"
+		" b/B      toggle breakpoint / automatic block size\n"
+		" hjkl     move around (or HJKL) (left-down-up-right)\n"
+		" pP       rotate print modes (hex, disasm, debug, words, buf)\n"
+		" cC       toggle (c)ursor and (C)olors\n"
 		" d[f?]    define function, data, code, ..\n"
 		" D        enter visual diff mode (set diff.from/to)\n"
-		" x        show xrefs to seek between them\n"
-		" sS       step / step over\n"
-		//" n/N      seek next/previous block\n"
 		" e        edit eval configuration variables\n"
+		" f/F      set/unset flag\n"
+		" gG       go seek to begin and end of file (0-$s)\n"
+		" mK/'K    mark/go to Key (any key)\n"
+		" M        walk the mounted filesystems\n"
+		" n/N      seek next/prev function/flag/hit (scr.nkey)\n"
+		" q        back to radare shell\n"
+		" sS       step / step over\n"
 		" t        track flags (browse symbols, functions..)\n"
 		" T        browse anal info and comments\n"
 		" v        visual code analysis menu\n"
 		" V        view graph using cmd.graph (agv?)\n"
-		" f/F      set/unset flag\n"
-		" n/N      seek next/prev function/flag/hit (scr.nkey)\n"
-		" b/B      toggle breakpoint / automatic block size\n"
 		" uU       undo/redo seek\n"
+		" x        show xrefs to seek between them\n"
 		" yY       copy and paste selection\n"
-		" mK/'K    mark/go to Key (any key)\n"
-		" M        show mount points\n"
-		" _        enter hud mode\n"
-		" /        in cursor mode search in current block\n"
-		" :cmd     run radare command\n"
-		" ;[-]cmt  add/remove comment\n"
-		" .        seek to program counter\n"
 		" z        toggle zoom mode\n"
-		" q        back to radare shell\n");
+		);
 		r_cons_flush ();
 		r_cons_any_key ();
 		r_cons_clear00 ();
@@ -776,6 +816,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		setcursor (core, 0);
 		return R_FALSE;
 	}
+	r_core_block_read (core, 0);
 	return R_TRUE;
 }
 
@@ -811,25 +852,30 @@ R_API void r_core_visual_title (RCore *core, int color) {
 		filename = core->file->filename;
 	else filename = "";
 	{ /* get flag with delta */
-		RFlagItem *f = r_flag_get_at (core->flags, core->offset);
+		ut64 addr = core->offset + curset? cursor: 0;
+		RFlagItem *f = r_flag_get_at (core->flags, addr);
 		if (f) {
-			if (f->offset == core->offset) snprintf (pos, sizeof (pos), "@ %s", f->name);
+			if (f->offset == addr || !f->offset)
+				snprintf (pos, sizeof (pos), "@ %s", f->name);
 			else snprintf (pos, sizeof (pos), "@ %s+%d (0x%"PFMT64x")",
-				f->name, (int)(core->offset-f->offset), f->offset);
+				f->name, (int)(addr-f->offset), f->offset);
 		} else pos[0] = 0;
 	}
 
 	if (cursor<0) cursor = 0;
+
 	if (color) r_cons_strcat (Color_YELLOW);
 	strncpy (bar, printfmt[PIDX], sizeof (bar)-1);
+
 	bar[sizeof (bar)-1] = 0; // '\0'-terminate bar
 	bar[10] = '.'; // chop cmdfmt
 	bar[11] = '.'; // chop cmdfmt
 	bar[12] = 0; // chop cmdfmt
 	if (curset)
-		snprintf (foo, sizeof (foo), "[0x%08"PFMT64x" %d %s(0x%x:%d=%d)]> %s\n", core->offset,
-				core->blocksize, filename, cursor, ocursor,
-				ocursor==-1?1:R_ABS (cursor-ocursor)+1, bar);
+		snprintf (foo, sizeof (foo), "[0x%08"PFMT64x" %d (0x%x:%d=%d)]> %s %s\n",
+				core->offset, core->blocksize, 
+				cursor, ocursor, ocursor==-1?1:R_ABS (cursor-ocursor)+1,
+				bar, pos);
 	else
 		snprintf (foo, sizeof (foo), "[0x%08"PFMT64x" %d %s]> %s %s\n",
 			core->offset, core->blocksize, filename, bar, pos);
@@ -838,30 +884,50 @@ R_API void r_core_visual_title (RCore *core, int color) {
 }
 
 static void r_core_visual_refresh (RCore *core) {
-	const char *vi;
+	RCons *cons;
+	const char *vi, *vcmd;
 	if (!core) return;
 	r_cons_get_size (NULL);
 	r_print_set_cursor (core->print, curset, ocursor, cursor);
+	cons = r_cons_singleton ();
+	cons->blankline = R_TRUE;
 
 	if (autoblocksize) {
 		r_cons_gotoxy (0, 0);
 		r_cons_flush ();
 	} else r_cons_clear ();
 
-	vi = r_config_get (core->config, "cmd.vprompt");
-	if (vi) r_core_cmd (core, vi, 0);
-	r_core_visual_title (core, color);
+	r_cons_print_clear ();
 
 	vi = r_config_get (core->config, "cmd.cprompt");
 	if (vi && *vi) {
-		r_cons_printf ("\n[cmd.cprompt] %s\n", vi);
+		// XXX: slow
+		cons->blankline = R_FALSE;
+		r_cons_printf ("[cmd.cprompt=%s]\n", vi);
 		r_core_cmd (core, vi, 0);
-		r_cons_column (80);
+		r_cons_column (r_config_get_i (core->config, "scr.colpos"));
+		r_core_visual_title (core, color);
+		r_cons_flush ();
+		vi = r_config_get (core->config, "cmd.vprompt");
+		if (vi) r_core_cmd (core, vi, 0);
+	} else {
+		vi = r_config_get (core->config, "cmd.vprompt");
+		if (vi) r_core_cmd (core, vi, 0);
+		r_core_visual_title (core, color);
 	}
-	if (zoom) r_core_cmd (core, "pz", 0);
-	else r_core_cmd (core, printfmt[PIDX], 0);
+
+	vcmd = r_config_get (core->config, "cmd.visual");
+	if (vcmd && *vcmd) {
+		r_core_cmd (core, vcmd, 0);
+	} else {
+		if (zoom) r_core_cmd (core, "pz", 0);
+		else r_core_cmd (core, printfmt[PIDX], 0);
+	}
 	blocksize = core->num->value? core->num->value : core->blocksize;
+
+	/* this is why there's flickering */
 	r_cons_visual_flush ();
+	cons->blankline = R_TRUE;
 }
 
 R_API int r_core_visual(RCore *core, const char *input) {

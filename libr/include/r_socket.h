@@ -15,6 +15,7 @@ typedef struct r_socket_t {
 	int fd;
 	int is_ssl;
 	int local; // TODO: merge ssl with local -> flags/options
+	struct sockaddr_in sa;
 #if HAVE_LIB_SSL
 	SSL_CTX *ctx;
 	SSL *sfd;
@@ -29,9 +30,9 @@ typedef struct r_socket_t {
 #ifdef R_API
 R_API RSocket *r_socket_new_from_fd (int fd);
 R_API RSocket *r_socket_new (int is_ssl);
-R_API int r_socket_connect (RSocket *s, const char *host, const char *port, int proto);
-#define r_socket_connect_tcp(a,b,c) r_socket_connect(a,b,c,R_SOCKET_PROTO_TCP)
-#define r_socket_connect_udp(a,b,c) r_socket_connect(a,b,c,R_SOCKET_PROTO_UDP)
+R_API int r_socket_connect (RSocket *s, const char *host, const char *port, int proto, int timeout);
+#define r_socket_connect_tcp(a,b,c,d) r_socket_connect(a,b,c,R_SOCKET_PROTO_TCP,d)
+#define r_socket_connect_udp(a,b,c,d) r_socket_connect(a,b,c,R_SOCKET_PROTO_UDP,d)
 #if __UNIX__
 #define r_socket_connect_unix(a,b) r_socket_connect(a,b,NULL,R_SOCKET_PROTO_UNIX)
 R_API int r_socket_unix_listen (RSocket *s, const char *file);
@@ -80,8 +81,9 @@ typedef struct r_socket_http_request {
 	int data_length;
 } RSocketHTTPRequest;
 
-R_API RSocketHTTPRequest *r_socket_http_accept (RSocket *s);
-R_API void r_socket_http_response (RSocketHTTPRequest *rs, int code, const char *out, int x);
+R_API RSocketHTTPRequest *r_socket_http_accept (RSocket *s, int timeout);
+R_API void r_socket_http_response (RSocketHTTPRequest *rs, int code, const char *out, int x, const char *headers);
 R_API void r_socket_http_close (RSocketHTTPRequest *rs);
+R_API ut8 *r_socket_http_handle_upload(const ut8 *str, int len, int *olen);
 #endif
 #endif

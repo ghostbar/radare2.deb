@@ -1,6 +1,7 @@
-/* radare - LGPL - Copyright 2008-2012 nibble<develsec.org>, pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2008-2013 - nibble, pancake */
 
 #include <r_anal.h>
+#include <r_print.h>
 
 R_API RMeta *r_meta_new() {
 	RMeta *m = R_NEW (RMeta);
@@ -47,8 +48,9 @@ R_API char *r_meta_get_string(RMeta *m, int type, ut64 addr) {
 	RListIter *iter;
 	RMetaItem *d;
 
-	switch(type) {
+	switch (type) {
 	case R_META_TYPE_COMMENT:
+	case R_META_TYPE_HIDE:
 	case R_META_TYPE_ANY:
 		break;
 	case R_META_TYPE_CODE:
@@ -172,6 +174,7 @@ R_API int r_meta_add(RMeta *m, int type, ut64 from, ut64 to, const char *str) {
 	if (to<from)
 		to = from+to;
 	switch (type) {
+	case R_META_TYPE_HIDE:
 	case R_META_TYPE_CODE:
 	case R_META_TYPE_DATA:
 	case R_META_TYPE_STRING:
@@ -194,6 +197,8 @@ R_API int r_meta_add(RMeta *m, int type, ut64 from, ut64 to, const char *str) {
 		eprintf ("r_meta_add: Unsupported type '%c'\n", type);
 		return R_FALSE;
 	}
+	if (mi->type == R_META_TYPE_FORMAT)
+		mi->size = r_print_format_length (mi->str);
 	return R_TRUE;
 }
 
@@ -254,6 +259,7 @@ int r_meta_get_bounds(RMeta *m, ut64 addr, int type, ut64 *from, ut64 *to)
 R_API const char *r_meta_type_to_string(int type) {
 	// XXX: use type as '%c'
 	switch(type) {
+	case R_META_TYPE_HIDE: return "Ch";
 	case R_META_TYPE_CODE: return "Cc";
 	case R_META_TYPE_DATA: return "Cd";
 	case R_META_TYPE_STRING: return "Cs";
@@ -285,14 +291,25 @@ static void printmetaitem(RMeta *m, RMetaItem *d, int rad) {
 	if (str) {
 		if (d->type=='s' && !*str)
 			return;
-		r_str_sanitize (str);
-		if (rad)
-			m->printf ("%s %d %s @ 0x%08"PFMT64x"\n",
-				r_meta_type_to_string (d->type),
-				(int)(d->to-d->from), str, d->from);
-		else
+		if (d->type != 'C')
+			r_name_filter (str, 0);
+//		r_str_sanitize (str);
+		switch (rad) {
+		case 'j':
+			m->printf ("{\"offset\":%"PFMT64d", \"type\":\"%s\", \"name\":\"%s\"}",
+				d->from, r_meta_type_to_string (d->type), str);
+			break;
+		case 0:
 			m->printf ("0x%08"PFMT64x" %s\n",
 				d->from, str);
+		case 1:
+		case '*':
+		default:
+			m->printf ("%s %d %s@0x%08"PFMT64x"\n",
+				r_meta_type_to_string (d->type),
+				(int)(d->to-d->from), str, d->from);
+			break;
+		}
 		free (str);
 	}
 }
@@ -302,11 +319,37 @@ R_API int r_meta_list(RMeta *m, int type, int rad) {
 	int count = 0;
 	RListIter *iter;
 	RMetaItem *d;
+	if (rad=='j') m->printf ("[");
 	r_list_foreach (m->data, iter, d) {
 		if (d->type == type || type == R_META_TYPE_ANY) {
 			printmetaitem (m, d, rad);
 			count++;
+			if (rad=='j' && iter->n) m->printf (",");
 		}
 	}
+	if (rad=='j') m->printf ("]\n");
 	return count;
+}
+
+R_API char *r_anal_meta_bar (RAnal *anal, ut64 from, ut64 to, int blocks) {
+	int i, n, blocksize;
+	char *res;
+	ut64 f, t;
+
+	if (blocks<1 || from > to)
+		return NULL;
+	if (from == to && from == 0) {
+		// autodetect min and max here
+	//	from = 
+	}
+	blocksize = (to-from)/blocks;
+	res = malloc (blocks*4); //blocksize*5);// use realloc here
+	for (i=0; i< blocks; i++) {
+		f = from + (blocksize*i);
+		t = f+blocksize;
+		n = r_anal_fcn_count (anal, f, t);
+		if (n>0) res[i++] = 'f';
+		res[i++] = ',';
+	}
+	return res;
 }

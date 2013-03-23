@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 #include <r_reg.h>
 #include <r_util.h>
@@ -53,7 +53,7 @@ R_API void r_reg_free_internal(RReg *reg) {
 	int i;
 	for (i=0; i<R_REG_TYPE_LAST; i++) {
 		r_list_destroy (reg->regset[i].regs);
-		R_LIST_NEW (reg->regset[i].regs, r_reg_item_free);
+		reg->regset[i].regs = r_list_newf ((RListFree)r_reg_item_free);
 	}
 }
 
@@ -81,8 +81,8 @@ R_API RReg *r_reg_new() {
 		arena = r_reg_arena_new (0);
 		if (!arena) return NULL;
 		reg->regset[i].arena = arena;
-		R_LIST_NEW (reg->regset[i].pool, r_reg_arena_free);
-		R_LIST_NEW (reg->regset[i].regs, r_reg_item_free);
+		reg->regset[i].pool = r_list_newf ((RListFree)r_reg_arena_free);
+		reg->regset[i].regs = r_list_newf ((RListFree)r_reg_item_free);
 		r_list_append (reg->regset[i].pool, reg->regset[i].arena);
 	}
 	return reg;
@@ -270,7 +270,7 @@ R_API ut64 r_reg_cmp(RReg *reg, RRegItem *item) {
 	RRegArena *dst = r_list_head (reg->regset[item->type].pool)->n->data;
 	if (off+len>src->size) len = src->size-off;
 	if (off+len>dst->size) len = dst->size-off;
-	if (len>0 && memcmp (dst->bytes+off, src->bytes+off, len)) {
+	if (len>1 && memcmp (dst->bytes+off, src->bytes+off, len)) {
 		r_reg_arena_set (reg, ptr, 0);
 		ret = r_reg_get_value (reg, item);
 		r_reg_arena_set (reg, !ptr, 0);

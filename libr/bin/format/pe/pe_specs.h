@@ -102,6 +102,9 @@ typedef struct {
 #define PE_IMAGE_FILE_UP_SYSTEM_ONLY           0x4000
 #define PE_IMAGE_FILE_BYTES_REVERSED_HI        0x8000
 
+#define IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE  0x4000
+#define IMAGE_DLLCHARACTERISTICS_NX_COMPAT     0x0100
+
 typedef struct {
 	ut16 Machine;
 	ut16 NumberOfSections;
@@ -226,7 +229,7 @@ typedef struct {
 #define PE_IMAGE_SCN_MEM_WRITE     0x80000000
 
 typedef struct {
-	ut8  Name[PE_IMAGE_SIZEOF_SHORT_NAME];
+	ut8 Name[PE_IMAGE_SIZEOF_SHORT_NAME];
 	union {
 		ut32 PhysicalAddress;
 		ut32 VirtualSize;

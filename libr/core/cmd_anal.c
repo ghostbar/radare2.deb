@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 // pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 #if 1
 /* TODO: Move into cmd_anal() */
@@ -92,6 +92,40 @@ static int var_cmd(RCore *core, const char *str) {
 }
 #endif
 
+static void cmd_anal_trampoline (RCore *core, const char *input) {
+	int i, bits = r_config_get_i (core->config, "asm.bits");
+	char *p, *inp = strdup (input);
+	p = strchr (inp, ' ');
+	if (p) *p=0;
+	ut64 a = r_num_math (core->num, inp);
+	ut64 b = p?r_num_math (core->num, p+1):0;
+	free (inp);
+	switch (bits) {
+	case 32:
+		for (i=0; i<core->blocksize; i+=4) {
+			ut32 n;
+			memcpy (&n, core->block+i, sizeof(ut32));
+			if (n>=a && n<=b) {
+				r_cons_printf ("f trampoline.%x @ 0x%"PFMT64x"\n", n, core->offset+i);
+				r_cons_printf ("Cd 4 @ 0x%"PFMT64x":4\n", core->offset+i);
+				// TODO: add data xrefs
+			}
+		}
+		break;
+	case 64:
+		for (i=0; i<core->blocksize; i+=8) {
+			ut32 n;
+			memcpy (&n, core->block+i, sizeof(ut32));
+			if (n>=a && n<=b) {
+				r_cons_printf ("f trampoline.%"PFMT64x" @ 0x%"PFMT64x"\n", n, core->offset+i);
+				r_cons_printf ("Cd 8 @ 0x%"PFMT64x":8\n", core->offset+i);
+				// TODO: add data xrefs
+			}
+		}
+		break;
+	}
+}
+
 static void cmd_syscall_do(RCore *core, int num) {
 	int i;
 	char str[64];
@@ -169,11 +203,11 @@ static const char *optypestr(int type) {
 	return "err";
 }
 
-static void r_core_anal_bytes (RCore *core, const ut8 *buf, int len) {
-	int ret, idx;
+static void r_core_anal_bytes (RCore *core, const ut8 *buf, int len, int nops) {
+	int ret, i, idx;
 	RAnalOp op;
 
-	for (idx=ret=0; idx<len; idx+=ret) {
+	for (i=idx=ret=0; idx<len && (!nops|| (nops&&i<nops)); i++, idx+=ret) {
 		ret = r_anal_op (core->anal, &op,
 				core->offset+idx, buf + idx, (len-idx));
 		if (ret<1) {
@@ -202,30 +236,16 @@ static int cmd_anal(void *data, const char *input) {
 	ut64 addr = core->offset;
 	ut32 tbs = core->blocksize;
 
-#if 1
-	switch (input[0]) {
-case 'o':
-	if (input[0] && input[1]) {
-		l = (int) r_num_get (core->num, input+2);
-		if (l>0) len = l;
-		if (l>tbs) {
-			r_core_block_size (core, l);
-			len = l;
-		}
-	} else len = l = core->blocksize;
-	}
-#endif
-
 	r_cons_break (NULL, NULL);
 
 	switch (input[0]) {
-	case '8':
+	case '8': // TODO: rename to 'ab'?
 		if (input[1]==' ') {
 			int len;
 			ut8 *buf = malloc (strlen (input));
 			len = r_hex_str2bin (input+2, buf);
 			if (len>0)
-				r_core_anal_bytes (core, buf, len);
+				r_core_anal_bytes (core, buf, len, 0);
 			free (buf);
 		} else eprintf ("Usage: ab [hexpair-bytes]\n");
 		break;
@@ -270,10 +290,10 @@ case 'o':
 				char *p;
 				ut64 a, b;
 				RAnalFunction *fcn;
-				char *mi = strdup (input);
-				if (mi && mi[2]==' ' && (p=strchr (mi+3, ' '))) {
+				char *mi = strdup (input+2);
+				if (mi && *mi==' ' && (p=strchr (mi+1, ' '))) {
 					*p = 0;
-					a = r_num_math (core->num, mi+2);
+					a = r_num_math (core->num, mi);
 					b = r_num_math (core->num, p+1);
 					fcn = r_anal_fcn_find (core->anal, a, R_ANAL_FCN_TYPE_ROOT);
 					if (fcn) {
@@ -305,14 +325,27 @@ case 'o':
 		if (input[1] == 'e') {
 			eprintf ("TODO: r_anal_op_execute\n");
 		} else {
-			r_core_anal_bytes (core, core->block, len);
+			int count = 0;
+			if (input[0] && input[1]) {
+				l = (int) r_num_get (core->num, input+2);
+				if (l>0) count = l;
+				if (l>tbs) {
+					r_core_block_size (core, l*4);
+					//len = l;
+				}
+			} else len = l = core->blocksize;
+			r_core_anal_bytes (core, core->block, len, count);
 		}
+		break;
+	case 'F':
+		r_core_anal_fcn (core, core->offset, -1, R_ANAL_REF_TYPE_NULL, 1);
 		break;
 	case 'f':
 		switch (input[1]) {
 		case '-':
 			{
-			ut64 addr = r_num_math (core->num, input+2);
+			ut64 addr = input[2]?
+				r_num_math (core->num, input+2): core->offset;
 			r_anal_fcn_del_locs (core->anal, addr);
 			r_anal_fcn_del (core->anal, addr);
 			}
@@ -368,19 +401,7 @@ case 'o':
 			r_core_anal_fcn_list (core, input+2, 0);
 			break;
 		case 'l':
-			{
-				RAnalFunction *fcn;
-				RListIter *iter;
-				int bbs;
-
-				r_list_foreach (core->anal->fcns, iter, fcn) {
-					if (input[2]!='*' && !memcmp (fcn->name, "loc.", 4))
-						continue;
-					bbs = r_list_length (fcn->bbs);
-					r_cons_printf ("0x%08"PFMT64x" %6"PFMT64d" %3d  %s\n",
-						fcn->addr, fcn->size, bbs, fcn->name);
-				}
-			}
+			r_core_anal_fcn_list (core, input, 2);
 			break;
 		case '*':
 			r_core_anal_fcn_list (core, input+2, 1);
@@ -473,22 +494,26 @@ case 'o':
 			}
 			break;
 		case 'r':
-			{
+			if (1) { //input[2]==' ' && input[3]) {
 				RAnalFunction *fcn;
 				ut64 off = core->offset;
 				char *p, *name = strdup (input+3);
 				if ((p=strchr (name, ' '))) {
-					*p = 0;
-					off = r_num_math (core->num, name);
+					*p++ = 0;
+					off = r_num_math (core->num, p);
 				}
-				fcn = r_anal_fcn_find (core->anal, off,
-						R_ANAL_FCN_TYPE_FCN|R_ANAL_FCN_TYPE_SYM);
-				if (fcn) {
-					r_core_cmdf (core, "fr %s %s @ 0x%"PFMT64x,
-						fcn->name, p+1, off);
-					free (fcn->name);
-					fcn->name = strdup (p+1);
-				} else eprintf ("Cannot find function '%s' at 0x%08llx\n", name, off);
+				if (*name) {
+					fcn = r_anal_fcn_find (core->anal, off,
+							R_ANAL_FCN_TYPE_FCN|R_ANAL_FCN_TYPE_SYM);
+					if (fcn) {
+						eprintf ("fr %s %s@ 0x%"PFMT64x"\n",
+							fcn->name, name, off);
+						r_core_cmdf (core, "fr %s %s@ 0x%"PFMT64x,
+							fcn->name, name, off);
+						free (fcn->name);
+						fcn->name = strdup (name);
+					} else eprintf ("Cannot find function '%s' at 0x%08llx\n", name, off);
+				} else eprintf ("Usage: afr [newname] [off]\n");
 			}
 			break;
 		case 'e':
@@ -562,7 +587,10 @@ case 'o':
 			}
 			break;
 		case 'c':
-			r_core_anal_refs (core, r_num_math (core->num, input+2), 1);
+			r_core_anal_refs (core, r_num_math (core->num, input+2), input[2]=='j'? 2: 1);
+			break;
+		case 'j':
+			r_core_anal_graph (core, r_num_math (core->num, input+2), R_CORE_ANAL_JSON);
 			break;
 		case 'l':
 			r_core_anal_graph (core, r_num_math (core->num, input+2), R_CORE_ANAL_GRAPHLINES);
@@ -575,6 +603,8 @@ case 'o':
 					R_CORE_ANAL_GRAPHBODY|R_CORE_ANAL_GRAPHDIFF);
 			break;
 		case 'v':
+			r_core_cmd0 (core, "=H /graph/");
+#if 0
 			{
 				int is_html = (r_config_get_i (core->config, "scr.html"));
 				const char *cmd = r_config_get (core->config, "cmd.graph");
@@ -596,6 +626,7 @@ case 'o':
 				r_core_cmdf (core, "%s", cmd);
 				free (tmp);
 			}
+#endif
 			break;
 		case '?':
 			r_cons_printf (
@@ -738,7 +769,7 @@ case 'o':
 			r_cons_printf (
 			"Usage: ar[?d-l*]\n"
 			" ar addr [at]   ; Add code ref\n"
-			" ard addr [at]  ; Add dara ref\n"
+			" ard addr [at]  ; Add data ref\n"
 			" ar- [at]       ; Clean all refs (or refs from addr)\n"
 			" arl            ; List refs\n"
 			" ar*            ; Output radare commands\n");
@@ -787,55 +818,142 @@ case 'o':
 		} else r_core_search_preludes (core);
 		break;
 	case 'd':
-		{
-			int i, bits = r_config_get_i (core->config, "asm.bits");
-			char *p, *inp = strdup (input+2);
-			p = strchr (inp, ' ');
-			if (p) *p=0;
-			ut64 a = r_num_math (core->num, inp);
-			ut64 b = p?r_num_math (core->num, p+1):0;
-			free (inp);
-			switch (bits) {
-			case 32:
-				for (i=0; i<core->blocksize; i+=4) {
-					ut32 n;
-					memcpy (&n, core->block+i, sizeof(ut32));
-					if (n>=a && n<=b) {
-						r_cons_printf ("f trampoline.%x @ 0x%"PFMT64x"\n", n, core->offset+i);
-						r_cons_printf ("Cd 4 @ 0x%"PFMT64x":4\n", core->offset+i);
-						// TODO: add data xrefs
-					}
-				}
-				break;
-			case 64:
-				for (i=0; i<core->blocksize; i+=8) {
-					ut32 n;
-					memcpy (&n, core->block+i, sizeof(ut32));
-					if (n>=a && n<=b) {
-						r_cons_printf ("f trampoline.%"PFMT64x" @ 0x%"PFMT64x"\n", n, core->offset+i);
-						r_cons_printf ("Cd 8 @ 0x%"PFMT64x":8\n", core->offset+i);
-						// TODO: add data xrefs
-					}
-				}
-				break;
+		switch (input[1]) {
+		case 't':
+			cmd_anal_trampoline (core, input+2);
+			break;
+		case ' ':
+			{
+				const int default_depth = 1;
+				const char *p;
+				int a, b;
+				a = r_num_math (core->num, input+2);
+				p = strchr (input+2, ' ');
+				b = p? r_num_math (core->num, p+1): default_depth;
+				if (a<1) a = 1;
+				if (b<1) b = 1;
+				r_core_anal_data (core, core->offset, a, b);
 			}
+			break;
+		case 'k':
+			{ 
+				const char *r = r_anal_data_kind (core->anal,
+					core->offset, core->block, core->blocksize);
+				r_cons_printf ("%s\n", r);
+			}
+			break;
+		case '\0':
+			{
+				//int word = core->assembler->bits / 8;
+				r_core_anal_data (core, core->offset, core->blocksize, 1);
+			}
+			break;
+		default:
+			eprintf ("Usage: ad[kt] [...]\n"
+			"  ad [N] [D]  analyze N data words at D depth\n"
+			"  adt         analyze data trampolines (wip)\n"
+			"  adk         analyze data kind (code, text, data, invalid, ...)\n");
+			break;
+		}
+		break;
+	case 'h':
+		switch (input[1]) {
+		case '?':
+			if (input[2]) {
+				//ut64 addr = r_num_math (core->num, input+2);
+				eprintf ("TODO: show hint\n");
+			} else
+			r_cons_printf (
+				"Usage: ah[lba-]\n"
+				" ah?           # show this help\n"
+				" ah? offset    # show hint of given offset\n"
+				" ah            # list hints in human-readable format\n"
+				" ah-           # remove all hints\n"
+				" ah- offset    # remove hints at given offset\n"
+				" ah* offset    # list hints in radare commands format\n"
+				" aha ppc 51    # set arch for a range of N bytes\n"
+				" ahb 16 @ $$   # force 16bit for current instruction\n"
+				" ahl 4 32      # set opcode size=4 for range of 32 bytes\n"
+				" aho foo a0,33 # replace opcode string\n"
+				" ahs eax+=3    # set vm analysis string\n"
+			);
+			break;
+#if 0
+in core/disasm we call
+R_API int r_core_hint(RCore *core, ut64 addr) {
+  static int hint_bits = 0;
+  RAnalHint *hint = r_anal_hint_get (core->anal, addr);
+  if (hint->bits) {
+   if (!hint_bits)
+     hint_bits = core->assembler->bits;
+   r_config_set_i (core->config, "asm.bits", hint->bits);
+  } else if (hint_bits) {
+   r_config_set_i (core->config, "asm.bits", hint_bits);
+   hint_bits = 0;
+  } 
+  if (hint->arch)
+   r_config_set (core->config, "asm.arch", hint->arch);
+  if (hint->length)
+   force_instruction_length = hint->length;
+  r_anal_hint_free (hint);
+#endif
+		case 'a': // set arch
+			r_anal_hint_set_arch (core->anal, core->offset,
+				1, input+2);
+			break;
+		case 'b': // set bits
+			r_anal_hint_set_bits (core->anal, core->offset,
+				1, atoi (input+2));
+			//r_anal_hint_bits (op, 1);
+			break;
+		case 'l': // set size (opcode length)
+			r_anal_hint_set_length (core->anal, core->offset,
+				1, atoi (input+2));
+			break;
+		case 'o': // set opcode string
+			r_anal_hint_set_opcode (core->anal, core->offset,
+				1, input+2);
+			break;
+		case 's': // set analysis string
+			r_anal_hint_set_analstr (core->anal, core->offset,
+				1, input+2);
+			break;
+#if TODO
+		case 'e': // set endian
+			r_anal_hint_set_opcode (core->anal, core->offset,
+				1, atoi (input+2));
+			break;
+#endif
+		case '*':
+		case 'j':
+		case '\0':
+			r_core_anal_hint_list (core->anal, input[1]);
+			break;
+		case '-':
+			if (input[2]) {
+				r_anal_hint_del (core->anal,
+					r_num_math (core->num, input+2));
+			} else r_anal_hint_clear (core->anal);
+			break;
 		}
 		break;
 	default:
 		r_cons_printf (
-		"Usage: a[?obdfrgtv]\n"
-		" aa               ; analyze all (fcns + bbs)\n"
+		"Usage: a[?adfFghoprsx]\n"
 		" a8 [hexpairs]    ; analyze bytes\n" 
+		" aa               ; analyze all (fcns + bbs)\n"
 		" ad               ; analyze data trampoline (wip)\n"
-		" ap               ; find and analyze function preludes\n"
 		" ad [from] [to]   ; analyze data pointers to (from-to)\n"
-		" as [num]         ; analyze syscall using dbg.reg\n"
-		" ax[-cCd] [f] [t] ; manage code/call/data xrefs\n"
-		" ao[e?] [len]     ; analyze Opcodes (or emulate it)\n"
 		" af[bcsl?+-*]     ; analyze Functions\n"
-		" ar[?ld-*]        ; manage refs/xrefs\n"
+		" aF               ; same as above, but using graph.depth=1\n"
 		" ag[?acgdlf]      ; output Graphviz code\n"
+		" ah[?lba-]        ; analysis hints (force opcode size, ...)\n"
+		" ao[e?] [len]     ; analyze Opcodes (or emulate it)\n"
+		" ap               ; find and analyze function preludes\n"
+		" ar[?ld-*]        ; manage refs/xrefs\n"
+		" as [num]         ; analyze syscall using dbg.reg\n"
 		" at[trd+-*?] [.]  ; analyze execution Traces\n"
+		" ax[-cCd] [f] [t] ; manage code/call/data xrefs\n"
 		"Examples:\n"
 		" f ts @ `S*~text:0[3]`; f t @ section..text\n"
 		" f ds @ `S*~data:0[3]`; f d @ section..data\n"

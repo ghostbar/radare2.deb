@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 nibble<.ds@gmail.com>, pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2012 - nibble, pancake */
 
 #include <r_types.h>
 #include <r_util.h>
@@ -12,7 +12,7 @@ static int load(RBinArch *arch) {
 	return R_TRUE;
 }
 
-static int destroy (RBinArch *arch) {
+static int destroy(RBinArch *arch) {
 	PE_(r_bin_pe_free) ((struct PE_(r_bin_pe_obj_t)*)arch->bin_obj);
 	return R_TRUE;
 }
@@ -105,9 +105,9 @@ static RList* symbols(RBinArch *arch) {
 		strncpy (ptr->forwarder, (char*)symbols[i].forwarder, R_BIN_SIZEOF_STRINGS);
 		strncpy (ptr->bind, "NONE", R_BIN_SIZEOF_STRINGS);
 		strncpy (ptr->type, "FUNC", R_BIN_SIZEOF_STRINGS); //XXX Get the right type 
+		ptr->size = 0;
 		ptr->rva = symbols[i].rva;
 		ptr->offset = symbols[i].offset;
-		ptr->size = 0;
 		ptr->ordinal = symbols[i].ordinal;
 		r_list_append (ret, ptr);
 	}
@@ -164,18 +164,15 @@ static RList* libs(RBinArch *arch) {
 
 static RBinInfo* info(RBinArch *arch) {
 	char *str;
-	RBinInfo *ret = NULL;
-
-	if((ret = R_NEW (RBinInfo)) == NULL)
-		return NULL;
-	memset(ret, '\0', sizeof (RBinInfo));
+	RBinInfo *ret = R_NEW0 (RBinInfo);
+	if (!ret) return NULL;
 	strncpy (ret->file, arch->file, R_BIN_SIZEOF_STRINGS);
 	strncpy (ret->rpath, "NONE", R_BIN_SIZEOF_STRINGS);
 	if ((str = PE_(r_bin_pe_get_class) (arch->bin_obj))) {
 		strncpy (ret->bclass, str, R_BIN_SIZEOF_STRINGS);
 		free (str);
 	}
-	strncpy(ret->rclass, "pe", R_BIN_SIZEOF_STRINGS);
+	strncpy (ret->rclass, "pe", R_BIN_SIZEOF_STRINGS);
 	if ((str = PE_(r_bin_pe_get_os) (arch->bin_obj))) {
 		strncpy (ret->os, str, R_BIN_SIZEOF_STRINGS);
 		free (str);
@@ -311,6 +308,7 @@ struct r_bin_plugin_t r_bin_plugin_pe = {
 	.relocs = NULL,
 	.meta = NULL,
 	.write = NULL,
+	.minstrlen = 4,
 	.create = &create,
 };
 

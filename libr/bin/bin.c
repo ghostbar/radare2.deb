@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake, nibble */
+/* radare - LGPL - Copyright 2009-2013 - pancake, nibble */
 
 // TODO: dlopen library and show address
 
@@ -20,10 +20,12 @@ static void get_strings_range(RBinArch *arch, RList *list, int min, ut64 from, u
 
 	if (arch && arch->buf && to > arch->buf->length)
 		to = arch->buf->length;
-	if (to > 0xffffff) {
-		eprintf ("WARNING: bin_strings buffer is too big\n");
+	if (to > 0xf00000) {
+		eprintf ("WARNING: bin_strings buffer is too big at 0x%08"PFMT64x"\n", from);
 		return;
 	}
+	if (to == 0)
+		to = arch->buf->length;
 	if (arch->buf && arch->buf->buf)
 	for (i = from; i < to; i++) { 
 		if ((IS_PRINTABLE (arch->buf->buf[i])) && \
@@ -65,7 +67,7 @@ static int is_data_section(RBinArch *a, RBinSection *s) {
 	RBinObject *o = a->o;
 	if (strstr (o->info->bclass, "MACH0") && strstr (s->name, "_cstring")) // OSX
 		return 1;
-	if (strstr (o->info->bclass, "ELF") && strstr (s->name, "data")) // LINUX
+	if (strstr (o->info->bclass, "ELF") && strstr (s->name, "data") && !strstr (s->name, "rel")) // LINUX
 		return 1;
 #define X 1
 #define ROW (4|2)
@@ -75,23 +77,23 @@ static int is_data_section(RBinArch *a, RBinSection *s) {
 }
 
 static RList* get_strings(RBinArch *a, int min) {
-	RBinSection *section;
-	RListIter *iter;
-	RList *ret;
 	int count = 0;
-
-	if (!(ret = r_list_new ())) {
+	RListIter *iter;
+	RBinSection *section;
+	RList *ret = r_list_new ();
+	if (!ret) {
 		eprintf ("Error allocating array\n");
 		return NULL;
 	}
 	ret->free = free;
-	
 	if (a->o->sections) {
 		r_list_foreach (a->o->sections, iter, section) {
 			if (is_data_section (a, section)) {
-				count ++;
+				count++;
 				get_strings_range (a, ret, min,
-					section->offset, section->offset+section->size, section->rva);
+					section->offset,
+					section->offset+section->size,
+					section->rva);
 			}
 		}	
 	}
@@ -100,14 +102,24 @@ static RList* get_strings(RBinArch *a, int min) {
 	return ret;
 }
 
+// public api?
+static void load_languages(RBin *bin) {
+	/* load objc information if available */
+	if (r_bin_lang_objc (bin)) //->cur.o))
+		eprintf ("ObjectiveC information loaded\n");
+	else if (r_bin_lang_cxx (bin)) //->cur.o))
+		eprintf ("C++ information loaded\n");
+	/* TODO : do the same for dex, java and c++ name demangling? */
+}
+
 static int r_bin_init_items(RBin *bin, int dummy) {
-	int i;
+	int i, minlen = bin->minstrlen;
 	RListIter *it;
 	RBinPlugin *plugin, *cp;
 	RBinArch *a = &bin->cur;
 	RBinObject *o = a->o;
-
 	a->curplugin = NULL;
+// DEBUG eprintf ("LOAD\n");
 	r_list_foreach (bin->plugins, it, plugin) {
 		if ((dummy && !strncmp (plugin->name, "any", 5)) ||
 			(!dummy && (plugin->check && plugin->check (&bin->cur)))) {
@@ -116,8 +128,18 @@ static int r_bin_init_items(RBin *bin, int dummy) {
 		}
 	}
 	cp = bin->cur.curplugin;
-	if (!cp || !cp->load || !cp->load (a))
+	if (minlen<0) {
+		if (cp && cp->minstrlen) 
+			minlen = cp->minstrlen;
+		else minlen = -minlen;
+	}
+	if (!cp || !cp->load || !cp->load (a)) {
+		r_buf_free (a->buf);
+		a->buf = r_buf_mmap (bin->cur.file, 0);
+		a->size = a->buf->length;
+		o->strings = get_strings (a, minlen);
 		return R_FALSE;
+	}
 	if (cp->baddr) o->baddr = cp->baddr (a);
 	// XXX: no way to get info from xtr pluginz?
 	if (cp->size) o->size = cp->size (a);
@@ -132,10 +154,12 @@ static int r_bin_init_items(RBin *bin, int dummy) {
 	if (cp->relocs) o->relocs = cp->relocs (a);
 	if (cp->sections) o->sections = cp->sections (a);
 	if (cp->strings) o->strings = cp->strings (a);
-	else o->strings = get_strings (a, 4);
+	else o->strings = get_strings (a, minlen);
 	if (cp->symbols) o->symbols = cp->symbols (a);
 	if (cp->classes) o->classes = cp->classes (a);
 	if (cp->lines) o->lines = cp->lines (a);
+	load_languages (bin);
+
 	return R_TRUE;
 }
 
@@ -198,16 +222,13 @@ static int r_bin_extract(RBin *bin, int idx) {
 R_API int r_bin_add(RBin *bin, RBinPlugin *foo) {
 	RListIter *it;
 	RBinPlugin *plugin;
-
 	if (foo->init)
 		foo->init (bin->user);
-
 	r_list_foreach(bin->plugins, it, plugin) {
 		if (!strcmp (plugin->name, foo->name))
 			return R_FALSE;
 	}
 	r_list_append(bin->plugins, foo);
-
 	return R_TRUE;
 }
 
@@ -244,15 +265,12 @@ R_API int r_bin_list(RBin *bin) {
 	RListIter *it;
 	RBinXtrPlugin *plugin;
 	RBinXtrPlugin *xtr;
-
 	r_list_foreach (bin->plugins, it, plugin) {
-		printf ("bin %-10s %s\n", plugin->name, plugin->desc);
+		printf ("bin  %-11s %s\n", plugin->name, plugin->desc);
 	}
-
 	r_list_foreach (bin->binxtrs, it, xtr) {
-		printf ("bin-xtr %-10s %s\n", xtr->name, xtr->desc);
+		printf ("xtr  %-11s %s\n", xtr->name, xtr->desc);
 	}
-
 	return R_FALSE;
 }
 
@@ -294,6 +312,7 @@ R_API RList* r_bin_get_imports(RBin *bin) {
 }
 
 R_API RBinInfo* r_bin_get_info(RBin *bin) {
+	if (!bin->cur.buf) return NULL;
 	return bin->cur.o->info;
 }
 
@@ -367,6 +386,7 @@ R_API RBin* r_bin_new() {
 	if (!bin) return NULL;
 	bin->plugins = r_list_new();
 	bin->plugins->free = free;
+	bin->minstrlen = -2;
 	bin->cur.o = R_NEW0 (RBinObject);
 	for (i=0; bin_static_plugins[i]; i++) {
 		static_plugin = R_NEW (RBinPlugin);
@@ -402,7 +422,6 @@ R_API int r_bin_use_arch(RBin *bin, const char *arch, int bits, const char *name
 			return R_TRUE;
 		}
 	}
-
 	return R_FALSE;
 }
 
@@ -410,6 +429,7 @@ R_API int r_bin_use_arch(RBin *bin, const char *arch, int bits, const char *name
 R_API int r_bin_select(RBin *bin, const char *arch, int bits, const char *name) {
 	int i;
 	RBinInfo *info;
+	//if (bin->narch >1) // fix double load when no multiarch bin is loaded
 	for (i=0; i<bin->narch; i++) {
 		r_bin_select_idx (bin, i);
 		info = bin->cur.o->info;
@@ -435,10 +455,11 @@ R_API void r_bin_list_archs(RBin *bin) {
 	for (i = 0; i < bin->narch; i++)
 		if (r_bin_select_idx (bin, i)) {
 			RBinInfo *info = bin->cur.o->info;
-			printf ("%03i 0x%08"PFMT64x" %s_%i %s\n", i, 
-				bin->cur.offset, info->arch,
+			printf ("%03i 0x%08"PFMT64x" %d %s_%i %s\n", i, 
+				bin->cur.offset, bin->cur.size, info->arch,
 				info->bits, info->machine);
-		}
+		} else eprintf ("%03i 0x%08"PFMT64x" %d unknown_0\n", i,
+				bin->cur.offset, bin->cur.size);
 }
 
 R_API void r_bin_set_user_ptr(RBin *bin, void *user) {
@@ -452,9 +473,15 @@ static int getoffset (RBin *bin, int type, int idx) {
 	return -1;
 }
 
+static const char *getname (RBin *bin, int off) {
+	// walk symbols, find index, return name, ignore offset wtf
+	return NULL;
+}
+
 R_API void r_bin_bind (RBin *bin, RBinBind *b) {
 	b->bin = bin;
 	b->get_offset = getoffset;
+	b->get_name = getname;
 }
 
 R_API RBuffer *r_bin_create (RBin *bin, const ut8 *code, int codelen, const ut8 *data, int datalen) {
@@ -466,7 +493,7 @@ R_API RBuffer *r_bin_create (RBin *bin, const ut8 *code, int codelen, const ut8 
 	return NULL;
 }
 
-R_API RBinObject *r_bin_get_object(RBin *bin, int flags) {
+R_API RBinObject *r_bin_get_object(RBin *bin) {
 	bin->cur.o->referenced = R_TRUE;
 	return bin->cur.o;
 }
@@ -477,6 +504,61 @@ R_API void r_bin_object_free(RBinObject *obj) {
 
 R_API RList* /*<RBinClass>*/r_bin_get_classes(RBin *bin) {
 	return bin->cur.o->classes;
+}
+
+R_API RBinClass *r_bin_class_new (RBin *bin, const char *name, const char *super, int view) {
+	RList *list = bin->cur.o->classes;
+	RBinClass *c;
+	if (!name) return NULL;
+	c = r_bin_class_get (bin, name);
+	if (c) {
+		if (super) {
+			free (c->super);
+			c->super = strdup (super);
+		}
+		return c;
+	}
+	c = R_NEW0 (RBinClass);
+	if (!c) return NULL;
+	c->name = strdup (name);
+	c->super = super? strdup (super): NULL;
+	c->index = r_list_length (list);
+	c->methods = r_list_new ();
+	c->fields = r_list_new ();
+	c->visibility = view;
+	if (!list)
+		list = bin->cur.o->classes = r_list_new ();
+	r_list_append (list, c);
+	return c;
+}
+
+R_API RBinClass *r_bin_class_get (RBin *bin, const char *name) {
+	RList *list = bin->cur.o->classes;
+	RListIter *iter;
+	RBinClass *c;
+	r_list_foreach (list, iter, c) {
+		if (!strcmp (c->name, name))
+			return c;
+	}
+	return NULL;
+}
+
+R_API int r_bin_class_add_method (RBin *bin, const char *classname, const char *name, int nargs) {
+	RBinClass *c = r_bin_class_get (bin, classname);
+	name = strdup (name); // XXX
+	if (c) {
+		r_list_append (c->methods, (void*)name);
+		return R_TRUE;
+	} else {
+		c = r_bin_class_new (bin, classname, NULL, 0);
+		r_list_append (c->methods, (void*)name);
+	}
+	return R_FALSE;
+}
+
+R_API void r_bin_class_add_field (RBin *bin, const char *classname, const char *name) {
+#warning TODO: add_field into class
+	//eprintf ("TODO add field: %s \n", name);
 }
 
 R_API ut64 r_bin_get_offset (RBin *bin) {

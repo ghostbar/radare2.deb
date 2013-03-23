@@ -142,9 +142,8 @@ static RBinInfo* info(RBinArch *arch) {
 
 	if (!(bina = r_bin_p9_get_arch (arch->buf->buf, &bits, &big_endian)))
 		return NULL;
-	if ((ret = R_NEW (RBinInfo)) == NULL)
+	if ((ret = R_NEW0 (RBinInfo)) == NULL)
 		return NULL;
-	memset (ret, '\0', sizeof (RBinInfo));
 	strncpy (ret->file, arch->file, R_BIN_SIZEOF_STRINGS);
 	strncpy (ret->rpath, "NONE", R_BIN_SIZEOF_STRINGS);
 	strncpy (ret->bclass, "program", R_BIN_SIZEOF_STRINGS);
@@ -163,7 +162,7 @@ static RBinInfo* info(RBinArch *arch) {
 	return ret;
 }
 
-int size(RBinArch *arch) {
+static int size(RBinArch *arch) {
 	ut64 text, data, syms, spsz;
 	int big_endian;
 	if (!arch->o->info)

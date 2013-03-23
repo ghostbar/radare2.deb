@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2006-2012 - pancake */
+/* radare - LGPL - Copyright 2006-2013 - pancake */
 
 #include "r_config.h"
 #include "r_util.h" // r_str_hash, r_str_chop, ...
@@ -12,9 +12,9 @@ R_API RConfigNode* r_config_node_new(const char *name, const char *value) {
 	node->name = strdup (name);
 	node->desc = NULL;
 	node->hash = r_str_hash (name);
-	node->value = strdup (value?value:"");
+	node->value = strdup (value? value: "");
 	node->flags = CN_RW | CN_STR;
-	node->i_value = 0;
+	node->i_value = r_num_get (NULL, value);;
 	node->callback = NULL;
 	return node;
 }
@@ -83,7 +83,7 @@ R_API int r_config_swap(RConfig *cfg, const char *name) {
 R_API ut64 r_config_get_i(RConfig *cfg, const char *name) {
 	RConfigNode *node = r_config_node_get (cfg, name);
 	if (node) {
-		if (node->i_value != 0)
+		if (node->i_value != 0 || !strcmp (node->value, "false"))
 			return node->i_value;
 		return (ut64)r_num_math (cfg->num, node->value);
 	}

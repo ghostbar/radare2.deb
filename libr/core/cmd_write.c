@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 // pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 /* TODO: simplify using r_write */
 static int cmd_write(void *data, const char *input) {
@@ -136,7 +136,7 @@ static int cmd_write(void *data, const char *input) {
 		break;
 	case 't':
 		if (*str != ' ') {
-			eprintf ("Usage: wt file [off]\n");
+			eprintf ("Usage: wt file [size]\n");
 		} else {
 			tmp = strchr (str+1, ' ');
 			if (tmp) {
@@ -190,10 +190,14 @@ static int cmd_write(void *data, const char *input) {
 		break;
 	case 'x':
 		{
-		int len = strlen (input);
+		int b, len = strlen (input);
 		ut8 *buf = malloc (len+1);
 		len = r_hex_str2bin (input+1, buf);
-		if (len != -1) {
+		if (len != 0) {
+			if (len<0) len = -len+1;
+			b = core->block[len]&0xf;
+			b |= (buf[len]&0xf0);
+			buf[len] = b;
 			r_core_write_at (core, core->offset, buf, len);
 			WSEEK (core, len);
 			r_core_block_read (core, 0);
@@ -300,26 +304,59 @@ static int cmd_write(void *data, const char *input) {
 		}
 		break;
 	case 'v':
-		off = r_num_math (core->num, input+1);
-		r_io_set_fd (core->io, core->file->fd);
-		r_io_seek (core->io, core->offset, R_IO_SEEK_SET);
-		if (off&UT64_32U) {
-			/* 8 byte addr */
+		{
+			int type = 0;
+			ut8 addr1;
+			ut16 addr2;
+			ut32 addr4, addr4_;
 			ut64 addr8;
-			memcpy((ut8*)&addr8, (ut8*)&off, 8); // XXX needs endian here
-		//	endian_memcpy((ut8*)&addr8, (ut8*)&off, 8);
-			r_io_write(core->io, (const ut8 *)&addr8, 8);
-			WSEEK (core, 8);
-		} else {
-			/* 4 byte addr */
-			ut32 addr4, addr4_ = (ut32)off;
-			//drop_endian((ut8*)&addr4_, (ut8*)&addr4, 4); /* addr4_ = addr4 */
-			//endian_memcpy((ut8*)&addr4, (ut8*)&addr4_, 4); /* addr4 = addr4_ */
-			memcpy ((ut8*)&addr4, (ut8*)&addr4_, 4); // XXX needs endian here too
-			r_io_write (core->io, (const ut8 *)&addr4, 4);
-			WSEEK (core, 4);
+
+			switch (input[1]) {
+			case '?':
+				r_cons_printf ("Usage: wv[size] [value]    # write value of given size\n"
+					"  wv1 234      # write one byte with this value\n"
+					"  wv 0x834002  # write dword with this value\n"
+					"Supported sizes are: 1, 2, 4, 8\n");
+				return 0;
+			case '1': type = 1; break;
+			case '2': type = 2; break;
+			case '4': type = 4; break;
+			case '8': type = 8; break;
+			}
+			off = r_num_math (core->num, input+2);
+			r_io_set_fd (core->io, core->file->fd);
+			r_io_seek (core->io, core->offset, R_IO_SEEK_SET);
+			if (type == 0)
+				type = (off&UT64_32U)? 8: 4;
+			switch (type) {
+			case 1:
+				addr1 = (ut8)off;
+				r_io_write (core->io, (const ut8 *)&addr1, 1);
+				WSEEK (core, 1);
+				break;
+			case 2:
+				addr2 = (ut16)off;
+				r_io_write (core->io, (const ut8 *)&addr2, 2);
+				WSEEK (core, 2);
+				break;
+			case 4:
+				addr4_ = (ut32)off;
+				//drop_endian((ut8*)&addr4_, (ut8*)&addr4, 4); /* addr4_ = addr4 */
+				//endian_memcpy((ut8*)&addr4, (ut8*)&addr4_, 4); /* addr4 = addr4_ */
+				memcpy ((ut8*)&addr4, (ut8*)&addr4_, 4); // XXX needs endian here too
+				r_io_write (core->io, (const ut8 *)&addr4, 4);
+				WSEEK (core, 4);
+				break;
+			case 8:
+				/* 8 byte addr */
+				memcpy ((ut8*)&addr8, (ut8*)&off, 8); // XXX needs endian here
+			//	endian_memcpy((ut8*)&addr8, (ut8*)&off, 8);
+				r_io_write (core->io, (const ut8 *)&addr8, 8);
+				WSEEK (core, 8);
+				break;
+			}
+			r_core_block_read (core, 0);
 		}
-		r_core_block_read (core, 0);
 		break;
 	case 'o':
 		switch (input[1]) {
@@ -332,6 +369,7 @@ static int cmd_write(void *data, const char *input) {
 			case 'm':
 			case 'd':
 			case 'o':
+			case 'w':
 				if (input[2]!=' ') {
 					r_cons_printf ("Usage: 'wo%c 00 11 22'\n", input[1]);
 					return 0;
@@ -356,6 +394,7 @@ static int cmd_write(void *data, const char *input) {
 						"  wox 0x0203 ; xor cur block with 0203\n"
 						"  woa 02 03  ; add [0203][0203][...] to curblk\n"
 						"Supported operations:\n"
+						"  wow  ==  write looped value (alias for 'wb')\n"
 						"  woa  +=  addition\n"
 						"  wos  -=  substraction\n"
 						"  wom  *=  multiply\n"
@@ -395,7 +434,7 @@ static int cmd_write(void *data, const char *input) {
 			" wm f0ff      set binary mask hexpair to be used as cyclic write mask\n"
 			" wf file      write contents of file at current offset\n"
 			" wF file      write contents of hexpairs file here\n"
-			" wt file      write current block to file\n"
+			" wt file [sz] write to file (from current seek, blocksize or sz bytes)\n"
 			" wp file      apply radare patch file. See wp? fmi\n");
 			//TODO: add support for offset+seek
 			// " wf file o s ; write contents of file from optional offset 'o' and size 's'.\n"

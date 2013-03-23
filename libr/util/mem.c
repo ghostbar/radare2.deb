@@ -108,7 +108,7 @@ src |__________|_________|
 	r_mem_copybits (dst, src, nbits);
 }
 
-R_API ut64 r_mem_get_num(ut8 *b, int size, int endian) {
+R_API ut64 r_mem_get_num(const ut8 *b, int size, int endian) {
         ut16 n16;
         ut32 n32;
         ut64 n64;
@@ -149,6 +149,7 @@ R_API int r_mem_set_num (ut8 *dest, int dest_size, ut64 num, int endian) {
 }
 
 /* XXX TODO check and use system endian */
+// TODO: rename to r_mem_swap() */
 R_API void r_mem_copyendian (ut8 *dest, const ut8 *orig, int size, int endian) {
 	ut8 buffer[8];
         if (endian) {

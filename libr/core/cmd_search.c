@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 static int preludecnt = 0;
 static int searchflags = 0;
@@ -12,7 +12,7 @@ static int __prelude_cb_hit(RSearchKeyword *kw, void *user, ut64 addr) {
 	RCore *core = (RCore *)user;
 	int depth = r_config_get_i (core->config, "anal.depth");
 	//eprintf ("ap: Found function prelude %d at 0x%08"PFMT64x"\n", preludecnt, addr);
-	searchhits = kw->count+1;
+	searchhits ++; //= kw->count+1;
 	r_core_anal_fcn (core, addr, -1, R_ANAL_REF_TYPE_NULL, depth);
 	preludecnt++;
 	return R_TRUE;
@@ -83,10 +83,10 @@ R_API int r_core_search_preludes(RCore *core) {
 
 static int __cb_hit(RSearchKeyword *kw, void *user, ut64 addr) {
 	RCore *core = (RCore *)user;
-	searchhits = kw->count+1;
+	searchhits ++ ;///= kw->count+1;
 	if (searchcount) {
 		if (!--searchcount) {
-			eprintf ("\nsearch stop: search.count reached\n");
+			//eprintf ("\nsearch stop: search.count reached\n");
 			return R_FALSE;
 		}
 	}
@@ -135,12 +135,74 @@ static int __cb_hit(RSearchKeyword *kw, void *user, ut64 addr) {
 	return R_TRUE;
 }
 
+static int c = 0;
 static inline void print_search_progress(ut64 at, ut64 to, int n) {
-	static int c = 0;
-	if ((++c%23))
+	if ((++c%64))
 		return;
 	eprintf ("\r[  ]  0x%08"PFMT64x" < 0x%08"PFMT64x"  hits = %d                      \r%s",
 			at, to, n, (c%2)?"[ #]":"[# ]");
+}
+
+R_API void r_core_get_boundaries (RCore *core, const char *mode, ut64 *from, ut64 *to) {
+	if (!strcmp (mode, "block")) {
+		*from = core->offset;
+		*to = core->offset + core->blocksize;
+	} else
+	if (!strcmp (mode, "file")) {
+		if (core->io->va) {
+			RListIter *iter;
+			RIOSection *s;
+			*from = *to = core->offset;
+			r_list_foreach (core->io->sections, iter, s) {
+				if (((s->vaddr) < *from) && s->vaddr)
+					*from = s->vaddr;
+				if ((s->vaddr+s->size) > *to && *from>=s->vaddr)
+					*to = s->vaddr+s->size;
+			}
+			if (*to == 0LL || *to == UT64_MAX || *to == UT32_MAX)
+				*to = r_io_size (core->io);
+		} else {
+			RIOMap *map = r_io_map_get (core->io, core->offset);
+			*from = core->offset;
+			*to = r_io_size (core->io) + (map? map->to:0);
+		}
+	} else
+	if (!strcmp (mode, "section")) {
+		if (core->io->va) {
+			RListIter *iter;
+			RIOSection *s;
+			*from = *to = core->offset;
+			r_list_foreach (core->io->sections, iter, s) {
+				if (*from >= s->vaddr && *from < (s->vaddr+s->size)) {
+					*to = s->vaddr+s->size;
+					break;
+				}
+			}
+		} else {
+			*from = core->offset;
+			*to = r_io_size (core->io);
+		}
+	} else {
+		//if (!strcmp (mode, "raw")) {
+		/* obey temporary seek if defined '/x 8080 @ addr:len' */
+		if (core->tmpseek) {
+			*from = core->offset;
+			*to = core->offset + core->blocksize;
+		} else {
+			// TODO: repeat last search doesnt works for /a
+			*from = r_config_get_i (core->config, "search.from");
+			if (*from == UT64_MAX)
+				*from = core->offset;
+			*to = r_config_get_i (core->config, "search.to");
+			if (*to == UT64_MAX) {
+				if (core->io->va) {
+					/* TODO: section size? */
+				} else {
+					*to = core->file->size;
+				}
+			}
+		}
+	}
 }
 
 static int cmd_search(void *data, const char *input) {
@@ -152,71 +214,24 @@ static int cmd_search(void *data, const char *input) {
 	ut64 at, from, to;
 	const char *mode;
 	char *inp;
-	ut64 n64;
+	ut64 n64, __from, __to;
 	ut32 n32;
 	ut16 n16;
 	ut8 *buf;
 
+c = 0;
+	__from = r_config_get_i (core->config, "search.from");
+	__to = r_config_get_i (core->config, "search.to");
+
 	searchshow = r_config_get_i (core->config, "search.show");
 	mode = r_config_get (core->config, "search.in");
-	if (!strcmp (mode, "block")) {
-		from = core->offset;
-		to = core->offset + core->blocksize;
-	} else
-	if (!strcmp (mode, "file")) {
-		if (core->io->va) {
-			RListIter *iter;
-			RIOSection *s;
-			from = core->offset;
-			to = from;
-			r_list_foreach (core->io->sections, iter, s) {
-				if ((s->vaddr+s->size) > to && from>=s->vaddr) {
-					to = s->vaddr+s->size;
-				}
-			}
-			if (to == 0LL || to == UT64_MAX || to == UT32_MAX)
-				to = r_io_size (core->io);
-		} else {
-			from = core->offset;
-			to = r_io_size (core->io);
-		}
-	} else
-	if (!strcmp (mode, "section")) {
-		if (core->io->va) {
-			RListIter *iter;
-			RIOSection *s;
-			from = core->offset;
-			to = from;
-			r_list_foreach (core->io->sections, iter, s) {
-				if (from >= s->vaddr && from < (s->vaddr+s->size)) {
-					to = s->vaddr+s->size;
-					break;
-				}
-			}
-		} else {
-			from = core->offset;
-			to = r_io_size (core->io);
-		}
-	} else {
-		//if (!strcmp (mode, "raw")) {
-		/* obey temporary seek if defined '/x 8080 @ addr:len' */
-		if (core->tmpseek) {
-			from = core->offset;
-			to = core->offset + core->blocksize;
-		} else {
-			// TODO: repeat last search doesnt works for /a
-			from = r_config_get_i (core->config, "search.from");
-			if (from == UT64_MAX)
-				from = core->offset;
-			to = r_config_get_i (core->config, "search.to");
-			if (to == UT64_MAX) {
-				if (core->io->va) {
-					/* TODO: section size? */
-				} else {
-					to = core->file->size;
-				}
-			}
-		}
+	r_core_get_boundaries (core, mode, &from, &to);
+
+	if (__from != UT64_MAX) from = __from;
+	if (__to != UT64_MAX) to = __to;
+	if (__to < __from) {
+		eprintf ("Invalid search range. Check 'e search.{from|to}'\n");
+		return R_FALSE;
 	}
 
 	core->search->align = r_config_get_i (core->config, "search.align");
@@ -276,7 +291,10 @@ static int cmd_search(void *data, const char *input) {
 			for (; addr<to; addr++) {
 				if (r_cons_singleton ()->breaked)
 					break;
-				r_core_magic_at (core, file, addr, 99, R_FALSE);
+				if (r_core_magic_at (core, file, addr, 99, R_FALSE) == -1) {
+					// something went terribly wrong.
+					break;
+				}
 			}
 			r_cons_break_end ();
 		} else eprintf ("Usage: /m [file]\n");
@@ -489,6 +507,7 @@ static int cmd_search(void *data, const char *input) {
 		"Configuration:\n"
 		" e cmd.hit = x         ; command to execute on every search hit\n"
 		" e search.distance = 0 ; search string distance\n"
+		" e search.in = [foo]   ; boundaries to raw, block, file, section)\n"
 		" e search.align = 4    ; only catch aligned search hits\n"
 		" e search.from = 0     ; start address\n"
 		" e search.to = 0       ; end address\n"
@@ -529,8 +548,8 @@ static int cmd_search(void *data, const char *input) {
 				}
 				//ret = r_core_read_at (core, at, buf, core->blocksize);
 			//	ret = r_io_read_at (core->io, at, buf, core->blocksize); 
-	r_io_seek (core->io, at, R_IO_SEEK_SET);
-	ret = r_io_read (core->io, buf, core->blocksize);
+				r_io_seek (core->io, at, R_IO_SEEK_SET);
+				ret = r_io_read (core->io, buf, core->blocksize);
 /*
 				if (ignorecase) {
 					int i;
@@ -550,7 +569,7 @@ static int cmd_search(void *data, const char *input) {
 					}
 				} else
 				if (r_search_update (core->search, &at, buf, ret) == -1) {
-					eprintf ("search: update read error at 0x%08"PFMT64x"\n", at);
+					//eprintf ("search: update read error at 0x%08"PFMT64x"\n", at);
 					break;
 				}
 			}

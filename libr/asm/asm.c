@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - nibble */
+/* radare - LGPL - Copyright 2009-2013 - pancake, nibble */
 
 #include <stdio.h>
 #include <r_types.h>
@@ -124,6 +124,7 @@ R_API RAsm *r_asm_new() {
 	RAsm *a = R_NEW (RAsm);
 	if (!a) return NULL;
 	a->pair = NULL;
+	a->num = NULL;
 	a->user = NULL;
 	a->cur = NULL;
 	a->binb.bin = NULL;
@@ -302,6 +303,7 @@ R_API int r_asm_assemble(RAsm *a, RAsmOp *op, const char *buf) {
 	char *b = strdup (buf);
 	if (a->ifilter)
 		r_parse_parse (a->ifilter, buf, b);
+	r_str_case (b, 0); // to-lower
 	memset (op, 0, sizeof (RAsmOp));
 	if (a->cur) {
 		if (!a->cur->assemble) {
@@ -397,7 +399,6 @@ R_API RAsmCode* r_asm_massemble(RAsm *a, const char *buf) {
 	int labels = 0, stage, ret, idx, ctr, i, j;
 	char *lbuf = NULL, *ptr2, *ptr = NULL, *ptr_start = NULL,
 		 *tokens[R_ASM_BUFSIZE], buf_token[R_ASM_BUFSIZE];
-
 	if (buf == NULL)
 		return NULL;
 	if (!(acode = r_asm_code_new ()))
@@ -405,12 +406,21 @@ R_API RAsmCode* r_asm_massemble(RAsm *a, const char *buf) {
 	if (!(acode->buf_asm = malloc (strlen (buf)+16)))
 		return r_asm_code_free (acode);
 	strncpy (acode->buf_asm, buf, sizeof (acode->buf_asm)-1);
-	if (!(acode->buf_hex = malloc (64)))
+	if (!(acode->buf_hex = malloc (64))) // WTF unefficient
 		return r_asm_code_free (acode);
 	*acode->buf_hex = 0;
 	if (!(acode->buf = malloc (64)))
 		return r_asm_code_free (acode);
 	lbuf = strdup (buf);
+
+	/* accept ';' as comments when input is multiline */
+	{
+		char *nl = strchr (lbuf, '\n');
+		if (nl) {
+			if (strchr (nl+1, '\n'))
+				r_str_replace_char (lbuf, ';', '#');
+		}
+	}
 
 	if (strchr (lbuf, ':'))
 		labels = 1;
@@ -420,8 +430,9 @@ R_API RAsmCode* r_asm_massemble(RAsm *a, const char *buf) {
 		(ptr = strchr (tokens[ctr], ';')) || 
 		(ptr = strchr (tokens[ctr], '\n')) ||
 		(ptr = strchr (tokens[ctr], '\r'));
-		tokens[++ctr] = ptr+1)
+		tokens[++ctr] = ptr+1) {
 			*ptr = '\0';
+	}
 
 	/* Stage 0-1: Parse labels*/
 	/* Stage 2: Assemble */
@@ -537,7 +548,7 @@ R_API RAsmCode* r_asm_massemble(RAsm *a, const char *buf) {
 			}
 			if (stage == 2) {
 				if (ret < 1) {
-					printf ("Cannot assemble '%s'\n", ptr_start);
+					//eprintf ("Cannot assemble '%s'\n", ptr_start);
 					return r_asm_code_free (acode);
 				}
 				acode->len = idx + ret;

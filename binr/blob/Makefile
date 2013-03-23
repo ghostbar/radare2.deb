@@ -13,7 +13,6 @@ CFLAGS+=-DR2_GITTIP=\"$(GIT_TIP)\"
 
 #ifeq ($(STATIC_BUILD),1)
 ifeq ($(WITHNONPIC),1)
-LDFLAGS+=../../libr/th/libr_th.a
 LDFLAGS+=../../libr/io/libr_io.a
 LDFLAGS+=../../libr/asm/libr_asm.a
 LDFLAGS+=../../libr/db/libr_db.a
@@ -26,12 +25,10 @@ LDFLAGS+=../../libr/cmd/libr_cmd.a
 LDFLAGS+=../../libr/fs/libr_fs.a
 LDFLAGS+=../../libr/sign/libr_sign.a
 LDFLAGS+=../../libr/magic/libr_magic.a
-LDFLAGS+=../../libr/line/libr_line.a
 LDFLAGS+=../../libr/cons/libr_cons.a
 LDFLAGS+=../../libr/diff/libr_diff.a
 LDFLAGS+=../../libr/syscall/libr_syscall.a
 LDFLAGS+=../../libr/flags/libr_flags.a
-LDFLAGS+=../../libr/print/libr_print.a
 LDFLAGS+=../../libr/reg/libr_reg.a
 LDFLAGS+=../../libr/debug/libr_debug.a
 LDFLAGS+=../../libr/search/libr_search.a
@@ -47,7 +44,6 @@ LDFLAGS+=../../libr/fs/p/grub/libgrubfs.a
 LDFLAGS+=../../libr/db/sdb/src/libsdb.a
 LDFLAGS+=-lm
 else
-LDFLAGS+=-L../../libr/th -lr_th
 LDFLAGS+=-L../../libr/io -lr_io
 LDFLAGS+=-L../../libr/bp -lr_bp
 LDFLAGS+=-L../../libr/socket -lr_socket
@@ -63,7 +59,6 @@ LDFLAGS+=-L../../libr/diff -lr_diff
 LDFLAGS+=-L../../libr/util -lr_util
 LDFLAGS+=-L../../libr/cons -lr_cons
 LDFLAGS+=-L../../libr/hash -lr_hash
-LDFLAGS+=-L../../libr/print -lr_print
 LDFLAGS+=-L../../libr/debug -lr_debug
 LDFLAGS+=-L../../libr/search -lr_search
 LDFLAGS+=-L../../libr/config -lr_config
@@ -82,6 +77,9 @@ clean:
 	mv main.k main.c
 	rm -f ${BINS2} r2
 
+SOURCES= main.c rabin2.c radare2.c radiff2.c rafind2.c
+SOURCES+=rahash2.c rarun2.c rasm2.c rax2.c ragg2.c
+
 build:
 	mv main.c main.k
 	rm -f *.[ch]
@@ -94,7 +92,7 @@ build:
 		rm -f _$$a ; \
 	done
 	rm -f _*
-	${CC} -o radare2 *.c ${CFLAGS} ${LDFLAGS}
+	${CC} -o radare2 ${SOURCES} ${CFLAGS} ${LDFLAGS}
 	mv main.c main.k
 	rm -f *.[ch]
 	mv main.k main.c

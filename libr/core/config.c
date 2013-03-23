@@ -1,6 +1,11 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 #include <r_core.h>
+
+static int config_cfgsandbox_callback(void *user, void *data) {
+	RConfigNode *node = (RConfigNode*) data;
+	return r_sandbox_enable (node->i_value);
+}
 
 static int config_scrnkey_callback(void *user, void *data) {
 	RConfigNode *node = (RConfigNode*) data;
@@ -35,12 +40,33 @@ static int config_searchalign_callback(void *user, void *data) {
 static int config_iomaxblk_callback(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	if (node->i_value>1) {
-		core->blocksize_max = node->i_value;
-		return R_TRUE;
-	}
-	return R_FALSE;
+	core->blocksize_max = node->i_value;
+	return R_TRUE;
 }
+
+static int config_iobuffer_callback(void *user, void *data) {
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	if (node->i_value) {
+		ut64 from, to;
+		from = r_config_get_i (core->config, "io.buffer.from");
+		to = r_config_get_i (core->config, "io.buffer.to");
+		if (from>=to) {
+			eprintf ("ERROR: io.buffer.from >= io.buffer.to"
+				" (0x%"PFMT64x" >= 0x%"PFMT64x")\n", from, to);
+		} else r_io_buffer_load (core->io, from, (int)(to-from));
+	} else r_io_buffer_close (core->io);
+	r_core_block_read (core, 0);
+	return R_TRUE;
+}
+
+static int config_iozeromap_callback(void *user, void *data) {
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	core->io->zeromap = node->i_value;
+	return R_TRUE;
+}
+
 static int config_ioffio_callback(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
@@ -52,6 +78,8 @@ static int config_bigendian_callback(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
 	core->assembler->big_endian = node->i_value;
+	core->anal->big_endian = node->i_value;
+	core->print->big_endian = node->i_value;
 	return R_TRUE;
 }
 
@@ -116,7 +144,8 @@ static int config_cfgdebug_callback(void *user, void *data) {
 		if (!strcmp (dbgbackend, "bf"))
 			r_config_set (core->config, "asm.arch", "bf");
 		if (core->file) {
-			r_debug_select (core->dbg, core->file->fd->fd, core->file->fd->fd);
+			r_debug_select (core->dbg, core->file->fd->fd,
+				core->file->fd->fd);
 		}
 	} else r_debug_use (core->dbg, NULL);
 	return R_TRUE;
@@ -313,6 +342,13 @@ static int config_scrprompt_callback(void *user, void *data) {
 	return R_TRUE;
 }
 
+static int config_scrstride_callback(void *user, void *data) {
+	RConfigNode *node = (RConfigNode *) data;
+	RCore *core = (RCore *) user;
+	core->print->stride = node->i_value;
+	return R_TRUE;
+}
+
 static int config_scrsparse_callback(void *user, void *data) {
 	RConfigNode *node = (RConfigNode *) data;
 	RCore *core = (RCore *) user;
@@ -337,6 +373,15 @@ static int config_swstep_callback(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
 	core->dbg->swstep = node->i_value;
+	return R_TRUE;
+}
+
+static int config_segoff_callback(void *user, void *data) {
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	if (node->i_value)
+		core->print->flags |= R_PRINT_FLAGS_SEGOFF;
+	else core->print->flags &= (((ut32)-1) & (~R_PRINT_FLAGS_SEGOFF));
 	return R_TRUE;
 }
 
@@ -439,19 +484,11 @@ static int config_pager_callback(void *user, void *data) {
 #define SLURP_LIMIT (10*1024*1024)
 R_API int r_core_config_init(RCore *core) {
 	int i;
-	char buf[128], *p;
+	char buf[128], *p, *tmpdir;
 	RConfig *cfg = cfg = core->config = r_config_new (core);
 	cfg->printf = r_cons_printf;
 	cfg->num = core->num;
 
-	r_config_set (cfg, "dir.types", "/usr/include");
-	r_config_desc (cfg, "dir.types", "Default path to look for cparse type files");
-	r_config_set (cfg, "dir.source", "");
-	r_config_desc (cfg, "dir.source", "Path to find source files");
-	r_config_set (cfg, "dir.magic", R_MAGIC_PATH);
-	r_config_desc (cfg, "dir.magic", "Path to r_magic files");
-	r_config_set (cfg, "dir.plugins", LIBDIR"/radare2/"R2_VERSION"/");
-	r_config_desc (cfg, "dir.plugins", "Path to plugin files to be loaded at startup");
 	/* anal */
 	r_config_set (cfg, "anal.prelude", "");
 	r_config_desc (cfg, "anal.prelude", "Specify an hexpair to find preludes in code");
@@ -482,7 +519,7 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_set (cfg, "asm.middle", "false"); // jump in the middle because of antidisasm tricks
 	r_config_set (cfg, "asm.comments", "true");
 	r_config_desc (cfg, "asm.comments", "Show comments in disassembly view");
-	r_config_set (cfg, "asm.cmtright", "true");
+	r_config_set (cfg, "asm.cmtright", "false");
 	r_config_desc (cfg, "asm.cmtright", "Show comments at right of disassembly if they fit in screen");
 	r_config_set (cfg, "asm.ucase", "false");
 	r_config_desc (cfg, "asm.ucase", "Use uppercase syntax at disassembly");
@@ -505,10 +542,16 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_desc (cfg, "asm.decode", "Use code analysis as a disassembler");
 	r_config_set (cfg, "asm.offset", "true");
 	r_config_desc (cfg, "asm.offset", "Show offsets at disassembly");
+#if 0
 	r_config_set (cfg, "asm.offseg", "false");
 	r_config_desc (cfg, "asm.offseg", "Show offsets as in 16 bit segment addressing mode");
+#endif
+	r_config_set_cb (cfg, "asm.segoff", "false", &config_segoff_callback);
+	r_config_desc (cfg, "asm.segoff", "show segmented address in prompt (x86-16)");
 	r_config_set (cfg, "asm.lines", "true");
 	r_config_desc (cfg, "asm.lines", "If enabled show ascci-art lines at disassembly");
+	r_config_set (cfg, "asm.linesright", "false");
+	r_config_desc (cfg, "asm.linesright", "If enabled show lines before opcode instead of offset");
 	r_config_set (cfg, "asm.linesout", "true");
 	r_config_desc (cfg, "asm.linesout", "If enabled show out of block lines");
 	r_config_set (cfg, "asm.linesstyle", "false");
@@ -525,6 +568,13 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_desc (cfg, "asm.syntax", "Select assembly syntax");
 	r_config_set_cb (cfg, "asm.profile", "default", &config_asmprofile_callback);
 	r_config_desc (cfg, "asm.profile", "configure disassembler (default, simple, gas, smart, debug, full)");
+	/* bin */
+	r_config_set (cfg, "bin.strings", "true");
+	r_config_desc (cfg, "bin.strings", "Load strings or not\n");
+	r_config_set_i (cfg, "bin.minstr", 0);
+	r_config_desc (cfg, "bin.minstr", "Minimum string length for r_bin");
+	r_config_set (cfg, "bin.rawstr", "false");
+	r_config_desc (cfg, "bin.rawstr", "Load strings from raw binaries");
 	/* misc */
 #if LIL_ENDIAN
 	r_config_set_cb (cfg, "cfg.bigendian", "false", &config_bigendian_callback);
@@ -538,6 +588,8 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_desc (cfg, "cfg.datefmt", "Date format (%d:%m:%Y %H:%M:%S %z)");
 	r_config_set (cfg, "cfg.fortunes", "true");
 	r_config_desc (cfg, "cfg.fortunes", "If enabled show tips at start");
+	r_config_set_cb (cfg, "cfg.sandbox", "false", &config_cfgsandbox_callback);
+	r_config_desc (cfg, "cfg.sandbox", "sandbox mode disables systems and open on upper directories");
 	r_config_set (cfg, "cfg.wseek", "false");
 	r_config_desc (cfg, "cfg.wseek", "Seek after write");
 	r_config_set_i (cfg, "cfg.hashlimit", SLURP_LIMIT);
@@ -547,6 +599,15 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_desc (cfg, "diff.from", "set source diffing address for px (uses cc command)");
 	r_config_set_i (cfg, "diff.to", 0);
 	r_config_desc (cfg, "diff.to", "set destination diffing address for px (uses cc command)");
+	/* dir */
+	r_config_set (cfg, "dir.types", "/usr/include");
+	r_config_desc (cfg, "dir.types", "Default path to look for cparse type files");
+	r_config_set (cfg, "dir.source", "");
+	r_config_desc (cfg, "dir.source", "Path to find source files");
+	r_config_set (cfg, "dir.magic", R_MAGIC_PATH);
+	r_config_desc (cfg, "dir.magic", "Path to r_magic files");
+	r_config_set (cfg, "dir.plugins", LIBDIR"/radare2/"R2_VERSION"/");
+	r_config_desc (cfg, "dir.plugins", "Path to plugin files to be loaded at startup");
 	/* debug */
 	if (core->cons->rows>30) // HACKY
 		r_config_set_i (cfg, "dbg.follow", 64);
@@ -579,9 +640,6 @@ R_API int r_core_config_init(RCore *core) {
 #endif
 	r_config_desc (cfg, "cfg.editor", "Select default editor program");
 	free (p);
-	if (r_file_exists ("/usr/bin/htmlgraph.sh"))
-		r_config_set (cfg, "cmd.graph", "!htmlgraph.sh a.dot");
-	else
 	if (r_file_exists ("/usr/bin/xdot"))
 		r_config_set (cfg, "cmd.graph", "!xdot a.dot");
 	else
@@ -591,7 +649,13 @@ R_API int r_core_config_init(RCore *core) {
 	if (r_file_exists ("/usr/bin/gqview"))
 		r_config_set (cfg, "cmd.graph", "!dot -Tgif -oa.gif a.dot;!gqview a.gif");
 	else
-		r_config_set (cfg, "cmd.graph", "!dot -Tgif -oa.gif a.dot;!gqview a.gif");
+	if (r_file_exists ("/usr/bin/eog"))
+		r_config_set (cfg, "cmd.graph", "!dot -Tgif -oa.gif a.dot;!eog a.gif");
+	else
+	if (r_file_exists ("/usr/bin/xdg-open"))
+		r_config_set (cfg, "cmd.graph", "!dot -Tgif -oa.gif a.dot;!xdg-open a.gif");
+	else
+		r_config_set (cfg, "cmd.graph", "?e cannot find a valid picture viewer");
 	r_config_desc (cfg, "cmd.graph", "Command executed by 'agv' command to view graphs");
 	r_config_set (cfg, "cmd.hit", "");
 	r_config_desc (cfg, "cmd.hit", "Command to execute on every search hit");
@@ -603,12 +667,14 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_desc (cfg, "cmd.prompt", "Prompt commands");
 	r_config_set (cfg, "cmd.cprompt", "");
 	r_config_desc (cfg, "cmd.cprompt", "Column visual prompt commands");
+	r_config_set (cfg, "cmd.visual", "");
+	r_config_desc (cfg, "cmd.visual", "Replace current print mode");
 	r_config_set (cfg, "cmd.vprompt", "");
 	r_config_desc (cfg, "cmd.vprompt", "Visual prompt commands");
 	r_config_set (cfg, "cmd.bp", "");
 	r_config_desc (cfg, "cmd.bp", "Command to executed every breakpoint hitted");
-	r_config_set (cfg, "http.public", "false");
-	r_config_desc (cfg, "http.public", "set to true to listen on 0.0.0.0");
+	r_config_set (cfg, "http.allow", "");
+	r_config_desc (cfg, "http.allow", "http firewall. only accept clients from the comma separated IP list");
 #if __WINDOWS__
 	r_config_set (cfg, "http.browser", "start");
 #else
@@ -622,18 +688,40 @@ R_API int r_core_config_init(RCore *core) {
 	else r_config_set (cfg, "http.browser", "firefox");
 #endif
 	r_config_desc (cfg, "http.browser", "command to open http urls");
+	r_config_set (cfg, "http.sandbox", "false");
+	r_config_set_i (cfg, "http.timeout", 3);
+	r_config_desc (cfg, "http.timeout", "disconnect clients after N seconds if no data sent");
+	r_config_set (cfg, "http.public", "false");
+	r_config_desc (cfg, "http.public", "set to true to listen on 0.0.0.0");
 	r_config_set (cfg, "http.port", "9090");
 	r_config_desc (cfg, "http.root", "port to listen for http connections");
+	r_config_set (cfg, "http.uri", "");
+	r_config_desc (cfg, "http.uri", "base uri to remote host proxy host");
 	r_config_set (cfg, "http.root", WWWROOT);
 	r_config_desc (cfg, "http.root", "http root directory");
 
+	r_config_set (cfg, "http.upload", "false");
+	r_config_desc (cfg, "http.upload", "enable file POST uploads in /up/<filename>");
+	r_config_set_i (cfg, "http.maxsize", 0);
+	r_config_desc (cfg, "http.maxsize", "define maximum file size to upload");
+	r_config_set (cfg, "http.upget", "false");
+	r_config_desc (cfg, "http.upget", "/up/ can be GET, not only POST");
+	tmpdir = r_file_tmpdir ();
+	r_config_set (cfg, "http.uproot", tmpdir);
+	free (tmpdir);
+	r_config_desc (cfg, "http.uproot", "path to store uploaded files");
+
 	r_config_set (cfg, "graph.font", "Courier");
 	r_config_desc (cfg, "graph.font", "font to be used by the dot graphs");
+	r_config_set_i_cb (cfg, "scr.stride", 0, config_scrstride_callback);
+	r_config_desc (cfg, "scr.stride", "select row stride for hexdump (px)");
 	r_config_set_cb (cfg, "scr.sparse", "false", config_scrsparse_callback);
 	r_config_set_cb (cfg, "scr.interactive", "true", config_scrint_callback);
 	r_config_set_cb (cfg, "scr.tee", "", config_teefile_callback);
 	r_config_desc (cfg, "scr.tee", "Pipe console output to file if not empty");
 	r_config_set_cb (cfg, "scr.prompt", "true", &config_scrprompt_callback);
+	r_config_set (cfg, "scr.pipecolor", "false");
+	r_config_desc (cfg, "scr.pipecolor", "enable colors when using pipes if true");
 	r_config_set_cb (cfg, "scr.color",
 		(core->print->flags&R_PRINT_FLAGS_COLOR)?"true":"false",
 		&config_color_callback);
@@ -644,8 +732,12 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_set_cb (cfg, "scr.nkey", "hit", &config_scrnkey_callback);
 	r_config_desc (cfg, "scr.nkey", "Select the seek mode in visual");
 	r_config_set (cfg, "scr.seek", "");
+	r_config_set_i(cfg, "scr.colpos", 80);
+	r_config_desc (cfg, "scr.colpos", "Column position of cmd.cprompt in visual");
 	r_config_set_i_cb (cfg, "scr.cols", 16, &config_scrcols_callback);
 	r_config_desc (cfg, "scr.cols", "Configure the number of columns to print");
+	r_config_set_cb (cfg, "scr.html", "false", &config_scrhtml_callback);
+	r_config_desc (cfg, "scr.html", "If enabled disassembly use HTML syntax");
 	r_config_set (cfg, "search.in", "file");
 	r_config_desc (cfg, "search.in", "Specify search boundaries (raw, block, file, section)");
 	r_config_set_i (cfg, "search.kwidx", 0);
@@ -658,18 +750,24 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_desc (cfg, "search.count", "Start index number at search hits");
 	r_config_set (cfg, "search.prefix", "hit");
 	r_config_desc (cfg, "search.prefix", "Prefix name in search hits label");
-	r_config_set_i (cfg, "search.from", UT64_MAX);
+	r_config_set_i (cfg, "search.from", -1);
 	r_config_desc (cfg, "search.from", "Search start address");
-	r_config_set_i (cfg, "search.to", UT64_MAX);
+	r_config_set_i (cfg, "search.to", -1);
 	r_config_desc (cfg, "search.to", "Search end address");
 	r_config_set_i (cfg, "search.distance", 0); // TODO: use i_cb here and remove code in cmd.c
 	r_config_desc (cfg, "search.distance", "Search string distance");
 	r_config_set_i_cb (cfg, "search.align", 0, &config_searchalign_callback);
 	r_config_desc (cfg, "search.align", "Only catch aligned search hits");
-	r_config_set_cb (cfg, "scr.html", "false", &config_scrhtml_callback);
-	r_config_desc (cfg, "scr.html", "If enabled disassembly use HTML syntax");
 
-	sprintf (buf, "%d", R_CORE_BLOCKSIZE_MAX);
+	r_config_set_cb (cfg, "io.buffer", "false", &config_iobuffer_callback);
+	r_config_desc (cfg, "io.buffer", "load and use buffer cache if enabled");
+	r_config_set_i (cfg, "io.buffer.from", 0);
+	r_config_desc (cfg, "io.buffer.from", "lower address of buffered cache");
+	r_config_set_i (cfg, "io.buffer.to", 0);
+	r_config_desc (cfg, "io.buffer.to", "higher address of buffered cache");
+	sprintf (buf, "0");
+	r_config_set_cb (cfg, "io.zeromap", buf, &config_iozeromap_callback);
+	r_config_desc (cfg, "io.zeromap", "double map the last opened file to address zero");
 	r_config_set_cb (cfg, "io.maxblk", buf, &config_iomaxblk_callback);
 	r_config_desc (cfg, "io.maxblk", "set max block size (soft limit)");
 

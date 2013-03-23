@@ -1,17 +1,20 @@
-/* radare - LGPL - Copyright 2009-2012 // pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 static void dot_r_graph_traverse(RCore *core, RGraph *t) {
 	RGraphNode *n, *n2;
 	RListIter *iter, *iter2;
 	const char *gfont = r_config_get (core->config, "graph.font");
-	r_cons_printf ("digraph code {\n");
-	r_cons_printf ("graph [bgcolor=white];\n");
-	r_cons_printf ("   node [color=lightgray, style=filled shape=box fontname=\"%s\" fontsize=\"8\"];\n", gfont);
+	r_cons_printf ("digraph code {\n"
+		"graph [bgcolor=white];\n"
+		"    node [color=lightgray, style=filled"
+		" shape=box fontname=\"%s\" fontsize=\"8\"];\n", gfont);
 	r_list_foreach (t->nodes, iter, n) {
-		r_cons_printf ("\"0x%08"PFMT64x"\" [URL=\"0x%08"PFMT64x"\" color=\"lightgray\" "
-			"label=\"0x%08"PFMT64x" (%d)\"]\n", n->addr, n->addr, n->addr, n->refs);
+		r_cons_printf ("\"0x%08"PFMT64x"\" [URL=\"0x%08"PFMT64x
+			"\" color=\"lightgray\" label=\"0x%08"PFMT64x
+			" (%d)\"]\n", n->addr, n->addr, n->addr, n->refs);
 		r_list_foreach (n->children, iter2, n2) {
-			r_cons_printf ("\"0x%08"PFMT64x"\" -> \"0x%08"PFMT64x"\" [color=\"red\"];\n", n->addr, n2->addr);
+			r_cons_printf ("\"0x%08"PFMT64x"\" -> \"0x%08"PFMT64x
+				"\" [color=\"red\"];\n", n->addr, n2->addr);
 		}
 	}
 	r_cons_printf ("}\n");
@@ -37,6 +40,21 @@ static int step_until(RCore *core, ut64 addr) {
 		off = r_debug_reg_get (core->dbg, "pc");
 		// check breakpoint here
 	} while (off != addr);
+	return R_TRUE;
+}
+
+/* until end of frame */
+static int step_until_eof(RCore *core) {
+	ut64 off, now = r_debug_reg_get (core->dbg, "sp");
+	do {
+		r_debug_step (core->dbg, 1);
+		if (checkbpcallback (core)) {
+			eprintf ("Interrupted by a breakpoint\n");
+			break;
+		}
+		off = r_debug_reg_get (core->dbg, "sp");
+		// check breakpoint here
+	} while (off <= now);
 	return R_TRUE;
 }
 
@@ -89,8 +107,8 @@ static void cmd_debug_pid(RCore *core, const char *input) {
 		sig = ptr? atoi (ptr+1): 0;
 		if (pid > 0) {
 			eprintf ("Sending signal '%d' to pid '%d'\n", sig, pid);
-			r_debug_kill (core->dbg, R_FALSE, sig);
-		} else eprintf ("Invalid arguments\n");
+			r_debug_kill (core->dbg, 0, R_FALSE, sig);
+		} else eprintf ("cmd_debug_pid: Invalid arguments (%s)\n", input);
 		break;
 	case 'n':
 		eprintf ("TODO: debug_fork: %d\n", r_debug_fork (core->dbg));
@@ -110,22 +128,11 @@ static void cmd_debug_pid(RCore *core, const char *input) {
 			break;
 		}
 		break;
-	case '?':
-		r_cons_printf ("Usage: dp[=][pid]\n"
-			" dp      list current pid and childrens\n"
-			" dp 748  list children of pid\n"
-			" dp*     list all attachable pids\n"
-			" dpa 377 attach and select this pid\n"
-			" dp=748  select this pid\n"
-			" dpn     Create new process (fork)\n"
-			" dpnt    Create new thread (clone)\n"
-			" dpt     List threads of current pid\n"
-			" dpt 74  List threads of given process\n"
-			" dpt=64  Attach to thread\n"
-			" dpk P S send signal S to P process id\n");
-		break;
 	case 'a':
-		r_debug_attach (core->dbg, (int) r_num_math (core->num, input+2));
+		if (input[2]) {
+			r_debug_attach (core->dbg, (int) r_num_math (
+				core->num, input+2));
+		} else r_debug_attach (core->dbg, core->file->fd->fd);
 		r_debug_select (core->dbg, core->dbg->pid, core->dbg->tid);
 		r_config_set_i (core->config, "dbg.swstep",
 			(core->dbg->h && !core->dbg->h->canstep));
@@ -144,6 +151,20 @@ static void cmd_debug_pid(RCore *core, const char *input) {
 		r_debug_pid_list (core->dbg,
 			(int) r_num_math (core->num, input+2));
 		break;
+	case '?':
+		r_cons_printf ("Usage: dp[=][pid]\n"
+			" dp      list current pid and childrens\n"
+			" dp 748  list children of pid\n"
+			" dp*     list all attachable pids\n"
+			" dpa 377 attach and select this pid\n"
+			" dp=748  select this pid\n"
+			" dpn     Create new process (fork)\n"
+			" dpnt    Create new thread (clone)\n"
+			" dpt     List threads of current pid\n"
+			" dpt 74  List threads of given process\n"
+			" dpt=64  Attach to thread\n"
+			" dpk P S send signal S to P process id\n");
+		break;
 	default:
 		eprintf ("selected: %d %d\n", core->dbg->pid, core->dbg->tid);
 		r_debug_pid_list (core->dbg, core->dbg->pid);
@@ -158,7 +179,8 @@ static void cmd_debug_backtrace (RCore *core, const char *input) {
 		r_bp_traptrace_list (core->dbg->bp);
 	} else {
 		ut64 oaddr = 0LL;
-		eprintf ("Trap tracing 0x%08"PFMT64x"-0x%08"PFMT64x"\n", core->offset, core->offset+len);
+		eprintf ("Trap tracing 0x%08"PFMT64x"-0x%08"PFMT64x"\n",
+			core->offset, core->offset+len);
 		r_reg_arena_swap (core->dbg->reg, R_TRUE);
 		r_bp_traptrace_reset (core->dbg->bp, R_TRUE);
 		r_bp_traptrace_add (core->dbg->bp, core->offset, core->offset+len);
@@ -245,7 +267,8 @@ static int cmd_debug_map(RCore *core, const char *input) {
 				r_io_read_at (core->io, map->addr, buf, map->size);
 				if (input[1]==' ' && input[2]) {
 					strncpy (file, input+2, sizeof (file));
-				} else snprintf (file, sizeof (file), "0x%08"PFMT64x"-0x%08"PFMT64x"-%s.dmp",
+				} else snprintf (file, sizeof (file),
+					"0x%08"PFMT64x"-0x%08"PFMT64x"-%s.dmp",
 					map->addr, map->addr_end, r_str_rwx_i (map->perm));
 				if (!r_file_dump (file, buf, map->size)) {
 					eprintf ("Cannot write '%s'\n", file);
@@ -415,13 +438,13 @@ static void cmd_debug_reg(RCore *core, const char *str) {
 		} //else eprintf ("Cannot retrieve registers from pid %d\n", core->dbg->pid);
 		break;
 	case '*':
-		if (r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, R_FALSE)) {
-			r_debug_reg_list (core->dbg, R_REG_TYPE_GPR, bits, 1); // XXX detect which one is current usage
-		} //else eprintf ("Cannot retrieve registers from pid %d\n", core->dbg->pid);
+		if (r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, R_FALSE))
+			r_debug_reg_list (core->dbg, R_REG_TYPE_GPR, bits, '*');
 		break;
+	case 'j':
 	case '\0':
 		if (r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, R_FALSE)) {
-			r_debug_reg_list (core->dbg, R_REG_TYPE_GPR, bits, 0);
+			r_debug_reg_list (core->dbg, R_REG_TYPE_GPR, bits, str[0]);
 		} else eprintf ("Cannot retrieve registers from pid %d\n", core->dbg->pid);
 		break;
 	case ' ':
@@ -430,7 +453,6 @@ static void cmd_debug_reg(RCore *core, const char *str) {
 			*arg = 0;
 			r = r_reg_get (core->dbg->reg, str+1, R_REG_TYPE_GPR);
 			if (r) {
-				//eprintf ("SET(%s)(%s)\n", str, arg+1);
 				r_cons_printf ("0x%08"PFMT64x" ->", str,
 					r_reg_get_value (core->dbg->reg, r));
 				r_reg_set_value (core->dbg->reg, r,
@@ -448,10 +470,8 @@ static void cmd_debug_reg(RCore *core, const char *str) {
 				*arg='\0';
 				size = atoi (arg);
 			} else size = core->dbg->bits;
-			//eprintf ("ARG(%s)\n", str+1);
 			type = r_reg_type_by_name (str+1);
 		}
-		//printf("type = %d\nsize = %d\n", type, size);
 		if (type != R_REG_TYPE_LAST) {
 			r_debug_reg_sync (core->dbg, type, R_FALSE);
 			r_debug_reg_list (core->dbg, type, size, str[0]=='*');
@@ -489,26 +509,23 @@ static void static_debug_stop(void *u) {
 }
 
 static void r_core_cmd_bp(RCore *core, const char *input) {
-	RBreakpointItem *bp;
-	int hwbp = r_config_get_i (core->config, "dbg.hwbp");
+	ut64 addr;
+	RList *list;
+	RListIter *iter;
+	RDebugFrame *frame;
+	int i, hwbp = r_config_get_i (core->config, "dbg.hwbp");
 	switch (input[1]) {
 	case 't':
-		{
-		int i = 0;
-		ut64 at = UT64_MAX;
-		RList *list;
-		RListIter *iter;
-		RDebugFrame *frame;
-
+		addr = UT64_MAX;
 		if (input[2]==' ' && input[3])
-			at = r_num_math (core->num, input+2);
-		list = r_debug_frames (core->dbg, at);
+			addr = r_num_math (core->num, input+2);
+		i = 0;
+		list = r_debug_frames (core->dbg, addr);
 		r_list_foreach (list, iter, frame) {
 			r_cons_printf ("%d  0x%08"PFMT64x"  %d\n",
 				i++, frame->addr, frame->size);
 		}
 		r_list_destroy (list);
-		}
 		break;
 	case '\0':
 		r_bp_list (core->dbg->bp, input[1]=='*');
@@ -516,33 +533,30 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 	case '-':
 		r_bp_del (core->dbg->bp, r_num_math (core->num, input+2));
 		break;
-	case 'c': {
-			ut64 off = r_num_math (core->num, input+2);
-			RBreakpointItem *bpi = r_bp_get (core->dbg->bp, off);
-			if (bpi) {
-				char *arg = strchr (input+2, ' ');
-				if (arg)
-					arg = strchr (arg+1, ' ');
-				if (arg) {
-					free (bpi->data);
-					bpi->data = strdup (arg+1);
-				} else {
-					free (bpi->data);
-					bpi->data = NULL;
-				}
-			} else eprintf ("No breakpoint defined at 0x%08"PFMT64x"\n", off);
-		}
+	case 'c':
+		addr = r_num_math (core->num, input+2);
+		RBreakpointItem *bpi = r_bp_get (core->dbg->bp, addr);
+		if (bpi) {
+			char *arg = strchr (input+2, ' ');
+			if (arg)
+				arg = strchr (arg+1, ' ');
+			if (arg) {
+				free (bpi->data);
+				bpi->data = strdup (arg+1);
+			} else {
+				free (bpi->data);
+				bpi->data = NULL;
+			}
+		} else eprintf ("No breakpoint defined at 0x%08"PFMT64x"\n", addr);
 		break;
 	case 's':
-		{
-			ut64 addr = r_num_math (core->num, input+2);
-			RBreakpointItem *bp = r_bp_get (core->dbg->bp, addr);
-			if (bp) bp->enabled = !bp->enabled;
-			else {
-				if (hwbp) bp = r_bp_add_hw (core->dbg->bp, addr, 1, R_BP_PROT_EXEC);
-				else bp = r_bp_add_sw (core->dbg->bp, addr, 1, R_BP_PROT_EXEC);
-				if (!bp) eprintf ("Cannot set breakpoint (%s)\n", input+2);
-			}
+		addr = r_num_math (core->num, input+2);
+		RBreakpointItem *bp = r_bp_get (core->dbg->bp, addr);
+		if (bp) bp->enabled = !bp->enabled;
+		else {
+			if (hwbp) bp = r_bp_add_hw (core->dbg->bp, addr, 1, R_BP_PROT_EXEC);
+			else bp = r_bp_add_sw (core->dbg->bp, addr, 1, R_BP_PROT_EXEC);
+			if (!bp) eprintf ("Cannot set breakpoint (%s)\n", input+2);
 		}
 		r_bp_enable (core->dbg->bp, r_num_math (core->num, input+2), 0);
 		break;
@@ -565,6 +579,7 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 		"db sym.main       ; add breakpoint into sym.main\n"
 		"db 0x804800       ; add breakpoint\n"
 		"db -0x804800      ; remove breakpoint\n"
+		// "dbi 0x848 ecx=3   ; stop execution when condition matches\n"
 		"dbs 0x8048000     ; toggle breakpoint on given address\n"
 		"dbe 0x8048000     ; enable breakpoint\n"
 		"dbc 0x8048000 cmd ; run command when breakpoint is hit\n"
@@ -574,14 +589,74 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 		"dbt [ebp]         ; debug backtrace\n");
 		break;
 	default:
-		{
-			ut64 addr = r_num_math (core->num, input+2);
-			if (hwbp) bp = r_bp_add_hw (core->dbg->bp, addr, 1, R_BP_PROT_EXEC);
-			else bp = r_bp_add_sw (core->dbg->bp, addr, 1, R_BP_PROT_EXEC);
-			if (!bp) eprintf ("Cannot set breakpoint (%s)\n", input+2);
-		}
+		addr = r_num_math (core->num, input+2);
+		if (hwbp) bp = r_bp_add_hw (core->dbg->bp, addr, 1, R_BP_PROT_EXEC);
+		else bp = r_bp_add_sw (core->dbg->bp, addr, 1, R_BP_PROT_EXEC);
+		if (!bp) eprintf ("Cannot set breakpoint (%s)\n", input+2);
 		break;
 	}
+}
+
+static void r_core_debug_trace_calls (RCore *core) {
+	int n = 0, t = core->dbg->trace->enabled;
+	/*RGraphNode *gn;*/
+	core->dbg->trace->enabled = 0;
+	r_graph_plant (core->dbg->graph);
+	r_cons_break (static_debug_stop, core->dbg);
+	r_reg_arena_swap (core->dbg->reg, R_TRUE);
+	for (;;) {
+		ut8 buf[32];
+		ut64 addr;
+		RAnalOp aop;
+		if (r_cons_singleton ()->breaked)
+			break;
+		r_debug_step (core->dbg, 1);
+		r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, R_FALSE);
+		addr = r_debug_reg_get (core->dbg, "pc");
+		r_io_read_at (core->io, addr, buf, sizeof (buf));
+		r_anal_op (core->anal, &aop, addr, buf, sizeof (buf));
+		eprintf (" %d %"PFMT64x"\r", n++, addr);
+		switch (aop.type) {
+			case R_ANAL_OP_TYPE_UCALL:
+				// store regs
+				// step into
+				// get pc
+				r_debug_step (core->dbg, 1);
+				r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, R_FALSE);
+				addr = r_debug_reg_get (core->dbg, "pc");
+				eprintf ("0x%08"PFMT64x" ucall. computation may fail\n", addr);
+				r_graph_push (core->dbg->graph, addr, NULL);
+				// TODO: push pc+aop.length into the call path stack
+				break;
+			case R_ANAL_OP_TYPE_CALL:
+				r_graph_push (core->dbg->graph, addr, NULL);
+				break;
+			case R_ANAL_OP_TYPE_RET:
+#if 0
+				// TODO: we must store ret value for each call in the graph path to do this check
+				r_debug_step (core->dbg, 1);
+				r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, R_FALSE);
+				addr = r_debug_reg_get (core->dbg, "pc");
+				// TODO: step into and check return address if correct
+				// if not correct we are hijacking the control flow (exploit!)
+#endif
+				/*gn =*/ r_graph_pop (core->dbg->graph);
+#if 0
+				if (addr != gn->addr) {
+					eprintf ("Oops. invalid return address 0x%08"PFMT64x
+							"\n0x%08"PFMT64x"\n", addr, gn->addr);
+				}
+#endif
+				break;
+		}
+		if (checkbpcallback (core)) {
+			eprintf ("Interrupted by a breakpoint\n");
+			break;
+		}
+	}
+	r_graph_traverse (core->dbg->graph);
+	core->dbg->trace->enabled = t;
+	r_cons_break_end();
 }
 
 static int cmd_debug(void *data, const char *input) {
@@ -605,68 +680,9 @@ static int cmd_debug(void *data, const char *input) {
 			r_cons_printf ("  dtr  - reset traces (instruction//cals)\n");
 			break;
 		case 'c':
-			{
-			int n = 0;
-			int t = core->dbg->trace->enabled;
-			/*RGraphNode *gn;*/
-			core->dbg->trace->enabled = 0;
-			r_graph_plant (core->dbg->graph);
-			r_cons_break (static_debug_stop, core->dbg);
-			r_reg_arena_swap (core->dbg->reg, R_TRUE);
-			for (;;) {
-				ut8 buf[32];
-				ut64 addr;
-				RAnalOp aop;
-				if (r_cons_singleton ()->breaked)
-					break;
-				r_debug_step (core->dbg, 1);
-				r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, R_FALSE);
-				addr = r_debug_reg_get (core->dbg, "pc");
-				r_io_read_at (core->io, addr, buf, sizeof (buf));
-				r_anal_op (core->anal, &aop, addr, buf, sizeof (buf));
-				eprintf (" %d %"PFMT64x"\r", n++, addr);
-				switch (aop.type) {
-				case R_ANAL_OP_TYPE_UCALL:
-					// store regs
-					// step into
-					// get pc
-					r_debug_step (core->dbg, 1);
-					r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, R_FALSE);
-					addr = r_debug_reg_get (core->dbg, "pc");
-					eprintf ("0x%08"PFMT64x" ucall. computation may fail\n", addr);
-					r_graph_push (core->dbg->graph, addr, NULL);
-// TODO: push pc+aop.length into the call path stack
-					break;
-				case R_ANAL_OP_TYPE_CALL:
-					r_graph_push (core->dbg->graph, addr, NULL);
-					break;
-				case R_ANAL_OP_TYPE_RET:
-#if 0
-// TODO: we must store ret value for each call in the graph path to do this check
-					r_debug_step (core->dbg, 1);
-					r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, R_FALSE);
-					addr = r_debug_reg_get (core->dbg, "pc");
-					// TODO: step into and check return address if correct
-					// if not correct we are hijacking the control flow (exploit!)
-#endif
-					/*gn =*/ r_graph_pop (core->dbg->graph);
-#if 0
-					if (addr != gn->addr) {
-						eprintf ("Oops. invalid return address 0x%08"PFMT64x
-							"\n0x%08"PFMT64x"\n", addr, gn->addr);
-					}
-#endif
-					break;
-				}
-				if (checkbpcallback (core)) {
-					eprintf ("Interrupted by a breakpoint\n");
-					break;
-				}
-			}
-			r_graph_traverse (core->dbg->graph);
-			core->dbg->trace->enabled = t;
-			r_cons_break_end();
-			}
+			if (r_debug_is_dead (core->dbg))
+				eprintf ("No process to debug.");
+			else r_core_debug_trace_calls (core);
 			break;
 		case 'g':
 			dot_r_graph_traverse (core, core->dbg->graph);
@@ -725,13 +741,42 @@ static int cmd_debug(void *data, const char *input) {
 		switch (input[1]) {
 		case '?':
 			r_cons_printf ("Usage: ds[ol] [count]\n"
-				" ds       step one instruction\n"
-				" ds 4     step 4 instructions\n"
-				" dso 3    step over 3 instructions\n"
-				" dsp      step into program (skip libs)\n"
-				" dsu addr step until address\n"
-				" dsl      step one source line\n"
-				" dsl 40   step 40 source lines\n");
+				" ds          step one instruction\n"
+				" ds 4        step 4 instructions\n"
+				" dsf         step until end of frame\n"
+				" dsi [cond]  continue until condition matches\n"
+				" dsl         step one source line\n"
+				" dsl 40      step 40 source lines\n"
+				" dso 3       step over 3 instructions\n"
+				" dsp         step into program (skip libs)\n"
+				" dss 3       skip 3 step instructions\n"
+				" dsu addr    step until address\n"
+				);
+			break;
+		case 'i':
+			if (input[2] == ' ') {
+				int n = 0;
+				r_cons_break (static_debug_stop, core->dbg);
+				do {
+					if (r_cons_singleton ()->breaked)
+						break;
+					r_debug_step (core->dbg, 1);
+					if (r_debug_is_dead (core->dbg))
+						break;
+					if (checkbpcallback (core)) {
+						eprintf ("Interrupted by a breakpoint\n");
+						break;
+					}
+					r_core_cmd0 (core, ".dr*");
+					n++;
+				} while (!r_num_conditional (core->num, input+3));
+				eprintf ("Stopped after %d instructions\n", n);
+			} else {
+				eprintf ("Missing argument\n");
+			}
+			break;
+		case 'f':
+			step_until_eof(core);
 			break;
 		case 'u':
 			r_reg_arena_swap (core->dbg->reg, R_TRUE);
@@ -759,6 +804,25 @@ static int cmd_debug(void *data, const char *input) {
 					eprintf ("Interrupted by a breakpoint\n");
 					break;
 				}
+			}
+			break;
+		case 's':
+			{
+			ut64 addr = r_debug_reg_get (core->dbg, "pc");
+			r_reg_arena_swap (core->dbg->reg, R_TRUE);
+			for (i=0; i<times; i++) {
+				ut8 buf[64];
+				RAnalOp aop;
+				r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, R_FALSE);
+				r_io_read_at (core->io, addr, buf, sizeof (buf));
+				r_anal_op (core->anal, &aop, addr, buf, sizeof (buf));
+				if (aop.jump != UT64_MAX && aop.fail != UT64_MAX) {
+					eprintf ("Dont know how to skip this instruction\n");
+					break;
+				}
+				addr += aop.length;
+			}
+			r_debug_reg_set (core->dbg, "pc", addr);
 			}
 			break;
 		case 'o':
@@ -950,7 +1014,18 @@ static int cmd_debug(void *data, const char *input) {
 		else r_debug_plugin_list (core->dbg);
 		break;
 	case 'o':
-		r_core_file_reopen (core, input[1]? input+2: NULL);
+		r_core_file_reopen (core, input[1]? input+2: NULL, 0);
+		break;
+	case 'w':
+		r_cons_break (static_debug_stop, core->dbg);
+		for (;!r_cons_singleton ()->breaked;) {
+			int pid = atoi (input+1);
+			//int opid = core->dbg->pid = pid;
+			int res = r_debug_kill (core->dbg, pid, 0, 0);
+			if (!res) break;
+			r_sys_usleep (200);
+		}
+			r_cons_break_end();
 		break;
 	default:
 		r_cons_printf ("Usage: d[sbhcrbo] [arg]\n"
@@ -965,7 +1040,8 @@ static int cmd_debug(void *data, const char *input) {
 		" db[?]          breakpoints\n"
 		" dbt            display backtrace\n"
 		" dt[?r] [tag]   display instruction traces (dtr=reset)\n"
-		" dm[?*]         show memory maps\n");
+		" dm[?*]         show memory maps\n"
+		" dw [pid]       block prompt until pid dies\n");
 		break;
 	}
 	if (follow>0) {

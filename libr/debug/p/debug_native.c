@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2013 pancake */
 
 #include <r_userconf.h>
 #include <r_debug.h>
@@ -8,6 +8,9 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/param.h>
+#if __UNIX__
+#include <errno.h>
+#endif
 
 #if DEBUGGER
 static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig);
@@ -169,6 +172,20 @@ ut32[16]
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <limits.h>
+
+struct user_regs_struct_x86_64 {
+  ut64 r15; ut64 r14; ut64 r13; ut64 r12; ut64 rbp; ut64 rbx; ut64 r11;
+  ut64 r10; ut64 r9; ut64 r8; ut64 rax; ut64 rcx; ut64 rdx; ut64 rsi;
+  ut64 rdi; ut64 orig_rax; ut64 rip; ut64 cs; ut64 eflags; ut64 rsp;
+  ut64 ss; ut64 fs_base; ut64 gs_base; ut64 ds; ut64 es; ut64 fs; ut64 gs;
+};
+
+struct user_regs_struct_x86_32 {
+  ut32 ebx; ut32 ecx; ut32 edx; ut32 esi; ut32 edi; ut32 ebp; ut32 eax;
+  ut32 xds; ut32 xes; ut32 xfs; ut32 xgs; ut32 orig_eax; ut32 eip;
+  ut32 xcs; ut32 eflags; ut32 esp; ut32 xss;
+};
+
 #ifdef __ANDROID__
 // #if __arm__
 # define R_DEBUG_REG_T struct pt_regs
@@ -260,6 +277,14 @@ static int r_debug_native_step(RDebug *dbg) {
 #elif __APPLE__
 	//debug_arch_x86_trap_set (dbg, 1);
 	// TODO: not supported in all platforms. need dbg.swstep=
+#if __arm__
+	ret = ptrace (PT_STEP, pid, (caddr_t)1, 0); //SIGINT);
+	if (ret != 0) {
+		perror ("ptrace-step");
+		eprintf ("mach-error: %d, %s\n", ret, MACH_ERROR_STRING (ret));
+		ret = R_FALSE; /* do not wait for events */
+	} else ret = R_TRUE;
+#else
 	#if 0 && __arm__
 	if (!dbg->swstep)
 		eprintf ("XXX hardware stepping is not supported in arm. set e dbg.swstep=true\n");
@@ -274,6 +299,7 @@ static int r_debug_native_step(RDebug *dbg) {
 		eprintf ("mach-error: %d, %s\n", ret, MACH_ERROR_STRING (ret));
 		ret = R_FALSE; /* do not wait for events */
 	} else ret = R_TRUE;
+#endif
 #elif __BSD__ 
 	ret = ptrace (PT_STEP, pid, (caddr_t)1, 0);
 	if (ret != 0) {
@@ -354,9 +380,36 @@ static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig) {
 	}
 	return 0;
 #elif __APPLE__
-	ut64 rip = r_debug_reg_get (dbg, "pc");
-	ptrace (PT_CONTINUE, pid, (void*)(size_t)rip, 0); // 0 = send no signal TODO !! implement somewhere else
+#if __arm__
+	int i, ret, status;
+	thread_array_t inferior_threads = NULL;
+	unsigned int inferior_thread_count = 0;
+
+// XXX: detach is noncontrollable continue
+        ptrace(PT_DETACH, pid, 0, 0);
+#if 0
+	ptrace (PT_THUPDATE, pid, (void*)(size_t)1, 0); // 0 = send no signal TODO !! implement somewhere else
+	ptrace (PT_CONTINUE, pid, (void*)(size_t)1, 0); // 0 = send no signal TODO !! implement somewhere else
+	task_resume (pid_to_task (pid));
+	ret = waitpid (pid, &status, 0);
+#endif
+/*
+        ptrace(PT_ATTACHEXC, pid, 0, 0);
+
+        if (task_threads (pid_to_task (pid), &inferior_threads,
+			&inferior_thread_count) != KERN_SUCCESS) {
+                eprintf ("Failed to get list of task's threads.\n");
+		return 0;
+        }
+        for (i = 0; i < inferior_thread_count; i++)
+		thread_resume (inferior_threads[i]);
+*/
+	return 1;
+#else
+	//ut64 rip = r_debug_reg_get (dbg, "pc");
+	ptrace (PT_CONTINUE, pid, (void*)(size_t)1, 0); // 0 = send no signal TODO !! implement somewhere else
         return 0;
+#endif
 #elif __BSD__
 	ut64 pc = r_debug_reg_get (dbg, "pc");
 	return ptrace (PTRACE_CONT, pid, (void*)(size_t)pc, (int)data);
@@ -1061,15 +1114,6 @@ if (dbg->bits & R_SYS_BITS_32) {
 #endif
 }
 
-/*
-	TODO: list all pids in linux and bsd.. osx seems to be strange
-	int i;
-	for (i=1; i<9999; i++) {
-		if (!kill (i, 0))
-			r_list_append (list, r_debug_pid_new ("???", i, 's', 0));
-	}
-*/
-
 #if __APPLE__
 // XXX
 static RDebugPid *darwin_get_pid(int pid) {
@@ -1250,7 +1294,7 @@ static RList *r_debug_native_pids(int pid) {
 		closedir (dh);
 	} else
 	for (i=2; i<MAXPID; i++) {
-		if (!kill (i, 0)) {
+		if (!r_sandbox_kill (i, 0)) {
 			// TODO: Use slurp!
 			snprintf (cmdline, sizeof (cmdline), "/proc/%d/cmdline", i);
 			fd = open (cmdline, O_RDONLY);
@@ -1277,7 +1321,7 @@ static RList *r_debug_native_threads(RDebug *dbg, int pid) {
 	return w32_thread_list (pid, list);
 #elif __APPLE__
 #if __arm__                 
-	#define OSX_PC state.pc
+	#define OSX_PC state.__pc
 #elif __POWERPC__
 	#define OSX_PC state.srr0
 #elif __x86_64__
@@ -1420,10 +1464,10 @@ eprintf ("++ EFL = 0x%08x  %d\n", ctx.EFlags, r_offsetof (CONTEXT, EFlags));
                 /* TODO: allow to choose the thread */
 		gp_count = R_DEBUG_STATE_SZ;
 
-if (tid <0 || tid>=inferior_thread_count) {
-	eprintf ("Tid out of range %d\n", inferior_thread_count);
-	return R_FALSE;
-}
+		if (tid <0 || tid>=inferior_thread_count) {
+			eprintf ("Tid out of range %d\n", inferior_thread_count);
+			return R_FALSE;
+		}
 // XXX: kinda spaguetti coz multi-arch
 #if __i386__ || __x86_64__
 		if (dbg->bits== R_SYS_BITS_64) {
@@ -1493,7 +1537,27 @@ if (tid <0 || tid>=inferior_thread_count) {
 		ret = ptrace (PTRACE_GETREGS, pid, &regs, NULL);
 #else
 		/* linux/arm/x86/x64 */
-		ret = ptrace (PTRACE_GETREGS, pid, NULL, &regs);
+		if (dbg->bits & R_SYS_BITS_32) {
+// XXX. this is wrong
+#if 0
+			struct user_regs_struct_x86_64 r64;
+			ret = ptrace (PTRACE_GETREGS, pid, NULL, &r64);
+eprintf (" EIP : 0x%x\n", r32.eip);
+eprintf (" ESP : 0x%x\n", r32.esp);
+#endif
+
+#if 0
+int i=0;
+unsigned char *p = &r64;;
+for(i=0;i< sizeof (r64); i++) {
+printf ("%02x ", p[i]);
+}
+printf ("\n");
+#endif
+			ret = ptrace (PTRACE_GETREGS, pid, NULL, &regs);
+		} else {
+			ret = ptrace (PTRACE_GETREGS, pid, NULL, &regs);
+		}
 #endif
 		if (ret != 0)
 			return R_FALSE;
@@ -1532,7 +1596,7 @@ static int r_debug_native_reg_write(RDebug *dbg, int type, const ut8* buf, int s
 		}
 		}
 #else
-return R_FALSE;
+		return R_FALSE;
 #endif
 #else
 		eprintf ("TODO: add support for write DRX registers\n");
@@ -1593,14 +1657,14 @@ return R_FALSE;
 					R_DEBUG_STATE_T, (thread_state_t) regs, &gp_count);
 #endif
 //if (thread_set_state (inferior_threads[0], R_DEBUG_STATE_T, (thread_state_t) regs, gp_count) != KERN_SUCCESS) {
-if (ret != KERN_SUCCESS) {
-	eprintf ("debug_setregs: Failed to set thread %d %d.error (%x). (%s)\n",
-			(int)pid, pid_to_task (pid), (int)ret, MACH_ERROR_STRING (ret));
-	perror ("thread_set_state");
-	return R_FALSE;
-}
-} else eprintf ("There are no threads!\n");
-return sizeof (R_DEBUG_REG_T);
+		if (ret != KERN_SUCCESS) {
+			eprintf ("debug_setregs: Failed to set thread %d %d.error (%x). (%s)\n",
+					(int)pid, pid_to_task (pid), (int)ret, MACH_ERROR_STRING (ret));
+			perror ("thread_set_state");
+			return R_FALSE;
+		}
+		} else eprintf ("There are no threads!\n");
+		return sizeof (R_DEBUG_REG_T);
 #else
 #warning r_debug_native_reg_write not implemented
 #endif
@@ -2019,7 +2083,7 @@ static RList *r_debug_native_frames(RDebug *dbg, ut64 at) {
 }
 
 // TODO: implement own-defined signals
-static int r_debug_native_kill(RDebug *dbg, boolt thread, int sig) {
+static int r_debug_native_kill(RDebug *dbg, int pid, int tid, int sig) {
 #if __WINDOWS__
 	// TODO: implement thread support signaling here
 	eprintf ("TODO: r_debug_native_kill\n");
@@ -2037,20 +2101,23 @@ static int r_debug_native_kill(RDebug *dbg, boolt thread, int sig) {
 	return R_FALSE;
 #else
 	int ret = R_FALSE;
-	if (thread) {
 #if 0
+	if (thread) {
 // XXX this is linux>2.5 specific..ugly
 		if (dbg->tid>0 && (ret = tgkill (dbg->pid, dbg->tid, sig))) {
 			if (ret != -1)
 				ret = R_TRUE;
 		}
-#endif
 	} else {
-		if (dbg->pid>0 && (ret = kill (dbg->pid, sig))) {
-			if (ret != -1)
-				ret = R_TRUE;
-		}
-	}
+#endif
+		if (pid==0) pid = dbg->pid;
+		if ((r_sandbox_kill (pid, sig) != -1))
+			ret = R_TRUE;
+		if (errno == 1) // EPERM
+			ret = -R_TRUE;
+#if 0
+//	}
+#endif
 	return ret;
 #endif
 }
@@ -2066,6 +2133,7 @@ static int r_debug_native_init(RDebug *dbg) {
 }
 
 #if __i386__ || __x86_64__
+// XXX: wtf cmon this  must use drx.c #if __linux__ too..
 static int drx_add(RDebug *dbg, ut64 addr, int rwx) {
 	// TODO
 	return R_FALSE;
@@ -2285,12 +2353,12 @@ static int r_debug_native_map_protect (RDebug *dbg, ut64 addr, int size, int per
 			(vm_address_t)addr,
 			(vm_size_t)size,
 			(boolean_t)0, /* maximum protection */
-			perms); //unix_prot_to_darwin (perms));
+			VM_PROT_COPY|perms); //unix_prot_to_darwin (perms));
 	if (ret != KERN_SUCCESS) {
 		printf("vm_protect failed\n");
-		return R_TRUE;
+		return R_FALSE;
 	}
-	return R_FALSE;
+	return R_TRUE;
 #elif __linux__
 #warning mprotect not implemented for this Linux.. contribs are welcome. use r_egg here?
 	return R_FALSE;
@@ -2322,7 +2390,7 @@ struct r_debug_plugin_t r_debug_plugin_native = {
 #elif __arm__
 	.bits = R_SYS_BITS_32,
 	.arch = R_ASM_ARCH_ARM,
-	.canstep = 1,
+	.canstep = 0, // XXX it's 1 on some platforms...
 #elif __mips__
 	.bits = R_SYS_BITS_64,
 	.arch = R_ASM_ARCH_MIPS,
