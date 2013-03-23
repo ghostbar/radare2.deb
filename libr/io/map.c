@@ -6,11 +6,21 @@
 #include <r_io.h>
 #include <r_list.h>
 
-R_API void r_io_map_init(struct r_io_t *io) {
+R_API void r_io_map_init(RIO *io) {
 	io->maps = r_list_new ();
 }
 
-R_API RIOMap *r_io_map_resolve(struct r_io_t *io, int fd) {
+R_API RIOMap *r_io_map_get(RIO *io, ut64 addr) {
+	RIOMap *map;
+	RListIter *iter;
+	r_list_foreach (io->maps, iter, map) {
+		if (map->from == addr)
+			return map;
+	}
+	return NULL;
+}
+
+R_API RIOMap *r_io_map_resolve(RIO *io, int fd) {
 	RIOMap *map;
 	RListIter *iter;
 	r_list_foreach (io->maps, iter, map) {
@@ -20,7 +30,7 @@ R_API RIOMap *r_io_map_resolve(struct r_io_t *io, int fd) {
 	return NULL;
 }
 
-R_API int r_io_map_del(struct r_io_t *io, int fd) {
+R_API int r_io_map_del(RIO *io, int fd) {
 	RIOMap *map;
 	RListIter *iter;
 	r_list_foreach (io->maps, iter, map) {
@@ -30,6 +40,18 @@ R_API int r_io_map_del(struct r_io_t *io, int fd) {
 		}
 	}
 	return R_FALSE;
+}
+
+R_API ut64 r_io_map_next(RIO *io, ut64 addr) {
+	ut64 next = 0;
+	RIOMap *map;
+	RListIter *iter;
+	r_list_foreach (io->maps, iter, map) {
+		if (map->from > addr)
+			if (!next || map->from < next)
+				next = map->from;
+	}
+	return next;
 }
 
 R_API int r_io_map_del_at(RIO *io, ut64 addr) {
@@ -44,16 +66,23 @@ R_API int r_io_map_del_at(RIO *io, ut64 addr) {
 	return R_FALSE;
 }
 
-R_API RIOMap *r_io_map_add(RIO *io, int fd, int flags, ut64 delta, ut64 offset, ut64 size) {
-	RIOMap *im = R_NEW (RIOMap);
-	if (!im) return NULL;
-	im->fd = fd;
-	im->flags = flags;
-	im->delta = delta;
-	im->from = offset;
-	im->to = offset + size;
-	r_list_append (io->maps, im);
-	return im;
+R_API RIOMap *r_io_map_add(RIO *io, int fd, int flags, ut64 delta, ut64 addr, ut64 size) {
+	RIOMap *map;
+	RListIter *iter;
+	r_list_foreach (io->maps, iter, map) {
+		// cannot map two files on the same address
+		if (map->from == addr)
+			return NULL;
+	}
+	map = R_NEW (RIOMap);
+	if (!map) return NULL;
+	map->fd = fd;
+	map->flags = flags;
+	map->delta = delta;
+	map->from = addr;
+	map->to = addr + size;
+	r_list_append (io->maps, map);
+	return map;
 }
 
 R_API int r_io_map_select(RIO *io, ut64 off) {

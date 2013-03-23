@@ -1,15 +1,21 @@
-/* radare - LGPL - Copyright 2009-2012 // pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 // XXX this command is broken. output of _list is not compatible with input
 static int cmd_meta(void *data, const char *input) {
 	RCore *core = (RCore*)data;
+	int n = 0, type = input[0];
+	ut64 addr = core->offset;
+	char *t, *p, name[256];
 	int i, ret, line = 0;
 	ut64 addr_end = 0LL;
-	ut64 addr = core->offset;
+	RAnalFunction *f;
+	RListIter *iter;
 	char file[1024];
+
 	switch (*input) {
+	case 'j':
 	case '*':
-		r_meta_list (core->anal->meta, R_META_TYPE_ANY, 1);
+		r_meta_list (core->anal->meta, R_META_TYPE_ANY, *input);
 		break;
 	case 'l':
 		// XXX: this should be moved to CL?
@@ -64,7 +70,8 @@ static int cmd_meta(void *data, const char *input) {
 		}
 		break;
 	case 'L': // debug information of current offset
-		ret = r_bin_meta_get_line (core->bin, core->offset, file, sizeof (file)-1, &line);
+		ret = r_bin_meta_get_line (core->bin, core->offset, file,
+			sizeof (file)-1, &line);
 		if (ret) {
 			r_cons_printf ("file %s\nline %d\n", file, line);
 			ret = (line<5)? 5-line: 5;
@@ -74,9 +81,18 @@ static int cmd_meta(void *data, const char *input) {
 				r_cons_printf ("%c %.3x  %s\n", (i==2)?'>':' ', line+i, row);
 				free (row);
 			}
-		} else eprintf ("Cannot find meta information at 0x%08"PFMT64x"\n", core->offset);
+		} else eprintf ("Cannot find meta information at 0x%08"
+			PFMT64x"\n", core->offset);
 		break;
 	// XXX: use R_META_TYPE_XXX here
+	case 'z': /* string */
+		{
+			r_core_read_at (core, addr, (ut8*)name, sizeof (name));
+			name[sizeof(name)] = 0;
+			n = strlen (name);
+			eprintf ("%d\n", n);
+		}
+	case 'h': /* comment */
 	case 'C': /* comment */
 	case 's': /* string */
 	case 'd': /* data */
@@ -87,90 +103,101 @@ static int cmd_meta(void *data, const char *input) {
 			eprintf ("See C?\n");
 			break;
 		case '-':
-			addr = core->offset;
 			switch (input[2]) {
 			case '*':
-				core->num->value = r_meta_del (core->anal->meta, input[0], 0, UT64_MAX, NULL);
+				core->num->value = r_meta_del (core->anal->meta,
+					input[0], 0, UT64_MAX, NULL);
 				break;
 			case ' ':
 				addr = r_num_math (core->num, input+3);
 			default:
-				core->num->value = r_meta_del (core->anal->meta, input[0], addr, 1, NULL);
+				core->num->value = r_meta_del (core->anal->meta,
+					input[0], addr, 1, NULL);
 				break;
 			}
-			break;
-		case '\0':
-			r_meta_list (core->anal->meta, input[0], 0);
 			break;
 		case '*':
 			r_meta_list (core->anal->meta, input[0], 1);
 			break;
 		case '!':
 			{
-				char *out, *comment = r_meta_get_string (core->anal->meta, R_META_TYPE_COMMENT, addr);
+				char *out, *comment = r_meta_get_string (
+					core->anal->meta, R_META_TYPE_COMMENT, addr);
 				out = r_core_editor (core, comment);
 				//r_meta_add (core->anal->meta, R_META_TYPE_COMMENT, addr, 0, out);
 				r_core_cmdf (core, "CC-@0x%08"PFMT64x, addr);
 				//r_meta_del (core->anal->meta, input[0], addr, addr+1, NULL);
-				r_meta_set_string (core->anal->meta, R_META_TYPE_COMMENT, addr, out);
+				r_meta_set_string (core->anal->meta,
+					R_META_TYPE_COMMENT, addr, out);
 				free (out);
 				free (comment);
 			}
 			break;
 		default: {
-			char *t, *p, name[256];
-			int n = 0, type = input[0];
+			if (type!='z' && !input[1]) {
+				r_meta_list (core->anal->meta, input[0], 0);
+				break;
+			}
 			t = strdup (input+2);
-			if (atoi (t)>0) {
+			n = r_num_math (core->num, t);
+			if (!*t || n>0) { //atoi (t)>0) {
+				RFlagItem *fi;
 				p = strchr (t, ' ');
 				if (p) {
 					*p = '\0';
 					strncpy (name, p+1, sizeof (name)-1);
-				} else switch (type) {
+				} else
+				switch (type) {
+				case 'z':
+					type='s';
 				case 's':
 					// TODO: filter \n and so on :)
 					strncpy (name, t, sizeof (name)-1);
 					r_core_read_at (core, addr, (ut8*)name, sizeof (name));
 					break;
-				default: {
-					RFlagItem *fi = r_flag_get_i (core->flags, addr);
-					if (fi) strncpy (name, fi->name, sizeof (name)-1);
-					else sprintf (name, "ptr_%08"PFMT64x"", addr);
+				default:
+					fi = r_flag_get_i (core->flags, addr);
+					if (fi) {
+						strncpy (name, fi->name, sizeof (name)-1);
+					//else sprintf (name, "ptr_%08"PFMT64x"", addr);
+					//} else {
+					//	eprintf ("meta: Invalid arguments (%s)\n", input);
+					//	return 1;
 					}
 				}
-				n = atoi (input+1);
+				//if (!n) n = atoi (input+1);
 			} else {
 				p = NULL;
 				strncpy (name, t, sizeof (name)-1);
 			}
 			if (!n) n++;
 			addr_end = addr + n;
-			r_meta_add (core->anal->meta, type, addr, addr_end, name);
-			free (t);
+			if (!r_meta_add (core->anal->meta, type, addr, addr_end, name))
+				free (t);
 			}
+			break;
 		}
 		break;
 	case 'v':
 		switch (input[1]) {
+		case '?':
+			r_cons_printf ("Usage: Cv[-*][ off reg name] \n");
+			break;
 		case '-':
 			{
-			RAnalFunction *f;
-			RListIter *iter;
 			ut64 offset;
 			if (input[2]==' ') {
 				offset = r_num_math (core->num, input+3);
-				if ((f = r_anal_fcn_find (core->anal, offset, R_ANAL_FCN_TYPE_NULL)) != NULL)
-					memset (f->varsubs, 0, sizeof(f->varsubs));
+				if ((f = r_anal_fcn_find (core->anal, offset,
+						R_ANAL_FCN_TYPE_NULL)) != NULL)
+					memset (f->varsubs, 0, sizeof (f->varsubs));
 			} else if (input[2]=='*') {
 				r_list_foreach (core->anal->fcns, iter, f)
-					memset (f->varsubs, 0, sizeof(f->varsubs));
+					memset (f->varsubs, 0, sizeof (f->varsubs));
 			}
 			}
 			break;
 		case '*':
-			{
-			RAnalFunction *f;
-			RListIter *iter;
 			r_list_foreach (core->anal->fcns, iter, f) {
 				for (i = 0; i < R_ANAL_VARSUBS; i++) {
 					if (f->varsubs[i].pat[0] != '\0')
@@ -178,16 +205,14 @@ static int cmd_meta(void *data, const char *input) {
 					else break;
 				}
 			}
-			}
 			break;
 		default:
 			{
-			RAnalFunction *f;
 			char *ptr = strdup (input+2);
 			const char *varsub = NULL;
 			const char *pattern = NULL;
 			ut64 offset = -1LL;
-			int i, n = r_str_word_set0 (ptr);
+			n = r_str_word_set0 (ptr);
 			if (n > 2) {
 				switch(n) {
 				case 3: varsub = r_str_word_get0 (ptr, 2);
@@ -225,20 +250,17 @@ static int cmd_meta(void *data, const char *input) {
 		" CC[-] [size] [string]  # add/remove comment. Use CC! to edit with $EDITOR\n"
 		" Cv[-] offset reg name  # add var substitution\n"
 		" Cs[-] [size] [[addr]]  # add string\n"
+		" Ch[-] [size]           # hide data\n"
 		" Cd[-] [size]           # hexdump data\n"
 		" Cf[-] [sz] [fmt..]     # format memory (see pf?)\n"
 		" Cm[-] [sz] [fmt..]     # magic parse (see pm?)\n");
 		break;
 	case 'F':
-		{
-		RAnalFunction *f = r_anal_fcn_find (core->anal, core->offset,
+		f = r_anal_fcn_find (core->anal, core->offset,
 				R_ANAL_FCN_TYPE_FCN|R_ANAL_FCN_TYPE_SYM);
 		if (f) r_anal_str_to_fcn (core->anal, f, input+2);
 		else eprintf ("Cannot find function here\n");
-		}
 		break;
 	}
 	return R_TRUE;
 }
-
-

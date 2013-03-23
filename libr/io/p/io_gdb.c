@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2010-2012 pancake */
+/* radare - LGPL - Copyright 2010-2013 pancake */
 
 #include <r_io.h>
 #include <r_lib.h>
@@ -39,8 +39,13 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 	port++;
 	p = strchr (port, '/');
 	if (p) *p=0;
+
+	if (r_sandbox_enable (0)) {
+		eprintf ("sandbox: Cannot use network\n");
+		return NULL;
+	}
 	_fd = r_socket_new (R_FALSE);
-	if (_fd && r_socket_connect_tcp (_fd, host, port)) {
+	if (_fd && r_socket_connect_tcp (_fd, host, port, 30)) {
 		riog = R_NEW (RIOGdb);
 		riog->fd = _fd;
 		riog->desc = gdbwrap_init (_fd->fd, NUM_REGS, 4);
@@ -108,7 +113,7 @@ static int __system(RIO *io, RIODesc *fd, const char *cmd) {
 struct r_io_plugin_t r_io_plugin_gdb = {
         //void *plugin;
 	.name = "gdb",
-        .desc = "Attach to a running 'gdbserver', 'qemu -s' or other, gdb://localhost:1234", 
+        .desc = "Attach to gdbserver, 'qemu -s', gdb://localhost:1234", 
         .open = __open,
         .close = __close,
 	.read = __read,

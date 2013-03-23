@@ -67,17 +67,17 @@ static RList* sections(RBinArch *arch) {
 }
 
 static RList* symbols(RBinArch *arch) {
-	RList *ret = NULL;
-	RBinSymbol *ptr = NULL;
 	struct r_bin_mach0_symbol_t *symbols = NULL;
+	RList *ret = r_list_new ();
+	RBinSymbol *ptr = NULL;
 	int i;
 
-	if (!(ret = r_list_new ()))
-		return NULL;
+	if (!ret) return NULL;
 	ret->free = free;
 	if (!(symbols = MACH0_(r_bin_mach0_get_symbols) (arch->bin_obj)))
 		return ret;
 	for (i = 0; !symbols[i].last; i++) {
+		if (!symbols[i].name[0] || symbols[i].addr<100) continue;
 		if (!(ptr = R_NEW (RBinSymbol)))
 			break;
 		strncpy (ptr->name, (char*)symbols[i].name, R_BIN_SIZEOF_STRINGS);
@@ -117,7 +117,7 @@ static RList* imports(RBinArch *arch) {
 		else strncpy (ptr->type, "OBJECT", R_BIN_SIZEOF_STRINGS);
 		ptr->rva = imports[i].addr;
 		ptr->offset = imports[i].offset;
-		ptr->size = 0;
+		ptr->size = 6;
 		ptr->ordinal = 0;
 		ptr->hint = 0;
 		r_list_append (ret, ptr);
@@ -148,6 +148,7 @@ static RBinInfo* info(RBinArch *arch) {
 	RBinInfo *ret = R_NEW0 (RBinInfo);
 	if (!ret) return NULL;
 
+	ret->lang = "c";
 	strncpy (ret->file, arch->file, R_BIN_SIZEOF_STRINGS);
 	strncpy (ret->rpath, "NONE", R_BIN_SIZEOF_STRINGS);
 	if ((str = MACH0_(r_bin_mach0_get_class) (arch->bin_obj))) {
@@ -175,6 +176,7 @@ static RBinInfo* info(RBinArch *arch) {
 	/* TODO detailed debug info */
 	ret->dbg_info = 0;
 	ret->has_va = R_TRUE;
+	ret->has_pi = MACH0_(r_bin_mach0_is_pie) (arch->bin_obj);
 	return ret;
 }
 

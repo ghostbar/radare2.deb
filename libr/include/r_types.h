@@ -14,7 +14,7 @@
 #define __KFBSD__ 0
 #endif
 
-#if defined(__linux__) || defined(__APPLE__) || defined(__GNU__) || defined(__ANDROID__) || defined(__QNX__)
+#if defined(EMSCRIPTEN) || defined(__linux__) || defined(__APPLE__) || defined(__GNU__) || defined(__ANDROID__) || defined(__QNX__)
   #define __BSD__ 0
   #define __UNIX__ 1
 #endif
@@ -122,6 +122,7 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #define eprintf(x,y...) fprintf(stderr,x,##y)
 
 #define R_ROUND(x,y) ((x)%(y))? (x)+((y)-((x)%(y))): (x)
+#define R_DIM(x,y,z) (x<y?y:x>z?z:x)
 #define R_MAX(x,y) ((x)>(y))?x:y
 #define R_MIN(x,y) ((x)>(y))?y:x
 #define R_ABS(x) (((x)<0)?-(x):(x))
@@ -147,6 +148,9 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #define PFMT64o "llo"
 #endif
 
+#ifndef O_BINARY
+#define O_BINARY 0
+#endif
 
 #if __APPLE__
 # if __i386__
@@ -210,7 +214,9 @@ enum {
 	R_SYS_ARCH_AVR = 0x1000,
 	R_SYS_ARCH_DALVIK = 0x2000,
 	R_SYS_ARCH_Z80 = 0x4000,
-	R_SYS_ARCH_ARC = 0x8000
+	R_SYS_ARCH_ARC = 0x8000,
+	R_SYS_ARCH_I8080 = 0x10000,
+	R_SYS_ARCH_RAR = 0x20000,
 };
 
 /* os */

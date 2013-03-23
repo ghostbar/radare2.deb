@@ -24,7 +24,7 @@ static int MACH0_(r_bin_mach0_addr_to_offset)(struct MACH0_(r_bin_mach0_obj_t)* 
 }
 
 static int MACH0_(r_bin_mach0_init_hdr)(struct MACH0_(r_bin_mach0_obj_t)* bin) {
-	ut32 magic;
+	ut32 magic = 0;
 	int len;
 
 	if (r_buf_read_at (bin->b, 0, (ut8*)&magic, 4) == -1) {
@@ -588,7 +588,7 @@ struct r_bin_mach0_lib_t* MACH0_(r_bin_mach0_get_libs)(struct MACH0_(r_bin_mach0
 }
 
 ut64 MACH0_(r_bin_mach0_get_baddr)(struct MACH0_(r_bin_mach0_obj_t)* bin) {
-	return UT64_MIN;
+	return 0LL;
 }
 
 char* MACH0_(r_bin_mach0_get_class)(struct MACH0_(r_bin_mach0_obj_t)* bin) {
@@ -764,6 +764,10 @@ char* MACH0_(r_bin_mach0_get_cpusubtype)(struct MACH0_(r_bin_mach0_obj_t)* bin) 
 	default:
 		return strdup ("Unknown cputype");
 	}
+}
+
+int MACH0_(r_bin_mach0_is_pie)(struct MACH0_(r_bin_mach0_obj_t)* bin) {
+	return (bin->hdr.filetype == MH_EXECUTE && bin->hdr.flags & MH_PIE);
 }
 
 char* MACH0_(r_bin_mach0_get_filetype)(struct MACH0_(r_bin_mach0_obj_t)* bin) {

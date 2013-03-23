@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2010 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2012 - pancake */
 
 #include <r_util.h>
 
@@ -6,6 +6,10 @@
 
 static int r_name_validate_char(const char ch) {
 	switch (ch) {
+	case '{':
+	case '}':
+	case '$':
+	case '=':
 	case '*':
 	case '/':
 	case '+':
@@ -41,7 +45,7 @@ static int r_name_validate_char(const char ch) {
 }
 
 R_API int r_name_check(const char *name) {
-	if (name[0]=='\0')
+	if (!*name)
 		return R_FALSE;
 	for (;*name!='\0'; name++)
 		if (!r_name_validate_char (*name))

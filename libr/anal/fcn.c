@@ -1,17 +1,15 @@
-/* radare - LGPL - Copyright 2010-2012 - nibble, pancake */
+/* radare - LGPL - Copyright 2010-2013 - nibble, pancake */
 
 #include <r_anal.h>
 #include <r_util.h>
 #include <r_list.h>
 
-/* work in progress */
-#define USE_NEW_FCN_STORE 0
 /* faster retrival, slower storage */
+// TODO: use slist ?
 
 R_API RAnalFunction *r_anal_fcn_new() {
-	RAnalFunction *fcn = R_NEW (RAnalFunction);
+	RAnalFunction *fcn = R_NEW0 (RAnalFunction);
 	if (!fcn) return NULL;
-	memset (fcn, 0, sizeof (RAnalFunction));
 	fcn->name = NULL;
 	fcn->dsc = NULL;
 	/* Function return type */
@@ -62,8 +60,8 @@ R_API int r_anal_fcn_xref_add (RAnal *anal, RAnalFunction *fcn, ut64 at, ut64 ad
 	RAnalRef *ref;
 	if (!fcn || !anal || !(ref = r_anal_ref_new ()))
 		return R_FALSE;
-	ref->at = at;
-	ref->addr = addr;
+	ref->at = at; // from 
+	ref->addr = addr; // to
 	ref->type = type;
 	// TODO: ensure we are not dupping xrefs
 	r_list_append (fcn->refs, ref);
@@ -73,7 +71,7 @@ R_API int r_anal_fcn_xref_add (RAnal *anal, RAnalFunction *fcn, ut64 at, ut64 ad
 R_API int r_anal_fcn_xref_del (RAnal *anal, RAnalFunction *fcn, ut64 at, ut64 addr, int type) {
 	RAnalRef *ref;
 	RListIter *iter;
-	/* No _safe loop necessary because we return immediately after the delete. */
+	/* No need for _safe loop coz we return immediately after the delete. */
 	r_list_foreach (fcn->xrefs, iter, ref) {
 		if ((type != -1 || type == ref->type)  &&
 			(at == 0LL || at == ref->at) &&
@@ -212,21 +210,19 @@ R_API int r_anal_fcn_del_locs(RAnal *anal, ut64 addr) {
 #if USE_NEW_FCN_STORE
 #warning TODO: r_anal_fcn_del_locs not implemented for newstore
 #endif
-	if (f) {
-		r_list_foreach_safe (anal->fcns, iter, iter2, fcn) {
-			if (fcn->type != R_ANAL_FCN_TYPE_LOC)
-				continue;
-			if (fcn->addr >= f->addr && fcn->addr < (f->addr+f->size)) {
-				r_list_delete (anal->fcns, iter);
-			}
-		}
+	if (!f) return R_FALSE;
+	r_list_foreach_safe (anal->fcns, iter, iter2, fcn) {
+		if (fcn->type != R_ANAL_FCN_TYPE_LOC)
+			continue;
+		if (fcn->addr >= f->addr && fcn->addr < (f->addr+f->size))
+			r_list_delete (anal->fcns, iter);
 	}
 	r_anal_fcn_del (anal, addr);
 	return R_TRUE;
 }
 
 R_API int r_anal_fcn_del(RAnal *anal, ut64 addr) {
-	if (addr == 0) {
+	if (addr == UT64_MAX) {
 #if USE_NEW_FCN_STORE
 		r_listrange_free (anal->fcnstore);
 		anal->fcnstore = r_listrange_new ();
@@ -256,7 +252,7 @@ R_API int r_anal_fcn_del(RAnal *anal, ut64 addr) {
 R_API RAnalFunction *r_anal_fcn_find(RAnal *anal, ut64 addr, int type) {
 #if USE_NEW_FCN_STORE
 	// TODO: type is ignored here? wtf.. we need more work on fcnstore
-	if (root) return r_listrange_find_root (anal->fcnstore, addr);
+	//if (root) return r_listrange_find_root (anal->fcnstore, addr);
 	return r_listrange_find_in_range (anal->fcnstore, addr);
 #else
 	RAnalFunction *fcn, *ret = NULL;
@@ -451,7 +447,7 @@ R_API char *r_anal_fcn_to_string(RAnal *a, RAnalFunction* fs) {
 // TODO: This function is not fully implemented
 /* set function signature from string */
 R_API int r_anal_str_to_fcn(RAnal *a, RAnalFunction *f, const char *sig) {
-	char *p, *q, *r, *str;
+	char *str; //*p, *q, *r
 	RAnalType *t;
 
 	if (!a || !f || !sig) {
@@ -544,4 +540,14 @@ R_API RList* r_anal_fcn_get_bbs (RAnalFunction *anal) { return anal->bbs; }
 
 R_API int r_anal_fcn_is_in_offset (RAnalFunction *fcn, ut64 addr) {
 	return (addr >= fcn->addr &&  addr < (fcn->addr+fcn->size));
+}
+
+R_API int r_anal_fcn_count (RAnal *anal, ut64 from, ut64 to) {
+	int n = 0;
+	RAnalFunction *fcni;
+	RListIter *iter;
+	r_list_foreach (anal->fcns, iter, fcni)
+		if (fcni->addr >= from && fcni->addr < to)
+			return n++;
+	return n;
 }

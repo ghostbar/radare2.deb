@@ -1,3 +1,4 @@
+#if NOT_USER_RIGHT_NOW
 /* ntfscomp.c - compression support for the NTFS filesystem */
 /*
  *  Copyright (C) 2007 Free Software Foundation, Inc.
@@ -362,3 +363,4 @@ quit:
     grub_free (ctx->comp.cbuf);
   return ret;
 }
+#endif

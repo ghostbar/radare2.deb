@@ -1,4 +1,4 @@
-.Dd Mar 11, 2010
+.Dd Mar 11, 2012
 .Dt RABIN2 1
 .Os
 .Sh NAME
@@ -6,12 +6,11 @@
 .Nd Binary program info extractor
 .Sh SYNOPSIS
 .Nm rabin2
-.Op Fl ACeisSMzIHlRrvLxVh
+.Op Fl ACeisSMzIHlRrLxvVh
 .Op Fl a Ar arch
 .Op Fl b Ar bits
 .Op Fl B Ar addr
 .Op Fl c Ar fmt:C:[D]
-.Op Fl p Ar patchfile
 .Op Fl f Ar subbin
 .Op Fl O Ar str
 .Op Fl o Ar str
@@ -34,8 +33,6 @@ Override baddr
 Create [elf,mach0,pe] for arm and x86-32/64 tiny binaries where 'C' is an hexpair list of the code bytes and ':D' is an optional concatenation to describe the bytes for the data section.
 .It Fl C
 List classes
-.It Fl p Ar patchfile
-Patch file (see man rabin2)
 .It Fl e
 Show entrypoints for disk and on-memory
 .It Fl f Ar subbin
@@ -52,11 +49,11 @@ Show address of 'main' symbol
 Show strings inside .data section (like gnu strings does)
 .It Fl I
 Show binary info
-.It Fl I
+.It Fl H
 Show header fields
 .It Fl l
 List linked libraries to the binary
-.It Fl I
+.It Fl R
 Show realocations
 .It Fl O Ar str
 Write/extract operations (\-O help)
@@ -81,13 +78,29 @@ Show version information
 .It Fl h
 Show usage help message.
 .El
+.Sh EXAMPLES
+.Pp
+List symbols of a program
+.Pp
+  $ rabin2 -s a.out
+.Pp
+Get offset of symbol
+.Pp
+  $ rabin2 -n _main a.out
+.Pp
+Get entrypoint
+.Pp
+  $ rabin2 -e a.out
+.Pp
+Load symbols and imports from radare
+.Pp
+  .!rabin2 -vrsi a.out
 .Sh SEE ALSO
 .Pp
 .Xr rahash2(1) ,
 .Xr rafind2(1) ,
 .Xr radare2(1) ,
 .Xr radiff2(1) ,
-.Xr ranal2(1) ,
 .Xr rasm2(1) ,
 .Xr rax2(1) ,
 .Xr rsc2(1) ,

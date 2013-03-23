@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2012 - pancake */
 
 #include <r_debug.h>
 #include <r_anal.h>
@@ -16,7 +16,11 @@ static int r_debug_recoil(RDebug *dbg) {
 		ut64 addr = r_reg_get_value (dbg->reg, ri);
 		recoil = r_bp_recoil (dbg->bp, addr);
 		eprintf ("[R2] Breakpoint recoil at 0x%"PFMT64x" = %d\n", addr, recoil);
-		if (recoil<1) recoil = 1; // XXX Hack :D
+#if __arm__
+		if (recoil<1) recoil = 0; // XXX Hack :D
+#else
+		if (recoil<1) recoil = 1; // XXX Hack :D (x86 only?)
+#endif
 		if (recoil) {
 			dbg->reason = R_DBG_REASON_BP;
 			r_reg_set_value (dbg->reg, ri, addr-recoil);
@@ -193,6 +197,8 @@ R_API int r_debug_select(RDebug *dbg, int pid, int tid) {
 	if (pid != dbg->pid || tid != dbg->tid)
 		eprintf ("r_debug_select: %d %d\n", pid, tid);
 	dbg->pid = pid;
+	if (tid == -1)
+		tid = dbg->pid;
 	dbg->tid = tid;
 	return R_TRUE;
 }
@@ -245,10 +251,11 @@ R_API int r_debug_step_soft(RDebug *dbg) {
 //eprintf ("breakpoint at pc1 = 0x%llx\n", pc1);
 	// XXX: Does not works for 'ret'
 	pc2 = op.jump? op.jump: 0;
+//eprintf ("ADD SECOND BREAKPOINT FRO CALLS %llx\n", op.jump);
 //eprintf ("breakpoint 2 at pc2 = 0x%llx\n", pc2);
 
 	r_bp_add_sw (dbg->bp, pc1, 4, R_BP_PROT_EXEC);
-	//if (pc2) r_bp_add_sw (dbg->bp, pc2, 4, R_BP_PROT_EXEC);
+	if (pc2) r_bp_add_sw (dbg->bp, pc2, 4, R_BP_PROT_EXEC);
 	r_debug_continue (dbg);
 //eprintf ("wait\n");
 	//r_debug_wait (dbg);
@@ -340,7 +347,7 @@ R_API int r_debug_continue_kill(RDebug *dbg, int sig) {
 #if __UNIX__
 		/* XXX Uh? */
 		if (dbg->stop_all_threads && dbg->pid>0)
-			kill (dbg->pid, SIGSTOP);
+			r_sandbox_kill (dbg->pid, SIGSTOP);
 #endif
 #endif
 		r_debug_select (dbg, dbg->pid, ret);
@@ -434,7 +441,7 @@ R_API int r_debug_continue_syscall(struct r_debug_t *dbg, int sc) {
 }
 
 // TODO: remove from here? this is code injection!
-R_API int r_debug_syscall(struct r_debug_t *dbg, int num) {
+R_API int r_debug_syscall(RDebug *dbg, int num) {
 	int ret = R_FALSE;
 	if (dbg->h->contsc) {
 		ret = dbg->h->contsc (dbg, dbg->pid, num);
@@ -447,10 +454,12 @@ R_API int r_debug_syscall(struct r_debug_t *dbg, int num) {
 	return ret;
 }
 
-R_API int r_debug_kill(struct r_debug_t *dbg, boolt thread, int sig) {
+R_API int r_debug_kill(RDebug *dbg, int pid, int tid, int sig) {
 	int ret = R_FALSE;
+	if (r_debug_is_dead (dbg))
+		return R_FALSE;
 	if (dbg->h && dbg->h->kill)
-		ret = dbg->h->kill (dbg, thread, sig);
+		ret = dbg->h->kill (dbg, pid, tid, sig);
 	else eprintf ("Backend does not implements kill()\n");
 	return ret;
 }

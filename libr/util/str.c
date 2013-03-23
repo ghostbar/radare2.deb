@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2012 - pancake */
+/* radare - LGPL - Copyright 2007-2013 - pancake */
 
 #include "r_types.h"
 #include "r_util.h"
@@ -50,26 +50,7 @@ R_API void r_str_chop_path (char *s) {
 	else *dst = 0;
 }
 
-#if 0
-// TEST CASE FOR r_str_chop_path
-main () {
-	char buf[1024];
-	strcpy (buf, "/foo/boo/");
-	r_str_chop_path (buf);
-	printf ("%d %s\n", strcmp ("/foo/boo", buf), buf);
-	strcpy (buf, "/foo/boo");
-	r_str_chop_path (buf);
-	printf ("%d %s\n", strcmp ("/foo/boo", buf), buf);
-	strcpy (buf, "/foo");
-	r_str_chop_path (buf);
-	printf ("%d %s\n", strcmp ("/foo", buf), buf);
-	strcpy (buf, "/");
-	r_str_chop_path (buf);
-	printf ("%d %s\n", strcmp ("/", buf), buf);
-}
-#endif
-
-R_API int r_str_replace_char (char *s, int a, int b) {
+R_API int r_str_replace_char_once (char *s, int a, int b) {
 	int ret = 0;
 	char *o = s;
 	for (; *o; s++, o++) {
@@ -82,6 +63,25 @@ R_API int r_str_replace_char (char *s, int a, int b) {
 			o++;
 		}
 		*s = *o;
+	}
+	*s = 0;
+	return ret;
+}
+
+// Spagetti.. must unify and support 'g', 'i' ...
+R_API int r_str_replace_char (char *s, int a, int b) {
+	int ret = 0;
+	char *o = s;
+	for (; *o; s++, o++) {
+		if (*o==a) {
+			ret++;
+			if (b) {
+				*s = b;
+			} else {
+				/* remove char */
+				s--;
+			}
+		} else *s = *o;
 	}
 	*s = 0;
 	return ret;
@@ -217,9 +217,9 @@ R_API ut64 r_str_hash64(const char *str) {
 
 R_API ut32 r_str_hash(const char *str) {
 	ut32 ret = 0;
-	if (str)
-	for (; *str; str++)
-		ret ^= (ret<<7 | *str);
+	if (str && *str)
+		for (; *str; str++)
+			ret ^= (ret<<7 | *str);
 	return ret;
 }
 
@@ -335,11 +335,9 @@ R_API int r_str_nstr(char *from, char *to, int size) {
 	return (size!=i);
 }
 
+// TODO: rewrite in macro?
 R_API const char *r_str_chop_ro(const char *str) {
-	if (str)
-	while (*str && iswhitechar (*str))
-		str++;
-	return str;
+	if (str) while (*str && iswhitechar (*str)) str++; return str;
 }
 
 R_API char *r_str_new(char *str) {
@@ -510,6 +508,19 @@ R_API void r_str_writef(int fd, const char *fmt, ...) {
 	va_end (ap);
 }
 
+R_API char *r_str_prefix(char *ptr, const char *string) {
+	int slen, plen;
+	if (ptr == NULL)
+		return strdup (string);
+	plen = strlen (ptr);
+	slen = strlen (string);
+	ptr = realloc (ptr, slen + plen + 1);
+	if (ptr == NULL)
+		return NULL;
+	memmove (ptr+slen, ptr, plen+1);
+	memmove (ptr, string, slen);
+	return ptr;
+}
 /*
  * first argument must be allocated
  * return: the pointer ptr resized to string size.
@@ -603,7 +614,6 @@ R_API int r_str_escape(char *buf) {
 	int i;
 
 	for (i=0; buf[i]; i++) {
-		// only parse scaped characters //
 		if (buf[i]!='\\')
 			continue;
 		if (buf[i+1]=='e') {
@@ -634,27 +644,30 @@ R_API int r_str_escape(char *buf) {
 			return 0;
 		}
 	}
-
-	//char *p = buf; while(*p) { eprintf("%d %c\n", *p, *p); p++; }
-	//eprintf("OLEN=%d (%s)\n", strlen(buf), buf);
-	return i; //strlen (buf);
+	return i;
 }
 
 R_API void r_str_sanitize(char *c) {
 	char *d = c;
-	for (; *d; c++, d++) {
-		switch (*d) {
-		case '~':
-		case '|':
-		case ';':
-		case '#':
-		case '@':
-		case '&':
-		case '<':
-		case '>':
-			d++;
-			break;
-		}
+	if(d)
+		for (; *d; c++, d++) {
+			switch (*d) {
+			case '`':
+			case '$':
+			case '{':
+			case '}':
+			case '~':
+			case '|':
+			case ';':
+			case '#':
+			case '@':
+			case '&':
+			case '<':
+			case '>':
+				d++;
+				*c = '_';
+				continue;
+			}
 		*c = *d;
 	}
 }
@@ -665,7 +678,7 @@ R_API char *r_str_unscape(char *buf) {
 	ptr = ret = malloc (1+len*2);
 	if (ptr == NULL)
 		return NULL;
-	for (;*buf;buf++,ptr++) {
+	for (; *buf; buf++, ptr++) {
 		if (*buf=='\n') {
 			*ptr = '\\';
 			ptr++;
@@ -719,11 +732,9 @@ R_API const char *r_str_ansi_chrn(const char *str, int n) {
 }
 
 R_API int r_str_ansi_filter(char *str, int len) {
-	char *tmp;
 	int i, j;
-
-	if (!(tmp = malloc (len)))
-		return -1;
+	char *tmp = malloc (len);
+	if (!tmp) return -1;
 	memcpy (tmp, str, len);
 	for (i=j=0; i<len; i++)
 		if (i+1<len && tmp[i] == 0x1b && tmp[i+1] == '[')
@@ -736,7 +747,6 @@ R_API int r_str_ansi_filter(char *str, int len) {
 R_API void r_str_filter_zeroline(char *str, int len) {
 	int i;
 	for (i=0; str[i] && i<len; i++) {
-		// TODO: honor newlines?
 		if (str[i]=='\n' || str[i]=='\r')
 			break;
 		if (!IS_PRINTABLE (str[i]))
@@ -762,7 +772,8 @@ R_API int r_str_glob (const char *str, const char *glob) {
 		if (glob[1] == '\0')
 			return R_TRUE;
 		if (glob[glen-1] == '*') {
-			return r_mem_mem ((const ut8*)str, slen, (const ut8*)glob+1, glen-2) != 0;
+			return r_mem_mem ((const ut8*)str, slen,
+				(const ut8*)glob+1, glen-2) != 0;
 		}
 		if (slen<glen-2)
 			return R_FALSE;
@@ -777,10 +788,10 @@ R_API int r_str_glob (const char *str, const char *glob) {
 			char *p = strchr (glob, '*');
 			if (p) {
 				int a = (int)(size_t)(p-glob);
-				return ((!memcmp (str, glob, a)) && ( !memcmp (str+slen-a, glob+a+1, glen-a-1)))? 1: 0;
-			} else {
-				return !strcmp (str, glob);
+				return ((!memcmp (str, glob, a)) && \
+					(!memcmp (str+slen-a, glob+a+1, glen-a-1)))? 1: 0;
 			}
+			return !strcmp (str, glob);
 		}
 	}
 	return R_FALSE; // statement never reached
@@ -922,7 +933,7 @@ R_API void r_str_range_foreach(const char *r, RStrRangeCallback cb, void *u) {
 
 // convert from html escaped sequence "foo%20bar" to "foo bar"
 // TODO: find better name.. unencode? decode
-R_API void r_str_unescape (char *s) {
+R_API void r_str_uri_decode (char *s) {
 	int n;
 	char *d;
 	for (d=s; *s; s++, d++) {
@@ -938,4 +949,141 @@ R_API void r_str_unescape (char *s) {
 		} else *d = *s;
 	}
 	*d = 0;
+}
+
+R_API char *r_str_uri_encode (const char *s) {
+	char ch[4], *d, *od;
+	if (!s) return NULL;
+	od = d = malloc (1+(strlen (s)*4));
+	if (!d) return NULL;
+	for (; *s; s++) {
+		if((*s>='0' && *s<='9') 
+		|| (*s>='a' && *s<='z')
+		|| (*s>='A' && *s<='Z')) {
+			*d++ = *s;
+		} else {
+			*d++ = '%';
+			sprintf (ch, "%02x", (unsigned char)*s);
+			*d++ = ch[0];
+			*d++ = ch[1];
+		}
+	}
+	*d = 0;
+	return realloc (od, strlen (od)+1); // FIT
+}
+
+// TODO: merge print inside rutil
+/* hack from print */
+R_API int r_print_format_length (const char *fmt) {
+	int nargs, i, j, idx, times, endian;
+	char *args, *bracket, tmp, last = 0;
+	const char *arg = fmt;
+	const char *argend = arg+strlen (fmt);
+	char namefmt[8];
+	int viewflags = 0;
+	nargs = endian = i = j = 0;
+
+	while (*arg && iswhitechar (*arg)) arg++;
+	/* get times */
+	times = atoi (arg);
+	if (times > 0)
+		while ((*arg>='0'&&*arg<='9')) arg++;
+	bracket = strchr (arg,'{');
+	if (bracket) {
+		char *end = strchr (arg,'}');
+		if (end == NULL) {
+			eprintf ("No end bracket. Try pm {ecx}b @ esi\n");
+			return 0;
+		}
+		*end='\0';
+		times = r_num_math (NULL, bracket+1);
+		arg = end + 1;
+	}
+
+	if (*arg=='\0')
+		return 0;
+
+	/* get args */
+	args = strchr (arg, ' ');
+	if (args) {
+		int l=0, maxl = 0;
+		argend = args;
+		args = strdup (args+1);
+		nargs = r_str_word_set0 (args+1);
+		if (nargs == 0)
+			R_FREE (args);
+		for (i=0; i<nargs; i++) {
+			int len = strlen (r_str_word_get0 (args+1, i));
+			if (len>maxl) maxl = len;
+		}
+		l++;
+		snprintf (namefmt, sizeof (namefmt), "%%%ds : ", maxl);
+	}
+
+	/* go format */
+	i = 0;
+	if (!times) times = 1;
+	for (; times; times--) { // repeat N times
+		const char * orig = arg;
+		idx = 0;
+		arg = orig;
+		for (idx=0; arg<argend && *arg; idx++, arg++) {
+			tmp = *arg;
+		feed_me_again:
+			if (tmp == 0 && last != '*')
+				break;
+			/* skip chars */
+			switch (tmp) {
+			case '*':
+				if (i<=0) break;
+				tmp = last;
+				arg--;
+				idx--;
+				goto feed_me_again;
+			case '+':
+				idx--;
+				viewflags = !viewflags;
+				continue;
+			case 'e': // tmp swap endian
+				idx--;
+				endian ^= 1;
+				continue;
+			case '.': // skip char
+				i++;
+				idx--;
+				continue;
+			case 'p':
+				tmp = (sizeof (void*)==8)? 'q': 'x';
+				break;
+			case '?': // help
+				idx--;
+				return 0;
+			}
+			switch (tmp) {
+			case 'e': i += 8; break;
+			case 'q': i += 8; break;
+			case 'b': i++; break;
+			case 'c': i++; break;
+			case 'B': i += 4; break;
+			case 'i': i += 4; break;
+			case 'd': i += 4; break;
+			case 'x': i += 4; break;
+			case 'w':
+			case '1': i+=2; break;
+			case 'z': // XXX unsupported
+			case 'Z': // zero terminated wide string
+				break;
+			case 's': i += 4; break; // S for 8?
+			case 'S': i += 8; break; // S for 8?
+			default:
+				/* ignore unknown chars */
+				break;
+			}
+			last = tmp;
+		}
+		arg = orig;
+		idx = 0;
+	}
+//	free((void *)&args);
+	return i;
 }

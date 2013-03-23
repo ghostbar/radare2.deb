@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 #include "r_core.h"
 
@@ -75,7 +75,7 @@ R_API int r_core_visual_trackflags(RCore *core) {
 					}
 				}
 			}
-			{
+			if (core->flags->spaces[9]) {
 				if (option == j) {
 					fs = "*";
 					hit = 1;
@@ -947,12 +947,17 @@ static ut64 addr = 0;
 static int option = 0;
 
 static void r_core_visual_anal_refresh (RCore *core) {
-	ut64 addr = core->offset;
-	char old[1024];
-	old[0]='\0';
-	int cols = r_cons_get_size (NULL);
-	RAnalFunction *fcn = r_anal_fcn_find (core->anal, core->offset, R_ANAL_FCN_TYPE_NULL); // once
+	RAnalFunction *fcn;
 	char *oprofile;
+	ut64 addr;
+	int cols;
+	char old[1024];
+
+	if (!core) return;
+	old[0]='\0';
+	cols = r_cons_get_size (NULL);
+	addr = core->offset;
+	fcn = r_anal_fcn_find (core->anal, core->offset, R_ANAL_FCN_TYPE_NULL); // once
 
 	cols -= 50;
 	if (cols> 60) cols = 60;
@@ -965,7 +970,7 @@ static void r_core_visual_anal_refresh (RCore *core) {
 
 		oprofile = strdup (r_config_get (core->config, "asm.profile"));
 		r_config_set (core->config, "asm.profile", "simple");
-		r_core_cmdf (core, "pd @ 0x%"PFMT64x":32", addr);
+		r_core_cmdf (core, "pd @ 0x%"PFMT64x"!32", addr);
 		r_config_set (core->config, "asm.profile", oprofile);
 		free (oprofile);
 
@@ -1110,6 +1115,7 @@ eprintf ("TODO: Add new function manually\n");
 		case 'q':
 			if (level==0)
 				goto beach;
+			else level--;
 			break;
 		}
 	}
@@ -1188,7 +1194,9 @@ R_API void r_core_seek_previous (RCore *core, const char *type) {
 }
 
 R_API void r_core_visual_define (RCore *core) {
-	int ch, ntotal = 0;
+	char *name;
+	RAnalFunction *f;
+	int n, ch, ntotal = 0;
 	ut64 off = core->offset;
 	ut8 *p = core->block;
 	int plen = core->blocksize;
@@ -1198,6 +1206,7 @@ R_API void r_core_visual_define (RCore *core) {
 		plen -= core->print->cur;
 	}
 	r_cons_printf ("Define current block as:\n"
+		" r  - rename function\n"
 		" d  - set as data\n"
 		" c  - set as code\n"
 		" s  - set string\n"
@@ -1211,10 +1220,12 @@ R_API void r_core_visual_define (RCore *core) {
 	ch = r_cons_arrow_to_hjkl (r_cons_readchar ());
 
 	switch (ch) {
+	case 'r':
+		r_core_cmd0 (core, "?i new function name;afr `?y`");
+		break;
 	case 'S':
 		do {
-			char *name;
-			int n = r_str_nlen ((const char*)p+ntotal, plen-ntotal)+1;
+			n = r_str_nlen ((const char*)p+ntotal, plen-ntotal)+1;
 			name = malloc (n+10);
 			strcpy (name, "str.");
 			strncpy (name+4, (const char *)p+ntotal, n);
@@ -1227,16 +1238,14 @@ R_API void r_core_visual_define (RCore *core) {
 		} while (ntotal<core->blocksize);
 		break;
 	case 's':
-		{
-			char *name;
-			int n = r_str_nlen ((const char*)p, plen)+1;
-			name = malloc (n+10);
-			strcpy (name, "str.");
-			strncpy (name+4, (const char *)p, n);
-			r_flag_set (core->flags, name, off, n, 0);
-			r_meta_add (core->anal->meta, R_META_TYPE_STRING, off, off+n, (const char *)p);
-			free (name);
-		}
+		// TODO: r_core_cmd0 (core, "Cz");
+		n = r_str_nlen ((const char*)p, plen)+1;
+		name = malloc (n+10);
+		strcpy (name, "str.");
+		strncpy (name+4, (const char *)p, n);
+		r_flag_set (core->flags, name, off, n, 0);
+		r_meta_add (core->anal->meta, R_META_TYPE_STRING, off, off+n, (const char *)p);
+		free (name);
 		break;
 	case 'd': // TODO: check
 		r_meta_add (core->anal->meta, R_META_TYPE_DATA, off, off+core->blocksize, "");
@@ -1246,13 +1255,10 @@ R_API void r_core_visual_define (RCore *core) {
 		break;
 	case 'u':
 		r_flag_unset_i (core->flags, off, NULL);
-		{
-			// rm bbs
-			RAnalFunction *f = r_anal_fcn_find (core->anal, off, 0);
-			r_anal_fcn_del_locs (core->anal, off);
-			if (f) r_meta_del (core->anal->meta, R_META_TYPE_ANY, off, f->size, "");
-			r_anal_fcn_del (core->anal, off);
-		}
+		f = r_anal_fcn_find (core->anal, off, 0);
+		r_anal_fcn_del_locs (core->anal, off);
+		if (f) r_meta_del (core->anal->meta, R_META_TYPE_ANY, off, f->size, "");
+		r_anal_fcn_del (core->anal, off);
 		break;
 	case 'f':
 		r_cons_break(NULL,NULL);

@@ -1,4 +1,5 @@
-/* radare2 - Copyleft 2011 - pancake<nopcode.org> */
+/* radare2 - Copyleft 2011-2013 - pancake */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,7 +54,8 @@ static void parseline (char *b) {
 		int n = atoi (b+3);
 		if (n>=0 && n<NARGS) {
 			_args[n] = strdup (e);
-		} else fprintf (stderr, "Out of bounds args index: %d\n", n);
+			r_str_escape (_args[n]);
+		} else eprintf ("Out of bounds args index: %d\n", n);
 	} else if (!strcmp (b, "timeout")) _timeout = atoi (e);
 	else if (!strcmp (b, "setenv")) {
 		char *v = strchr (e, '=');
@@ -102,7 +104,7 @@ static int runfile () {
 		if (p) {
 			RSocket *fd = r_socket_new (0);
 			*p=0;
-			if (!r_socket_connect_tcp (fd, _connect, p+1)) {
+			if (!r_socket_connect_tcp (fd, _connect, p+1, 30)) {
 				eprintf ("Cannot connect\n");
 				return 1;
 			}
@@ -121,7 +123,7 @@ static int runfile () {
 	if (_listen) {
 		RSocket *child, *fd = r_socket_new (0);
 		if (!r_socket_listen (fd, _listen, NULL)) {
-			eprintf ("Cannot listen\n");
+			eprintf ("rarun2: cannot listen\n");
 			return 1;
 		}
 		child = r_socket_accept (fd);
@@ -138,6 +140,12 @@ static int runfile () {
 	if (_chgdir) chdir (_chgdir);
 	if (_chroot) chdir (_chroot);
 #if __UNIX__
+	if (_chroot) {
+		if (chroot (".")) {
+			eprintf ("rarun2: cannot chroot\n");
+			return 1;
+		}
+	}
 	if (_setuid) setuid (atoi (_setuid));
 	if (_seteuid) seteuid (atoi (_seteuid));
 	if (_setgid) setgid (atoi (_setgid));
@@ -163,7 +171,7 @@ static int runfile () {
 		if (!fork ()) {
 			sleep (_timeout);
 			if (!kill (mypid, 0))
-				fprintf (stderr, "\nInterrupted by timeout\n");
+				fprintf (stderr, "\nrarun2: Interrupted by timeout\n");
 			kill (mypid, SIGKILL);
 			exit (0);
 		}
@@ -171,16 +179,19 @@ static int runfile () {
 		eprintf ("timeout not supported for this platform\n");
 #endif
 	}
+	if (!r_file_exists (_program)) {
+		eprintf ("rarun2: %s: file not found\n", _program);
+		return 1;
+	}
 	exit (execv (_program, _args));
 }
 
 int main(int argc, char **argv) {
 	int i;
 	FILE *fd;
-	char *file, buf[1024];
+	char *file, buf[4096];
 	if (argc==1 || !strcmp (argv[1], "-h")) {
-		fprintf (stderr, "Usage: rarun2 [''|script.rr2] [options ...]\n"
-			"> options are file directives:\n");
+		fprintf (stderr, "Usage: rarun2 [-v] [script.rr2] [directive ..]\n");
 		printf (
 			"program=/bin/ls\n"
 			"arg1=/bin\n"
@@ -201,8 +212,12 @@ int main(int argc, char **argv) {
 			"# setegid=2001\n");
 		return 1;
 	}
+	if (!strcmp (argv[1], "-v")) {
+		printf ("rarun2 "R2_VERSION"\n");
+		return 0;
+	}
 	file = argv[1];
-	if (*file) {
+	if (*file && !strchr (file, '=')) {
 		fd = fopen (file, "r");
 		if (!fd) {
 			fprintf (stderr, "Cannot open %s\n", file);
@@ -216,7 +231,7 @@ int main(int argc, char **argv) {
 		}
 		fclose (fd);
 	} else {
-		for (i=2; i<argc; i++)
+		for (i=*file?1:2; i<argc; i++)
 			parseline (argv[i]);
 	}
 	return runfile ();

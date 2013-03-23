@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - nibble */
+/* radare - LGPL - Copyright 2009-2013 - nibble */
 
 #include <r_types.h>
 #include <r_util.h>
@@ -95,8 +95,7 @@ static RList* sections(RBinArch *arch) {
 	if (r_list_empty (ret)) {
 		if (!arch->size) {
 			struct Elf_(r_bin_elf_obj_t) *bin = arch->bin_obj;
-			if (bin) arch->size = bin->size;
-			else arch->size = 0x9999; // XXX hack
+			arch->size = bin? bin->size: 0x9999;
 		}
 		if (!(ptr = R_NEW (RBinSection)))
 			return ret;
@@ -215,9 +214,9 @@ static RBinInfo* info(RBinArch *arch) {
 	RBinInfo *ret = NULL;
 	char *str;
 
-	if(!(ret = R_NEW (RBinInfo)))
+	if(!(ret = R_NEW0 (RBinInfo)))
 		return NULL;
-	memset (ret, '\0', sizeof (RBinInfo));
+	ret->lang = "c";
 	strncpy (ret->file, arch->file, R_BIN_SIZEOF_STRINGS);
 	if ((str = Elf_(r_bin_elf_get_rpath)(arch->bin_obj))) {
 		strncpy (ret->rpath, str, R_BIN_SIZEOF_STRINGS);
@@ -226,6 +225,7 @@ static RBinInfo* info(RBinArch *arch) {
 	if ((str = Elf_(r_bin_elf_get_file_type) (arch->bin_obj)) == NULL)
 		return NULL;
 	strncpy (ret->type, str, R_BIN_SIZEOF_STRINGS);
+	ret->has_pi = (strstr (str, "DYN"))? 1: 0;
 	free (str);
 	if ((str = Elf_(r_bin_elf_get_elf_class) (arch->bin_obj)) == NULL)
 		return NULL;
@@ -286,7 +286,8 @@ static RList* fields(RBinArch *arch) {
 #if !R_BIN_ELF64
 static int check(RBinArch *arch) {
 	if (arch && arch->buf && arch->buf->buf)
-	if (!memcmp (arch->buf->buf, "\x7F\x45\x4c\x46\x01", 5))
+	//if (!memcmp (arch->buf->buf, "\x7F\x45\x4c\x46\x01", 5))
+	if (!memcmp (arch->buf->buf, "\x7F\x45\x4c\x46", 4) && arch->buf->buf[4] != 2)
 		return R_TRUE;
 	return R_FALSE;
 }

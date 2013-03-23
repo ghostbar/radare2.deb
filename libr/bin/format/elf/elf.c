@@ -1,5 +1,4 @@
-/* radare - LGPL - Copyright 2008-2012 - nibble, pancake */
-// TODO: review the rest of strtab index out of range
+/* radare - LGPL - Copyright 2008-2013 - nibble, pancake */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -84,7 +83,7 @@ static int Elf_(r_bin_elf_init_shdr)(struct Elf_(r_bin_elf_obj_t) *bin) {
 #endif
 			bin->ehdr.e_shnum);
 	if (len == -1) {
-		eprintf ("Error: read (shdr)\n");
+		eprintf ("Error: read (shdr) at 0x%"PFMT64x"\n", (ut64) bin->ehdr.e_shoff);
 		R_FREE (bin->shdr);
 		return R_FALSE;
 	}
@@ -95,11 +94,11 @@ static int Elf_(r_bin_elf_init_strtab)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	int sz;
 	if (bin->strtab || !bin->shdr) return R_FALSE;
 	bin->shstrtab_section =
-	bin->strtab_section = &bin->shdr[bin->ehdr.e_shstrndx];
+		bin->strtab_section = &bin->shdr[bin->ehdr.e_shstrndx];
 	if (bin->strtab_section == NULL)
 		return R_FALSE;
 	bin->shstrtab_size =
-	bin->strtab_size = bin->strtab_section->sh_size;
+		bin->strtab_size = bin->strtab_section->sh_size;
 	sz = sizeof (struct r_bin_elf_section_t) + bin->strtab_section->sh_size;
 	if ((bin->strtab = (char *)malloc (sz)) == NULL) {
 		perror ("malloc");
@@ -108,9 +107,11 @@ static int Elf_(r_bin_elf_init_strtab)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	}
 	memset (bin->strtab, 0, sz);
 	bin->shstrtab = bin->strtab;
+	//bin->strtab_section->sh_offset = 0;
 	if (r_buf_read_at (bin->b, bin->strtab_section->sh_offset, (ut8*)bin->strtab,
 				bin->strtab_section->sh_size) == -1) {
-		eprintf ("Error: read (strtab)\n");
+		eprintf ("Error: read (strtab) at 0x%"PFMT64x"\n",
+				(ut64) bin->strtab_section->sh_offset);
 		R_FREE (bin->strtab);
 		bin->shstrtab = NULL;
 		return R_FALSE;
@@ -186,7 +187,7 @@ static int Elf_(r_bin_elf_init)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	}
 	Elf_(r_bin_elf_init_phdr) (bin);
 	//if (!Elf_(r_bin_elf_init_phdr) (bin))
-		//eprintf ("Warning: Cannot initialize program headers\n");
+	//	eprintf ("Warning: Cannot initialize program headers\n");
 	if (!Elf_(r_bin_elf_init_shdr) (bin))
 		eprintf ("Warning: Cannot initialize section headers\n");
 	if (!Elf_(r_bin_elf_init_strtab) (bin))
@@ -426,6 +427,7 @@ char* Elf_(r_bin_elf_get_arch)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	case EM_MIPS_X:
 		return strdup ("mips");
 	case EM_ARM:
+	case EM_AARCH64:
 		return strdup ("arm");
 	case EM_SPARC:
 	case EM_SPARC32PLUS:
@@ -516,6 +518,7 @@ char* Elf_(r_bin_elf_get_machine_name)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	case EM_OPENRISC:    return strdup ("OpenRISC 32-bit embedded processor");
 	case EM_ARC_A5:      return strdup ("ARC Cores Tangent-A5");
 	case EM_XTENSA:      return strdup ("Tensilica Xtensa Architecture");
+	case EM_AARCH64:     return strdup ("ARM aarch64");
 	default:             return r_str_dup_printf ("<unknown>: 0x%x", bin->ehdr.e_machine);
 	}
 }
@@ -548,17 +551,20 @@ char* Elf_(r_bin_elf_get_elf_class)(struct Elf_(r_bin_elf_obj_t) *bin) {
 
 int Elf_(r_bin_elf_get_bits)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	switch (bin->ehdr.e_ident[EI_CLASS]) {
-	case ELFCLASSNONE: return 0;
 	case ELFCLASS32:   return 32;
 	case ELFCLASS64:   return 64;
-	default:           return -1;
+	case ELFCLASSNONE:
+	default:           return 32; // defaults
 	}
 }
 
 static inline int needle(struct Elf_(r_bin_elf_obj_t) *bin, const char *s) {
-	if (bin->shstrtab)
-		return r_mem_mem ((const ut8*)bin->shstrtab, bin->shstrtab_size,
+	if (bin->shstrtab) {
+		int len = bin->shstrtab_size;
+		if (len > 4096) len = 4096; // avoid slow loading .. can be buggy?
+		return r_mem_mem ((const ut8*)bin->shstrtab, len,
 				(const ut8*)s, strlen (s)) != NULL;
+	}
 	return 0;
 }
 
@@ -734,8 +740,8 @@ struct r_bin_elf_reloc_t* Elf_(r_bin_elf_get_relocs)(struct Elf_(r_bin_elf_obj_t
 			perror ("malloc (reloc)");
 			return NULL;
 		}
-		if (sym)
-		for (j =  0; j < nrel; j++) {
+		j = 0;
+		if (sym) for (; j < nrel; j++) {
 			idx = ELF_R_SYM (rel[j].r_info);
 			if (idx < nsym) {
 				if (sym[idx].st_name > bin->strtab_section->sh_size) {
@@ -859,7 +865,7 @@ struct r_bin_elf_symbol_t* Elf_(r_bin_elf_get_symbols)(struct Elf_(r_bin_elf_obj
 	ut64 sym_offset = 0, data_offset = 0, toffset;
 	int shdr_size, tsize, nsym, ret_ctr, i, j, k, len;
 
-	if (!bin->shdr || bin->ehdr.e_shnum == 0)
+	if (!bin->shdr || bin->ehdr.e_shnum == 0 || bin->ehdr.e_shnum == 0xffff)
 		return NULL;
 	if (bin->ehdr.e_type == ET_REL) {
 		// XXX: we must obey shndx here
@@ -869,11 +875,9 @@ struct r_bin_elf_symbol_t* Elf_(r_bin_elf_get_symbols)(struct Elf_(r_bin_elf_obj
 			data_offset = 0;
 	}
 	shdr_size = bin->ehdr.e_shnum * sizeof (Elf_(Shdr));
-	for (i = 0; i < bin->ehdr.e_shnum; i++)
-		if ((type == R_BIN_ELF_IMPORTS &&
-				bin->shdr[i].sh_type == (bin->ehdr.e_type == ET_REL ? SHT_SYMTAB : SHT_DYNSYM)) ||
-			(type == R_BIN_ELF_SYMBOLS  &&
-			 	bin->shdr[i].sh_type == (Elf_(r_bin_elf_get_stripped) (bin) ? SHT_DYNSYM : SHT_SYMTAB))) {
+	for (i = 0; i < bin->ehdr.e_shnum; i++) {
+		if ((type == R_BIN_ELF_IMPORTS && bin->shdr[i].sh_type == (bin->ehdr.e_type == ET_REL ? SHT_SYMTAB : SHT_DYNSYM)) ||
+		(type == R_BIN_ELF_SYMBOLS && bin->shdr[i].sh_type == (Elf_(r_bin_elf_get_stripped) (bin) ? SHT_DYNSYM : SHT_SYMTAB))) {
 			if (bin->shdr[i].sh_link > shdr_size) {
 				/* oops. fix out of range pointers */
 				continue;
@@ -922,7 +926,7 @@ struct r_bin_elf_symbol_t* Elf_(r_bin_elf_get_symbols)(struct Elf_(r_bin_elf_obj
 					perror ("realloc (symbols|imports)");
 					return NULL;
 				}
-				{
+				if (bin->baddr) {
 					int idx = sym[k].st_shndx;
 					if (idx>=0 && idx < bin->ehdr.e_shnum) {
 						if (bin->baddr && toffset>bin->baddr)
@@ -975,7 +979,7 @@ struct r_bin_elf_symbol_t* Elf_(r_bin_elf_get_symbols)(struct Elf_(r_bin_elf_obj
 				ret_ctr++;
 			}
 			{
-			ut8 *p = realloc (ret, (ret_ctr+1)* sizeof (struct r_bin_elf_symbol_t));
+			ut8 *p = (ut8*)realloc (ret, (ret_ctr+1)* sizeof (struct r_bin_elf_symbol_t));
 			if (!p) {
 				free (ret);
 				return NULL;
@@ -985,6 +989,7 @@ struct r_bin_elf_symbol_t* Elf_(r_bin_elf_get_symbols)(struct Elf_(r_bin_elf_obj
 			ret[ret_ctr].last = 1; // ugly dirty hack :D
 			break;
 		}
+	}
 	return ret;
 }
 

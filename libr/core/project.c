@@ -1,13 +1,9 @@
-/* radare - LGPL - Copyright 2010-2012 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2010-2013 - pancake */
 
 #include <r_types.h>
 #include <r_list.h>
 #include <r_flags.h>
 #include <r_core.h>
-
-#ifndef O_BINARY
-#define O_BINARY 0
-#endif
 
 static char *r_core_project_file(const char *file) {
 	char buf[128];
@@ -44,31 +40,27 @@ R_API int r_core_project_open(RCore *core, const char *prjfile) {
 }
 
 R_API char *r_core_project_info(RCore *core, const char *prjfile) {
-	char buf[256], *file = NULL;
-	char *prj = r_core_project_file (prjfile);
-	FILE *fd;
-	if (prj && (fd = fopen (prj, "r"))) {
-		for (;;) {
-			fgets (buf, sizeof (buf), fd);
-			if (feof (fd))
-				break;
-			if (!memcmp (buf, "e file.path = ", 14)) {
-				buf[strlen(buf)-1]=0;
-				file = r_str_new (buf+14);
-				break;
-			}
+	char buf[256], *file = NULL, *prj = r_core_project_file (prjfile);
+	FILE *fd = prj? r_sandbox_fopen (prj, "r"): NULL;
+	for (;fd;) {
+		fgets (buf, sizeof (buf), fd);
+		if (feof (fd))
+			break;
+		if (!memcmp (buf, "e file.path = ", 14)) {
+			buf[strlen(buf)-1]=0;
+			file = r_str_new (buf+14);
+			break;
 		}
-		fclose (fd);
 	}
+	fclose (fd);
 	r_cons_printf ("Project : %s\n", prj);
-	if (file)
-		r_cons_printf ("FilePath: %s\n", file);
+	if (file) r_cons_printf ("FilePath: %s\n", file);
 	free (prj);
 	return file;
 }
 
 R_API int r_core_project_save(RCore *core, const char *file) {
-	int fd, tmp, ret = R_TRUE;
+	int fd, fdold, tmp, ret = R_TRUE;
 	char *prj;
 
 	if (file == NULL || *file == '\0')
@@ -76,20 +68,18 @@ R_API int r_core_project_save(RCore *core, const char *file) {
 
 	prj = r_core_project_file (file);
 	r_core_project_init ();
-	fd = open (prj, O_BINARY|O_RDWR|O_CREAT, 0644);
+	fd = r_sandbox_open (prj, O_BINARY|O_RDWR|O_CREAT, 0644);
 	if (fd != -1) {
-		int fdold = r_cons_singleton ()->fdout;
+		fdold = r_cons_singleton ()->fdout;
 		r_cons_singleton ()->fdout = fd;
 		r_cons_singleton ()->is_interactive = R_FALSE;
 		r_str_write (fd, "# r2 rdb project file\n");
-		//--
 		r_str_write (fd, "# flags\n");
 		tmp = core->flags->space_idx;
 		core->flags->space_idx = -1;
 		r_flag_list (core->flags, R_TRUE);
 		core->flags->space_idx = tmp;
 		r_cons_flush ();
-		//--
 		r_str_write (fd, "# eval\n");
 		// TODO: r_str_writef (fd, "e asm.arch=%s", r_config_get ("asm.arch"));
 		r_config_list (core->config, NULL, R_TRUE);
@@ -103,6 +93,8 @@ R_API int r_core_project_save(RCore *core, const char *file) {
 		r_core_cmd (core, "ar*", 0);
 		r_cons_flush ();
 		r_core_cmd (core, "af*", 0);
+		r_cons_flush ();
+		r_core_cmd (core, "ah*", 0);
 		r_cons_flush ();
 		r_str_write (fd, "# seek\n");
 		r_str_writef (fd, "s 0x%08"PFMT64x, core->offset);

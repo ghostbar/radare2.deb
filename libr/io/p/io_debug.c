@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2012 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2007-2012 - pancake */
 
 #include <r_io.h>
 #include <r_lib.h>
@@ -215,7 +215,7 @@ static int fork_and_ptraceme(int bits, const char *cmd) {
 				eprintf ("Success\n");
 				break;
 			case 22:
-				eprintf ("Invalid argument\n");
+				eprintf ("posix_spawnp: Invalid argument\n");
 				break;
 			case 86:
 				eprintf ("Unsupported architecture\n");
@@ -268,6 +268,7 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 	if (__plugin_open (io, file)) {
 		int pid = atoi (file+6);
 		if (pid == 0) {
+			// TODO: get bits from ELF?
 			pid = fork_and_ptraceme (io->bits, file+6);
 			if (pid==-1)
 				return NULL;
@@ -300,7 +301,7 @@ struct r_io_plugin_t r_io_plugin_debug = {
         .plugin_open = __plugin_open,
 	.lseek = NULL,
 	.system = NULL,
-	.debug = (void *)1,
+	.debug = (void *)(size_t)1,
         //void *widget;
 /*
         struct debug_t *debug;

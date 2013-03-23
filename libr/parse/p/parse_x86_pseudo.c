@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 nibble */
+/* radare - LGPL - Copyright 2009-2012 - nibble, pancake */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,13 +9,18 @@
 #include <r_flags.h>
 #include <r_anal.h>
 #include <r_parse.h>
-
+// 16 bit examples
+//    0x0001f3a4      9a67620eca       call word 0xca0e:0x6267
+//    0x0001f41c      eabe76de12       jmp word 0x12de:0x76be [2]
+//    0x0001f56a      ea7ed73cd3       jmp word 0xd33c:0xd77e [6]
 static int replace(int argc, const char *argv[], char *newstr) {
 	int i,j,k;
 	struct {
 		char *op;
 		char *str;
 	} ops[] = {
+		{ "in",   "1 = io[2]"},
+		{ "out",  "io[1] = 2"},
 		{ "cmp",  "cmp 1, 2"},
 		{ "test", "cmp 1, 2"},
 		{ "lea",  "1 = 2"},
@@ -37,10 +42,10 @@ static int replace(int argc, const char *argv[], char *newstr) {
 		{ NULL }
 	};
 
-	for(i=0; ops[i].op != NULL; i++) {
+	for (i=0; ops[i].op != NULL; i++) {
 		if (!strcmp (ops[i].op, argv[0])) {
 			if (newstr != NULL) {
-				for (j=k=0;ops[i].str[j]!='\0';j++,k++) {
+				for (j=k=0; ops[i].str[j]!='\0'; j++, k++) {
 					if (ops[i].str[j]>='0' && ops[i].str[j]<='9') {
 						const char *w = argv[ ops[i].str[j]-'0' ];
 						if (w != NULL) {
@@ -63,28 +68,23 @@ static int replace(int argc, const char *argv[], char *newstr) {
 			strcat (newstr, (i == 0 || i== argc - 1)?" ":",");
 		}
 	}
-
 	return R_FALSE;
 }
 
 static int parse(RParse *p, const char *data, char *str) {
+	char w0[256], w1[256], w2[256], w3[256];
 	int i, len = strlen (data);
-	char w0[64];
-	char w1[64];
-	char w2[64];
-	char w3[64];
 	char *buf, *ptr, *optr;
 
+	if (len>=sizeof (w0))
+		return R_FALSE;
 	// malloc can be slow here :?
 	if ((buf = malloc (len+1)) == NULL)
 		return R_FALSE;
 	memcpy (buf, data, len+1);
 
 	if (*buf) {
-		w0[0]='\0';
-		w1[0]='\0';
-		w2[0]='\0';
-		w3[0]='\0';
+		*w0 = *w1 = *w2 = *w3 = '\0';
 		ptr = strchr (buf, ' ');
 		if (ptr == NULL)
 			ptr = strchr (buf, '\t');
@@ -94,14 +94,14 @@ static int parse(RParse *p, const char *data, char *str) {
 			strcpy (w0, buf);
 			strcpy (w1, ptr);
 
-			optr=ptr;
+			optr = ptr;
 			ptr = strchr (ptr, ',');
 			if (ptr) {
 				*ptr = '\0';
 				for (++ptr; *ptr==' '; ptr++);
 				strcpy (w1, optr);
 				strcpy (w2, ptr);
-				optr=ptr;
+				optr = ptr;
 				ptr = strchr (ptr, ',');
 				if (ptr) {
 					*ptr = '\0';
@@ -136,26 +136,63 @@ static int assemble(RParse *p, char *data, char *str) {
 	return R_TRUE;
 }
 
+static inline int ishexch (char c) {
+	if (c>=0 && c<=9) return 1;
+	if (c>='a' && c<='f') return 1;
+	if (c>='A' && c<='F') return 1;
+	return 0;
+}
+
+static inline int issegoff (const char *w) {
+	if (!ishexch (w[0])) return 0;
+	if (!ishexch (w[1])) return 0;
+	if (!ishexch (w[2])) return 0;
+	if (!ishexch (w[3])) return 0;
+	// : 
+	if (!ishexch (w[5])) return 0;
+	if (!ishexch (w[6])) return 0;
+	if (!ishexch (w[7])) return 0;
+	if (!ishexch (w[8])) return 0;
+	return 1;
+}
+
+#define isx86separator(x) ( \
+	(x)==' '||(x)=='\t'||(x)=='\n'|| (x)=='\r'||(x)==' '|| \
+	(x)==','||(x)==';'||(x)=='['||(x)==']'|| \
+	(x)=='('||(x)==')'||(x)=='{'||(x)=='}')
+
 static int filter(RParse *p, RFlag *f, char *data, char *str, int len) {
-	RListIter *iter;
+	char *ptr = data, *ptr2;
+	//RListIter *iter;
 	RFlagItem *flag;
-	char *ptr, *ptr2;
 	ut64 off;
-	ptr = data;
+
+	ptr2 = NULL;
 	while ((ptr = strstr (ptr, "0x"))) {
-		for (ptr2 = ptr; *ptr2 && !isseparator (*ptr2); ptr2++);
+		for (ptr2 = ptr; *ptr2 && !isx86separator (*ptr2); ptr2++);
 		off = r_num_math (NULL, ptr);
-		if(!off){
-			ptr=ptr2;
+		if (!off) {
+			ptr = ptr2;
 			continue;
 		}
-		r_list_foreach (f->flags, iter, flag) {
-			if (flag->offset == off && strchr (flag->name, '.')) {
+		flag = r_flag_get_i (f, off);
+		if (flag && strchr (flag->name, '.')) {
+		// XXX. tooslow but correct
+		//r_list_foreach (f->flags, iter, flag) { if (flag->offset == off && strchr (flag->name, '.')) {
+				if (p->notin_flagspace != -1) {
+					if (p->flagspace == flag->space)
+						continue;
+				} else
+				if (p->flagspace != -1 && \
+					(p->flagspace != flag->space)) {
+					continue;
+				}
 				*ptr = 0;
-				snprintf (str, len, "%s%s%s", data, flag->name, ptr2!=ptr? ptr2: "");
+				snprintf (str, len, "%s%s%s", data, flag->name,
+					ptr2!=ptr? ptr2: "");
 				return R_TRUE;
 			}
-		}
+		//}
 		ptr = ptr2;
 	}
 	strncpy (str, data, len);
@@ -163,16 +200,17 @@ static int filter(RParse *p, RFlag *f, char *data, char *str, int len) {
 }
 
 static int varsub(RParse *p, RAnalFunction *f, char *data, char *str, int len) {
-	char *ptr, *ptr2;
 	int i;
-
+	char *ptr, *ptr2;
 	strncpy (str, data, len);
 	for (i = 0; i < R_ANAL_VARSUBS; i++)
-		if (f->varsubs[i].pat[0] != '\0' && f->varsubs[i].sub[0] != '\0' &&
+		if (f->varsubs[i].pat[0] != '\0' && \
+			f->varsubs[i].sub[0] != '\0' && \
 			(ptr = strstr (data, f->varsubs[i].pat))) {
 				*ptr = '\0';
 				ptr2 = ptr + strlen (f->varsubs[i].pat);
-				snprintf (str, len, "%s%s%s", data, f->varsubs[i].sub, ptr2);
+				snprintf (str, len, "%s%s%s", data,
+					f->varsubs[i].sub, ptr2);
 		}
 	return R_TRUE;
 }

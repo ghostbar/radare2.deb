@@ -6,7 +6,7 @@
 .Nd block based hashing utility
 .Sh SYNOPSIS
 .Nm hasher2
-.Op Fl hBrv
+.Op Fl hBrkv
 .Op Fl a Ar algorithm
 .Op Fl b Ar size
 .Op Fl s Ar string
@@ -26,10 +26,12 @@ This is the command used by the '#' command of radare.
 .Bl -tag -width Fl
 .It Fl a Ar algo
 Select an algorithm for the hashing. Valid values are md5, crc32 and sha1
-.It Fl b Ar block size
+.It Fl b Ar blocksize
 Define the block size
 .It Fl B
 Show per-block hash
+.It Fl k
+Show result using OpenSSH's VisualHostKey randomart algorithm
 .It Fl s Ar string
 Hash this string instead of using the 'source' and 'hash-file' arguments.
 .It Fl f Ar from
@@ -49,7 +51,6 @@ Show usage help message.
 .Xr rafind2(1) ,
 .Xr rahash2(1) ,
 .Xr rabin2(1) ,
-.Xr ranal2(1) ,
 .Xr radiff2(1) ,
 .Xr rasm2(1) ,
 .Xr ragg2(1) ,

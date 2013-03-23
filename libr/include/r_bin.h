@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2012 nibble, pancake */
+/* radare - LGPL - Copyright 2008-2013 - nibble, pancake */
 
 #ifndef _INCLUDE_R_BIN_H_
 #define _INCLUDE_R_BIN_H_
@@ -60,8 +60,10 @@ typedef struct r_bin_info_t {
 	char os[R_BIN_SIZEOF_STRINGS];
 	char subsystem[R_BIN_SIZEOF_STRINGS];
 	char rpath[R_BIN_SIZEOF_STRINGS];
+	const char *lang;
 	int bits;
 	int has_va;
+	int has_pi; // pic/pie
 	int big_endian;
 	ut64 dbg_info;
 } RBinInfo;
@@ -84,6 +86,7 @@ typedef struct r_bin_t {
 	int narch;
 	void *user;
 	void *bin_obj;
+	int minstrlen;
 	struct r_bin_xtr_plugin_t *curxtr;
 	RList *plugins;
 	RList *binxtrs;
@@ -128,6 +131,7 @@ typedef struct r_bin_plugin_t {
 	struct r_bin_write_t *write;
 	int (*get_offset)(RBinArch *arch, int type, int idx);
 	RBuffer* (*create)(RBin *bin, const ut8 *code, int codelen, const ut8 *data, int datalen);
+	int minstrlen;
 } RBinPlugin;
 
 typedef struct r_bin_section_t {
@@ -143,8 +147,8 @@ typedef struct r_bin_class_t {
 	char *name;
 	char *super;
 	int index;
-	RList *methods;
-	RList *fields;
+	RList *methods; // <RBinSymbol>
+	RList *fields; // <RBinField>
 	int visibility;
 } RBinClass;
 
@@ -159,6 +163,7 @@ typedef struct r_bin_symbol_t {
 	char forwarder[R_BIN_SIZEOF_STRINGS];
 	char bind[R_BIN_SIZEOF_STRINGS];
 	char type[R_BIN_SIZEOF_STRINGS];
+	const char *classname;
 	ut64 rva;
 	ut64 offset;
 	ut64 size;
@@ -230,30 +235,36 @@ typedef struct r_bin_object_t {
 // TODO: has_dbg_syms... maybe flags?
 
 typedef int (*RBinGetOffset)(RBin *bin, int type, int idx);
+typedef const char *(*RBinGetName)(RBin *bin, int off);
 
 typedef struct r_bin_bind_t {
 	RBin *bin;
 	RBinGetOffset get_offset;
+	RBinGetName get_name;
 } RBinBind;
 
 #ifdef R_API
 
 #define r_bin_class_free(x) { free(x->name);free(x->super);free (x); }
 
-R_API void r_bin_bind(RBin *b, RBinBind *bnd);
 /* bin.c */
+R_API void r_bin_bind(RBin *b, RBinBind *bnd);
 R_API int r_bin_add(RBin *bin, RBinPlugin *foo);
 R_API int r_bin_xtr_add(RBin *bin, RBinXtrPlugin *foo);
 R_API void* r_bin_free(RBin *bin);
 R_API int r_bin_list(RBin *bin);
 R_API int r_bin_load(RBin *bin, const char *file, int dummy);
-R_API RBinObject *r_bin_get_object(RBin *bin, int flags);
+R_API RBinObject *r_bin_get_object(RBin *bin);
 R_API ut64 r_bin_get_baddr(RBin *bin);
 R_API RBinAddr* r_bin_get_sym(RBin *bin, int sym);
+
 R_API char* r_bin_demangle(RBin *bin, const char *str);
 R_API int r_bin_demangle_type (const char *str);
 R_API char *r_bin_demangle_java(const char *str);
 R_API char *r_bin_demangle_cxx(const char *str);
+R_API char *r_bin_demangle_objc(RBin *bin, const char *sym);
+R_API int r_bin_lang_objc(RBin *a);
+
 R_API RList* r_bin_get_entries(RBin *bin);
 R_API RList* r_bin_get_fields(RBin *bin);
 R_API RList* r_bin_get_imports(RBin *bin);
@@ -263,6 +274,12 @@ R_API ut64 r_bin_get_size (RBin *bin);
 R_API RList* r_bin_get_relocs(RBin *bin);
 R_API RList* r_bin_get_sections(RBin *bin);
 R_API RList* /*<RBinClass>*/r_bin_get_classes(RBin *bin);
+
+R_API RBinClass *r_bin_class_get (RBin *bin, const char *name);
+R_API RBinClass *r_bin_class_new (RBin *bin, const char *name, const char *super, int view);
+R_API int r_bin_class_add_method (RBin *bin, const char *classname, const char *name, int nargs);
+R_API void r_bin_class_add_field (RBin *bin, const char *classname, const char *name);
+
 R_API RBinSection* r_bin_get_section_at(RBin *bin, ut64 off, int va);
 R_API RList* r_bin_get_strings(RBin *bin);
 R_API RList* r_bin_get_symbols(RBin *bin);
@@ -299,11 +316,13 @@ extern RBinPlugin r_bin_plugin_p9;
 extern RBinPlugin r_bin_plugin_pe;
 extern RBinPlugin r_bin_plugin_mz;
 extern RBinPlugin r_bin_plugin_pe64;
+extern RBinPlugin r_bin_plugin_te;
 extern RBinPlugin r_bin_plugin_mach0;
 extern RBinPlugin r_bin_plugin_mach064;
 extern RBinPlugin r_bin_plugin_java;
 extern RBinPlugin r_bin_plugin_dex;
 extern RBinPlugin r_bin_plugin_dummy;
+extern RBinPlugin r_bin_plugin_rar;
 extern RBinXtrPlugin r_bin_xtr_plugin_zip;
 extern RBinXtrPlugin r_bin_xtr_plugin_fatmach0;
 extern RBinXtrPlugin r_bin_xtr_plugin_dyldcache;

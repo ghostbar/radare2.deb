@@ -1,7 +1,7 @@
 #ifndef _INCLUDE_CONS_R_
 #define _INCLUDE_CONS_R_
 
-#define HAVE_DIETLINE 0
+#define HAVE_DIETLINE 1
 
 #include <r_types.h>
 #include <r_util.h>
@@ -80,6 +80,7 @@ typedef struct r_cons_t {
 	/* Pager (like more or less) to use if the output doesn't fit on the
 	 * current window. If NULL or "" no pager is used. */
 	char *pager;
+	int blankline;
 } RCons;
 
 // XXX THIS MUST BE A SINGLETON AND WRAPPED INTO RCons */
@@ -188,6 +189,7 @@ R_API int r_cons_w32_print(ut8 *ptr, int empty);
 
 /* control */
 R_API void r_cons_reset();
+R_API void r_cons_print_clear();
 R_API void r_cons_clear();
 R_API void r_cons_clear00();
 R_API void r_cons_clear_line();
@@ -235,12 +237,77 @@ R_API void r_cons_grep(const char *str);
 R_API int r_cons_grep_line(char *buf, int len); // must be static
 R_API int r_cons_grepbuf(char *buf, int len);
 
+R_API void r_cons_color (int fg, int r, int g, int b);
 R_API void r_cons_invert(int set, int color);
 R_API int r_cons_yesno(int def, const char *fmt, ...);
 R_API void r_cons_set_cup(int enable);
 R_API void r_cons_column(int c);
 R_API int r_cons_get_column();
 R_API char *r_cons_message(const char *msg);
+#endif
+
+/* r_line */
+#define R_LINE_BUFSIZE 4096
+#define R_LINE_HISTSIZE 256
+
+typedef struct r_line_hist_t {
+	char **data;
+	int size;
+	int index;
+	int top;
+	int autosave;
+} RLineHistory;
+
+typedef struct r_line_buffer_t {
+	char data[R_LINE_BUFSIZE];
+	int index;
+	int length;
+} RLineBuffer;
+
+typedef struct r_line_t RLine; // forward declaration
+
+typedef int (*RLineCallback)(RLine *line);
+
+typedef struct r_line_comp_t {
+	int argc;
+	const char **argv;
+	RLineCallback run;
+} RLineCompletion;
+
+struct r_line_t {
+	RLineCompletion completion;
+	RLineHistory history;
+	RLineBuffer buffer;
+	int echo;
+	int has_echo;
+	char *prompt;
+	char *clipboard;
+	int disable;
+	void *user;
+}; /* RLine */
+
+#ifdef R_API
+
+R_API RLine *r_line_new();
+R_API RLine *r_line_singleton();
+R_API void r_line_free();
+R_API char *r_line_get_prompt ();
+R_API void r_line_set_prompt(const char *prompt);
+
+typedef int (RLineReadCallback) (void *user, const char *line);
+R_API char *r_line_readline();
+R_API char *r_line_readline_cb(RLineReadCallback cb, void *user);
+
+R_API int r_line_hist_load(const char *file);
+R_API int r_line_hist_add(const char *line);
+R_API int r_line_hist_save(const char *file);
+R_API int r_line_hist_label(const char *label, void (*cb)(const char*));
+R_API void r_line_label_show();
+R_API int r_line_hist_list();
+R_API const char *r_line_hist_get(int n);
+
+#define R_CONS_INVERT(x,y) (y? (x?Color_INVERT: Color_INVERT_RESET): (x?"[":"]"))
+
 #endif
 
 #endif

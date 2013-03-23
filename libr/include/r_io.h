@@ -8,6 +8,7 @@
 #define R_IO_READ  4
 #define R_IO_WRITE 2
 #define R_IO_EXEC  1
+#define R_IO_RW R_IO_READ | R_IO_WRITE
 
 #define R_IO_SEEK_SET 0
 #define R_IO_SEEK_CUR 1
@@ -38,6 +39,19 @@ typedef struct r_io_map_t {
 	ut64 from;
 	ut64 to;
 } RIOMap;
+
+typedef struct r_io_section_t {
+	char name[64]; // use strpool
+	ut64 offset;
+	ut64 vaddr;
+	ut64 size;
+	ut64 vsize;
+	int rwx;
+	int id;
+	/* */
+	int arch;
+	int bits;
+} RIOSection;
 
 typedef struct r_io_desc_t {
 	int fd;
@@ -105,13 +119,17 @@ typedef struct r_io_t {
 	struct list_head io_list;
 	RList *sections;
 	int next_section_id;
+	RIOSection *section; /* current section (cache) */
 	/* maps */
 	RList *maps; /*<RIOMap>*/
 	RList *desc;
 	RList *cache;
+	int zeromap;
 	//XXX: Need by rap
 	void *user;
 	int (*core_cmd_cb)(void *user, const char *str);
+	RCache *buffer;
+	int buffer_enabled;
 } RIO;
 
 //struct r_io_plugin_fd_t {
@@ -158,17 +176,6 @@ typedef struct r_io_bind_t {
 	RIOReadAt read_at;
 	RIOWriteAt write_at;
 } RIOBind;
-
-/* sections */
-typedef struct r_io_section_t {
-	char name[64];
-	ut64 offset;
-	ut64 vaddr;
-	ut64 size;
-	ut64 vsize;
-	int rwx;
-	int id;
-} RIOSection;
 
 typedef struct r_io_cache_t {
 	ut64 from;
@@ -222,6 +229,7 @@ R_API RIODesc *r_io_open_as(RIO *io, const char *urihandler, const char *file, i
 R_API int r_io_redirect(RIO *io, const char *file);
 R_API int r_io_set_fd(RIO *io, RIODesc *fd);
 R_API int r_io_set_fdn(RIO *io, int fd);
+R_API const ut8* r_io_get_raw (RIO *io, ut64 addr, int *len);
 R_API RBuffer *r_io_read_buf(RIO *io, ut64 addr, int len);
 R_API int r_io_read(RIO *io, ut8 *buf, int len);
 R_API int r_io_read_at(RIO *io, ut64 addr, ut8 *buf, int len);
@@ -252,8 +260,10 @@ R_API int r_io_bind(RIO *io, RIOBind *bnd);
 
 /* io/map.c */
 R_API void r_io_map_init(RIO *io);
+R_API ut64 r_io_map_next(RIO *io, ut64 addr);
 R_API RIOMap *r_io_map_add(RIO *io, int fd, int flags, ut64 delta, ut64 offset, ut64 size);
 R_API int r_io_map_del_at(RIO *io, ut64 addr);
+R_API RIOMap *r_io_map_get(RIO *io, ut64 addr);
 R_API int r_io_map_del(RIO *io, int fd);
 R_API int r_io_map(RIO *io, const char *file, ut64 offset);
 R_API int r_io_map_select(RIO *io, ut64 off);
@@ -265,6 +275,10 @@ R_API void r_io_section_init(RIO *io);
 R_API void r_io_section_add(RIO *io, ut64 offset, ut64 vaddr, ut64 size, ut64 vsize, int rwx, const char *name);
 R_API RIOSection *r_io_section_get_name(RIO *io, const char *name);
 R_API RIOSection *r_io_section_get_i(RIO *io, int idx);
+R_API RIOSection *r_io_section_getv(RIO *io, ut64 vaddr);
+R_API RIOSection *r_io_section_vget(RIO *io, ut64 addr);
+R_API int r_io_section_set_archbits(RIO *io, ut64 addr, const char *arch, int bits);
+R_API const char *r_io_section_get_archbits(RIO* io, ut64 addr, int *bits);
 R_API int r_io_section_rm(RIO *io, int idx);
 R_API void r_io_section_list(RIO *io, ut64 offset, int rad);
 R_API void r_io_section_list_visual(RIO *io, ut64 seek, ut64 len);
@@ -310,6 +324,12 @@ R_API int r_io_desc_del(RIO *io, int fd);
 R_API RIODesc *r_io_desc_get(RIO *io, int fd);
 //R_API int r_io_desc_generate(RIO *io);
 
+/* buffer.c */
+R_API void r_io_buffer_close(RIO* io);
+R_API int r_io_buffer_load(RIO* io, ut64 addr, int len);
+R_API const ut8* r_io_buffer_get (RIO *io, ut64 addr, int *len);
+R_API int r_io_buffer_read (RIO *io, ut64 addr, ut8* buf, int len);
+
 /* plugins */
 extern RIOPlugin r_io_plugin_procpid;
 extern RIOPlugin r_io_plugin_malloc;
@@ -326,13 +346,7 @@ extern RIOPlugin r_io_plugin_bfdbg;
 extern RIOPlugin r_io_plugin_w32;
 extern RIOPlugin r_io_plugin_ewf;
 extern RIOPlugin r_io_plugin_zip;
-#endif
-
-#if 0
-#define CB_READ int (*cb_read)(RIO *user, int pid, ut64 addr, ut8 *buf, int len)
-#define CB_WRITE int (*cb_write)(RIO *user, int pid, ut64 addr, const ut8 *buf, int len)
-#define CB_IO int (*cb_io)(void *user, CB_READ, CB_WRITE)
-R_API int r_io_hook(RIO *io, CB_IO);
+extern RIOPlugin r_io_plugin_mmap;
 #endif
 
 #endif

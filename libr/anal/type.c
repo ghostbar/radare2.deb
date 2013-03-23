@@ -115,7 +115,7 @@ R_API char* r_anal_type_to_str(RAnal *a, RAnalType *t, const char *sep) {
 	{
 		int custom = t->custom.p->type;
 		int type = R_ANAL_UNMASK_TYPE (custom);
-		int sign = R_ANAL_UNMASK_SIGN (sign);
+		int sign = R_ANAL_UNMASK_SIGN (custom);
 		switch (type) {
 		case R_ANAL_VAR_TYPE_BYTE:
 			sprintf(buf, "%s *%s", sign?"byte":"ut8", t->custom.p->name);
@@ -269,7 +269,7 @@ R_API RAnalType *r_anal_type_loadfile(RAnal *a, const char *path) {
 	cparsepp_file (path, tmp_path);
 
 	/* Parse preprocessed file then */
-	if (!(cfile = fopen (tmp_path, "r"))) {
+	if (!(cfile = r_sandbox_fopen (tmp_path, "r"))) {
 		free (tmp_path);
 		return NULL;
 	}

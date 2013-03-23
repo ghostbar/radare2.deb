@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2010 nibble<.ds@gmail.com> */
+/* radare - LGPL - Copyright 2009-2013 - nibble */
 
 namespace Radare {
 	[Compact]
@@ -12,9 +12,9 @@ namespace Radare {
 			FINI,
 			LAST
 		}
-		public const string file;
-		public int narch;
+		public unowned string file;
 		public RBin.Arch cur;
+		public int narch;
 
 		public RBin();
 
@@ -47,12 +47,59 @@ namespace Radare {
 		public int has_dbg_relocs();
 		public int meta_get_line(uint64 addr, ref string file, int len, out int line);
 		public string meta_get_source_line(uint64 addr);
+		public RBin.Object get_object ();
 
 		[CCode (cname="RBinArch", free_function="", ref_function="", unref_function="")]
 		public struct Arch {
+			RBuffer buf;
 			public unowned string file;
 			public int size;
-			public RBuffer buf;
+			public uint64 offset;
+			public RBin.Object o;
+			/** string?? this is hack coz swig dislikes void* */
+			public weak string bin_obj;
+			public Plugin curplugin;
+		}
+
+		[CCode (cname="RBinPlugin", free_function="", ref_function="", unref_function="")]
+		public class Plugin {
+		}
+
+		[CCode (cname="RBinDwarfRow", free_function="", ref_function="", unref_function="")]
+		public class DwarfRow {
+			public uint64 address;
+			public string file;
+			public int line;
+			public int column;
+		}
+
+		[CCode (cname="RBinClass", free_function="", ref_function="", unref_function="")]
+		public class Class {
+			public string name;
+			public string super;
+			public int index;
+			public RList<Symbol> methods;
+			public RList<Field> fields;
+			public bool visibility;
+		}
+
+		[CCode (cname="RBinObject", free_function="", ref_function="", unref_function="")]
+		public class Object {
+			public uint64 baddr;
+			public int size;
+			public RList<RBin.Section> sections;
+			public RList<RBin.Import> imports;
+			public RList<RBin.Symbol> symbols;
+			//public RList<RBin.Symbol> entries;
+			public RList<RBin.Addr> entries;
+			public RList<RBin.Field> fields;
+			public RList<RBin.Symbol> libs;
+			public RList<RBin.Reloc> relocs;
+			public RList<RBin.String> strings;
+			public RList<RBin.Class> classes;
+			public RList<RBin.DwarfRow> lines;
+			public RBin.Info info;
+			public RBin.Addr binsym[4]; //
 		}
 
 		[CCode (cname="RBinAddr", free_function="", ref_function="", unref_function="")]
@@ -64,11 +111,11 @@ namespace Radare {
 		[CCode (cname="RBinSection", free_function="", ref_function="", unref_function="")]
 		public class Section {
 			public char name[256]; // FIXME proper static strings w/o hardcoded size
-			public int32 size;
-			public int32 vsize;
+			public uint64 size;
+			public uint64 vsize;
 			public uint64 rva;
 			public uint64 offset;
-			public int32 srwx;
+			public uint64 srwx;
 		}
 
 		[CCode (cname="RBinSymbol", free_function="", ref_function="", unref_function="")]
@@ -77,10 +124,11 @@ namespace Radare {
 			public char forwarder[256]; // FIXME proper static strings w/o hardcoded size
 			public char bind[256]; // FIXME proper static strings w/o hardcoded size
 			public char type[256]; // FIXME proper static strings w/o hardcoded size
+			public unowned string classname;
 			public uint64 rva;
 			public uint64 offset;
-			public uint32 size;
-			public uint32 ordinal;
+			public uint64 size;
+			public uint64 ordinal;
 		}
 
 		[CCode (cname="RBinImport", free_function="", ref_function="", unref_function="")]
@@ -90,8 +138,9 @@ namespace Radare {
 			public char type[256]; // FIXME proper static strings w/o hardcoded size
 			public uint64 rva;
 			public uint64 offset;
-			public uint32 ordinal;
-			public uint32 hint;
+			public uint64 size;
+			public uint64 ordinal;
+			public uint64 hint;
 		}
 
 		[CCode (cname="RBinReloc", free_function="", ref_function="", unref_function="")]
@@ -107,17 +156,19 @@ namespace Radare {
 		public class Info {
 			public char file[256]; // FIXME proper static strings w/o hardcoded size
 			public char type[256]; // FIXME proper static strings w/o hardcoded size
-			public char @class[256]; // FIXME proper static strings w/o hardcoded size
+			public char bclass[256]; // FIXME proper static strings w/o hardcoded size
 			public char rclass[256]; // FIXME proper static strings w/o hardcoded size
 			public char arch[256]; // FIXME proper static strings w/o hardcoded size
 			public char machine[256]; // FIXME proper static strings w/o hardcoded size
 			public char os[256]; // FIXME proper static strings w/o hardcoded size
 			public char subsystem[256]; // FIXME proper static strings w/o hardcoded size
 			public char rpath[256]; // FIXME proper static strings w/o hardcoded size
+			public unowned string lang;
 			public int bits;
 			public bool has_va;
+			public bool has_pi;
 			public bool big_endian;
-			public uint32 dbg_info;
+			public uint64 dbg_info;
 		}
 
 		[CCode (cname="RBinString", free_function="", ref_function="", unref_function="")]

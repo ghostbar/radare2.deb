@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2012 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2008-2013 - pancake */
 
 #include <r_cons.h>
 #include <stdio.h>
@@ -27,6 +27,22 @@ static inline void r_cons_write (const char *buf, int len) {
 		//exit (1);
 	}
 #endif
+}
+
+R_API void r_cons_color (int fg, int r, int g, int b) {
+	int k;
+	r = R_DIM (r, 0, 255);
+	g = R_DIM (g, 0, 255);
+	b = R_DIM (b, 0, 255);
+	if (r == g && g == b) { // b&w
+		k = 232 + (int)(((r+g+b)/3)/10.3);
+	} else {
+		r = (int)(r/42.6);
+		g = (int)(g/42.6);
+		b = (int)(b/42.6);
+		k = 16 + (r*36) + (g*6) + b;
+	}
+	r_cons_printf ("\x1b[%d;5;%dm", fg? 48: 38, k);
 }
 
 R_API void r_cons_strcat_justify (const char *str, int j, char c) {
@@ -79,9 +95,7 @@ static BOOL __w32_control(DWORD type) {
 	}
 	return R_FALSE;
 }
-#endif
-
-#if __UNIX__
+#elif __UNIX__
 static void resize (int sig) {
 	if (I.event_resize)
 		I.event_resize (I.data);
@@ -90,6 +104,7 @@ static void resize (int sig) {
 
 R_API RCons *r_cons_new () {
 	I.event_interrupt = NULL;
+	I.blankline = R_TRUE;
 	I.event_resize = NULL;
 	I.data = NULL;
 	I.is_interactive = R_TRUE;
@@ -103,7 +118,9 @@ R_API RCons *r_cons_new () {
 	I.buffer_len = 0;
 	r_cons_get_size (NULL);
 	I.num = NULL;
-#if __UNIX__
+#if EMSCRIPTEN
+	/* do nothing here :? */
+#elif __UNIX__
 	tcgetattr (0, &I.term_buf);
 	memcpy (&I.term_raw, &I.term_buf, sizeof (I.term_raw));
 	I.term_raw.c_iflag &= ~(BRKINT|PARMRK|ISTRIP|INLCR|IGNCR|ICRNL|IXON);
@@ -164,6 +181,12 @@ R_API void r_cons_gotoxy(int x, int y) {
 #endif
 #endif
 	r_cons_printf ("\x1b[%d;%dH", y, x);
+}
+
+R_API void r_cons_print_clear() {
+	// xlr8!
+	r_cons_write ("\x1b[0;0H", 6);
+	//r_cons_memcat ("\x1b[2J", 4);
 }
 
 R_API void r_cons_clear_line() {
@@ -233,7 +256,7 @@ R_API void r_cons_flush() {
 			r_cons_reset ();
 
 		} else if (I.buffer_len > CONS_MAX_USER) {
-			if (!r_cons_yesno ('n',"Do you want to print %d bytes? (y/N)",
+			if (!r_cons_yesno ('n',"Do you want to print %d chars? (y/N)",
 					I.buffer_len)) {
 				r_cons_reset ();
 				return;
@@ -241,12 +264,12 @@ R_API void r_cons_flush() {
 		}
 	}
 	if (tee&&*tee) {
-		FILE *d = fopen (tee, "a+");
+		FILE *d = r_sandbox_fopen (tee, "a+");
 		if (d != NULL) {
 			if (I.buffer_len != fwrite (I.buffer, 1, I.buffer_len, d))
 				eprintf ("r_cons_flush: fwrite: error (%s)\n", tee);
 			fclose (d);
-		}
+		} else eprintf ("Cannot write on '%s'\n", tee);
 	}
 	// is_html must be a filter, not a write endpoint
 	if (I.is_html) r_cons_html_print (I.buffer);
@@ -296,7 +319,7 @@ R_API void r_cons_visual_write (char *buffer) {
 				int w = cols-alen;
 				if (ptr>buffer) r_cons_write (ptr-1, len);
 				else r_cons_write (ptr, len-1);
-				if (w>0) { 
+				if (I.blankline && w>0) { 
 					if (w>sizeof (white)-1)
 						w = sizeof (white)-1;
 					r_cons_write (white, w);
@@ -431,7 +454,9 @@ R_API void r_cons_set_raw(int is_raw) {
 	if (oldraw != -1)
 		if (is_raw == oldraw)
 			return;
-#if __UNIX__
+#if EMSCRIPTEN
+	/* do nothing here */
+#elif __UNIX__
 	if (is_raw) tcsetattr (0, TCSANOW, &I.term_raw);
 	else tcsetattr (0, TCSANOW, &I.term_buf);
 #elif __WINDOWS__
@@ -445,8 +470,7 @@ R_API void r_cons_set_raw(int is_raw) {
 }
 
 R_API void r_cons_invert(int set, int color) {
-	if (color) r_cons_strcat (set?  Color_INVERT: Color_INVERT_RESET);
-	else r_cons_strcat (set? "[": "]");
+	r_cons_strcat (R_CONS_INVERT (set, color));
 }
 
 /*
@@ -478,6 +502,7 @@ R_API void r_cons_column(int c) {
 	// align current buffer N chars right
 	r_cons_strcat_justify (b, c, 0);
 	r_cons_gotoxy (0, 0);
+	free(b);
 }
 
 static int lasti = 0; /* last interactive mode */
