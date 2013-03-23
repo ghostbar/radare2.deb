@@ -22,9 +22,6 @@ endif
 %:
 	dh $@
 
-override_dh_auto_clean:
-	-make clean
-
 override_dh_auto_configure:
 	./configure --prefix=/usr --libdir=/usr/lib/$(DEB_HOST_MULTIARCH) ${EXTRA_FLAGS}
 
@@ -37,5 +34,5 @@ override_dh_strip:
 
 override_dh_auto_clean:
 	touch config-user.mk libr/config.mk
-	dh_auto_clean
+	-dh_auto_clean
 	rm config-user.mk libr/config.mk
