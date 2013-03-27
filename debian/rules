@@ -1,7 +1,7 @@
 #!/usr/bin/make -f
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 DEBUG_SUPPORT=0
-EXTRA_FLAGS=--with-sysmagic --without-ssl
+EXTRA_FLAGS=--with-sysmagic
 
 ifeq (arm,$(DEB_HOST_ARCH_CPU))
 DEBUG_SUPPORT=1
