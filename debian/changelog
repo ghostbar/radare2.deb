@@ -3,6 +3,7 @@ radare2 (0.9.4-1) UNRELEASED; urgency=low
   * New upstream release
   * Update debian/copyright
   * Bump Debian Standards Version 3.9.2 -> 3.9.4
+  * Create new -common package for arch independent files
 
  -- Sebastian Reichel <sre@debian.org>  Tue, 02 Oct 2012 15:57:03 +0200
 
