@@ -55,7 +55,7 @@ Package: libradare2-0.9.4
 Section: libs
 Architecture: any
 Pre-Depends: ${misc:Pre-Depends}
-Depends: ${shlibs:Depends}, ${misc:Depends}, libradare2-common (>= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}, libradare2-common (>= ${source:Version})
 Multi-Arch: same
 Description: libraries from the radare2 suite
  The project aims to create a complete, portable, multi-architecture,
@@ -112,6 +112,7 @@ Description: debug symbols for libraries from radare suite
  This package provides the debug symbols for the libraries of radare2.
 
 Package: libradare2-common
+Multi-Arch: foreign
 Architecture: all
 Depends: ${misc:Depends}
 Description: arch independent files from the radare2 suite
