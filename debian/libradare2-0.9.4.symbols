@@ -1478,7 +1478,7 @@ libr_debug.so.0.9.4 libradare2-0.9.4 #MINVER#
  r_debug_desc_list@Base 0.9.4
  r_debug_desc_new@Base 0.9.4
  r_debug_desc_open@Base 0.9.4
- r_debug_desc_plugin_native@Base 0.9.4
+ (arch=amd64 armel armhf i386 mips mipsel)r_debug_desc_plugin_native@Base 0.9.4
  r_debug_desc_read@Base 0.9.4
  r_debug_desc_seek@Base 0.9.4
  r_debug_desc_write@Base 0.9.4
