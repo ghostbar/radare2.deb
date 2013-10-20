@@ -2,6 +2,7 @@ radare2 (0.9.4-2) UNRELEASED; urgency=low
 
   * r_debug_desc_plugin_native is not available on some architectures,
     so make tag it accordingly in *.symbols file.
+  * add patch to fix compilation under kfreebsd
 
  -- Sebastian Reichel <sre@debian.org>  Thu, 17 Oct 2013 11:51:55 +0200
 

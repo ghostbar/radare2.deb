@@ -1,0 +1,14 @@
+Subject: Fix compilation under kfreebsd
+ kfreebsd needs string.h for strlcpy and strlcat.
+Author: Sebastian Reichel <sre@debian.org>
+Last-Update: 2013-10-21
+--- a/libr/debug/p/debug_native.c
++++ b/libr/debug/p/debug_native.c
+@@ -6,6 +6,7 @@
+ #include <r_reg.h>
+ #include <r_lib.h>
+ #include <signal.h>
++#include <string.h>
+ #include <sys/types.h>
+ #include <sys/param.h>
+ #if __UNIX__

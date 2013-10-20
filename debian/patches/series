@@ -1,1 +1,2 @@
+fix-kfreebsd-compilation.patch
 link-needed-libmagic.patch
