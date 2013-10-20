@@ -5,11 +5,9 @@ Reviewed-by: Sebastian Reichel <sre@debian.org>
 Debian-Bug: http://bugs.debian.org/653873
 Forwarded: yes
 
-Index: radare2-0.9/libr/core/Makefile
-===================================================================
---- radare2-0.9.orig/libr/core/Makefile	2011-12-31 18:54:20.000000000 +0000
-+++ radare2-0.9/libr/core/Makefile	2011-12-31 18:57:53.467286854 +0000
-@@ -15,7 +15,7 @@
+--- a/libr/core/Makefile
++++ b/libr/core/Makefile
+@@ -12,7 +12,7 @@
  CFLAGS+=-DLIBDIR=\"${LIBDIR}\"
  CFLAGS+=-DPREFIX=\"${PREFIX}\"
  CFLAGS+=-DWWWROOT=\"${WWWROOT}\"
