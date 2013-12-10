@@ -1,10 +1,11 @@
-radare2 (0.9.4-2) UNRELEASED; urgency=low
+radare2 (0.9.4-2) unstable; urgency=low
 
+  [ Sebastian Reichel ]
   * r_debug_desc_plugin_native is not available on some architectures,
     so make tag it accordingly in *.symbols file.
-  * add patch to fix compilation under kfreebsd
+  * Add patch to fix compilation under GNU/kFreeBSD.
 
- -- Sebastian Reichel <sre@debian.org>  Thu, 17 Oct 2013 11:51:55 +0200
+ -- David Martínez Moreno <ender@debian.org>  Tue, 10 Dec 2013 11:17:44 -0800
 
 radare2 (0.9.4-1) unstable; urgency=low
 
