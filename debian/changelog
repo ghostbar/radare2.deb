@@ -1,3 +1,29 @@
+radare2 (0.9.6-1) UNRELEASED; urgency=low
+
+  * New upstream release.  Main changes are:
+    - r2 now supports UTF-8, RGB and TrueColor ansi codes.
+    - More platforms supported: ARM aarch64, TI c55x+, 8051, Javascript
+      (emscripten), ARCcompact.
+    - ASLR for PIE binaries is now supported by using the -B flag.
+    - MACH0 XNU kernels are now properly loaded.
+    - Added support for TE binaries.
+    - Identify some PC BIOS and UEFI ROMs.
+    - Java Class file parser has been rewritten to support Java7.
+    - Python ctypes, D and Java JNI bindings.
+    - An embedded webserver have been included, and you can invoke it using
+      the `=h' or '=H' commands.
+    - Improved JSON output for many commands. Just append 'j' to the command
+      and it will use that format.
+    - First release with an extensive test suite.
+    - Lots of bugs has been fixed, overflows, memory leaks, and many
+      handcrafted binaries can now be loaded without segfaults, crashes or
+      lack of info.
+  * debian/patches:
+    - fix-kfreebsd-compilation: Refreshed.
+    - link-needed-libmagic: Fixed.
+
+ -- David Martínez Moreno <ender@debian.org>  Wed, 11 Dec 2013 01:38:00 -0800
+
 radare2 (0.9.4-2) unstable; urgency=low
 
   [ Sebastian Reichel ]

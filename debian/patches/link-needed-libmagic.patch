@@ -7,10 +7,10 @@ Forwarded: yes
 
 --- a/libr/core/Makefile
 +++ b/libr/core/Makefile
-@@ -12,7 +12,7 @@
- CFLAGS+=-DLIBDIR=\"${LIBDIR}\"
- CFLAGS+=-DPREFIX=\"${PREFIX}\"
- CFLAGS+=-DWWWROOT=\"${WWWROOT}\"
+@@ -10,7 +10,7 @@
+ OBJS+=anal.o project.o gdiff.o asm.o rtr.o vmenus.o disasm.o patch.o bin.o log.o
+ 
+ include ../db/build.mk
 -LDFLAGS+=${DL_LIBS}
 +LDFLAGS+=${DL_LIBS} -lmagic
  
