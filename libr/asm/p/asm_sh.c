@@ -18,7 +18,7 @@ static int sh_buffer_read_memory (bfd_vma memaddr, bfd_byte *myaddr, unsigned in
 	return 0;
 }
 
-//int print_insn_shl (bfd_vma memaddr, struct disassemble_info *info);
+int print_insn_shl (bfd_vma memaddr, struct disassemble_info *info);
 
 static int symbol_at_address(bfd_vma addr, struct disassemble_info * info) {
 	return 0;
@@ -52,7 +52,7 @@ static int buf_fprintf(void *stream, const char *format, ...) {
 	return ret;
 }
 
-static int disassemble(RAsm *a, struct r_asm_op_t *op, const ut8 *buf, ut64 len) {
+static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	static struct disassemble_info disasm_obj;
 	if (len<2) return -1;
 	buf_global = op->buf_asm;

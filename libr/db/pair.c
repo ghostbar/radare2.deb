@@ -1,8 +1,8 @@
-/* radare - LGPL - Copyright 2011-2012 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2011-2013 pancake */
 
 #include <r_db.h>
 #include <r_util.h>
-#include "sdb/src/sdb.h"
+#include "../../shlr/sdb/src/sdb.h"
 
 R_API void r_pair_set_file (RPair*p, const char *file) {
 	if (!file || !*file) return;
@@ -72,7 +72,7 @@ R_API void r_pair_delete (RPair *p, const char *name) {
 	ut32 hdom;
 	char *dom, *key = strdup (name);
 
-	dom = r_str_lchr (key, '.');
+	dom = (char *)r_str_lchr (key, '.');
 	if (dom) {
 		key = dom+1;
 		*dom = 0;
@@ -111,7 +111,7 @@ R_API char *r_pair_get (RPair *p, const char *name) {
 		return sdb_get (p->sdb, name, NULL);
 
 	key = okey = strdup (name);
-	dom = r_str_lchr (okey, '.');
+	dom = (char*)r_str_lchr (okey, '.');
 	if (dom) {
 		char *tmp = okey;
 		*dom = 0;
@@ -137,7 +137,7 @@ R_API void r_pair_set (RPair *p, const char *name, const char *value) {
 		return;
 	}
 	key = strdup (name);
-	dom = r_str_lchr (key, '.');
+	dom = (char*)r_str_lchr (key, '.');
 	if (dom) {
 		okey = key;
 		*dom = 0;
@@ -156,12 +156,14 @@ R_API RList *r_pair_list (RPair *p, const char *domain) {
 	else s = r_hashtable_lookup (p->ht, r_str_hash (domain));
 	if (s) {
 		RList *list = r_list_new ();
-		char key[SDB_KSZ];
-		char val[SDB_VSZ];
+		char *key, *val;
 		list->free = (RListFree)r_pair_item_free;
 		sdb_dump_begin (s);
-		while (sdb_dump_next (s, key, val))
+		while (sdb_dump_dupnext (s, &key, &val)) {
 			r_list_append (list, r_pair_item_new (key, val));
+			free (key);
+			free (val);
+		}
 		return list;
 	}
 	return NULL;

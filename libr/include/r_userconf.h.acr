@@ -13,10 +13,12 @@
 #define R2_PREFIX "."
 #define R2_LIBDIR "./lib"
 #define R2_INCDIR "./include/libr"
+#define R2_DATDIR "./share"
 #else
 #define R2_PREFIX "@PREFIX@"
 #define R2_LIBDIR "@LIBDIR@"
 #define R2_INCDIR "@INCLUDEDIR@/libr"
+#define R2_DATDIR "@DATADIR@"
 #endif
 
 #define R2_VERSION "@VERSION@"
@@ -24,5 +26,7 @@
 #define USE_LIB_MAGIC @USE_LIB_MAGIC@
 #define HAVE_LIB_SSL @HAVE_OPENSSL@
 #define HAVE_LIB_EWF @HAVE_LIB_EWF@
+
+#define R2_WWWROOT "@DATADIR@/radare2/@VERSION@/www"
 
 #endif

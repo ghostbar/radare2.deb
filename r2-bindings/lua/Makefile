@@ -2,6 +2,7 @@ LANG=lua
 LANG_EXT=lua
 LIBS_PFX=
 
+MY_SOEXT=so
 include ../rules.mk
 
 tri:

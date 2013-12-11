@@ -1,4 +1,6 @@
--include config.mk
+# Requires ./configure
+include config.mk
+
 PREFIX?=/usr
 PYTHON2_CONFIG=python2.7-config
 PYTHON3_CONFIG=python3.2-config
@@ -40,7 +42,7 @@ $(foreach p,${ALANGS},$(eval $(call ADD_lang,$(p))))
 
 ifeq ($(DEVEL_MODE),1)
 LANGS=$(shell cat supported.langs 2>/dev/null)
-all: supported.langs 
+all: supported.langs
 	@for a in ${LANGS} ; do \
 		[ $$a = valac ] && continue; \
 		(cd $$a && ${MAKE} ) ; done
@@ -141,10 +143,13 @@ PYTHON_INSTALL_DIR=${DESTDIR}/${PYTHON_PKGDIR}/r2
 
 .PHONY: purge purge-python install-cxx
 
-purge: purge-python
+purge: purge-python purge-java
 
 install-cxx:
 	@echo TODO: install-cxx
+
+purge-java:
+	cd java && ${MAKE} purge
 
 purge-python:
 	[ -n "${PYTHON_PKGDIR}" ] && \
@@ -159,12 +164,18 @@ install-python:
 	: > ${PYTHON_INSTALL_DIR}/__init__.py ; \
 	cp -rf python/r_*.py python/*.$$E ${PYTHON_INSTALL_DIR}
 
-install-lua:
-	for a in 5.1 ; do \
-		mkdir -p ${DESTDIR}${PREFIX}/lib/lua/$$a ; \
-		echo "Installing lua$$a r2 modules..." ; \
-		cp -rf lua/*.${SOEXT} ${DESTDIR}${PREFIX}/lib/lua/$$a ; \
-	done
+LUAPATH=$(shell strings `../sys/whereis.sh lua`| grep lib/lua | cut -d ';' -f 2 | grep '.so'  | cut -d '?' -f 1)
+
+LUAPKG=$(shell pkg-config --list-all|awk '/lua|lua-/{print $$1;}')
+ifneq (${LUAPKG},)
+LUADIR=$(shell pkg-config --variable=INSTALL_CMOD ${LUAPKG})
+lua-install install-lua:
+	@mkdir -p ${DESTDIR}${LUADIR} ; \
+	echo "Installing lua r2 modules... ${DESTDIR}${LUADIR}" ; \
+	cp -rf lua/*.so ${DESTDIR}${LUADIR}/
+else
+lua-install install-lua:
+endif
 
 install-go:
 	@. ./go/goenv.sh ; \
@@ -176,7 +187,7 @@ install-go:
 	fi
 
 install-java:
-	@echo "TODO: install-java"
+	cd java && ${MAKE} install
 
 install-ruby:
 	for a in 1.8 1.9.1; do \
@@ -247,8 +258,8 @@ mrproper:
 version:
 	@echo ${VERSION}
 
-.PHONY: $(LANGS) $(ALANGS) 
-.PHONY: clean mrproper all vdoc 
-.PHONY: oldtest test 
-.PHONY: w32 w32dist check check-w32 
+.PHONY: $(LANGS) $(ALANGS)
+.PHONY: clean mrproper all vdoc
+.PHONY: oldtest test
+.PHONY: w32 w32dist check check-w32
 .PHONY: deinstall uninstall install version

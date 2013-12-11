@@ -14,22 +14,24 @@ enyo.kind ({
   ra: null,
   components: [
     {kind:"FittableColumns", style:"margin-bottom:5px", components:[
-      {kind: "onyx.Button", content: "[", ontap: "closeSidebar", style: "padding:8px;margin-right:8px"},
-      {onup:"toggleScroll", kind: "onyx.MenuDecorator", onSelect: "itemSelected", components: [
+    {kind: "onyx.Button", content: "[", ontap: "closeSidebar", style: "padding:8px;margin-right:8px"},
+      {onup:"toggleScroll", style:"position:absolute;left:40px;top:0px;", kind: "onyx.MenuDecorator", onSelect: "itemSelected", components: [
         {content: "List elements" },
-        {kind: "onyx.Menu", showOnTop: true, maxHeight:290, style:"height:300px", components: [
+        {kind: "onyx.Menu", showOnTop: true, maxHeight:290, name: "menu", style:"height:300px", components: [
           {content: "flags", value: "2"},
           {content: "flagspaces", value: "2"},
           {classes: "onyx-menu-divider"},
+          {content: "strings", value: "1"},
           {content: "symbols", value: "1"},
           {content: "imports", value: "1"},
+          {content: "relocs", value: "1"},
           {content: "functions", value: "1"},
           {content: "comments", value: "1"},
           {classes: "onyx-menu-divider"},
           {content: "registers", value: "1"},
           {content: "stack", value: "2"},
           {content: "backtrace", value: "3"},
-        ]}
+        ]},
       ]},
     ]},
     {kind: "Scroller", animated: false, fit: true, horizontal: false, name: "scroll", components: [
@@ -47,16 +49,9 @@ enyo.kind ({
     ]}
   ],
   toggleScroll: function() { 
-    this.$.scroll.setShowing (!this.visible);
-/*
-    if (this.visible) 
-      this.$.scroll.hide();
-    else
-      this.$.scroll.show();
-*/
-    this.visible  = !this.visible;
+    var is_visible = this.$.menu.getShowing ();
+    this.$.scroll.setShowing (is_visible);
   },
-  visible: true,
   rowTap: function () {
     /* do something here */
   },
@@ -72,9 +67,8 @@ enyo.kind ({
     var item = this.data[inIndex.index];
     if (!item)
       return false;
-    this.visible = true;
     var msg = item.name + " "+item.offset;
-    console.log(msg);
+    console.log (msg);
     this.$.msg.setContent (msg);
     return true;
   },
@@ -82,10 +76,22 @@ enyo.kind ({
     //this.$.list.setCount (this.data.length);
     //this.$.list.refresh ();
   },
-  itemSelected: function(inSender, inEvent) {
+  itemSelected: function (inSender, inEvent) {
     var self = this;
     var selected = inEvent.originator.content;
+    var is_visible = this.$.menu.getShowing ();
+    r2ui.rp = self;
+    this.$.scroll.setShowing (!!! is_visible);
+    this.$.menu.setShowing (false);
+    this.$.scroll.scrollToTop();
+    //this.$.output.scrollToTop();
     switch (selected) {
+    case "comments":
+      r2.cmd ("CC*", function(x) {
+        x = x.replace (/0x([a-zA-Z0-9]*)/g, "<a style='color:yellow' href='javascript:r2ui.seek(\"0x$1\")'>0x$1</a>");
+	self.$.output.setContent (x);
+      });
+      break;
     case "functions":
       r2.cmd ("afl", function(x) {
         x = x.replace (/0x([a-zA-Z0-9]*)/g, "<a style='color:yellow' href='javascript:r2ui.seek(\"0x$1\")'>0x$1</a>");
@@ -93,8 +99,18 @@ enyo.kind ({
       });
       break;
     case "flagspaces":
-      r2.cmd ("fs", function (x) {
-	self.$.output.setContent (x);
+      this.updateFlagspace ();
+      break;
+    case "strings":
+      r2.cmd ("izj", function(x) {
+	var s = JSON.parse (x);
+        var h = '';
+        for (var i in s) {
+          var off = (+s[i]['offset']).toString(16);
+          h += '<a style="color:yellow" href="javascript:r2ui.opendis(0x'+
+          off+')">0x'+off+'</a> '+s[i]['string']+'<br />';
+        }
+        self.$.output.setContent (h);
       });
       break;
     case "sections":
@@ -104,6 +120,11 @@ enyo.kind ({
       break;
     case "symbols":
       r2.bin_symbols(function (x) {
+	self.$.output.setContent (makelist (x));
+      });
+      break;
+    case "relocs":
+      r2.bin_relocs (function (x) {
 	self.$.output.setContent (makelist (x));
       });
       break;
@@ -123,5 +144,24 @@ enyo.kind ({
   },
   closeSidebar: function() {
     this.ra.setIndex (1);
-  }
+  },
+  selectFlagspace: function (x) {
+    r2.cmd ('fs '+x, function(x) {
+      r2ui.rp.updateFlagspace();
+    });
+  },
+  updateFlagspace: function() {
+      var self = r2ui.rp;
+      r2.cmd ("fsj", function (x) {
+        var s = JSON.parse (x);
+        var h = '';
+        for (var i in s) {
+          var nam = s[i].name;
+          var sel = s[i].selected;
+          h += '<a style="color:yellow" href="javascript:r2ui.rp.selectFlagspace(\''+
+            nam+'\')">'+nam+'</a> '+(sel?"  (selected)":"")+'<br />';
+        }
+        self.$.output.setContent (h);
+      });
+}
 });

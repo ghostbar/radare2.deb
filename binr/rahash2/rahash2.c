@@ -7,11 +7,38 @@
 #include <r_hash.h>
 #include <r_util.h>
 #include <r_print.h>
+#include "../blob/version.c"
 
 static ut64 from = 0LL;
 static ut64 to = 0LL;
 static int incremental = 1;
+static int iterations = 0;
 static int quiet = 0;
+static RHashSeed s = {0}, *_s = NULL;
+
+static void do_hash_seed(const char *seed) {
+	const char *sptr = seed;
+	if (!seed) {
+		_s = NULL;
+		return;
+	}
+	_s = &s;
+	s.buf = (ut8*)malloc (strlen (seed)+128);
+	if (*seed=='^') {
+		s.prefix = 1;
+		sptr++;
+	} else s.prefix = 0;
+	if (!strncmp (sptr, "s:", 2)) {
+		strcpy ((char*)s.buf, sptr+2);
+		s.len = strlen (sptr+2);
+	} else {
+		s.len = r_hex_str2bin (sptr, s.buf);
+		if (s.len<1) {
+			strcpy ((char*)s.buf, sptr);
+			s.len = strlen (sptr);
+		}
+	}
+}
 
 static void do_hash_print(RHash *ctx, int hash, int dlen, int rad) {
 	int i;
@@ -55,16 +82,20 @@ static int do_hash_internal(RHash *ctx, int hash, const ut8 *buf, int len, int r
 			r_print_progressbar (NULL, 12.5 * e, 60);
 			printf ("\n");
 		}
-	} else do_hash_print (ctx, hash, dlen, rad);
+	} else {
+		if (iterations>0)
+			r_hash_do_spice (ctx, hash, iterations, _s);
+		do_hash_print (ctx, hash, dlen, rad);
+	}
 	return 1;
 }
 
+
 static int do_hash(const char *file, const char *algo, RIO *io, int bsize, int rad) {
-	ut8 *buf;
+	ut64 j, fsize, algobit = r_hash_name_to_bits (algo);
 	RHash *ctx;
-	ut64 j, fsize;
+	ut8 *buf;
 	int i;
-	ut64 algobit = r_hash_name_to_bits (algo);
 	if (algobit == R_HASH_NONE) {
 		eprintf ("rahash2: Invalid hashing algorithm specified\n");
 		return 1;
@@ -94,20 +125,34 @@ static int do_hash(const char *file, const char *algo, RIO *io, int bsize, int r
 				int hashbit = i & algobit;
 				int dlen = r_hash_size (hashbit);
 				r_hash_do_begin (ctx, i);
+				if (s.buf && s.prefix) {
+					do_hash_internal (ctx,
+						hashbit, s.buf, s.len, rad, 0);
+				}
 				for (j=from; j<to; j+=bsize) {
 					r_io_read_at (io, j, buf, bsize);
 					do_hash_internal (ctx,
 						hashbit, buf, ((j+bsize)<fsize)?
 						bsize: (fsize-j), rad, 0);
 				}
+				if (s.buf && !s.prefix) {
+					do_hash_internal (ctx,
+						hashbit, s.buf, s.len, rad, 0);
+				}
 				r_hash_do_end (ctx, i);
+				if (iterations>0)
+					r_hash_do_spice (ctx, i, iterations, _s);
 				if (!quiet)
 					printf ("%s: ", file);
 				do_hash_print (ctx, i, dlen, rad);
 			}
 		}
+		if (_s)
+			free (_s->buf);
 	} else {
 		/* iterate over all algorithm bits */
+		if (s.buf)
+			eprintf ("Warning: Seed ignored on per-block hashing.\n");
 		for (i=1; i<0x800000; i<<=1) {
 			ut64 f, t, ofrom, oto;
 			if (algobit & i) {
@@ -134,13 +179,15 @@ static int do_hash(const char *file, const char *algo, RIO *io, int bsize, int r
 }
 
 static int do_help(int line) {
-	printf ("Usage: rahash2 [-rBLkv] [-b sz] [-a algo] [-s str] [-f from] [-t to] [file] ...\n");
+	printf ("Usage: rahash2 [-rBhLkv] [-b sz] [-a algo] [-s str] [-f from] [-t to] [file] ...\n");
 	if (line) return 0;
 	printf (
 	" -a algo     comma separated list of algorithms (default is 'sha256')\n"
 	" -b bsize    specify the size of the block (instead of full file)\n"
 	" -B          show per-block hash\n"
 	" -f from     start hashing at given address\n"
+	" -i num      repeat hash N iterations\n"
+	" -S seed     use given seed (hexa or s:string) use ^ to prefix\n"
 	" -k          show hash using the openssh's randomkey algorithm\n"
 	" -q          run in quiet mode (only show results)\n"
 	" -L          list all available algorithms (see -a)\n"
@@ -163,15 +210,19 @@ static void algolist() {
 }
 
 int main(int argc, char **argv) {
-	RIO *io;
-	RHash *ctx;
-	ut64 algobit;
-	const char *algo = "sha256"; /* default hashing algorithm */
 	int i, ret, c, rad = 0, quit = 0, bsize = 0, numblocks = 0;
+	const char *algo = "sha256"; /* default hashing algorithm */
+	const char *seed = NULL;
+	char *hashstr = NULL;
+	ut64 algobit;
+	RHash *ctx;
+	RIO *io;
 
-	while ((c = getopt (argc, argv, "rva:s:b:nBhf:t:kLq")) != -1) {
+	while ((c = getopt (argc, argv, "rva:i:S:s:b:nBhf:t:kLq")) != -1) {
 		switch (c) {
 		case 'q': quiet = 1; break;
+		case 'i': iterations = atoi (optarg); break;
+		case 'S': seed = optarg; break;
 		case 'n': numblocks = 1; break;
 		case 'L': algolist (); return 0;
 		case 'r': rad = 1; break;
@@ -181,29 +232,53 @@ int main(int argc, char **argv) {
 		case 'b': bsize = (int)r_num_math (NULL, optarg); break;
 		case 'f': from = r_num_math (NULL, optarg); break;
 		case 't': to = r_num_math (NULL, optarg); break;
-		case 'v': printf ("rahash2 v"R2_VERSION"\n"); return 0;
+		case 'v': return blob_version ("rahash2");
 		case 'h': return do_help (0);
-		case 's':
-			  algobit = r_hash_name_to_bits (algo);
-			  for (i=1; i<0x800000; i<<=1) {
-				  ut64 f, t, ofrom, oto;
-				  if (algobit & i) {
-					  int hashbit = i & algobit;
-					  ctx = r_hash_new (R_TRUE, hashbit);
-					  from = 0;
-					  to = strlen (optarg);
-					  do_hash_internal (ctx, //0, strlen (optarg),
-							  hashbit, (const ut8*) optarg,
-							  strlen (optarg), rad, 1);
-					  r_hash_free (ctx);
-					  quit = R_TRUE;
-				  }
-			  }
-			break;
+		case 's': hashstr = optarg; break;
 		default: eprintf ("rahash2: Unknown flag\n"); return 1;
 		}
 	}
-
+	do_hash_seed (seed);
+	if (hashstr && !strcmp (hashstr, "-")) {
+		hashstr = malloc(1024);
+		fread ((void*)hashstr, 1, 1023, stdin);
+		hashstr[1023] = 0;
+	}
+	if (hashstr) {
+		char *str = (char *)hashstr;
+		int strsz = strlen (hashstr);
+		if (_s) {
+			// alloc/concat/resize
+			str = malloc (strsz + s.len);
+			if (s.prefix) {
+				memcpy (str, s.buf, s.len);
+				strcpy (str+s.len, hashstr);
+			} else {
+				strcpy (str, hashstr);
+				memcpy (str+strsz, s.buf, s.len);
+			}
+			strsz += s.len;
+			str[strsz] = 0;
+		}
+		algobit = r_hash_name_to_bits (algo);
+		for (i=1; i<0x800000; i<<=1) {
+			if (algobit & i) {
+				int hashbit = i & algobit;
+				ctx = r_hash_new (R_TRUE, hashbit);
+				from = 0;
+				to = strsz;
+				do_hash_internal (ctx, hashbit,
+					(const ut8*)str, strsz, rad, 1);
+				r_hash_free (ctx);
+				quit = R_TRUE;
+			}
+		}
+		if (_s) {
+			free (str);
+			free (s.buf);
+		}
+		return 0;
+	}
 	if (quit)
 		return 0;
 	if (optind>=argc)

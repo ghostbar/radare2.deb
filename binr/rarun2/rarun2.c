@@ -13,7 +13,6 @@
 
 #define NARGS (sizeof (_args)/sizeof(*_args))
 static char *_args[512] = {NULL};
-
 static char *_program = NULL;
 static char *_stdin = NULL;
 static char *_stdout = NULL;
@@ -30,6 +29,57 @@ static char *_connect = NULL;
 static char *_listen = NULL;
 static int _timeout = 0;
 
+static char *getstr(const char *src) {
+	int len;
+	char *ret;
+	switch (*src) {
+	case '\'':
+		ret = strdup (src+1);
+		if (ret) {
+			len = strlen (ret);
+			if (len>0) {
+				len--;
+				if (ret[len]=='\'') {
+					ret[len] = 0;
+					return ret;
+				} else eprintf ("Missing \"\n");
+			}
+		}
+		return NULL;
+	case '"':
+		ret = strdup (src+1);
+		if (ret) {
+			len = strlen (ret);
+			if (len>0) {
+				len--;
+				if (ret[len]=='"') {
+					ret[len] = 0;
+					r_str_escape (ret);
+					return ret;
+				} else eprintf ("Missing \"\n");
+			}
+		}
+		return NULL;
+	case '@':
+		// slurp file
+		return r_file_slurp (src+1, NULL);
+	case ':':
+		// hexpairs
+		ret = strdup (src);
+		len = r_hex_str2bin (src+1, (ut8*)ret);
+		if (len>0) {
+			ret[len] = 0;
+			return ret;
+		} else {
+			eprintf ("Invalid hexpair string\n");
+			return NULL;
+		}
+	}
+	ret = strdup (src);
+	r_str_escape (ret);
+	return ret;
+}
+
 static void parseline (char *b) {
 	char *e = strchr (b, '=');
 	if (!e) return;
@@ -41,7 +91,10 @@ static void parseline (char *b) {
 	else if (!strcmp (b, "connect")) _connect = strdup (e);
 	else if (!strcmp (b, "listen")) _listen = strdup (e);
 	else if (!strcmp (b, "stdout")) _stdout = strdup (e);
-	else if (!strcmp (b, "stdin")) _stdin = strdup (e);
+	else if (!strcmp (b, "stdio")) {
+		_stdout = _stderr = _stdin = strdup (e);
+	} else if (!strcmp (b, "stdin")) _stdin = strdup (e);
+	else if (!strcmp (b, "stderr")) _stderr = strdup (e);
 	else if (!strcmp (b, "input")) _input = strdup (e);
 	else if (!strcmp (b, "chdir")) _chgdir = strdup (e);
 	else if (!strcmp (b, "chroot")) _chroot = strdup (e);
@@ -53,11 +106,30 @@ static void parseline (char *b) {
 	else if (!memcmp (b, "arg", 3)) {
 		int n = atoi (b+3);
 		if (n>=0 && n<NARGS) {
-			_args[n] = strdup (e);
-			r_str_escape (_args[n]);
+			_args[n] = getstr (e);
 		} else eprintf ("Out of bounds args index: %d\n", n);
-	} else if (!strcmp (b, "timeout")) _timeout = atoi (e);
-	else if (!strcmp (b, "setenv")) {
+	} else if (!strcmp (b, "timeout")) {
+		_timeout = atoi (e);
+	} else if (!strcmp (b, "envfile")) {
+		char *p, buf[1024];
+		FILE *fd = fopen (e, "r");
+		if (!fd) {
+			eprintf ("Cannot open '%s'\n", e);
+			return;
+		}
+		for (;;) {
+			fgets (buf, sizeof (buf)-1, fd);
+			if (feof (fd)) break;
+			p = strchr (buf, '=');
+			if (p) {
+				*p = 0;
+				r_sys_setenv (buf, p+1);
+			}
+		}
+		fclose (fd);
+	} else if (!strcmp (b, "unsetenv")) {
+		r_sys_setenv (e, NULL);
+	} else if (!strcmp (b, "setenv")) {
 		char *v = strchr (e, '=');
 		if (v) {
 			*v++ = 0;
@@ -89,12 +161,12 @@ static int runfile () {
 		dup2 (f, 0);
 	}
 	if (_stdout) {
-		int f = open (_stdout, O_RDONLY);
+		int f = open (_stdout, O_WRONLY);
 		close (1);
 		dup2 (f, 1);
 	}
 	if (_stderr) {
-		int f = open (_stderr, O_RDONLY);
+		int f = open (_stderr, O_WRONLY);
 		close (2);
 		dup2 (f, 2);
 	}
@@ -160,7 +232,11 @@ static int runfile () {
 #endif
 	if (_preload) {
 #if __APPLE__
+		// 10.6
 		r_sys_setenv ("DYLD_PRELOAD", _preload);
+		r_sys_setenv ("DYLD_INSERT_LIBRARIES", _preload);
+		// 10.8
+		r_sys_setenv ("DYLD_FORCE_FLAT_NAMESPACE", "1");
 #else
 		r_sys_setenv ("LD_PRELOAD", _preload);
 #endif
@@ -171,7 +247,7 @@ static int runfile () {
 		if (!fork ()) {
 			sleep (_timeout);
 			if (!kill (mypid, 0))
-				fprintf (stderr, "\nrarun2: Interrupted by timeout\n");
+				eprintf ("\nrarun2: Interrupted by timeout\n");
 			kill (mypid, SIGKILL);
 			exit (0);
 		}
@@ -191,15 +267,22 @@ int main(int argc, char **argv) {
 	FILE *fd;
 	char *file, buf[4096];
 	if (argc==1 || !strcmp (argv[1], "-h")) {
-		fprintf (stderr, "Usage: rarun2 [-v] [script.rr2] [directive ..]\n");
+		eprintf ("Usage: rarun2 [-v] [script.rr2] [directive ..]\n");
 		printf (
 			"program=/bin/ls\n"
 			"arg1=/bin\n"
-			"# arg#=...\n"
+			"# arg2=hello\n"
+			"# arg3=\"hello\\nworld\"\n"
+			"# arg4=:048490184058104849\n"
+			"# arg4=@arg.txt\n"
 			"setenv=FOO=BAR\n"
+			"# unsetenv=FOO\n"
+			"# envfile=environ.txt\n"
 			"timeout=3\n"
 			"# connect=localhost:8080\n"
 			"# listen=8080\n"
+			"# #stdio=blah.txt\n"
+			"# #stderr=foo.txt\n"
 			"# stdout=foo.txt\n"
 			"# stdin=input.txt\n"
 			"# input=input.txt\n"
@@ -220,7 +303,7 @@ int main(int argc, char **argv) {
 	if (*file && !strchr (file, '=')) {
 		fd = fopen (file, "r");
 		if (!fd) {
-			fprintf (stderr, "Cannot open %s\n", file);
+			eprintf ("Cannot open %s\n", file);
 			return 1;
 		}
 		for (;;) {

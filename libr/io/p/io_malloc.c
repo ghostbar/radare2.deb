@@ -19,18 +19,22 @@ typedef struct {
 static int __write(RIO *io, RIODesc *fd, const ut8 *buf, int count) {
 	if (fd == NULL || fd->data == NULL)
 		return -1;
+	if (io->off > RIOMALLOC_SZ (fd))
+		return -1;
 	if (io->off+count > RIOMALLOC_SZ (fd))
 		count -= (io->off+count-(RIOMALLOC_SZ (fd)));
-	if (count>0)
+	if (count>0) {
 		memcpy (RIOMALLOC_BUF (fd)+io->off, buf, count);
-	return count;
+		return count;
+	}
+	return -1;
 }
 
 static int __read(RIO *io, RIODesc *fd, ut8 *buf, int count) {
 	memset (buf, 0xff, count);
 	if (fd == NULL || fd->data == NULL)
 		return -1;
-	if (io->off>= RIOMALLOC_SZ (fd))
+	if (io->off>RIOMALLOC_SZ (fd))
 		return -1;
 	if (io->off+count >= RIOMALLOC_SZ (fd))
 		count = RIOMALLOC_SZ (fd) - io->off;
@@ -70,7 +74,7 @@ static int __plugin_open(struct r_io_t *io, const char *pathname) {
 static RIODesc *__open(struct r_io_t *io, const char *pathname, int rw, int mode) {
 	if (__plugin_open (io, pathname)) {
 		RIOMalloc *mal = R_NEW (RIOMalloc);
-		mal->fd = -1; /* causes r_io_desc_new() to set the correct fd */
+		mal->fd = -2; /* causes r_io_desc_new() to set the correct fd */
 		if (!memcmp (pathname, "hex://", 6)) {
 			mal->size = strlen (pathname);
 			mal->buf = malloc (mal->size);
@@ -87,8 +91,10 @@ static RIODesc *__open(struct r_io_t *io, const char *pathname, int rw, int mode
 			}
 		}
 		if (mal->buf != NULL)
-			return r_io_desc_new (&r_io_plugin_malloc, mal->fd, pathname, rw, mode, mal);
-		eprintf ("Cannot allocate (%s) %d bytes\n", pathname+9, mal->size);
+			return r_io_desc_new (&r_io_plugin_malloc, mal->fd,
+				pathname, rw, mode, mal);
+		eprintf ("Cannot allocate (%s) %d bytes\n", pathname+9,
+			mal->size);
 		free (mal);
 	}
 	return NULL;

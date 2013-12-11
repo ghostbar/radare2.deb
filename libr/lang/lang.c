@@ -1,9 +1,12 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 #include <r_lang.h>
 #include <r_util.h>
 
+R_LIB_VERSION(r_lang);
+
 #include "p/vala.c" // hardcoded
+
 
 RLang *__lang = NULL;
 R_API void r_lang_plugin_free (RLangPlugin *p) {
@@ -91,7 +94,7 @@ R_API int r_lang_setup(RLang *lang) {
 }
 
 R_API int r_lang_add(RLang *lang, RLangPlugin *foo) {
-	if (foo && (!r_lang_get (lang, foo->name))) {
+	if (foo && (!r_lang_get_by_name (lang, foo->name))) {
 		if (foo->init)
 			foo->init (lang);
 		r_list_append (lang->langs, foo);
@@ -109,7 +112,19 @@ R_API int r_lang_list(RLang *lang) {
 	return R_FALSE;
 }
 
-R_API RLangPlugin *r_lang_get (RLang *lang, const char *name) {
+R_API RLangPlugin *r_lang_get_by_extension (RLang *lang, const char *ext) {
+	RListIter *iter;
+	RLangPlugin *h;
+	const char *p = r_str_lchr (ext, '.');
+	if (p) ext = p+1;
+	r_list_foreach (lang->langs, iter, h) {
+		if (!strcmp (h->ext, ext))
+			return h;
+	}
+	return NULL;
+}
+
+R_API RLangPlugin *r_lang_get_by_name (RLang *lang, const char *name) {
 	RListIter *iter;
 	RLangPlugin *h;
 	r_list_foreach (lang->langs, iter, h) {
@@ -120,7 +135,7 @@ R_API RLangPlugin *r_lang_get (RLang *lang, const char *name) {
 }
 
 R_API int r_lang_use(RLang *lang, const char *name) {
-	RLangPlugin *h = r_lang_get (lang, name);
+	RLangPlugin *h = r_lang_get_by_name (lang, name);
 	if (h) {
 		lang->cur = h;
 		return R_TRUE;
@@ -193,13 +208,27 @@ R_API int r_lang_prompt(RLang *lang) {
 		if (!p) break;
 		r_line_hist_add (p);
 		strcpy (buf, p);
+		if (*buf == '!') {
+			r_sandbox_system (buf+1, 1);
+			continue;
+		}
+		if (!memcmp (buf, ". ", 2)) {
+			char *file = r_file_abspath (buf+2);
+			if (file) {
+				r_lang_run_file (lang, file);
+				free (file);
+			}
+			continue;
+		}
 		if (!strcmp (buf, "q"))
 			return R_TRUE;
 		if (!strcmp (buf, "?")) {
 			RLangDef *def;
 			RListIter *iter;
-			eprintf("  ?    - show this help message\n"
-				"  q    - quit\n");
+			eprintf("  ?        - show this help message\n"
+				"  !command - run system command\n"
+				"  . file   - interpret file\n"
+				"  q        - quit prompt\n");
 			if (lang->cur) {
 				eprintf ("%s example:\n", lang->cur->name);
 				if (lang->cur->help)

@@ -8,6 +8,10 @@
 #undef __UNIX__
 #undef __WINDOWS__
 
+#ifdef __HAIKU__
+# define __UNIX__ 1
+#endif
+
 #if defined (__FreeBSD__) || defined (__FreeBSD_kernel__)
 #define __KFBSD__ 1
 #else
@@ -47,6 +51,19 @@
 #include <sys/time.h>
 #include <fcntl.h> /* for O_RDONLY */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifndef GIT_TAP
+#define GIT_TAP R2_VERSION
+#endif
+
+#define R_LIB_VERSION_HEADER(x) \
+const char *x##_version();
+#define R_LIB_VERSION(x) \
+const char *x##_version() { return ""GIT_TAP; }
+
 // TODO: FS or R_SYS_DIR ??
 #undef FS
 #if __WINDOWS__
@@ -59,12 +76,18 @@
 #define R_SYS_HOME "HOME"
 #endif
 
-/* provide a per-module debug-enabled feature */
-// TODO NOT USED. DEPREACATE
-#if R_DEBUG
-#define IFDBG
+#define R2_HOMEDIR ".config/radare2"
+
+#ifndef __packed
+#define __packed __attribute__((__packed__))
+#endif
+
+#ifndef UNUSED
+#ifdef __GNUC__
+#define UNUSED __attribute__((__unused__))
 #else
-#define IFDBG if (0)
+#define UNUSED
+#endif
 #endif
 
 typedef void (*PrintfCallback)(const char *str, ...);
@@ -82,16 +105,23 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #define CTI(x,y,z) (*((size_t*)(CTA(x,y,z))))
 #define CTS(x,y,z,t,v) {t* _=(t*)CTA(x,y,z);*_=v;}
 
+#ifdef R_API
+#undef R_API
+#endif
 #if R_SWIG
   #define R_API export
 #elif R_INLINE
   #define R_API inline
 #else
-  #define R_API
+  #if defined(__GNUC__)
+    #define R_API __attribute__((visibility("default")))
+  #else
+    #define R_API
+  #endif
 #endif
 
 #define BITS2BYTES(x) ((x/8)+((x%8)?1:0))
-#define ZERO_FILL(x) memset (x, 0, sizeof (x))
+#define ZERO_FILL(x) memset (&x, 0, sizeof (x))
 #define R_NEWS0(x,y) (x*)memset (malloc(sizeof(x)*y), 0, sizeof(x)*y);
 #define R_NEWS(x,y) (x*)malloc(sizeof(x)*y)
 #define R_NEW(x) (x*)malloc(sizeof(x))
@@ -101,6 +131,13 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #define IS_PRINTABLE(x) (x>=' '&&x<='~')
 #define IS_WHITESPACE(x) (x==' '||x=='\t')
 #define R_MEM_ALIGN(x) ((void *)(size_t)(((ut64)(size_t)x) & 0xfffffffffffff000LL))
+
+#define R_PTR_ALIGN(v,t) \
+	((char *)(((size_t)(v) ) \
+	& ~(t - 1))) 
+#define R_PTR_ALIGN_NEXT(v,t) \
+	((char *)(((size_t)(v) + (t - 1)) \
+	& ~(t - 1))) 
 
 #define R_BIT_SET(x,y) (x[y>>4] |= (1<<(y&0xf)))
 #define R_BIT_UNSET(x,y) (x[y>>4] &= ~(1<<(y&0xf)))
@@ -121,8 +158,8 @@ typedef void (*PrintfCallback)(const char *str, ...);
 
 #define eprintf(x,y...) fprintf(stderr,x,##y)
 
-#define R_ROUND(x,y) ((x)%(y))? (x)+((y)-((x)%(y))): (x)
-#define R_DIM(x,y,z) (x<y?y:x>z?z:x)
+#define R_ROUND(x,y) ((x)%(y))?(x)+((y)-((x)%(y))):(x)
+#define R_DIM(x,y,z) (((x)<(y))?(y):((x)>(z))?(z):(x))
 #define R_MAX(x,y) ((x)>(y))?x:y
 #define R_MIN(x,y) ((x)>(y))?y:x
 #define R_ABS(x) (((x)<0)?-(x):(x))
@@ -217,6 +254,8 @@ enum {
 	R_SYS_ARCH_ARC = 0x8000,
 	R_SYS_ARCH_I8080 = 0x10000,
 	R_SYS_ARCH_RAR = 0x20000,
+	R_SYS_ARCH_8051 = 0x40000,
+	R_SYS_ARCH_C55PLUS = 0x80000,
 };
 
 /* os */
@@ -245,6 +284,10 @@ enum {
 #define R_SYS_ENDIAN "big"
 #endif
 
+#ifdef __cplusplus
+}
+#endif
+
 #endif
 
 // Usage: R_DEFINE_OBJECT(r_asm);
@@ -257,3 +300,4 @@ enum {
     return (type##_deinit(foo), free(foo), NULL); \
  }
 #endif
+

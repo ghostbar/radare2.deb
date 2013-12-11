@@ -2,6 +2,27 @@
 
 #include "r_core.h"
 
+
+R_API int r_core_seek_base (RCore *core, const char *hex) {
+	int i;
+	ut64 n = 0;
+	ut64 addr = core->offset;
+	ut64 mask = 0LL;
+	char * p;
+
+	i = strlen (hex) * 4;
+	p = malloc (strlen (hex)+10);
+	if (p) {
+		strcpy (p, "0x");
+		strcpy (p+2, hex);
+		n = r_num_math (core->num, p);
+		free (p);
+	}
+	mask = UT64_MAX << i;
+	addr = (addr & mask) | n;
+	return r_core_seek (core, addr, 1);
+}
+
 R_API int r_core_dump(RCore *core, const char *file, ut64 addr, ut64 size) {
 	ut64 i;
 	ut8 *buf;
@@ -44,12 +65,40 @@ R_API int r_core_write_op(RCore *core, const char *arg, char op) {
 	if (buf == NULL || str == NULL)
 		goto beach;
 	memcpy (buf, core->block, core->blocksize);
-	len = r_hex_str2bin (arg, (ut8 *)str);
-	if (len==-1) {
-		eprintf ("Invalid hexpair string\n");
-		goto beach;
-	}
+	if (op!='e') {
+		len = r_hex_str2bin (arg, (ut8 *)str);
+		if (len==-1) {
+			eprintf ("Invalid hexpair string\n");
+			goto beach;
+		}
+	} else len = 0;
 
+	if (op=='e') {
+		char *p, *s = strdup (arg);
+		int n, from = 0, to = 0, dif = 0, step = 1;
+		n = from = to;
+		to = UT8_MAX;
+		//
+		p = strchr (s, ' ');
+		if (p) {
+			*p = 0;
+			step = atoi (p+1);
+		}
+		p = strchr (s, '-');
+		if (p) {
+			*p = 0;
+			to = atoi (p+1);
+		}
+		if (to<1 || to>UT8_MAX) to = UT8_MAX;
+		from = atoi (s);
+		free (s);
+		dif = (to<=from)? UT8_MAX: (to-from)+1;
+		from %= (UT8_MAX+1);
+		if (dif<1) dif = UT8_MAX+1;
+		if (step<1) step = 1;
+		for (i=n=0; i<core->blocksize; i++, n+= step)
+			buf[i] = (ut8)(n%dif)+from;
+	} else
 	if (op=='2' || op=='4') {
 		op -= '0';
 		for (i=0; i<core->blocksize; i+=op) {
@@ -88,6 +137,35 @@ beach:
 	return ret;
 }
 
+R_API int r_core_seek_archbits (RCore *core, ut64 addr) {
+	static char *oldarch = NULL;
+	static int oldbits = 32;
+	int bits = 0;// = core->io->section->bits;
+	const char *arch = r_io_section_get_archbits (core->io, addr, &bits);
+	if (arch && bits) {
+		if (!oldarch) {
+			RBinInfo *info = r_bin_get_info (core->bin);
+			if (info) {
+				oldarch = strdup (info->arch);
+				oldbits = info->bits;
+			} else {
+				oldarch = strdup (r_config_get (core->config, "asm.arch"));
+				oldbits = 32;
+			}
+		}
+		r_config_set (core->config, "asm.arch", arch);
+		r_config_set_i (core->config, "asm.bits", bits);
+		return 1;
+	}
+	if (oldarch) {
+		r_config_set (core->config, "asm.arch", oldarch);
+		r_config_set_i (core->config, "asm.bits", oldbits);
+		free (oldarch);
+		oldarch = NULL;
+	}
+	return 0;
+}
+
 R_API boolt r_core_seek(RCore *core, ut64 addr, boolt rb) {
 	RIOSection *newsection;
 	ut64 old = core->offset;
@@ -110,7 +188,7 @@ R_API boolt r_core_seek(RCore *core, ut64 addr, boolt rb) {
 		//core->offset = addr;
 		if (!core->io->va)
 			return R_FALSE;
-		memset (core->block, 0xff, core->blocksize);
+		//memset (core->block, 0xff, core->blocksize);
 	} else core->offset = addr;
 	if (rb) {
 		ret = r_core_block_read (core, 0);
@@ -128,15 +206,33 @@ R_API boolt r_core_seek(RCore *core, ut64 addr, boolt rb) {
 		}
 	}
 	if (core->section != newsection) {//&& core->io->section->arch) {
-		int bits = 0;// = core->io->section->bits;
-		const char *arch = r_io_section_get_archbits (core->io, core->offset, &bits);
-		if (arch && bits) {
-			r_config_set (core->config, "asm.arch", arch);
-			r_config_set_i (core->config, "asm.bits", bits);
-		}
+		r_core_seek_archbits (core, core->offset);
 		core->section = core->io->section;
 	}
 	return (ret==-1)? R_FALSE: R_TRUE;
+}
+
+R_API int r_core_seek_delta(RCore *core, st64 addr) {
+	ut64 tmp = core->offset;
+	int ret;
+	if (addr == 0)
+		return R_TRUE;
+	if (addr>0LL) {
+		/* check end of file */
+		if (0) addr = 0;
+		else addr += tmp;
+	} else {
+		/* check < 0 */
+		if (-addr > tmp) addr = 0;
+		else addr += tmp;
+	}
+	core->offset = addr;
+	ret = r_core_seek (core, addr, 1);
+	//ret = r_core_block_read (core, 0);
+	//if (ret == -1)
+	//	memset (core->block, 0xff, core->blocksize);
+	//	core->offset = tmp;
+	return ret;
 }
 
 R_API int r_core_write_at(RCore *core, ut64 addr, const ut8 *buf, int size) {
@@ -160,7 +256,8 @@ R_API int r_core_block_read(RCore *core, int next) {
 		return -1;
 	}
 	r_io_set_fd (core->io, core->file->fd);
-	off = r_io_seek (core->io, core->offset+((next)?core->blocksize:0), R_IO_SEEK_SET);
+	off = r_io_seek (core->io, core->offset+((next)?core->blocksize:0),
+		R_IO_SEEK_SET);
 	if (off == UT64_MAX) {
 		memset (core->block, 0xff, core->blocksize);
 // TODO: do continuation in io
@@ -191,5 +288,5 @@ R_API int r_core_read_at(RCore *core, ut64 addr, ut8 *buf, int size) {
 	if (addr>=core->offset && addr<=core->offset+core->blocksize)
 		r_core_block_read (core, 0);
 #endif
-	return (ret==size); //UT64_MAX);
+	return (ret==size);
 }

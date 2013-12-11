@@ -1,6 +1,32 @@
 /* radare - LGPL - Copyright 2007-2013 pancake */
 
 #include "r_hash.h"
+#include "r_util.h"
+
+R_LIB_VERSION(r_hash);
+
+struct { const char *name; ut64 bit; }
+static const hash_name_bytes[] = {
+	 {"all", UT64_MAX},
+	 {"xor", R_HASH_XOR},
+	 {"xorpair", R_HASH_XORPAIR},
+	 {"md4", R_HASH_MD4},
+	 {"md5", R_HASH_MD5},
+	 {"sha1", R_HASH_SHA1},
+	 {"sha256", R_HASH_SHA256},
+	 {"sha384", R_HASH_SHA384},
+	 {"sha512", R_HASH_SHA512},
+	 {"crc16", R_HASH_CRC16},
+	 {"crc32", R_HASH_CRC32},
+	 {"adler32", R_HASH_ADLER32},
+	 {"xxhash", R_HASH_XXHASH},
+	 {"parity", R_HASH_PARITY},
+	 {"entropy", R_HASH_ENTROPY},
+	 {"hamdist", R_HASH_HAMDIST},
+	 {"pcprint", R_HASH_PCPRINT},
+	 {"mod255", R_HASH_MOD255},
+	 {NULL, 0}
+};
 
 /* returns 0-100 */
 R_API int r_hash_pcprint(const ut8 *buffer, ut64 len) {
@@ -54,25 +80,12 @@ R_API ut8 r_hash_deviation(const ut8 *b, ut64 len) {
 	return c;
 }
 
-/* TODO: rewrite in a non-spaguetty way */
 R_API const char *r_hash_name(ut64 bit) {
-	if (bit & R_HASH_MD4) return "md4";
-	if (bit & R_HASH_MD5) return "md5";
-	if (bit & R_HASH_SHA1) return "sha1";
-	if (bit & R_HASH_SHA256) return "sha256";
-	if (bit & R_HASH_SHA384) return "sha384";
-	if (bit & R_HASH_SHA512) return "sha512";
-	if (bit & R_HASH_CRC16) return "crc16";
-	if (bit & R_HASH_CRC32) return "crc32";
-	if (bit & R_HASH_PARITY) return "parity";
-	if (bit & R_HASH_ENTROPY) return "entropy";
-	if (bit & R_HASH_HAMDIST) return "hamdist";
-	if (bit & R_HASH_XOR) return "xor";
-	if (bit & R_HASH_XORPAIR) return "xorpair";
-	if (bit & R_HASH_MOD255) return "mod255";
-	if (bit & R_HASH_PCPRINT) return "pcprint";
-	if (bit & R_HASH_XXHASH) return "xxhash";
-	return "";
+    int i;
+    for (i=1; hash_name_bytes[i].bit; i++)
+        if (bit & hash_name_bytes[i].bit)
+            return hash_name_bytes[i].name;
+    return "";
 }
 
 R_API int r_hash_size(int bit) {
@@ -85,6 +98,7 @@ R_API int r_hash_size(int bit) {
 	if (bit & R_HASH_CRC16) return R_HASH_SIZE_CRC16;
 	if (bit & R_HASH_CRC32) return R_HASH_SIZE_CRC32;
 	if (bit & R_HASH_XXHASH) return R_HASH_SIZE_XXHASH;
+	if (bit & R_HASH_ADLER32) return R_HASH_SIZE_ADLER32;
 	if (bit & R_HASH_PARITY) return 1;
 	if (bit & R_HASH_ENTROPY) return 4; // special case
 	if (bit & R_HASH_HAMDIST) return 1;
@@ -94,25 +108,58 @@ R_API int r_hash_size(int bit) {
 	if (bit & R_HASH_PCPRINT) return 1;
 	return 0;
 }
-/* TODO: ignore case.. we have to use strcasestr */
+
 R_API ut64 r_hash_name_to_bits(const char *name) {
+	int i = 0, j, len = 0;
+	char name_lowercase[128];
+	const char* ptr = name_lowercase;
 	ut64 bits = R_HASH_NONE;
-	if (strstr (name, "all")) return UT64_MAX;
-	if (strstr (name, "md4")) bits |= R_HASH_MD4;
-	if (strstr (name, "md5")) bits |= R_HASH_MD5;
-	if (strstr (name, "sha1")) bits |= R_HASH_SHA1;
-	if (strstr (name, "sha256")) bits |= R_HASH_SHA256;
-	if (strstr (name, "sha384")) bits |= R_HASH_SHA384;
-	if (strstr (name, "sha512")) bits |= R_HASH_SHA512;
-	if (strstr (name, "crc16")) bits |= R_HASH_CRC16;
-	if (strstr (name, "crc32")) bits |= R_HASH_CRC32;
-	if (strstr (name, "xxhash")) bits |= R_HASH_XXHASH;
-	if (strstr (name, "xorpair")) bits |= R_HASH_XORPAIR;
-	else if (strstr (name, "xor")) bits |= R_HASH_XOR;
-	if (strstr (name, "parity")) bits |= R_HASH_PARITY;
-	if (strstr (name, "entropy")) bits |= R_HASH_ENTROPY;
-	if (strstr (name, "hamdist")) bits |= R_HASH_HAMDIST;
-	if (strstr (name, "pcprint")) bits |= R_HASH_PCPRINT;
-	if (strstr (name, "mod255")) bits |= R_HASH_MOD255;
+
+	for (j=0;name[j] && j<sizeof (name_lowercase); j++)
+		name_lowercase[j] = tolower (name[j]);
+	name_lowercase[j] = 0;
+
+	while (name_lowercase[i++]) {
+		len++;
+		if (name_lowercase[i] == ',') {
+			for (j=0; hash_name_bytes[j].name; j++) {
+				if (!strncmp (ptr, hash_name_bytes[j].name, len)) {
+					bits |= hash_name_bytes[j].bit;
+					break;
+				}
+			}
+			ptr = name_lowercase + i + 1;
+			len = -1;
+		}
+		while (name_lowercase[i+1] == ' ') {
+			i++;
+			ptr++;
+		}
+	}
+	for (i=0; hash_name_bytes[i].name; i++) { //last word of the list
+		if (!strcmp (ptr, hash_name_bytes[i].name))
+			bits |= hash_name_bytes[i].bit;
+	}
 	return bits;
+}
+
+R_API void r_hash_do_spice(RHash *ctx, int algo, int loops, RHashSeed *seed) {
+	ut8 buf[1024];
+	int i, len, dlen, hlen = r_hash_size (algo);
+	for (i = 0; i< loops; i++) {
+		if (seed) {
+			if (seed->prefix) {
+				memcpy (buf, seed->buf, seed->len);
+				memcpy (buf+seed->len, ctx->digest, hlen);
+			} else {
+				memcpy (buf, ctx->digest, hlen);
+				memcpy (buf+hlen, seed->buf, seed->len);
+			}
+			len = hlen + seed->len;
+		} else {
+			memcpy (buf, ctx->digest, hlen);
+			len = hlen;
+		}
+		dlen = r_hash_calculate (ctx, algo, buf, len);
+	}
 }

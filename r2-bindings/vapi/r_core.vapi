@@ -90,7 +90,8 @@ public class RCore {
 	public RConfig* get_config ();
 	public RCore();
 
-	public static unowned RCore cast(uint64 ptr);
+	public static unowned RCore ncast(uint64 ptr);
+	public static unowned RCore cast(void *p);
 	public bool loadlibs();
 	/* commands */
 	public int prompt(bool sync);
@@ -100,6 +101,7 @@ public class RCore {
 	//public int cmdf(...);
 	public int cmd(string cmd, bool log);
 	public int cmd0(string cmd);
+	public void cmd_flush ();
 	public void cmd_init ();
 
 	// XXX. must be const in .h public int cmd_foreach(string cmd, string each);

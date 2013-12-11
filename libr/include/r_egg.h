@@ -7,6 +7,12 @@
 #include <r_util.h>
 #include <r_syscall.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+R_LIB_VERSION_HEADER(r_egg);
+
 #define R_EGG_INCDIR_ENV "EGG_INCDIR"
 #define R_EGG_INCDIR_PATH R2_PREFIX"/lib/radare2/"R2_VERSION"/egg"
 
@@ -37,15 +43,28 @@ typedef struct r_egg_t {
 	int endian;
 	int bits;
 	ut32 os;
+	int context;
 } REgg;
 
 /* XXX: this may fail in different arches */
-#define R_EGG_OS_LINUX 0xcd21ce66
-#define R_EGG_OS_OSX 0x1bf9e4
-#define R_EGG_OS_DARWIN 0x5e417f87
-#define R_EGG_OS_MACOS 0xdc208773
-#define R_EGG_OS_W32 0x1dd9f6
-#define R_EGG_OS_WINDOWS 0xc9f3d7f
+#if 0
+r2 -q - <<EOF
+?e #define R_EGG_OS_LINUX \`?h linux\`
+?e #define R_EGG_OS_OSX \`?h osx\`
+?e #define R_EGG_OS_DARWIN \`?h darwin\`
+?e #define R_EGG_OS_MACOS \`?h macos\`
+?e #define R_EGG_OS_W32 \`?h w32\`
+?e #define R_EGG_OS_WINDOWS \`?h windows\`
+?e #define R_EGG_OS_BEOS \`?h beos\`
+EOF
+#endif
+#define R_EGG_OS_LINUX 0x5ca62a43
+#define R_EGG_OS_OSX 0x0ad593a1
+#define R_EGG_OS_DARWIN 0xd86d1ae2
+#define R_EGG_OS_MACOS 0x5cb23c16
+#define R_EGG_OS_W32 0x0ad5fbb3
+#define R_EGG_OS_WINDOWS 0x05b7de9a
+#define R_EGG_OS_BEOS 0x506108be
 
 #if __APPLE__
 #define R_EGG_OS_DEFAULT R_EGG_OS_OSX
@@ -141,4 +160,9 @@ extern REggPlugin r_egg_plugin_xor;
 extern REggPlugin r_egg_plugin_shya;
 extern REggPlugin r_egg_plugin_exec;
 #endif
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

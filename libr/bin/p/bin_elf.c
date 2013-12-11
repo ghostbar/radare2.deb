@@ -1,5 +1,6 @@
-/* radare - LGPL - Copyright 2009-2013 - nibble */
+/* radare - LGPL - Copyright 2009-2013 - nibble, pancake */
 
+#include <stdio.h>
 #include <r_types.h>
 #include <r_util.h>
 #include <r_lib.h>
@@ -67,45 +68,79 @@ static RList* sections(RBinArch *arch) {
 	if (!(ret = r_list_new ()))
 		return NULL;
 	ret->free = free;
-	if (!(section = Elf_(r_bin_elf_get_sections) (arch->bin_obj)))
-		return ret;
-	for (i = 0; !section[i].last; i++) {
-		if (!section[i].size) continue;
-		if (!(ptr = R_NEW (RBinSection)))
-			break;
-		strncpy (ptr->name, (char*)section[i].name, R_BIN_SIZEOF_STRINGS);
-		ptr->size = section[i].size;
-		ptr->vsize = section[i].size;
-		ptr->offset = section[i].offset;
-		ptr->rva = section[i].rva;
-		// HACK
-		if (ptr->rva == 0) ptr->rva = section[i].offset;
-		ptr->srwx = 0;
-		if (R_BIN_ELF_SCN_IS_EXECUTABLE (section[i].flags))
-			ptr->srwx |= 1;
-		if (R_BIN_ELF_SCN_IS_WRITABLE (section[i].flags))
-			ptr->srwx |= 2;
-		if (R_BIN_ELF_SCN_IS_READABLE (section[i].flags))
-			ptr->srwx |= 4;
-		r_list_append (ret, ptr);
+	if ((section = Elf_(r_bin_elf_get_sections) (arch->bin_obj))) {
+		for (i = 0; !section[i].last; i++) {
+			if (!section[i].size) continue;
+			if (!(ptr = R_NEW0 (RBinSection)))
+				break;
+			strncpy (ptr->name, (char*)section[i].name, R_BIN_SIZEOF_STRINGS);
+			ptr->size = section[i].size;
+			ptr->vsize = section[i].size;
+			ptr->offset = section[i].offset;
+			ptr->rva = section[i].rva;
+			// HACK
+			if (ptr->rva == 0) ptr->rva = section[i].offset;
+			ptr->srwx = 0;
+			if (R_BIN_ELF_SCN_IS_EXECUTABLE (section[i].flags))
+				ptr->srwx |= 1;
+			if (R_BIN_ELF_SCN_IS_WRITABLE (section[i].flags))
+				ptr->srwx |= 2;
+			if (R_BIN_ELF_SCN_IS_READABLE (section[i].flags))
+				ptr->srwx |= 4;
+			r_list_append (ret, ptr);
+		}
+		free (section); // TODO: use r_list_free here
 	}
-	free (section); // TODO: use r_list_free here
 
 	// program headers is another section
 	if (r_list_empty (ret)) {
+		int found = 0;
+#define USE_PHDR 0
+#if USE_PHDR
+		struct Elf_(r_bin_elf_obj_t)* obj = arch->bin_obj;
+		int i, n, num = obj->ehdr.e_phnum;
+		Elf_(Phdr)* phdr = obj->phdr;
+		for (i=n=0; i<num; i++) {
+			if (phdr && phdr[i].p_type == 1) {
+				found = 1;
+				ut64 paddr = phdr[i].p_offset;
+				ut64 vaddr = phdr[i].p_vaddr;
+				int memsz = (int)phdr[i].p_memsz;
+				int perms = phdr[i].p_flags;
+				ut64 align = phdr[i].p_align;
+				if (!align) align = 0x1000;
+				memsz = (int)(size_t)R_PTR_ALIGN_NEXT ((size_t)memsz, align);
+				paddr = (ut64)R_PTR_ALIGN ((ut64)paddr, align);
+				vaddr = (ut64)R_PTR_ALIGN ((ut64)vaddr, align);
+				vaddr -= obj->baddr; // yeah
+				if (!(ptr = R_NEW0 (RBinSection)))
+					return ret;
+				sprintf (ptr->name, "phdr%d", n);
+				ptr->size = memsz;
+				ptr->vsize = memsz;
+				ptr->offset = paddr;
+				ptr->rva = vaddr;
+				ptr->srwx = perms;
+				r_list_append (ret, ptr);
+				n++;
+			}
+		}
+#endif
 		if (!arch->size) {
 			struct Elf_(r_bin_elf_obj_t) *bin = arch->bin_obj;
 			arch->size = bin? bin->size: 0x9999;
 		}
-		if (!(ptr = R_NEW (RBinSection)))
-			return ret;
-		strncpy (ptr->name, "undefined", R_BIN_SIZEOF_STRINGS);
-		ptr->size = arch->size;
-		ptr->vsize = arch->size;
-		ptr->offset = 0;
-		ptr->rva = 0;
-		ptr->srwx = 7;
-		r_list_append (ret, ptr);
+		if (found == 0) {
+			if (!(ptr = R_NEW0 (RBinSection)))
+				return ret;
+			sprintf (ptr->name, "undefined");
+			ptr->size = arch->size;
+			ptr->vsize = arch->size;
+			ptr->offset = 0;
+			ptr->rva = 0;
+			ptr->srwx = 7;
+			r_list_append (ret, ptr);
+		} 
 	}
 	return ret;
 }
@@ -113,12 +148,30 @@ static RList* sections(RBinArch *arch) {
 static RList* symbols(RBinArch *arch) {
 	RList *ret = NULL;
 	RBinSymbol *ptr = NULL;
+	ut64 base = 0;
 	struct r_bin_elf_symbol_t *symbol = NULL;
+	struct Elf_(r_bin_elf_obj_t) *bin = arch->bin_obj;
 	int i;
+
+	int has_va = Elf_(r_bin_elf_has_va) (arch->bin_obj);
+	if (!has_va) {
+		// find base address for non-linked object (.o) //
+		if (arch->o->sections) {
+			RBinSection *s;
+			RListIter *iter;
+			r_list_foreach (arch->o->sections, iter, s) {
+				if (s->srwx & 1) {
+					base = s->offset;
+					break;
+				}
+			}
+		}
+	}
 
 	if (!(ret = r_list_new ()))
 		return NULL;
 	ret->free = free;
+
 	if (!(symbol = Elf_(r_bin_elf_get_symbols) (arch->bin_obj, R_BIN_ELF_SYMBOLS)))
 		return ret;
 	for (i = 0; !symbol[i].last; i++) {
@@ -128,13 +181,38 @@ static RList* symbols(RBinArch *arch) {
 		strncpy (ptr->forwarder, "NONE", R_BIN_SIZEOF_STRINGS);
 		strncpy (ptr->bind, symbol[i].bind, R_BIN_SIZEOF_STRINGS);
 		strncpy (ptr->type, symbol[i].type, R_BIN_SIZEOF_STRINGS);
+		ptr->rva = symbol[i].offset + base;
+		ptr->offset = symbol[i].offset + base;
+		ptr->size = symbol[i].size;
+		ptr->ordinal = symbol[i].ordinal;
+		if(bin->symbols_by_ord && ptr->ordinal < bin->symbols_by_ord_size)
+			bin->symbols_by_ord[ptr->ordinal] = ptr;
+		r_list_append (ret, ptr);
+	}
+	free (symbol);
+
+	if (!(symbol = Elf_(r_bin_elf_get_symbols) (arch->bin_obj, R_BIN_ELF_IMPORTS)))
+		return ret;
+	for (i = 0; !symbol[i].last; i++) {
+		if (!symbol[i].size)
+			continue;
+		if (!(ptr = R_NEW (RBinSymbol)))
+			break;
+		// TODO(eddyb) make a better distinction between imports and other symbols.
+		snprintf (ptr->name, R_BIN_SIZEOF_STRINGS, "imp.%s", symbol[i].name);
+		strncpy (ptr->forwarder, "NONE", R_BIN_SIZEOF_STRINGS);
+		strncpy (ptr->bind, symbol[i].bind, R_BIN_SIZEOF_STRINGS);
+		strncpy (ptr->type, symbol[i].type, R_BIN_SIZEOF_STRINGS);
 		ptr->rva = symbol[i].offset;
 		ptr->offset = symbol[i].offset;
 		ptr->size = symbol[i].size;
 		ptr->ordinal = symbol[i].ordinal;
+		if(bin->symbols_by_ord && ptr->ordinal < bin->symbols_by_ord_size)
+			bin->symbols_by_ord[ptr->ordinal] = ptr;
 		r_list_append (ret, ptr);
 	}
 	free (symbol);
+
 	return ret;
 }
 
@@ -142,6 +220,7 @@ static RList* imports(RBinArch *arch) {
 	RList *ret = NULL;
 	RBinImport *ptr = NULL;
 	struct r_bin_elf_symbol_t *import = NULL;
+	struct Elf_(r_bin_elf_obj_t) *bin = arch->bin_obj;
 	int i;
 
 	if (!(ret = r_list_new ()))
@@ -155,11 +234,9 @@ static RList* imports(RBinArch *arch) {
 		strncpy (ptr->name, import[i].name, R_BIN_SIZEOF_STRINGS);
 		strncpy (ptr->bind, import[i].bind, R_BIN_SIZEOF_STRINGS);
 		strncpy (ptr->type, import[i].type, R_BIN_SIZEOF_STRINGS);
-		ptr->rva = import[i].offset;
-		ptr->offset = import[i].offset;
-		ptr->size = import[i].size;
 		ptr->ordinal = import[i].ordinal;
-		ptr->hint = 0;
+		if(bin->imports_by_ord && ptr->ordinal < bin->imports_by_ord_size)
+			bin->imports_by_ord[ptr->ordinal] = ptr;
 		r_list_append (ret, ptr);
 	}
 	free (import);
@@ -185,25 +262,107 @@ static RList* libs(RBinArch *arch) {
 	return ret;
 }
 
+static RBinReloc *reloc_convert(struct Elf_(r_bin_elf_obj_t) *bin, RBinElfReloc *rel, ut64 GOT) {
+	RBinReloc *r = NULL;
+	ut64 B = bin->baddr, P = B + rel->rva;
+	char *str;
+
+	if (!(r = R_NEW (RBinReloc)))
+		return r;
+
+	r->import = NULL;
+	r->addend = rel->addend;
+	if (rel->sym) {
+		if (rel->sym < bin->imports_by_ord_size && bin->imports_by_ord[rel->sym])
+			r->import = bin->imports_by_ord[rel->sym];
+		else if (rel->sym < bin->symbols_by_ord_size && bin->symbols_by_ord[rel->sym])
+			r->addend += B + bin->symbols_by_ord[rel->sym]->rva;
+	}
+	r->rva = rel->rva;
+	r->offset = rel->offset;
+
+	#define SET(T) r->type = R_BIN_RELOC_ ## T; r->additive = 0; return r
+	#define ADD(T, A) r->type = R_BIN_RELOC_ ## T; r->addend += A; r->additive = !rel->is_rela; return r
+
+	switch (bin->ehdr.e_machine) {
+	case EM_386: switch (rel->type) {
+		case R_386_NONE:     break; // malloc then free. meh. then again, there's no real world use for _NONE.
+		case R_386_32:       ADD(32, 0);
+		case R_386_PC32:     ADD(32,-P);
+		case R_386_GLOB_DAT: SET(32);
+		case R_386_JMP_SLOT: SET(32);
+		case R_386_RELATIVE: ADD(32, B);
+		case R_386_GOTOFF:   ADD(32,-GOT);
+		case R_386_GOTPC:    ADD(32, GOT-P);
+		case R_386_16:       ADD(16, 0);
+		case R_386_PC16:     ADD(16,-P);
+		case R_386_8:        ADD(8,  0);
+		case R_386_PC8:      ADD(8, -P);
+		default: eprintf("TODO(eddyb): uninmplemented ELF/x86 reloc type %i\n", rel->type);
+		}
+		break;
+	case EM_X86_64: switch (rel->type) {
+		case R_X86_64_NONE:		break; // malloc then free. meh. then again, there's no real world use for _NONE.
+		case R_X86_64_64:		ADD(64, 0);
+		case R_X86_64_PC32:		ADD(32,-P);
+		case R_X86_64_GLOB_DAT:	SET(64);
+		case R_X86_64_JUMP_SLOT:SET(64);
+		case R_X86_64_RELATIVE:	ADD(64, B);
+		case R_X86_64_32:		ADD(32, 0);
+		case R_X86_64_32S:		ADD(32, 0);
+		case R_X86_64_16:		ADD(16, 0);
+		case R_X86_64_PC16:		ADD(16,-P);
+		case R_X86_64_8:		ADD(8,  0);
+		case R_X86_64_PC8:		ADD(8, -P);
+		default: eprintf("TODO(eddyb): uninmplemented ELF/x64 reloc type %i\n", rel->type);
+		}
+		break;
+	case EM_ARM: switch (rel->type) {
+		case R_ARM_NONE:		break; // malloc then free. meh. then again, there's no real world use for _NONE.
+		case R_ARM_ABS32:		ADD(32, 0);
+		case R_ARM_REL32:		ADD(32,-P);
+		case R_ARM_ABS16:		ADD(16, 0);
+		case R_ARM_ABS8:		ADD(8,  0);
+		case R_ARM_SBREL32:		ADD(32, -B);
+		case R_ARM_GLOB_DAT:	ADD(32, 0);
+		case R_ARM_JUMP_SLOT:	ADD(32, 0);
+		case R_ARM_RELATIVE:	ADD(32, B);
+		case R_ARM_GOTOFF:		ADD(32,-GOT);
+		default: eprintf("TODO(eddyb): uninmplemented ELF/ARM reloc type %i\n", rel->type);
+		}
+		break;
+	default:
+		if (!(str = Elf_(r_bin_elf_get_machine_name) (bin)))
+			break;
+		eprintf("TODO(eddyb): uninmplemented ELF reloc_convert for %s\n", str);
+		free(str);
+	}
+
+	#undef SET
+	#undef ADD
+
+	free(r);
+	return 0;
+}
+
 static RList* relocs(RBinArch *arch) {
 	RList *ret = NULL;
 	RBinReloc *ptr = NULL;
-	struct r_bin_elf_reloc_t *relocs = NULL;
+	RBinElfReloc *relocs = NULL;
+	ut64 got_addr;
 	int i;
 
 	if (!(ret = r_list_new ()))
 		return NULL;
 	ret->free = free;
+	if ((got_addr = Elf_ (r_bin_elf_get_section_addr) (arch->bin_obj, ".got")) == -1 &&
+		(got_addr = Elf_ (r_bin_elf_get_section_addr) (arch->bin_obj, ".got.plt")) == -1)
+		return ret;
 	if (!(relocs = Elf_(r_bin_elf_get_relocs) (arch->bin_obj)))
 		return ret;
 	for (i = 0; !relocs[i].last; i++) {
-		if (!(ptr = R_NEW (RBinReloc)))
+		if (!(ptr = reloc_convert(arch->bin_obj, &relocs[i], got_addr)))
 			break;
-		strncpy (ptr->name, relocs[i].name, R_BIN_SIZEOF_STRINGS);
-		ptr->rva = relocs[i].rva;
-		ptr->offset = relocs[i].offset;
-		ptr->type = relocs[i].type;
-		ptr->sym = relocs[i].sym;
 		r_list_append (ret, ptr);
 	}
 	free (relocs);
@@ -222,28 +381,28 @@ static RBinInfo* info(RBinArch *arch) {
 		strncpy (ret->rpath, str, R_BIN_SIZEOF_STRINGS);
 		free (str);
 	} else strncpy (ret->rpath, "NONE", R_BIN_SIZEOF_STRINGS);
-	if ((str = Elf_(r_bin_elf_get_file_type) (arch->bin_obj)) == NULL)
+	if (!(str = Elf_(r_bin_elf_get_file_type) (arch->bin_obj)))
 		return NULL;
 	strncpy (ret->type, str, R_BIN_SIZEOF_STRINGS);
 	ret->has_pi = (strstr (str, "DYN"))? 1: 0;
 	free (str);
-	if ((str = Elf_(r_bin_elf_get_elf_class) (arch->bin_obj)) == NULL)
+	if (!(str = Elf_(r_bin_elf_get_elf_class) (arch->bin_obj)))
 		return NULL;
 	strncpy (ret->bclass, str, R_BIN_SIZEOF_STRINGS);
 	free (str);
-	if ((str = Elf_(r_bin_elf_get_osabi_name) (arch->bin_obj)) == NULL)
+	if (!(str = Elf_(r_bin_elf_get_osabi_name) (arch->bin_obj)))
 		return NULL;
 	strncpy (ret->os, str, R_BIN_SIZEOF_STRINGS);
 	free (str);
-	if ((str = Elf_(r_bin_elf_get_osabi_name) (arch->bin_obj)) == NULL)
+	if (!(str = Elf_(r_bin_elf_get_osabi_name) (arch->bin_obj)))
 		return NULL;
 	strncpy (ret->subsystem, str, R_BIN_SIZEOF_STRINGS);
 	free (str);
-	if ((str = Elf_(r_bin_elf_get_machine_name) (arch->bin_obj)) == NULL)
+	if (!(str = Elf_(r_bin_elf_get_machine_name) (arch->bin_obj)))
 		return NULL;
 	strncpy (ret->machine, str, R_BIN_SIZEOF_STRINGS);
 	free (str);
-	if ((str = Elf_(r_bin_elf_get_arch) (arch->bin_obj)) == NULL)
+	if (!(str = Elf_(r_bin_elf_get_arch) (arch->bin_obj)))
 		return NULL;
 	strncpy (ret->arch, str, R_BIN_SIZEOF_STRINGS);
 	free (str);

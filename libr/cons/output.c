@@ -43,6 +43,18 @@ void w32_gotoxy(int x, int y) {
         SetConsoleCursorPosition (hStdout, coord);
 }
 
+static int wrapline (const char *s, int len) {
+	int l, n = 0;
+	for (; n<len; ) {
+		l = r_str_len_utf8char (s+n, (len-n));
+		n += l;
+	}
+	if (n>len)
+		n -= l;
+	else n--;
+	return n;
+}
+
 R_API int r_cons_w32_print(ut8 *ptr, int empty) {
 	HANDLE hConsole = GetStdHandle (STD_OUTPUT_HANDLE);
 	int esc = 0;
@@ -63,6 +75,7 @@ R_API int r_cons_w32_print(ut8 *ptr, int empty) {
 			if (ll<1)
 				continue;
 			if (empty) {
+				// TODO: Fix utf8 chop
 				/* only chop columns if necessary */
 				if (linelen+ll>cols) {
 					// chop line if too long
@@ -101,12 +114,15 @@ R_API int r_cons_w32_print(ut8 *ptr, int empty) {
 					}
 				}
 				write (1, "\n\r", 2);
+				//write (1, "\r\n", 2);
 				//lines--;
 				linelen = 0;
 			}
 			if (linelen+ll>cols) {
 				// chop line if too long
 				ll = (cols-linelen)-1;
+				// fix utf8 len here
+				ll = wrapline (str, cols-linelen-1);
 			}
 			if (ll>0) {
 				write (1, str, ll);
@@ -128,6 +144,54 @@ R_API int r_cons_w32_print(ut8 *ptr, int empty) {
 			continue;
 		} else 
 		if (esc == 2) {
+			{
+				int x, y;
+				char *ptr2 = NULL;
+				int i, state = 0;
+				for (i=0; ptr[i] && state>=0; i++) {
+					switch (state) {
+					case 0:
+						if (ptr[i]==';') {
+							y = atoi (ptr);
+							state = 1;
+							ptr2 = ptr+i+1;
+						} else 
+						if (ptr[i] >='0' && ptr[i]<='9') {
+							// ok
+						} else state = -1; // END FAIL
+						break;
+					case 1:
+						if (ptr[i]=='H') {
+							x = atoi (ptr2);
+							state = -2; // END OK
+						} else
+						if (ptr[i] >='0' && ptr[i]<='9') {
+							// ok
+						} else state = -1; // END FAIL
+						break;
+					}
+				}
+				if (state == -2) {
+					w32_gotoxy (x, y);
+					ptr += i;
+					str = ptr + 1;// + i-2;
+					continue;
+				}
+			}
+			if (ptr[0]=='0'&&ptr[1]==';'&&ptr[2]=='0') {
+				// \x1b[0;0H
+				/** clear screen if gotoxy **/
+				if (empty) {
+					// fill row here
+					fill_tail(cols, lines);
+				}
+				w32_gotoxy (0, 0);
+				lines = 0;
+				esc = 0;
+				ptr += 3;
+				str = ptr + 1;
+				continue;
+			} else
 			if (ptr[0]=='2'&&ptr[1]=='J') {
 				//fill_tail(cols, lines);
 				w32_clear (); //r_cons_clear ();

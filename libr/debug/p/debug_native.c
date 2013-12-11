@@ -8,14 +8,42 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/param.h>
-#if __UNIX__
-#include <errno.h>
-#endif
 
 #if DEBUGGER
+
+#if __UNIX__
+#include <errno.h>
+#include <sys/ptrace.h>
+#include <sys/wait.h>
+#include <signal.h>
+#endif
+
 static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig);
 static int r_debug_native_reg_read(RDebug *dbg, int type, ut8 *buf, int size);
 static int r_debug_native_reg_write(RDebug *dbg, int type, const ut8* buf, int size);
+
+static int r_debug_handle_signals (RDebug *dbg) {
+#if __linux__
+	siginfo_t siginfo = {0};
+	int ret = ptrace (PTRACE_GETSIGINFO, dbg->pid, 0, &siginfo);
+	if (ret != -1 && siginfo.si_signo>0) {
+		siginfo_t newsiginfo = {0};
+		//ptrace (PTRACE_SETSIGINFO, dbg->pid, 0, &siginfo);
+		dbg->reason = R_DBG_REASON_SIGNAL;
+		dbg->signum = siginfo.si_signo;
+		// siginfo.si_code -> USER, KERNEL or WHAT
+#if 0
+		eprintf ("[+] SIGNAL %d errno=%d code=%d ret=%d\n",
+			siginfo.si_signo, siginfo.si_errno,
+			siginfo.si_code, ret2);
+#endif
+		return R_TRUE;
+	}
+	return R_FALSE;
+#else
+	return -1;
+#endif
+}
 
 #define MAXBT 128
 
@@ -159,18 +187,12 @@ ut32[16]
 #endif
 
 #elif __sun
-#include <sys/ptrace.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 #define R_DEBUG_REG_T gregset_t
 #undef DEBUGGER
 #define DEBUGGER 0
 #warning No debugger support for SunOS yet
 
 #elif __linux__
-#include <sys/ptrace.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 #include <limits.h>
 
 struct user_regs_struct_x86_64 {
@@ -238,7 +260,6 @@ task_t pid_to_task(int pid) {
 	}
 	old_pid = pid;
 	old_task = task;
-
 	return task;
 }
 
@@ -273,7 +294,7 @@ static int r_debug_native_step(RDebug *dbg) {
 	regs.EFlags |= 0x100;
 	r_debug_native_reg_write (pid, dbg->tid, R_REG_TYPE_GPR, &regs, sizeof (regs));
 */
-	r_debug_native_continue (dbg, pid, dbg->tid, -1);
+	r_debug_native_continue (dbg, pid, dbg->tid, dbg->signum);
 #elif __APPLE__
 	//debug_arch_x86_trap_set (dbg, 1);
 	// TODO: not supported in all platforms. need dbg.swstep=
@@ -312,6 +333,7 @@ static int r_debug_native_step(RDebug *dbg) {
 	//printf("NATIVE STEP over PID=%d\n", pid);
 	addr = r_debug_reg_get (dbg, "pc");
 	ret = ptrace (PTRACE_SINGLESTEP, pid, (void*)(size_t)addr, 0); //addr, data);
+	r_debug_handle_signals (dbg);
 	if (ret == -1) {
 		perror ("native-singlestep");
 		ret = R_FALSE;
@@ -325,16 +347,14 @@ static int r_debug_native_attach(RDebug *dbg, int pid) {
 	int ret = -1;
 #if __WINDOWS__
 	HANDLE hProcess = OpenProcess (PROCESS_ALL_ACCESS, FALSE, pid);
-	if (hProcess != (HANDLE)NULL && DebugActiveProcess (pid)) {
+	if (hProcess != (HANDLE)NULL && DebugActiveProcess (pid))
 		ret = w32_first_thread (pid);
-	} else ret = -1;
+	else ret = -1;
 	ret = w32_first_thread (pid);
 #elif __APPLE__ || __KFBSD__
 	ret = ptrace (PT_ATTACH, pid, 0, 0);
-	if (ret!=-1) {
-		perror ("ptrace(PT_ATTACH)");
-		ret = pid;
-	}
+	if (ret!=-1)
+		perror ("ptrace (PT_ATTACH)");
 	ret = pid;
 #else
 	ret = ptrace (PTRACE_ATTACH, pid, 0, 0);
@@ -369,9 +389,7 @@ static int r_debug_native_continue_syscall(RDebug *dbg, int pid, int num) {
 /* TODO: specify thread? */
 /* TODO: must return true/false */
 static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig) {
-	void *data = NULL;
-	if (sig != -1)
-		data = (void*)(size_t)sig;
+	void *data = (void*)(size_t)((sig != -1)?sig: dbg->signum);
 #if __WINDOWS__
 	if (ContinueDebugEvent (pid, tid, DBG_CONTINUE) == 0) {
 		print_lasterr ((char *)__FUNCTION__);
@@ -394,7 +412,7 @@ static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig) {
 	ret = waitpid (pid, &status, 0);
 #endif
 /*
-        ptrace(PT_ATTACHEXC, pid, 0, 0);
+        ptrace (PT_ATTACHEXC, pid, 0, 0);
 
         if (task_threads (pid_to_task (pid), &inferior_threads,
 			&inferior_thread_count) != KERN_SUCCESS) {
@@ -407,13 +425,14 @@ static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig) {
 	return 1;
 #else
 	//ut64 rip = r_debug_reg_get (dbg, "pc");
-	ptrace (PT_CONTINUE, pid, (void*)(size_t)1, 0); // 0 = send no signal TODO !! implement somewhere else
+	ptrace (PT_CONTINUE, pid, (void*)(size_t)1, data);
         return 0;
 #endif
 #elif __BSD__
 	ut64 pc = r_debug_reg_get (dbg, "pc");
 	return ptrace (PTRACE_CONT, pid, (void*)(size_t)pc, (int)data);
 #else
+//eprintf ("SIG %d\n", dbg->signum);
 	return ptrace (PTRACE_CONT, pid, NULL, data);
 #endif
 }
@@ -422,19 +441,31 @@ static int r_debug_native_wait(RDebug *dbg, int pid) {
 #if __WINDOWS__
 	return w32_dbg_wait (dbg, pid);
 #else
-	int ret, status = -1;
+	int stopsig, ret, status = -1;
 	//printf ("prewait\n");
 	if (pid==-1)
 		return R_DBG_REASON_UNKNOWN;
 	ret = waitpid (pid, &status, 0);
 	//printf ("status=%d (return=%d)\n", status, ret);
 	// TODO: switch status and handle reasons here
+	r_debug_handle_signals (dbg);
+
+	if (WIFSTOPPED (status)) {
+		stopsig = WSTOPSIG (status);
+		dbg->signum = WSTOPSIG (status);
+		status = R_DBG_REASON_SIGNAL;
+	} else
+#if 0
+	if (WIFEXITED (status)) {
+		status = R_DBG_REASON_DEAD;
+	} else
+#endif
 	if (status == 0 || ret == -1) {
 		status = R_DBG_REASON_DEAD;
 	} else {
 		if (ret != pid)
 			status = R_DBG_REASON_NEW_PID;
-		else status = R_DBG_REASON_UNKNOWN;
+		else status = dbg->reason;
 	}
 	return status;
 #endif
@@ -774,6 +805,66 @@ PC = 272
 	);
 #elif (__i386__ || __x86_64__) && __linux__
 if (dbg->bits & R_SYS_BITS_32) {
+#if __x86_64__
+	// 64bit host debugging 32bit binary
+	return strdup (
+	"=pc	eip\n"
+	"=sp	esp\n"
+	"=bp	ebp\n"
+	"=a0	eax\n"
+ 	"=a1	ebx\n"
+ 	"=a2	ecx\n"
+ 	"=a3	edi\n"
+	"gpr	eip	.32	128	0\n"
+	"gpr	ip	.16	128	0\n"
+	"gpr	oeax	.32	120	0\n"
+	"gpr	eax	.32	80	0\n"
+	"gpr	ax	.16	80	0\n"
+	"gpr	ah	.8	80	0\n"
+	"gpr	al	.8	81	0\n"
+	"gpr	ebx	.32	40	0\n"
+	"gpr	bx	.16	40	0\n"
+	"gpr	bh	.8	40	0\n"
+	"gpr	bl	.8	41	0\n"
+	"gpr	ecx	.32	88	0\n"
+	"gpr	cx	.16	88	0\n"
+	"gpr	ch	.8	88	0\n"
+	"gpr	cl	.8	89	0\n"
+	"gpr	edx	.32	96	0\n"
+	"gpr	dx	.16	96	0\n"
+	"gpr	dh	.8	96	0\n"
+	"gpr	dl	.8	97	0\n"
+	"gpr	esp	.32	152	0\n"
+	"gpr	sp	.16	152	0\n"
+	"gpr	ebp	.32	32	0\n"
+	"gpr	bp	.16	32	0\n"
+	"gpr	esi	.32	104	0\n"
+	"gpr	si	.16	104	0\n"
+	"gpr	edi	.32	112	0\n"
+	"gpr	di	.16	112	0\n"
+	"seg	xfs	.32	200	0\n"
+	"seg	xgs	.32	208	0\n"
+	"seg	xcs	.32	136	0\n"
+	"seg	cs	.16	136	0\n"
+	"seg	xss	.32	160	0\n"
+	"gpr	eflags	.32	144	0	c1p.a.zstido.n.rv\n"
+	"gpr	flags	.16	144	0\n"
+	"flg	carry	.1	.1152	0\n"
+	"flg	flag_p	.1	.1153	0\n"
+	"flg	flag_a	.1	.1154	0\n"
+	"flg	zero	.1	.1155	0\n"
+	"flg	sign	.1	.1156	0\n"
+	"flg	flag_t	.1	.1157	0\n"
+	"flg	flag_i	.1	.1158	0\n"
+	"flg	flag_d	.1	.1159	0\n"
+	"flg	flag_o	.1	.1160	0\n"
+	"flg	flag_r	.1	.1161	0\n"
+ 	"drx	dr0	.32	0	0\n"
+ 	"drx	dr1	.32	4	0\n"
+ 	"drx	dr2	.32	8	0\n"
+	);
+#else
+	// 32bit host debugging 32bit target
 	return strdup (
 	"=pc	eip\n"
 	"=sp	esp\n"
@@ -835,7 +926,9 @@ if (dbg->bits & R_SYS_BITS_32) {
 	"drx	dr6	.32	24	0\n"
 	"drx	dr7	.32	28	0\n"
 	);
+#endif
 } else {
+	// 64bit host debugging 64bit target
 	return strdup (
 	"=pc	rip\n"
 	"=sp	rsp\n"
@@ -1851,6 +1944,50 @@ static RList *r_debug_native_sysctl_map (RDebug *dbg) {
 }
 #endif
 
+static RDebugMap* r_debug_native_map_alloc(RDebug *dbg, ut64 addr, int size) {
+#if __APPLE__
+	RDebugMap *map = NULL;
+	kern_return_t ret;
+	unsigned char *base = (unsigned char *)addr;
+	boolean_t anywhere = !VM_FLAGS_ANYWHERE;
+
+	if (addr == -1)
+		anywhere = VM_FLAGS_ANYWHERE;
+
+	ret = vm_allocate (pid_to_task (dbg->tid),
+			(vm_address_t*)&base,
+			(vm_size_t)size,
+			anywhere);
+	if (ret != KERN_SUCCESS) {
+		printf("vm_allocate failed\n");
+		return NULL;
+	}
+	r_debug_map_sync (dbg); // update process memory maps
+	map = r_debug_map_get (dbg, (ut64)base);
+	return map;
+#else
+#warning malloc not implemented for this platform
+	return NULL;
+#endif
+}
+
+static int r_debug_native_map_dealloc(RDebug *dbg, ut64 addr, int size) {
+#if __APPLE__
+	int ret;
+	ret = vm_deallocate (pid_to_task (dbg->tid),
+			(vm_address_t)addr,
+			(vm_size_t)size);
+	if (ret != KERN_SUCCESS) {
+		printf("vm_deallocate failed\n");
+		return R_FALSE;
+	}
+	return R_TRUE;
+#else
+#warning mdealloc not implemented for this platform
+	return R_FALSE;
+#endif
+}
+
 static RList *r_debug_native_map_get(RDebug *dbg) {
 	RList *list = NULL;
 #if __KFBSD__
@@ -2420,6 +2557,8 @@ struct r_debug_plugin_t r_debug_plugin_native = {
 	.reg_profile = (void *)r_debug_native_reg_profile,
 	.reg_read = r_debug_native_reg_read,
 	.reg_write = (void *)&r_debug_native_reg_write,
+	.map_alloc = r_debug_native_map_alloc,
+	.map_dealloc = r_debug_native_map_dealloc,
 	.map_get = r_debug_native_map_get,
 	.map_protect = r_debug_native_map_protect,
 	.breakpoint = r_debug_native_bp,

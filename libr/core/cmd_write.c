@@ -14,10 +14,20 @@ static int cmd_write(void *data, const char *input) {
 
 	switch (*input) {
 	case 'p':
+		if (input[1]=='-' || (input[1]==' '&&input[2]=='-')) {
+			const char *tmpfile = ".tmp";
+			char *out = r_core_editor (core, NULL);
+			if (out) {
+				// XXX hacky .. patch should support str, not only file
+				r_file_dump (tmpfile, (ut8*)out, strlen (out));
+				r_core_patch (core, tmpfile);
+				r_file_rm (tmpfile);
+			}
+		} else
 		if (input[1]==' ' && input[2]) {
 			r_core_patch (core, input+2);
 		} else {
-			eprintf ("Usage: wp [rapatch-file]\n"
+			eprintf ("Usage: wp [-|r2patch-file]\n"
 			         "TODO: rapatch format documentation here\n");
 		}
 		break;
@@ -119,6 +129,8 @@ static int cmd_write(void *data, const char *input) {
 			r_io_cache_list (core->io, R_TRUE);
 			break;
 		case '\0':
+			if (!r_config_get_i (core->config, "io.cache"))
+				eprintf ("[warning] e io.cache must be true\n");
 			r_io_cache_list (core->io, R_FALSE);
 			break;
 		}
@@ -152,6 +164,14 @@ static int cmd_write(void *data, const char *input) {
 		break;
 	case 'f':
 		arg = (const char *)(input+((input[1]==' ')?2:1));
+		if (!strcmp (arg, "-")) {
+			char *out = r_core_editor (core, NULL);
+			if (out) {
+				r_io_write_at (core->io, core->offset,
+					(ut8*)out, strlen (out));
+				free (out);
+			}
+		} else
 		if ((buf = (ut8*) r_file_slurp (arg, &size))) {
 			r_io_set_fd (core->io, core->file->fd);
 			r_io_write_at (core->io, core->offset, buf, size);
@@ -162,6 +182,21 @@ static int cmd_write(void *data, const char *input) {
 		break;
 	case 'F':
 		arg = (const char *)(input+((input[1]==' ')?2:1));
+		if (!strcmp (arg, "-")) {
+			int len;
+			ut8 *out;
+			char *in = r_core_editor (core, NULL);
+			if (in) {
+				out = (ut8 *)strdup (in);
+				if (out) {
+					len = r_hex_str2bin (in, out);
+					if (len>0)
+						r_io_write_at (core->io, core->offset, out, len);
+					free (out);
+				}
+				free (in);
+			}
+		} else
 		if ((buf = r_file_slurp_hexpairs (arg, &size))) {
 			r_io_set_fd (core->io, core->file->fd);
 			r_io_write_at (core->io, core->offset, buf, size);
@@ -362,6 +397,7 @@ static int cmd_write(void *data, const char *input) {
 		switch (input[1]) {
 			case 'a':
 			case 's':
+			case 'e':
 			case 'A':
 			case 'x':
 			case 'r':
@@ -371,13 +407,19 @@ static int cmd_write(void *data, const char *input) {
 			case 'o':
 			case 'w':
 				if (input[2]!=' ') {
-					r_cons_printf ("Usage: 'wo%c 00 11 22'\n", input[1]);
+					if (input[1]=='e') r_cons_printf (
+						"Usage: 'woe from-to step'\n");
+					else r_cons_printf (
+						"Usage: 'wo%c 00 11 22'\n", input[1]);
 					return 0;
 				}
 			case '2':
 			case '4':
 				r_core_write_op (core, input+3, input[1]);
 				r_core_block_read (core, 0);
+				break;
+			case 'R':
+				r_core_cmd0 (core, "wr $b");
 				break;
 			case 'n':
 				r_core_write_op (core, "ff", 'x');
@@ -393,6 +435,7 @@ static int cmd_write(void *data, const char *input) {
 						"  wox 90     ; xor cur block with 0x90\n"
 						"  wox 0x0203 ; xor cur block with 0203\n"
 						"  woa 02 03  ; add [0203][0203][...] to curblk\n"
+						"  woe 02 03  \n"
 						"Supported operations:\n"
 						"  wow  ==  write looped value (alias for 'wb')\n"
 						"  woa  +=  addition\n"
@@ -402,12 +445,28 @@ static int cmd_write(void *data, const char *input) {
 						"  wox  ^=  xor\n"
 						"  woo  |=  or\n"
 						"  woA  &=  and\n"
+						"  woR  random bytes (alias for 'wr $b'\n"
 						"  wor  >>= shift right\n"
 						"  wol  <<= shift left\n"
 						"  wo2  2=  2 byte endian swap\n"
 						"  wo4  4=  4 byte endian swap\n"
 						);
 				break;
+		}
+		break;
+	case 's':
+		{
+			ut8 ulen;
+			len = r_str_escape (str+1);
+			if (len>255) {
+				eprintf ("Too large\n");
+			} else {
+				ulen = (ut8)len;
+				r_core_write_at (core, core->offset, &ulen, 1);
+				r_core_write_at (core, core->offset+1, (const ut8*)str+1, len);
+				WSEEK (core, len);
+				r_core_block_read (core, 0);
+			}
 		}
 		break;
 	default:
@@ -427,15 +486,17 @@ static int cmd_write(void *data, const char *input) {
 			" waf file     assemble file and write bytes\n"
 			" wA r 0       alter/modify opcode at current seek (see wA?)\n"
 			" wb 010203    fill current block with cyclic hexpairs\n"
-			" wc[ir*?]     write cache commit/reset/list\n"
+			" wc[ir*?]     write cache undo/commit/reset/list (io.cache)\n"
 			" wx 9090      write two intel nops\n"
 			" wv eip+34    write 32-64 bit value\n"
 			" wo? hex      write in block with operation. 'wo?' fmi\n"
 			" wm f0ff      set binary mask hexpair to be used as cyclic write mask\n"
-			" wf file      write contents of file at current offset\n"
-			" wF file      write contents of hexpairs file here\n"
+			" ws pstring   write 1 byte for length and then the string\n"
+			" wf -|file    write contents of file at current offset\n"
+			" wF -|file    write contents of hexpairs file here\n"
+			" wp -|file    apply radare patch file. See wp? fmi\n"
 			" wt file [sz] write to file (from current seek, blocksize or sz bytes)\n"
-			" wp file      apply radare patch file. See wp? fmi\n");
+			);
 			//TODO: add support for offset+seek
 			// " wf file o s ; write contents of file from optional offset 'o' and size 's'.\n"
 		break;

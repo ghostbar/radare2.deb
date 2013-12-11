@@ -9,24 +9,27 @@ MAKE_JOBS=8
 OLD_LDFLAGS="${LDFLAGS}"
 unset LDFLAGS
 
-CFGFLAGS="--without-gmp --without-ewf --without-ssl --with-ostype=windows"
+CFGFLAGS="--without-ewf --with-ostype=windows"
 
-if [ -x /usr/bin/pacman ]; then
-	make clean
-	./configure ${CFGFLAGS} --with-compiler=i486-mingw32-gcc --host=i486-unknown-windows && \
-	make -s -j ${MAKE_JOBS} && \
-	make w32dist
+if [ -x /usr/bin/i686-w64-mingw32-gcc ]; then
+	C=i686-w64-mingw32-gcc
+	H=i686-unknown-windows
+elif [ -x /usr/bin/pacman ]; then
+	C=i486-mingw32-gcc
+	H=i486-unknown-windows
 elif [ `uname` = Darwin ]; then
-	make clean
-	./configure ${CFGFLAGS} --with-compiler=i386-mingw32-gcc --host=i386-unknown-windows && \
-	make -s -j ${MAKE_JOBS} && \
-	make w32dist
+	C=i386-mingw32-gcc
+	H=i386-unknown-windows
 elif [ -x /usr/bin/apt-get ]; then
-	make clean
-	./configure ${CFGFLAGS} --with-compiler=i586-mingw32msvc-gcc --host=i586-unknown-windows && \
-	make -s -j ${MAKE_JOBS} && \
-	make w32dist
+	C=i586-mingw32msvc-gcc
+	H=i586-unknown-windows
 else
-	echo "ubuntu/debian or archlinux required."
+	echo "arch/opensuse/ubuntu/debian mingw32 package required."
 	exit 1
 fi
+
+make mrproper
+
+./configure ${CFGFLAGS} --with-compiler=$C --host=$H && \
+	make -s -j ${MAKE_JOBS} CC="${C} -static-libgcc" && \
+	make w32dist

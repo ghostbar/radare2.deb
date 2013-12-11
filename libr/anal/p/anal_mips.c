@@ -8,7 +8,7 @@
 
 static int mips_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *b, int len) {
 	unsigned int opcode;
-	// UNUSED char buf[10]; int reg;
+	// WIP char buf[10]; int reg;
 	int family, optype, oplen = (anal->bits==16)?2:4;
 
         if (op == NULL)
@@ -18,6 +18,7 @@ static int mips_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *b, int len) {
         op->type = R_ANAL_OP_TYPE_UNK;
 	op->length = oplen;
 	op->delay = 4;
+	op->esil[0] = 0;
 
 	//r_mem_copyendian ((ut8*)&opcode, b, 4, !anal->big_endian);
 	memcpy (&opcode, b, 4);
@@ -35,6 +36,11 @@ static int mips_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *b, int len) {
 	R-TYPE
 	======
 	opcode (6)  rs (5)  rt (5)  rd (5)  sa (5)  function (6) 
+	rs = register source
+	rs = register target
+	rd = register destination
+	sa = 
+	fu =
 		
 		 |--[0]--|  |--[1]--|  |--[2]--|  |--[3]--|
 		 1111 1111  1111 1111  1111 1111  1111 1111
@@ -44,7 +50,7 @@ static int mips_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *b, int len) {
 		          |          (b[2]>>3)  |
 		  (b[0]&3)<<3)+(b[1]>>5)   (b[2]&7)+(b[3]>>6)
 #endif
-#if UNUSED
+#if WIP
 		int rs = ((b[0]&3)<<3) + (b[1]>>5);
 		int rt = b[1]&31;
 		int rd = b[2]>>3;
@@ -134,11 +140,13 @@ static int mips_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *b, int len) {
 		case 2: // j
 			op->type = R_ANAL_OP_TYPE_JMP;
 			op->jump = address;
+			sprintf (op->esil, "pc=0x%08x", address);
 			break;
 		case 3: // jal
 			op->type = R_ANAL_OP_TYPE_CALL;
 			op->jump = address;
 			op->fail = addr+8;
+			sprintf (op->esil, "lr=pc+4,pc=0x%08x", address);
 			break;
 		}
 		family = 'J';
@@ -157,7 +165,7 @@ static int mips_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *b, int len) {
 		          |          (b[2]>>3)  |
 		  (b[0]&3)<<3)+(b[1]>>5)   (b[2]&7)+(b[3]>>6)
 #endif
-#if UNUSED
+#if WIP
 		int fmt = ((b[0]&3)<<3) + (b[1]>>5);
 		int ft = (b[1]&31);
 		int fs = (b[2]>>3);
@@ -191,7 +199,7 @@ static int mips_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *b, int len) {
 		          |                     |
 		 ((b[0]&3)<<3)+(b[1]>>5)   (b[2]<<8)+b[3]
 #endif
-#if UNUSED
+#if WIP
 		int rs = ((b[0]&3)<<3)+(b[1]>>5);
 #endif
 		int rt = b[1]&31;

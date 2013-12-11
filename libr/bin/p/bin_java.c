@@ -1,3 +1,4 @@
+
 /* radare - LGPL - Copyright 2009-2013 - pancake, nibble */
 
 #include <r_types.h>
@@ -5,6 +6,8 @@
 #include <r_lib.h>
 #include <r_bin.h>
 #include "../../shlr/java/class.h"
+
+#define IFDBG  if(0)
 
 static int load(RBinArch *arch) {
 	return ((arch->bin_obj = r_bin_java_new_buf (arch->buf)))? 1: 0;
@@ -16,16 +19,7 @@ static int destroy(RBinArch *arch) {
 }
 
 static RList* entries(RBinArch *arch) {
-	RBinAddr *ptr;
-	RList *ret = r_list_new ();
-	if (!ret) return NULL;
-	ret->free = free;
-	if (!(ptr = R_NEW (RBinAddr)))
-		return ret;
-	memset (ptr, '\0', sizeof (RBinAddr));
-	ptr->offset = ptr->rva = r_bin_java_get_entrypoint (arch->bin_obj);
-	r_list_append (ret, ptr);
-	return ret;
+	return r_bin_java_get_entrypoints (arch->bin_obj);
 }
 
 static ut64 baddr(RBinArch *arch) {
@@ -33,74 +27,18 @@ static ut64 baddr(RBinArch *arch) {
 }
 
 static RList* classes(RBinArch *arch) {
-	char *p;
-	RBinClass *c;
-	RList *ret = r_list_new ();
-	if (!ret) return NULL;
-	
-	// TODO: add proper support for inner classes in Java
-	c = R_NEW0 (RBinClass);
-	c->visibility = R_BIN_CLASS_PUBLIC;
-	c->name = strdup (arch->file);
-	p = strchr (c->name, '.');
-	if (p) *p = 0;
-	p = r_str_lchr (c->name, '/');
-	if (p) strcpy (c->name, p+1);
-	c->super = strdup ("Object"); //XXX
-	r_list_append (ret, c);
-
+	RList *ret;
+	ret = r_bin_java_get_classes((struct r_bin_java_obj_t*)arch->bin_obj);
 	return ret;
 }
 
 static RList* symbols(RBinArch *arch) {
-	RList *ret = NULL;
-	RBinSymbol *ptr = NULL;
-	struct r_bin_java_sym_t *s = NULL;
-	int i;
-
-	if (!(ret = r_list_new ()))
-		return NULL;
-	ret->free = free;
-	if (!(s = r_bin_java_get_symbols ((struct r_bin_java_obj_t*)arch->bin_obj)))
-		return ret;
-	for (i = 0; !s[i].last; i++) {
-		if (!(ptr = R_NEW (RBinSymbol)))
-			break;
-		strncpy (ptr->name, s[i].name, R_BIN_SIZEOF_STRINGS);
-		strncpy (ptr->forwarder, "NONE", R_BIN_SIZEOF_STRINGS);
-		strncpy (ptr->bind, "NONE", R_BIN_SIZEOF_STRINGS);
-		strncpy (ptr->type, "FUNC", R_BIN_SIZEOF_STRINGS);
-		ptr->rva = ptr->offset = s[i].offset;
-		ptr->size = s[i].size;
-		ptr->ordinal = i;
-		r_list_append (ret, ptr);
-	}
-	free (s);
-	return ret;
+	IFDBG debug_dump_all_cp_obj((struct r_bin_java_obj_t*)arch->bin_obj);
+	return r_bin_java_get_symbols ((struct r_bin_java_obj_t*)arch->bin_obj);
 }
 
 static RList* strings(RBinArch *arch) {
-	RList *ret = NULL;
-	RBinString *ptr = NULL;
-	struct r_bin_java_str_t *strings = NULL;
-	int i;
-
-	if (!(ret = r_list_new ()))
-		return NULL;
-	ret->free = free;
-	if (!(strings = r_bin_java_get_strings((struct r_bin_java_obj_t*)arch->bin_obj)))
-		return ret;
-	for (i = 0; !strings[i].last; i++) {
-		if (!(ptr = R_NEW (RBinString)))
-			break;
-		strncpy (ptr->string, strings[i].str, R_BIN_SIZEOF_STRINGS);
-		ptr->rva = ptr->offset = strings[i].offset;
-		ptr->size = strings[i].size;
-		ptr->ordinal = strings[i].ordinal;
-		r_list_append (ret, ptr);
-	}
-	free (strings);
-	return ret;
+	return r_bin_java_get_strings((struct r_bin_java_obj_t*)arch->bin_obj);
 }
 
 static RBinInfo* info(RBinArch *arch) {
@@ -162,6 +100,10 @@ static int retdemangle(const char *str) {
 static RBinAddr* binsym(RBinArch *arch, int sym) {
 	RBinAddr *ret = NULL;
 	switch (sym) {
+
+	// XXX - TODO implement the INIT FINI symbol requests 
+	case R_BIN_SYM_INIT:
+	case R_BIN_SYM_FINI:
 	case R_BIN_SYM_ENTRY:
 		if (!(ret = R_NEW0 (RBinAddr)))
 			return NULL;
@@ -192,41 +134,12 @@ static RList* lines(RBinArch *arch) {
 }
 
 static RList* sections(RBinArch *arch) {
-	RList *ret = NULL;
-	RBinSection *ptr = NULL;
-	struct r_bin_java_sym_t *s = NULL;
-	RBinJavaObj *b = arch->bin_obj;
-
-	if (!(ret = r_list_new ()))
-		return NULL;
-	ret->free = free;
-	if ((s = r_bin_java_get_symbols (arch->bin_obj))) {
-		if ((ptr = R_NEW (RBinSection))) {
-			strcpy (ptr->name, "code");
-			ptr->size = ptr->vsize = b->fsymsz;
-			ptr->offset = ptr->rva = b->fsym;
-			ptr->srwx = 4|1;
-			r_list_append (ret, ptr);
-		}
-		if ((ptr = R_NEW (RBinSection))) {
-			strcpy (ptr->name, "constpool");
-			ptr->size = ptr->vsize = b->fsym;
-			ptr->offset = ptr->rva = 0;
-			ptr->srwx = 4;
-			r_list_append (ret, ptr);
-		}
-		if ((ptr = R_NEW (RBinSection))) {
-			strcpy (ptr->name, "data");
-			ptr->offset = ptr->rva = b->fsymsz+b->fsym;
-			ptr->size = ptr->vsize = arch->buf->length - ptr->rva;
-			ptr->srwx = 4|2;
-			r_list_append (ret, ptr);
-		}
-		free (s);
-	}
-	return ret;
+	return r_bin_java_get_sections (arch->bin_obj);
 }
 
+static RList* fields(RBinArch *arch) {
+	return r_bin_java_get_fields (arch->bin_obj);
+}
 struct r_bin_plugin_t r_bin_plugin_java = {
 	.name = "java",
 	.desc = "java bin plugin",
@@ -243,7 +156,7 @@ struct r_bin_plugin_t r_bin_plugin_java = {
 	.imports = NULL,
 	.strings = &strings,
 	.info = &info,
-	.fields = NULL,
+	.fields = fields,
 	.libs = NULL,
 	.relocs = NULL,
 	.meta = NULL,

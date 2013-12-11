@@ -20,9 +20,27 @@ BLA:
 
 static int getnum(RAsm *a, const char *s) {
 	if (!s) return 0;
-	if (*s=='$')
-		s++;
-	return r_num_get (a->num, s);
+	if (*s=='$') s++;
+	return r_num_math (a->num, s);
+}
+
+static ut8 getshop(const char *s) {
+	int i;
+	const char *ops = \
+		"sar\xf8" \
+		"shl\xf0" \
+		"shr\xe8" \
+		"shl\xe0" \
+		"rcr\xd8" \
+		"rcl\xd0" \
+		"ror\xc8" \
+		"rol\xc0";
+	if (strlen (s)<3)
+		return 0;
+	for (i=0; i<strlen (ops); i+=4)
+		if (!memcmp (s, ops+i, 3))
+			return (ut8)ops[i+3];
+	return 0;
 }
 
 static int jop (RAsm *a, ut8 *data, ut8 x, ut8 b, const char *arg) {
@@ -86,7 +104,7 @@ static int isnum(RAsm *a, const char *str) {
 
 static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 	ut64 offset = a->pc;
-	ut8 *data = ao->buf;
+	ut8 t, *data = ao->buf;
 	char *arg, op[128];
 	int l = 0;
 
@@ -301,6 +319,35 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 			}
 			if (a->bits==64)
 				data[l++] = 0x48;
+			if (*arg2=='[') {
+				char *p = strchr (arg2+1, '+');
+				if (!p) {
+					p = strchr (arg2+1, '-');
+				}
+				if (p) {
+					*p = 0;
+					ut32 n = getnum (a, p+1);
+					ut8 *ptr = &n;
+					arg1 = getreg (arg2+1);
+					data[l++] = 0x3b;
+					if (arg1 == 4) { // esp
+						data[l++] = 0x80 | arg1 | (arg0<<3);
+						data[l++] = 0x24;
+					} else {
+						data[l++] = 0xb8 | arg1;
+					}
+					data[l++] = ptr[0];
+					data[l++] = ptr[1];
+					data[l++] = ptr[2];
+					data[l++] = ptr[3];
+					return l;
+				} else {
+					eprintf ("unknown cmp\n");
+					return 0;
+				}
+
+				return 0;
+			}
 			if (isnum (a, arg2)) { // reg, num
 				int n = atoi (arg2);
 				if (n>127 || n<-127) {
@@ -373,13 +420,11 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 				ut32 addr = dst;
 				ut8 *ptr = (ut8 *)&addr;
 
-				if (dst == 0) {
+				if (dst == 0 && *arg != '0') {
 					data[l++] = '\xff';
 					data[l] = getreg (arg) | 0xd0;
-					if (data[l] == 0xff) {
-						//eprintf ("Invalid argument for 'call' (%s)\n", arg);
+					if (data[l] == 0xff)
 						return 0;
-					}
 					l++;
 					return l;
 				}
@@ -393,10 +438,18 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 				return l;
 			}
 		} else if (!strcmp (op, "inc")) {
-			data[l++] = 0x40 | getreg (arg);
+			if (arg[0]=='r') {
+				data[l++] = 0x48;
+				data[l++] = 0xff;
+				data[l++] = 0xc0 | getreg (arg);
+			} else data[l++] = 0x40 | getreg (arg);
 			return l;
 		} else if (!strcmp (op, "dec")) {
-			data[l++] = 0x48 | getreg (arg);
+			if (arg[0]=='r') {
+				data[l++] = 0x48;
+				data[l++] = 0xff;
+				data[l++] = 0xc8 | getreg (arg);
+			} else data[l++] = 0x48 | getreg (arg);
 			return l;
 		} else if (!strcmp (op, "push")) {
 			char *delta;
@@ -551,6 +604,8 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 				eprintf ("No args for lea?\n");
 				return 0;
 			}
+			if (a->bits==64)
+				data[l++] = 0x48;
 			data[l++] = 0x8d;
 			if (*arg2=='[') {
 				int r = getreg (arg);
@@ -567,23 +622,35 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 					data[l++] = ptr[2];
 					data[l++] = ptr[3];
 				} else {
-					char *p= strchr (arg2, '+');
+					char *p = strchr (arg2, '+');
 					if (!p) p = strchr (arg2, '-');
 					if (p) {
-						int n = getnum (a, p+1);
-						*p++ = 0;
-						ut8 *ptr = (ut8*)&n;
-						//data[l++]= 0x9d;
-						if (n>127 || n<-127) {
-							data[l++] = 0x80 | getreg (arg)<<3 | getreg (arg2);
-							data[l++] = ptr[0];
-							data[l++] = ptr[1];
-							data[l++] = ptr[2];
-							data[l++] = ptr[3];
-							// TODO
+						if (isnum (a, p+1)) {
+							int n = getnum (a, p+1);
+							*p++ = 0;
+							ut8 *ptr = (ut8*)&n;
+							if (n>127 || n<-127 || r2==4) {
+								data[l++] = 0x80 | getreg (arg)<<3 | getreg (arg2);
+								if (r2==4)
+									data[l++] = 0x24; // THE ESP EXCEPTION
+								data[l++] = ptr[0];
+								data[l++] = ptr[1];
+								data[l++] = ptr[2];
+								data[l++] = ptr[3];
+								// TODO
+							} else {
+								data[l++] = 0x40 | getreg (arg)<<3 | getreg (arg2);
+								data[l++] = n;
+							}
 						} else {
-							data[l++] = 0x40 | getreg (arg)<<3 | getreg (arg2);
-							data[l++] = n;
+							int r3 = getreg (p+1);
+							// lea reg, [reg+reg]
+							data[l++] = (r<<3) | 4;
+							if (r2>r3) {
+								data[l++] = (r3) | (r2<<3);
+							} else {
+								data[l++] = (r3<<3) | (r2);
+							}
 						}
 					} else {
 						if (r2==4) { //ESP
@@ -596,6 +663,23 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 					}
 				}
 			} else eprintf ("Invalid args for lea?\n");
+			return l;
+		} else if ((t=getshop (op))) { // sar, shl, shr, rcr, rcl, ror, rol
+			if (arg[1]=='l') { // 8bits
+				data[l++] = 0xc0;
+				data[l++] = t | getreg (arg);
+				data[l++] = getnum (a, arg2);
+			} else
+			if (*arg=='r') { // 64bits
+				data[l++] = 0x48;
+				data[l++] = 0xc1;
+				data[l++] = t | getreg (arg);
+				data[l++] = getnum (a, arg2);
+			} else { // 32bits
+				data[l++] = 0xc1;
+				data[l++] = t | getreg (arg);
+				data[l++] = getnum (a, arg2);
+			}
 			return l;
 		} else if (!strcmp (op, "cmovz")) {
 			ut8 a, b;
@@ -659,46 +743,51 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 			} else pfx = 0xc0;
 
 			if (*arg2=='[') {
+				int N;
 				arg2++;
-				if (a->bits == 64)  {
-					data[l++] = 0x67;
-					data[l++] = 0x8b;
-					data[l++] = getreg (arg)<<3 | getreg (arg2);
+				if (a->bits==64)
+					data[l++] = 0x48;
+				delta = strchr (arg2, '+');
+				if (delta) {
+					N=1;
+					*delta++ = 0;
 				} else {
-					delta = strchr (arg2, '+');
-					if (delta)
-						*delta++ = 0;
-					data[l++] = 0x8b;
+					delta = strchr (arg2, '-');
 					if (delta) {
-						int r = getreg (arg2);
-						if (r==4) { //ESP
-							data[l++] = getreg (arg)<<3 | r | 0x40;
-							data[l++] = 0x24;
-						} else if (r==5) { // EBP
-							data[l++] = getreg (arg)<<3 | r | 0x40;
-							data[l++] = 0;
-						} else data[l++] = getreg (arg) | r | 0x40;
-						data[l++] = atoi (delta);
+						N=-1;
+						*delta++ = 0;
+					}
+				}
+				data[l++] = 0x8b;
+				if (delta) {
+					int r = getreg (arg2);
+					if (r==4) { //ESP
+						data[l++] = getreg (arg)<<3 | r | 0x40;
+						data[l++] = 0x24;
+					} else if (r==5) { // EBP
+						data[l++] = getreg (arg)<<3 | r | 0x40;
+						data[l++] = 0;
+					} else data[l++] = getreg (arg) | r | 0x40;
+					data[l++] = atoi (delta) * N;
+				} else {
+					int r = getreg (arg2);
+					if (r==4) { //ESP
+						data[l++] = getreg (arg)<<3 | r;
+						data[l++] = 0x24;
+					} else if (r== 5) { // EBP
+						data[l++] = getreg (arg)<<3 | r | 0x40;
+						data[l++] = 0;
 					} else {
-						int r = getreg (arg2);
-						if (r==4) { //ESP
-							data[l++] = getreg (arg)<<3 | r;
-							data[l++] = 0x24;
-						} else if (r== 5) { // EBP
-							data[l++] = getreg (arg)<<3 | r | 0x40;
-							data[l++] = 0;
-						} else {
-							if (r == 0xff) {
-								ut32 n;
-								ut8 *N = (ut8*)&n;
-								data[l++] = getreg (arg)<<3|5;
-								n = getnum (a, arg2);
-								data[l++] = N[0];
-								data[l++] = N[1];
-								data[l++] = N[2];
-								data[l++] = N[3];
-							} else data[l++] = getreg (arg)<<3 | r;
-						}
+						if (r == 0xff) {
+							ut32 n;
+							ut8 *N = (ut8*)&n;
+							data[l++] = getreg (arg)<<3|5;
+							n = getnum (a, arg2);
+							data[l++] = N[0];
+							data[l++] = N[1];
+							data[l++] = N[2];
+							data[l++] = N[3];
+						} else data[l++] = getreg (arg)<<3 | r;
 					}
 				}
 				return l;
@@ -717,7 +806,9 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 				data[l++] = ptr[3];
 				return l;
 			}
+#if 0
 			if (a->bits==64) {
+eprintf ("--> \n");
 				if (isnum (a, arg2)) {
 					data[l++] = 0x48;
 					data[l++] = 0xc7;
@@ -733,6 +824,7 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 				data[l++] = arg0 | (getreg (arg2)<<3) | pfx;
 				return l;
 			}
+#endif
 
 			if (isnum (a, arg2)) {
 				if (delta) {
@@ -783,6 +875,8 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 				data[l++] = ptr[3];
 				return l;
 			} else {
+				if (a->bits==64)
+					data[l++] = 0x48;
 				data[l++] = 0x89;
 				if (delta) {
 					if (isnum (a, delta)){
@@ -826,11 +920,11 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 					return -1;
 				}
 			} else {
-				ut64 dst = getnum (a, arg) - offset;
+				st64 dst = getnum (a, arg) - offset;
 				ut32 addr = dst;
 				ut8 *ptr = (ut8 *)&addr;
 
-				if (dst+offset == 0) {
+				if (dst+offset == 0 && *arg != '0') {
 					data[l++] = '\xff';
 					data[l] = getreg (arg) | 0xe0;
 					if (data[l] != 0xff)
@@ -842,35 +936,13 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 						l++;
 					}
 					return -1;
-#if 0
-					if (!strcmp(arg, "esp")) { data[1]='\x24'; data[2]='\x24'; } else
-					if (!strcmp(arg, "ebp")) { data[1]='\x24'; data[2]='\x24'; } else
-					if (strstr(arg, "[eax")) { data[1]='\x60'; data[2]=(char)r_num_math (NULL, arg+4); } else
-					if (strstr(arg, "[ebx")) { data[1]='\x63'; data[2]=(char)r_num_math (NULL, arg+4); } else
-					if (strstr(arg, "[ecx")) { data[1]='\x61'; data[2]=(char)r_num_math (NULL, arg+4); } else
-					if (strstr(arg, "[edx")) { data[1]='\x62'; data[2]=(char)r_num_math (NULL, arg+4); } else
-					if (strstr(arg, "[esi")) { data[1]='\x66'; data[2]=(char)r_num_math (NULL, arg+4); } else
-					if (strstr(arg, "[edi")) { data[1]='\x67'; data[2]=(char)r_num_math (NULL, arg+4); } else
-					if (strstr(arg, "[esi")) { data[1]='\x67'; data[2]=(char)r_num_math (NULL, arg+4); } else
-					if (strstr(arg, "[ebp")) { data[1]='\x65'; data[2]=(char)r_num_math (NULL, arg+4); } 
-					else {
-						if (!strcmp(arg, "[esp")) { data[1]='\x64'; data[2]='\x24'; data[3]=(char)r_num_math (NULL, arg+4); }
-							else return 0;
-						return 4;
-					}
-#endif
 				}
 
 				dst -= offset;
-		// 7C90EAF5   .- E9 42158783   JMP     0018003C
-		// RELATIVE LONG JUMP (nice coz is 4 bytes, not 5) 
-
 				if (dst>-0x80 && dst<0x7f) {
-					/* relative address */
-					addr -= 2;
-					addr -= offset;
+					/* relative byte address */
 					data[l++] = 0xeb;
-					data[l++] = (char)dst;
+					data[l++] = (char)(addr-offset-2);
 					return l;
 				} else {
 					/* absolute address */

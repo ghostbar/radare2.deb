@@ -4,6 +4,12 @@
 #include <r_types.h>
 #include <r_util.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+R_LIB_VERSION_HEADER(r_diff);
+
 typedef struct r_diff_op_t {
 	/* file A */
 	ut64 a_off;
@@ -46,6 +52,10 @@ R_API int r_diff_buffers_distance(RDiff *d,
 R_API int r_diff_lines(const char *file1, const char *sa, int la, const char *file2, const char *sb, int lb);
 R_API int r_diff_set_delta(RDiff *d, int delta);
 R_API int r_diff_gdiff(const char *file1, const char *file2, int rad, int va);
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif

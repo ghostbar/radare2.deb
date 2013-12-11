@@ -10,26 +10,37 @@ char* r_bin_dex_get_version(struct r_bin_dex_obj_t* bin) {
 	return version;
 }
 
-struct r_bin_dex_obj_t* r_bin_dex_new_buf(struct r_buf_t *buf) {
-	struct r_bin_dex_obj_t *bin;
-
-	if (!(bin = malloc (sizeof (struct r_bin_dex_obj_t))))
-		return NULL;
-	memset (bin, 0, sizeof (struct r_bin_dex_obj_t));
+struct r_bin_dex_obj_t* r_bin_dex_new_buf(RBuffer *buf) {
+	struct r_bin_dex_obj_t *bin = R_NEW0 (struct r_bin_dex_obj_t);;
+	if (!bin) return NULL;
 	bin->b = buf;
 	bin->size = buf->length;
+	// XXX: use r_buf_getc()
 	// XXX: this is not endian safe
+	/* header */
 	r_buf_read_at (bin->b, 0, (ut8*)&bin->header, sizeof (struct dex_header_t));
 
+	/* strings */
 	bin->strings = (ut32 *) malloc (bin->header.strings_size * sizeof (ut32) + 1);
 	r_buf_read_at (bin->b, bin->header.strings_offset, (ut8*)bin->strings,
 			bin->header.strings_size * sizeof (ut32));
-
+	/* classes */
+	bin->classes = (struct dex_class_t *) malloc (bin->header.class_size *
+			sizeof (struct dex_class_t) + 1);
+	r_buf_read_at (bin->b, bin->header.class_offset, (ut8*)bin->classes,
+			bin->header.class_size * sizeof (struct dex_class_t));
+//{ ut8 *b = (ut8*)&bin->methods; eprintf ("CLASS %02x %02x %02x %02x\n", b[0], b[1], b[2], b[3]); }
+	/* methods */
 	bin->methods = (struct dex_method_t *) malloc (bin->header.method_size *
 			sizeof (struct dex_method_t) + 1);
 	r_buf_read_at (bin->b, bin->header.method_offset, (ut8*)bin->methods,
 			bin->header.method_size * sizeof (struct dex_method_t));
-
+	/* types */
+	bin->types = (struct dex_type_t *) malloc (bin->header.types_size *
+			sizeof (struct dex_type_t) + 1);
+	r_buf_read_at (bin->b, bin->header.types_offset, (ut8*)bin->types,
+			bin->header.types_size * sizeof (struct dex_type_t));
+	/* fields */
 	bin->fields = (struct dex_field_t *) malloc (bin->header.fields_size *
 			sizeof (struct dex_field_t) + 1);
 	r_buf_read_at (bin->b, bin->header.fields_offset, (ut8*)bin->fields,
@@ -38,7 +49,7 @@ struct r_bin_dex_obj_t* r_bin_dex_new_buf(struct r_buf_t *buf) {
 }
 
 // Move to r_util ??
-int dex_read_uleb128 (const char *ptr) {
+int dex_read_uleb128 (const ut8 *ptr) {
 	int cur, result = *(ptr++);
 
 	if (result > 0x7f) {
@@ -61,7 +72,7 @@ int dex_read_uleb128 (const char *ptr) {
 }
 
 #define LEB_MAX_SIZE 6
-int dex_uleb128_len (const char *ptr) {
+int dex_uleb128_len (const ut8 *ptr) {
 	int i=1, result = *(ptr++);
 
 	while (result > 0x7f && i <= LEB_MAX_SIZE) {

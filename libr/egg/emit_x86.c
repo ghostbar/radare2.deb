@@ -1,4 +1,4 @@
-/* pancake // nopcode.org 2010-2011 -- emit module for rcc */
+/* pancake // nopcode.org 2010-2013 -- emit module for rcc */
 
 #include <r_egg.h>
 
@@ -44,9 +44,18 @@ static char *emit_syscall (REgg *egg, int nargs) {
 	case R_EGG_OS_OSX:
 	case R_EGG_OS_MACOS:
 	case R_EGG_OS_DARWIN:
-		snprintf (p, sizeof (p),
-			"\n : mov eax, `.arg`\n : push eax\n : int 0x80\n : add esp, %d\n",
+#if ARCH_X86_64
+		snprintf (p, sizeof (p), "\n"
+			"  : mov rax, `.arg`\n"
+			"  : syscall\n");
+#else
+		snprintf (p, sizeof (p), "\n"
+			"  : mov eax, `.arg`\n"
+			"  : push eax\n"
+			"  : int 0x80\n"
+			"  : add esp, %d\n",
 			4); //(nargs+2)*(egg->bits/8));
+#endif
 		break;
 	default:
 		return NULL;

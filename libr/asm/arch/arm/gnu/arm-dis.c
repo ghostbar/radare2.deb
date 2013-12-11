@@ -25,20 +25,13 @@
 #include "sysdep.h"
 
 #include "dis-asm.h"
-#include "./arm.h"
-#include "./elfarm.h"
+#include "arm.h"
 #include "opintl.h"
-#include <string.h>
-
-//#include "safe-ctype.h"
-//#include "floatformat.h"
 
 /* FIXME: This shouldn't be done here.  */
-//#include "coff/internal.h"
-//#include "libcoff.h"
 #include "elf-bfd.h"
 #include "elf/internal.h"
-//#include "elf/arm.h"
+#include "elfarm.h"
 
 /* FIXME: Belongs in global header.  */
 #ifndef strneq
@@ -48,6 +41,8 @@
 #ifndef NUM_ELEM
 #define NUM_ELEM(a)     (sizeof (a) / sizeof (a)[0])
 #endif
+
+#define COMMENTS 1
 
 /* Cached mapping symbol state.  */
 enum map_type
@@ -145,7 +140,7 @@ enum opcode_sentinel_enum
   SENTINEL_GENERIC_START
 } opcode_sentinels;
 
-#define UNDEFINED_INSTRUCTION      "; invalid %0-31x"
+#define UNDEFINED_INSTRUCTION      "; <UNDEFINED> %0-31x"
 #define UNPREDICTABLE_INSTRUCTION  "; <UNPREDICTABLE>"
 
 /* Common coprocessor opcodes shared between Arm and Thumb-2.  */
@@ -163,9 +158,9 @@ static const struct opcode32 coprocessor_opcodes[] =
   { 0, SENTINEL_IWMMXT_START, 0, "" },
   {ARM_CEXT_IWMMXT, 0x0e130130, 0x0f3f0fff, "tandc%22-23w%c %12-15r"},
   {ARM_CEXT_XSCALE, 0x0e400010, 0x0ff00f3f, "tbcst%6-7w%c %16-19g, %12-15r"},
-  {ARM_CEXT_XSCALE, 0x0e130170, 0x0f3f0ff8, "textrc%22-23w%c %12-15r, #%0-2d"},
-  {ARM_CEXT_XSCALE, 0x0e100070, 0x0f300ff0, "textrm%3?su%22-23w%c %12-15r, %16-19g, #%0-2d"},
-  {ARM_CEXT_XSCALE, 0x0e600010, 0x0ff00f38, "tinsr%6-7w%c %16-19g, %12-15r, #%0-2d"},
+  {ARM_CEXT_XSCALE, 0x0e130170, 0x0f3f0ff8, "textrc%22-23w%c %12-15r, %0-2d"},
+  {ARM_CEXT_XSCALE, 0x0e100070, 0x0f300ff0, "textrm%3?su%22-23w%c %12-15r, %16-19g, %0-2d"},
+  {ARM_CEXT_XSCALE, 0x0e600010, 0x0ff00f38, "tinsr%6-7w%c %16-19g, %12-15r, %0-2d"},
   {ARM_CEXT_XSCALE, 0x0e000110, 0x0ff00fff, "tmcr%c %16-19G, %12-15r"},
   {ARM_CEXT_XSCALE, 0x0c400000, 0x0ff00ff0, "tmcrr%c %0-3g, %12-15r, %16-19r"},
   {ARM_CEXT_XSCALE, 0x0e2c0010, 0x0ffc0e10, "tmia%17?tb%16?tb%c %5-8g, %0-3r, %12-15r"},
@@ -181,7 +176,7 @@ static const struct opcode32 coprocessor_opcodes[] =
   {ARM_CEXT_XSCALE, 0x0e000180, 0x0f000ff0, "wadd%20-23w%c %12-15g, %16-19g, %0-3g"},
   {ARM_CEXT_XSCALE, 0x0e2001a0, 0x0fb00ff0, "waddbhus%22?ml%c %12-15g, %16-19g, %0-3g"},
   {ARM_CEXT_XSCALE, 0x0ea001a0, 0x0ff00ff0, "waddsubhx%c %12-15g, %16-19g, %0-3g"},
-  {ARM_CEXT_XSCALE, 0x0e000020, 0x0f800ff0, "waligni%c %12-15g, %16-19g, %0-3g, #%20-22d"},
+  {ARM_CEXT_XSCALE, 0x0e000020, 0x0f800ff0, "waligni%c %12-15g, %16-19g, %0-3g, %20-22d"},
   {ARM_CEXT_XSCALE, 0x0e800020, 0x0fc00ff0, "walignr%20-21d%c %12-15g, %16-19g, %0-3g"},
   {ARM_CEXT_XSCALE, 0x0e200000, 0x0fe00ff0, "wand%20'n%c %12-15g, %16-19g, %0-3g"},
   {ARM_CEXT_XSCALE, 0x0e800000, 0x0fa00ff0, "wavg2%22?hb%20'r%c %12-15g, %16-19g, %0-3g"},
@@ -195,7 +190,7 @@ static const struct opcode32 coprocessor_opcodes[] =
   {ARM_CEXT_XSCALE, 0x0e800100, 0x0fc00ff0, "wmadd%21?su%20'x%c %12-15g, %16-19g, %0-3g"},
   {ARM_CEXT_XSCALE, 0x0ec00100, 0x0fd00ff0, "wmadd%21?sun%c %12-15g, %16-19g, %0-3g"},
   {ARM_CEXT_XSCALE, 0x0e000160, 0x0f100ff0, "wmax%21?su%22-23w%c %12-15g, %16-19g, %0-3g"},
-  {ARM_CEXT_XSCALE, 0x0e000080, 0x0f100fe0, "wmerge%c %12-15g, %16-19g, %0-3g, #%21-23d"},
+  {ARM_CEXT_XSCALE, 0x0e000080, 0x0f100fe0, "wmerge%c %12-15g, %16-19g, %0-3g, %21-23d"},
   {ARM_CEXT_XSCALE, 0x0e0000a0, 0x0f800ff0, "wmia%21?tb%20?tb%22'n%c %12-15g, %16-19g, %0-3g"},
   {ARM_CEXT_XSCALE, 0x0e800120, 0x0f800ff0, "wmiaw%21?tb%20?tb%22'n%c %12-15g, %16-19g, %0-3g"},
   {ARM_CEXT_XSCALE, 0x0e100160, 0x0f100ff0, "wmin%21?su%22-23w%c %12-15g, %16-19g, %0-3g"},
@@ -209,18 +204,18 @@ static const struct opcode32 coprocessor_opcodes[] =
   {ARM_CEXT_XSCALE, 0x0ec000e0, 0x0fd00ff0, "wqmulwm%21'r%c %12-15g, %16-19g, %0-3g"},
   {ARM_CEXT_XSCALE, 0x0e000000, 0x0ff00ff0, "wor%c %12-15g, %16-19g, %0-3g"},
   {ARM_CEXT_XSCALE, 0x0e000080, 0x0f000ff0, "wpack%20-23w%c %12-15g, %16-19g, %0-3g"},
-  {ARM_CEXT_XSCALE, 0xfe300040, 0xff300ef0, "wror%22-23w %12-15g, %16-19g, #%i"},
+  {ARM_CEXT_XSCALE, 0xfe300040, 0xff300ef0, "wror%22-23w %12-15g, %16-19g, %i"},
   {ARM_CEXT_XSCALE, 0x0e300040, 0x0f300ff0, "wror%22-23w%c %12-15g, %16-19g, %0-3g"},
   {ARM_CEXT_XSCALE, 0x0e300140, 0x0f300ff0, "wror%22-23wg%c %12-15g, %16-19g, %0-3G"},
   {ARM_CEXT_XSCALE, 0x0e000120, 0x0fa00ff0, "wsad%22?hb%20'z%c %12-15g, %16-19g, %0-3g"},
-  {ARM_CEXT_XSCALE, 0x0e0001e0, 0x0f000ff0, "wshufh%c %12-15g, %16-19g, #%Z"},
-  {ARM_CEXT_XSCALE, 0xfe100040, 0xff300ef0, "wsll%22-23w %12-15g, %16-19g, #%i"},
+  {ARM_CEXT_XSCALE, 0x0e0001e0, 0x0f000ff0, "wshufh%c %12-15g, %16-19g, %Z"},
+  {ARM_CEXT_XSCALE, 0xfe100040, 0xff300ef0, "wsll%22-23w %12-15g, %16-19g, %i"},
   {ARM_CEXT_XSCALE, 0x0e100040, 0x0f300ff0, "wsll%22-23w%8'g%c %12-15g, %16-19g, %0-3g"},
   {ARM_CEXT_XSCALE, 0x0e100148, 0x0f300ffc, "wsll%22-23w%8'g%c %12-15g, %16-19g, %0-3G"},
-  {ARM_CEXT_XSCALE, 0xfe000040, 0xff300ef0, "wsra%22-23w %12-15g, %16-19g, #%i"},
+  {ARM_CEXT_XSCALE, 0xfe000040, 0xff300ef0, "wsra%22-23w %12-15g, %16-19g, %i"},
   {ARM_CEXT_XSCALE, 0x0e000040, 0x0f300ff0, "wsra%22-23w%8'g%c %12-15g, %16-19g, %0-3g"},
   {ARM_CEXT_XSCALE, 0x0e000148, 0x0f300ffc, "wsra%22-23w%8'g%c %12-15g, %16-19g, %0-3G"},
-  {ARM_CEXT_XSCALE, 0xfe200040, 0xff300ef0, "wsrl%22-23w %12-15g, %16-19g, #%i"},
+  {ARM_CEXT_XSCALE, 0xfe200040, 0xff300ef0, "wsrl%22-23w %12-15g, %16-19g, %i"},
   {ARM_CEXT_XSCALE, 0x0e200040, 0x0f300ff0, "wsrl%22-23w%8'g%c %12-15g, %16-19g, %0-3g"},
   {ARM_CEXT_XSCALE, 0x0e200148, 0x0f300ffc, "wsrl%22-23w%8'g%c %12-15g, %16-19g, %0-3G"},
   {ARM_CEXT_XSCALE, 0xfc400100, 0xfe500f00, "wstrd %12-15g, %r"},
@@ -365,15 +360,15 @@ static const struct opcode32 coprocessor_opcodes[] =
   {FPU_VFP_EXT_V1, 0x0eb80b40, 0x0fbf0f50, "vcvt%c.f64.%7?su32 %z1, %y0"},
   {FPU_VFP_EXT_V1xD, 0x0eb40a40, 0x0fbf0f50, "vcmp%7'e%c.f32 %y1, %y0"},
   {FPU_VFP_EXT_V1, 0x0eb40b40, 0x0fbf0f50, "vcmp%7'e%c.f64 %z1, %z0"},
-  {FPU_VFP_EXT_V3xD, 0x0eba0a40, 0x0fbe0f50, "vcvt%c.f32.%16?us%7?31%7?26 %y1, %y1, #%5,0-3k"},
-  {FPU_VFP_EXT_V3, 0x0eba0b40, 0x0fbe0f50, "vcvt%c.f64.%16?us%7?31%7?26 %z1, %z1, #%5,0-3k"},
+  {FPU_VFP_EXT_V3xD, 0x0eba0a40, 0x0fbe0f50, "vcvt%c.f32.%16?us%7?31%7?26 %y1, %y1, %5,0-3k"},
+  {FPU_VFP_EXT_V3, 0x0eba0b40, 0x0fbe0f50, "vcvt%c.f64.%16?us%7?31%7?26 %z1, %z1, %5,0-3k"},
   {FPU_VFP_EXT_V1xD, 0x0ebc0a40, 0x0fbe0f50, "vcvt%7`r%c.%16?su32.f32 %y1, %y0"},
   {FPU_VFP_EXT_V1, 0x0ebc0b40, 0x0fbe0f50, "vcvt%7`r%c.%16?su32.f64 %y1, %z0"},
-  {FPU_VFP_EXT_V3xD, 0x0ebe0a40, 0x0fbe0f50, "vcvt%c.%16?us%7?31%7?26.f32 %y1, %y1, #%5,0-3k"},
-  {FPU_VFP_EXT_V3, 0x0ebe0b40, 0x0fbe0f50, "vcvt%c.%16?us%7?31%7?26.f64 %z1, %z1, #%5,0-3k"},
+  {FPU_VFP_EXT_V3xD, 0x0ebe0a40, 0x0fbe0f50, "vcvt%c.%16?us%7?31%7?26.f32 %y1, %y1, %5,0-3k"},
+  {FPU_VFP_EXT_V3, 0x0ebe0b40, 0x0fbe0f50, "vcvt%c.%16?us%7?31%7?26.f64 %z1, %z1, %5,0-3k"},
   {FPU_VFP_EXT_V1, 0x0c500b10, 0x0fb00ff0, "vmov%c %12-15r, %16-19r, %z0"},
-  {FPU_VFP_EXT_V3xD, 0x0eb00a00, 0x0fb00ff0, "vmov%c.f32 %y1, #%0-3,16-19d"},
-  {FPU_VFP_EXT_V3, 0x0eb00b00, 0x0fb00ff0, "vmov%c.f64 %z1, #%0-3,16-19d"},
+  {FPU_VFP_EXT_V3xD, 0x0eb00a00, 0x0fb00ff0, "vmov%c.f32 %y1, %0-3,16-19d"},
+  {FPU_VFP_EXT_V3, 0x0eb00b00, 0x0fb00ff0, "vmov%c.f64 %z1, %0-3,16-19d"},
   {FPU_VFP_EXT_V2, 0x0c400a10, 0x0ff00fd0, "vmov%c %y4, %12-15r, %16-19r"},
   {FPU_VFP_EXT_V2, 0x0c400b10, 0x0ff00fd0, "vmov%c %z0, %12-15r, %16-19r"},
   {FPU_VFP_EXT_V2, 0x0c500a10, 0x0ff00fd0, "vmov%c %12-15r, %16-19r, %y4"},
@@ -449,8 +444,8 @@ static const struct opcode32 coprocessor_opcodes[] =
   {ARM_CEXT_MAVERICK, 0x0e1005e0, 0x0ff00fff, "cftruncd32%c mvfx%12-15d, mvd%16-19d"},
   {ARM_CEXT_MAVERICK, 0x0e000550, 0x0ff00ff0, "cfrshl32%c mvfx%16-19d, mvfx%0-3d, %12-15r"},
   {ARM_CEXT_MAVERICK, 0x0e000570, 0x0ff00ff0, "cfrshl64%c mvdx%16-19d, mvdx%0-3d, %12-15r"},
-  {ARM_CEXT_MAVERICK, 0x0e000500, 0x0ff00f10, "cfsh32%c mvfx%12-15d, mvfx%16-19d, #%I"},
-  {ARM_CEXT_MAVERICK, 0x0e200500, 0x0ff00f10, "cfsh64%c mvdx%12-15d, mvdx%16-19d, #%I"},
+  {ARM_CEXT_MAVERICK, 0x0e000500, 0x0ff00f10, "cfsh32%c mvfx%12-15d, mvfx%16-19d, %I"},
+  {ARM_CEXT_MAVERICK, 0x0e200500, 0x0ff00f10, "cfsh64%c mvdx%12-15d, mvdx%16-19d, %I"},
   {ARM_CEXT_MAVERICK, 0x0e100490, 0x0ff00ff0, "cfcmps%c %12-15r, mvf%16-19d, mvf%0-3d"},
   {ARM_CEXT_MAVERICK, 0x0e1004b0, 0x0ff00ff0, "cfcmpd%c %12-15r, mvd%16-19d, mvd%0-3d"},
   {ARM_CEXT_MAVERICK, 0x0e100590, 0x0ff00ff0, "cfcmp32%c %12-15r, mvfx%16-19d, mvfx%0-3d"},
@@ -566,8 +561,8 @@ static const struct opcode32 coprocessor_opcodes[] =
 static const struct opcode32 neon_opcodes[] =
 {
   /* Extract.  */
-  {FPU_NEON_EXT_V1, 0xf2b00840, 0xffb00850, "vext%c.8 %12-15,22R, %16-19,7R, %0-3,5R, #%8-11d"},
-  {FPU_NEON_EXT_V1, 0xf2b00000, 0xffb00810, "vext%c.8 %12-15,22R, %16-19,7R, %0-3,5R, #%8-11d"},
+  {FPU_NEON_EXT_V1, 0xf2b00840, 0xffb00850, "vext%c.8 %12-15,22R, %16-19,7R, %0-3,5R, %8-11d"},
+  {FPU_NEON_EXT_V1, 0xf2b00000, 0xffb00810, "vext%c.8 %12-15,22R, %16-19,7R, %0-3,5R, %8-11d"},
 
   /* Move data element to all lanes.  */
   {FPU_NEON_EXT_V1, 0xf3b40c00, 0xffb70f90, "vdup%c.32 %12-15,22R, %0-3,5D[%19d]"},
@@ -606,7 +601,7 @@ static const struct opcode32 neon_opcodes[] =
   {FPU_NEON_EXT_V1, 0xf3b20240, 0xffb30fd0, "vqmovun%c.s%18-19T2 %12-15,22D, %0-3,5Q"},
   {FPU_NEON_EXT_V1, 0xf3b20280, 0xffb30fd0, "vqmovn%c.s%18-19T2 %12-15,22D, %0-3,5Q"},
   {FPU_NEON_EXT_V1, 0xf3b202c0, 0xffb30fd0, "vqmovn%c.u%18-19T2 %12-15,22D, %0-3,5Q"},
-  {FPU_NEON_EXT_V1, 0xf3b20300, 0xffb30fd0, "vshll%c.i%18-19S2 %12-15,22Q, %0-3,5D, #%18-19S2"},
+  {FPU_NEON_EXT_V1, 0xf3b20300, 0xffb30fd0, "vshll%c.i%18-19S2 %12-15,22Q, %0-3,5D, %18-19S2"},
   {FPU_NEON_EXT_V1, 0xf3bb0400, 0xffbf0e90, "vrecpe%c.%8?fu%18-19S2 %12-15,22R, %0-3,5R"},
   {FPU_NEON_EXT_V1, 0xf3bb0480, 0xffbf0e90, "vrsqrte%c.%8?fu%18-19S2 %12-15,22R, %0-3,5R"},
   {FPU_NEON_EXT_V1, 0xf3b00000, 0xffb30f90, "vrev64%c.%18-19S2 %12-15,22R, %0-3,5R"},
@@ -710,64 +705,64 @@ static const struct opcode32 neon_opcodes[] =
   {FPU_NEON_EXT_V1, 0xf2800030, 0xfeb808b0, "vmvn%c.i32 %12-15,22R, %E"},
 
   /* Two registers and a shift amount.  */
-  {FPU_NEON_EXT_V1, 0xf2880810, 0xffb80fd0, "vshrn%c.i16 %12-15,22D, %0-3,5Q, #%16-18e"},
-  {FPU_NEON_EXT_V1, 0xf2880850, 0xffb80fd0, "vrshrn%c.i16 %12-15,22D, %0-3,5Q, #%16-18e"},
-  {FPU_NEON_EXT_V1, 0xf2880810, 0xfeb80fd0, "vqshrun%c.s16 %12-15,22D, %0-3,5Q, #%16-18e"},
-  {FPU_NEON_EXT_V1, 0xf2880850, 0xfeb80fd0, "vqrshrun%c.s16 %12-15,22D, %0-3,5Q, #%16-18e"},
-  {FPU_NEON_EXT_V1, 0xf2880910, 0xfeb80fd0, "vqshrn%c.%24?us16 %12-15,22D, %0-3,5Q, #%16-18e"},
-  {FPU_NEON_EXT_V1, 0xf2880950, 0xfeb80fd0, "vqrshrn%c.%24?us16 %12-15,22D, %0-3,5Q, #%16-18e"},
-  {FPU_NEON_EXT_V1, 0xf2880a10, 0xfeb80fd0, "vshll%c.%24?us8 %12-15,22D, %0-3,5Q, #%16-18d"},
-  {FPU_NEON_EXT_V1, 0xf2900810, 0xffb00fd0, "vshrn%c.i32 %12-15,22D, %0-3,5Q, #%16-19e"},
-  {FPU_NEON_EXT_V1, 0xf2900850, 0xffb00fd0, "vrshrn%c.i32 %12-15,22D, %0-3,5Q, #%16-19e"},
-  {FPU_NEON_EXT_V1, 0xf2880510, 0xffb80f90, "vshl%c.%24?us8 %12-15,22R, %0-3,5R, #%16-18d"},
-  {FPU_NEON_EXT_V1, 0xf3880410, 0xffb80f90, "vsri%c.8 %12-15,22R, %0-3,5R, #%16-18e"},
-  {FPU_NEON_EXT_V1, 0xf3880510, 0xffb80f90, "vsli%c.8 %12-15,22R, %0-3,5R, #%16-18d"},
-  {FPU_NEON_EXT_V1, 0xf3880610, 0xffb80f90, "vqshlu%c.s8 %12-15,22R, %0-3,5R, #%16-18d"},
-  {FPU_NEON_EXT_V1, 0xf2900810, 0xfeb00fd0, "vqshrun%c.s32 %12-15,22D, %0-3,5Q, #%16-19e"},
-  {FPU_NEON_EXT_V1, 0xf2900850, 0xfeb00fd0, "vqrshrun%c.s32 %12-15,22D, %0-3,5Q, #%16-19e"},
-  {FPU_NEON_EXT_V1, 0xf2900910, 0xfeb00fd0, "vqshrn%c.%24?us32 %12-15,22D, %0-3,5Q, #%16-19e"},
-  {FPU_NEON_EXT_V1, 0xf2900950, 0xfeb00fd0, "vqrshrn%c.%24?us32 %12-15,22D, %0-3,5Q, #%16-19e"},
-  {FPU_NEON_EXT_V1, 0xf2900a10, 0xfeb00fd0, "vshll%c.%24?us16 %12-15,22D, %0-3,5Q, #%16-19d"},
-  {FPU_NEON_EXT_V1, 0xf2880010, 0xfeb80f90, "vshr%c.%24?us8 %12-15,22R, %0-3,5R, #%16-18e"},
-  {FPU_NEON_EXT_V1, 0xf2880110, 0xfeb80f90, "vsra%c.%24?us8 %12-15,22R, %0-3,5R, #%16-18e"},
-  {FPU_NEON_EXT_V1, 0xf2880210, 0xfeb80f90, "vrshr%c.%24?us8 %12-15,22R, %0-3,5R, #%16-18e"},
-  {FPU_NEON_EXT_V1, 0xf2880310, 0xfeb80f90, "vrsra%c.%24?us8 %12-15,22R, %0-3,5R, #%16-18e"},
-  {FPU_NEON_EXT_V1, 0xf2880710, 0xfeb80f90, "vqshl%c.%24?us8 %12-15,22R, %0-3,5R, #%16-18d"},
-  {FPU_NEON_EXT_V1, 0xf2a00810, 0xffa00fd0, "vshrn%c.i64 %12-15,22D, %0-3,5Q, #%16-20e"},
-  {FPU_NEON_EXT_V1, 0xf2a00850, 0xffa00fd0, "vrshrn%c.i64 %12-15,22D, %0-3,5Q, #%16-20e"},
-  {FPU_NEON_EXT_V1, 0xf2900510, 0xffb00f90, "vshl%c.%24?us16 %12-15,22R, %0-3,5R, #%16-19d"},
-  {FPU_NEON_EXT_V1, 0xf3900410, 0xffb00f90, "vsri%c.16 %12-15,22R, %0-3,5R, #%16-19e"},
-  {FPU_NEON_EXT_V1, 0xf3900510, 0xffb00f90, "vsli%c.16 %12-15,22R, %0-3,5R, #%16-19d"},
-  {FPU_NEON_EXT_V1, 0xf3900610, 0xffb00f90, "vqshlu%c.s16 %12-15,22R, %0-3,5R, #%16-19d"},
-  {FPU_NEON_EXT_V1, 0xf2a00a10, 0xfea00fd0, "vshll%c.%24?us32 %12-15,22D, %0-3,5Q, #%16-20d"},
-  {FPU_NEON_EXT_V1, 0xf2900010, 0xfeb00f90, "vshr%c.%24?us16 %12-15,22R, %0-3,5R, #%16-19e"},
-  {FPU_NEON_EXT_V1, 0xf2900110, 0xfeb00f90, "vsra%c.%24?us16 %12-15,22R, %0-3,5R, #%16-19e"},
-  {FPU_NEON_EXT_V1, 0xf2900210, 0xfeb00f90, "vrshr%c.%24?us16 %12-15,22R, %0-3,5R, #%16-19e"},
-  {FPU_NEON_EXT_V1, 0xf2900310, 0xfeb00f90, "vrsra%c.%24?us16 %12-15,22R, %0-3,5R, #%16-19e"},
-  {FPU_NEON_EXT_V1, 0xf2900710, 0xfeb00f90, "vqshl%c.%24?us16 %12-15,22R, %0-3,5R, #%16-19d"},
-  {FPU_NEON_EXT_V1, 0xf2a00810, 0xfea00fd0, "vqshrun%c.s64 %12-15,22D, %0-3,5Q, #%16-20e"},
-  {FPU_NEON_EXT_V1, 0xf2a00850, 0xfea00fd0, "vqrshrun%c.s64 %12-15,22D, %0-3,5Q, #%16-20e"},
-  {FPU_NEON_EXT_V1, 0xf2a00910, 0xfea00fd0, "vqshrn%c.%24?us64 %12-15,22D, %0-3,5Q, #%16-20e"},
-  {FPU_NEON_EXT_V1, 0xf2a00950, 0xfea00fd0, "vqrshrn%c.%24?us64 %12-15,22D, %0-3,5Q, #%16-20e"},
-  {FPU_NEON_EXT_V1, 0xf2a00510, 0xffa00f90, "vshl%c.%24?us32 %12-15,22R, %0-3,5R, #%16-20d"},
-  {FPU_NEON_EXT_V1, 0xf3a00410, 0xffa00f90, "vsri%c.32 %12-15,22R, %0-3,5R, #%16-20e"},
-  {FPU_NEON_EXT_V1, 0xf3a00510, 0xffa00f90, "vsli%c.32 %12-15,22R, %0-3,5R, #%16-20d"},
-  {FPU_NEON_EXT_V1, 0xf3a00610, 0xffa00f90, "vqshlu%c.s32 %12-15,22R, %0-3,5R, #%16-20d"},
-  {FPU_NEON_EXT_V1, 0xf2a00010, 0xfea00f90, "vshr%c.%24?us32 %12-15,22R, %0-3,5R, #%16-20e"},
-  {FPU_NEON_EXT_V1, 0xf2a00110, 0xfea00f90, "vsra%c.%24?us32 %12-15,22R, %0-3,5R, #%16-20e"},
-  {FPU_NEON_EXT_V1, 0xf2a00210, 0xfea00f90, "vrshr%c.%24?us32 %12-15,22R, %0-3,5R, #%16-20e"},
-  {FPU_NEON_EXT_V1, 0xf2a00310, 0xfea00f90, "vrsra%c.%24?us32 %12-15,22R, %0-3,5R, #%16-20e"},
-  {FPU_NEON_EXT_V1, 0xf2a00710, 0xfea00f90, "vqshl%c.%24?us32 %12-15,22R, %0-3,5R, #%16-20d"},
-  {FPU_NEON_EXT_V1, 0xf2800590, 0xff800f90, "vshl%c.%24?us64 %12-15,22R, %0-3,5R, #%16-21d"},
-  {FPU_NEON_EXT_V1, 0xf3800490, 0xff800f90, "vsri%c.64 %12-15,22R, %0-3,5R, #%16-21e"},
-  {FPU_NEON_EXT_V1, 0xf3800590, 0xff800f90, "vsli%c.64 %12-15,22R, %0-3,5R, #%16-21d"},
-  {FPU_NEON_EXT_V1, 0xf3800690, 0xff800f90, "vqshlu%c.s64 %12-15,22R, %0-3,5R, #%16-21d"},
-  {FPU_NEON_EXT_V1, 0xf2800090, 0xfe800f90, "vshr%c.%24?us64 %12-15,22R, %0-3,5R, #%16-21e"},
-  {FPU_NEON_EXT_V1, 0xf2800190, 0xfe800f90, "vsra%c.%24?us64 %12-15,22R, %0-3,5R, #%16-21e"},
-  {FPU_NEON_EXT_V1, 0xf2800290, 0xfe800f90, "vrshr%c.%24?us64 %12-15,22R, %0-3,5R, #%16-21e"},
-  {FPU_NEON_EXT_V1, 0xf2800390, 0xfe800f90, "vrsra%c.%24?us64 %12-15,22R, %0-3,5R, #%16-21e"},
-  {FPU_NEON_EXT_V1, 0xf2800790, 0xfe800f90, "vqshl%c.%24?us64 %12-15,22R, %0-3,5R, #%16-21d"},
-  {FPU_NEON_EXT_V1, 0xf2a00e10, 0xfea00e90, "vcvt%c.%24,8?usff32.%24,8?ffus32 %12-15,22R, %0-3,5R, #%16-20e"},
+  {FPU_NEON_EXT_V1, 0xf2880810, 0xffb80fd0, "vshrn%c.i16 %12-15,22D, %0-3,5Q, %16-18e"},
+  {FPU_NEON_EXT_V1, 0xf2880850, 0xffb80fd0, "vrshrn%c.i16 %12-15,22D, %0-3,5Q, %16-18e"},
+  {FPU_NEON_EXT_V1, 0xf2880810, 0xfeb80fd0, "vqshrun%c.s16 %12-15,22D, %0-3,5Q, %16-18e"},
+  {FPU_NEON_EXT_V1, 0xf2880850, 0xfeb80fd0, "vqrshrun%c.s16 %12-15,22D, %0-3,5Q, %16-18e"},
+  {FPU_NEON_EXT_V1, 0xf2880910, 0xfeb80fd0, "vqshrn%c.%24?us16 %12-15,22D, %0-3,5Q, %16-18e"},
+  {FPU_NEON_EXT_V1, 0xf2880950, 0xfeb80fd0, "vqrshrn%c.%24?us16 %12-15,22D, %0-3,5Q, %16-18e"},
+  {FPU_NEON_EXT_V1, 0xf2880a10, 0xfeb80fd0, "vshll%c.%24?us8 %12-15,22D, %0-3,5Q, %16-18d"},
+  {FPU_NEON_EXT_V1, 0xf2900810, 0xffb00fd0, "vshrn%c.i32 %12-15,22D, %0-3,5Q, %16-19e"},
+  {FPU_NEON_EXT_V1, 0xf2900850, 0xffb00fd0, "vrshrn%c.i32 %12-15,22D, %0-3,5Q, %16-19e"},
+  {FPU_NEON_EXT_V1, 0xf2880510, 0xffb80f90, "vshl%c.%24?us8 %12-15,22R, %0-3,5R, %16-18d"},
+  {FPU_NEON_EXT_V1, 0xf3880410, 0xffb80f90, "vsri%c.8 %12-15,22R, %0-3,5R, %16-18e"},
+  {FPU_NEON_EXT_V1, 0xf3880510, 0xffb80f90, "vsli%c.8 %12-15,22R, %0-3,5R, %16-18d"},
+  {FPU_NEON_EXT_V1, 0xf3880610, 0xffb80f90, "vqshlu%c.s8 %12-15,22R, %0-3,5R, %16-18d"},
+  {FPU_NEON_EXT_V1, 0xf2900810, 0xfeb00fd0, "vqshrun%c.s32 %12-15,22D, %0-3,5Q, %16-19e"},
+  {FPU_NEON_EXT_V1, 0xf2900850, 0xfeb00fd0, "vqrshrun%c.s32 %12-15,22D, %0-3,5Q, %16-19e"},
+  {FPU_NEON_EXT_V1, 0xf2900910, 0xfeb00fd0, "vqshrn%c.%24?us32 %12-15,22D, %0-3,5Q, %16-19e"},
+  {FPU_NEON_EXT_V1, 0xf2900950, 0xfeb00fd0, "vqrshrn%c.%24?us32 %12-15,22D, %0-3,5Q, %16-19e"},
+  {FPU_NEON_EXT_V1, 0xf2900a10, 0xfeb00fd0, "vshll%c.%24?us16 %12-15,22D, %0-3,5Q, %16-19d"},
+  {FPU_NEON_EXT_V1, 0xf2880010, 0xfeb80f90, "vshr%c.%24?us8 %12-15,22R, %0-3,5R, %16-18e"},
+  {FPU_NEON_EXT_V1, 0xf2880110, 0xfeb80f90, "vsra%c.%24?us8 %12-15,22R, %0-3,5R, %16-18e"},
+  {FPU_NEON_EXT_V1, 0xf2880210, 0xfeb80f90, "vrshr%c.%24?us8 %12-15,22R, %0-3,5R, %16-18e"},
+  {FPU_NEON_EXT_V1, 0xf2880310, 0xfeb80f90, "vrsra%c.%24?us8 %12-15,22R, %0-3,5R, %16-18e"},
+  {FPU_NEON_EXT_V1, 0xf2880710, 0xfeb80f90, "vqshl%c.%24?us8 %12-15,22R, %0-3,5R, %16-18d"},
+  {FPU_NEON_EXT_V1, 0xf2a00810, 0xffa00fd0, "vshrn%c.i64 %12-15,22D, %0-3,5Q, %16-20e"},
+  {FPU_NEON_EXT_V1, 0xf2a00850, 0xffa00fd0, "vrshrn%c.i64 %12-15,22D, %0-3,5Q, %16-20e"},
+  {FPU_NEON_EXT_V1, 0xf2900510, 0xffb00f90, "vshl%c.%24?us16 %12-15,22R, %0-3,5R, %16-19d"},
+  {FPU_NEON_EXT_V1, 0xf3900410, 0xffb00f90, "vsri%c.16 %12-15,22R, %0-3,5R, %16-19e"},
+  {FPU_NEON_EXT_V1, 0xf3900510, 0xffb00f90, "vsli%c.16 %12-15,22R, %0-3,5R, %16-19d"},
+  {FPU_NEON_EXT_V1, 0xf3900610, 0xffb00f90, "vqshlu%c.s16 %12-15,22R, %0-3,5R, %16-19d"},
+  {FPU_NEON_EXT_V1, 0xf2a00a10, 0xfea00fd0, "vshll%c.%24?us32 %12-15,22D, %0-3,5Q, %16-20d"},
+  {FPU_NEON_EXT_V1, 0xf2900010, 0xfeb00f90, "vshr%c.%24?us16 %12-15,22R, %0-3,5R, %16-19e"},
+  {FPU_NEON_EXT_V1, 0xf2900110, 0xfeb00f90, "vsra%c.%24?us16 %12-15,22R, %0-3,5R, %16-19e"},
+  {FPU_NEON_EXT_V1, 0xf2900210, 0xfeb00f90, "vrshr%c.%24?us16 %12-15,22R, %0-3,5R, %16-19e"},
+  {FPU_NEON_EXT_V1, 0xf2900310, 0xfeb00f90, "vrsra%c.%24?us16 %12-15,22R, %0-3,5R, %16-19e"},
+  {FPU_NEON_EXT_V1, 0xf2900710, 0xfeb00f90, "vqshl%c.%24?us16 %12-15,22R, %0-3,5R, %16-19d"},
+  {FPU_NEON_EXT_V1, 0xf2a00810, 0xfea00fd0, "vqshrun%c.s64 %12-15,22D, %0-3,5Q, %16-20e"},
+  {FPU_NEON_EXT_V1, 0xf2a00850, 0xfea00fd0, "vqrshrun%c.s64 %12-15,22D, %0-3,5Q, %16-20e"},
+  {FPU_NEON_EXT_V1, 0xf2a00910, 0xfea00fd0, "vqshrn%c.%24?us64 %12-15,22D, %0-3,5Q, %16-20e"},
+  {FPU_NEON_EXT_V1, 0xf2a00950, 0xfea00fd0, "vqrshrn%c.%24?us64 %12-15,22D, %0-3,5Q, %16-20e"},
+  {FPU_NEON_EXT_V1, 0xf2a00510, 0xffa00f90, "vshl%c.%24?us32 %12-15,22R, %0-3,5R, %16-20d"},
+  {FPU_NEON_EXT_V1, 0xf3a00410, 0xffa00f90, "vsri%c.32 %12-15,22R, %0-3,5R, %16-20e"},
+  {FPU_NEON_EXT_V1, 0xf3a00510, 0xffa00f90, "vsli%c.32 %12-15,22R, %0-3,5R, %16-20d"},
+  {FPU_NEON_EXT_V1, 0xf3a00610, 0xffa00f90, "vqshlu%c.s32 %12-15,22R, %0-3,5R, %16-20d"},
+  {FPU_NEON_EXT_V1, 0xf2a00010, 0xfea00f90, "vshr%c.%24?us32 %12-15,22R, %0-3,5R, %16-20e"},
+  {FPU_NEON_EXT_V1, 0xf2a00110, 0xfea00f90, "vsra%c.%24?us32 %12-15,22R, %0-3,5R, %16-20e"},
+  {FPU_NEON_EXT_V1, 0xf2a00210, 0xfea00f90, "vrshr%c.%24?us32 %12-15,22R, %0-3,5R, %16-20e"},
+  {FPU_NEON_EXT_V1, 0xf2a00310, 0xfea00f90, "vrsra%c.%24?us32 %12-15,22R, %0-3,5R, %16-20e"},
+  {FPU_NEON_EXT_V1, 0xf2a00710, 0xfea00f90, "vqshl%c.%24?us32 %12-15,22R, %0-3,5R, %16-20d"},
+  {FPU_NEON_EXT_V1, 0xf2800590, 0xff800f90, "vshl%c.%24?us64 %12-15,22R, %0-3,5R, %16-21d"},
+  {FPU_NEON_EXT_V1, 0xf3800490, 0xff800f90, "vsri%c.64 %12-15,22R, %0-3,5R, %16-21e"},
+  {FPU_NEON_EXT_V1, 0xf3800590, 0xff800f90, "vsli%c.64 %12-15,22R, %0-3,5R, %16-21d"},
+  {FPU_NEON_EXT_V1, 0xf3800690, 0xff800f90, "vqshlu%c.s64 %12-15,22R, %0-3,5R, %16-21d"},
+  {FPU_NEON_EXT_V1, 0xf2800090, 0xfe800f90, "vshr%c.%24?us64 %12-15,22R, %0-3,5R, %16-21e"},
+  {FPU_NEON_EXT_V1, 0xf2800190, 0xfe800f90, "vsra%c.%24?us64 %12-15,22R, %0-3,5R, %16-21e"},
+  {FPU_NEON_EXT_V1, 0xf2800290, 0xfe800f90, "vrshr%c.%24?us64 %12-15,22R, %0-3,5R, %16-21e"},
+  {FPU_NEON_EXT_V1, 0xf2800390, 0xfe800f90, "vrsra%c.%24?us64 %12-15,22R, %0-3,5R, %16-21e"},
+  {FPU_NEON_EXT_V1, 0xf2800790, 0xfe800f90, "vqshl%c.%24?us64 %12-15,22R, %0-3,5R, %16-21d"},
+  {FPU_NEON_EXT_V1, 0xf2a00e10, 0xfea00e90, "vcvt%c.%24,8?usff32.%24,8?ffus32 %12-15,22R, %0-3,5R, %16-20e"},
 
   /* Three registers of different lengths.  */
   {FPU_CRYPTO_EXT_ARMV8, 0xf2a00e00, 0xfeb00f50, "vmull%c.p64 %12-15,22Q, %16-19,7D, %0-3,5D"},
@@ -920,7 +915,7 @@ static const struct opcode32 arm_opcodes[] =
 
   /* V7 instructions.  */
   {ARM_EXT_V7, 0xf450f000, 0xfd70f000, "pli %P"},
-  {ARM_EXT_V7, 0x0320f0f0, 0x0ffffff0, "dbg%c #%0-3d"},
+  {ARM_EXT_V7, 0x0320f0f0, 0x0ffffff0, "dbg%c %0-3d"},
   {ARM_EXT_V8, 0xf57ff051, 0xfffffff3, "dmb %U"},
   {ARM_EXT_V8, 0xf57ff041, 0xfffffff3, "dsb %U"},
   {ARM_EXT_V7, 0xf57ff050, 0xfffffff0, "dmb %U"},
@@ -939,7 +934,7 @@ static const struct opcode32 arm_opcodes[] =
   {ARM_EXT_V6T2, 0x03000000, 0x0ff00000, "movw%c %12-15R, %V"},
   {ARM_EXT_V6T2, 0x03400000, 0x0ff00000, "movt%c %12-15R, %V"},
   {ARM_EXT_V6T2, 0x06ff0f30, 0x0fff0ff0, "rbit%c %12-15R, %0-3R"},
-  {ARM_EXT_V6T2, 0x07a00050, 0x0fa00070, "%22?usbfx%c %12-15r, %0-3r, #%7-11d, #%16-20W"},
+  {ARM_EXT_V6T2, 0x07a00050, 0x0fa00070, "%22?usbfx%c %12-15r, %0-3r, %7-11d, %16-20W"},
 
   /* ARM Security extension instructions.  */
   {ARM_EXT_SEC, 0x01600070, 0x0ff000f0, "smc%c %e"},
@@ -962,14 +957,14 @@ static const struct opcode32 arm_opcodes[] =
 
   /* ARM V6 instructions.  */
   {ARM_EXT_V6, 0xf1080000, 0xfffffe3f, "cpsie %8'a%7'i%6'f"},
-  {ARM_EXT_V6, 0xf10a0000, 0xfffffe20, "cpsie %8'a%7'i%6'f,#%0-4d"},
+  {ARM_EXT_V6, 0xf10a0000, 0xfffffe20, "cpsie %8'a%7'i%6'f,%0-4d"},
   {ARM_EXT_V6, 0xf10C0000, 0xfffffe3f, "cpsid %8'a%7'i%6'f"},
-  {ARM_EXT_V6, 0xf10e0000, 0xfffffe20, "cpsid %8'a%7'i%6'f,#%0-4d"},
-  {ARM_EXT_V6, 0xf1000000, 0xfff1fe20, "cps #%0-4d"},
+  {ARM_EXT_V6, 0xf10e0000, 0xfffffe20, "cpsid %8'a%7'i%6'f,%0-4d"},
+  {ARM_EXT_V6, 0xf1000000, 0xfff1fe20, "cps %0-4d"},
   {ARM_EXT_V6, 0x06800010, 0x0ff00ff0, "pkhbt%c %12-15R, %16-19R, %0-3R"},
-  {ARM_EXT_V6, 0x06800010, 0x0ff00070, "pkhbt%c %12-15R, %16-19R, %0-3R, lsl #%7-11d"},
+  {ARM_EXT_V6, 0x06800010, 0x0ff00070, "pkhbt%c %12-15R, %16-19R, %0-3R, lsl %7-11d"},
   {ARM_EXT_V6, 0x06800050, 0x0ff00ff0, "pkhtb%c %12-15R, %16-19R, %0-3R, asr #32"},
-  {ARM_EXT_V6, 0x06800050, 0x0ff00070, "pkhtb%c %12-15R, %16-19R, %0-3R, asr #%7-11d"},
+  {ARM_EXT_V6, 0x06800050, 0x0ff00070, "pkhtb%c %12-15R, %16-19R, %0-3R, asr %7-11d"},
   {ARM_EXT_V6, 0x01900f9f, 0x0ff00fff, "ldrex%c r%12-15d, [%16-19R]"},
   {ARM_EXT_V6, 0x06200f10, 0x0ff00ff0, "qadd16%c %12-15R, %16-19R, %0-3R"},
   {ARM_EXT_V6, 0x06200f90, 0x0ff00ff0, "qadd8%c %12-15R, %16-19R, %0-3R"},
@@ -1070,19 +1065,19 @@ static const struct opcode32 arm_opcodes[] =
   {ARM_EXT_V6, 0x0750f010, 0x0ff0f0d0, "smmul%5'r%c %16-19R, %0-3R, %8-11R"},
   {ARM_EXT_V6, 0x07500010, 0x0ff000d0, "smmla%5'r%c %16-19R, %0-3R, %8-11R, %12-15R"},
   {ARM_EXT_V6, 0x075000d0, 0x0ff000d0, "smmls%5'r%c %16-19R, %0-3R, %8-11R, %12-15R"},
-  {ARM_EXT_V6, 0xf84d0500, 0xfe5fffe0, "srs%23?id%24?ba %16-19r%21'!, #%0-4d"},
-  {ARM_EXT_V6, 0x06a00010, 0x0fe00ff0, "ssat%c %12-15R, #%16-20W, %0-3R"},
-  {ARM_EXT_V6, 0x06a00010, 0x0fe00070, "ssat%c %12-15R, #%16-20W, %0-3R, lsl #%7-11d"},
-  {ARM_EXT_V6, 0x06a00050, 0x0fe00070, "ssat%c %12-15R, #%16-20W, %0-3R, asr #%7-11d"},
-  {ARM_EXT_V6, 0x06a00f30, 0x0ff00ff0, "ssat16%c %12-15r, #%16-19W, %0-3r"},
+  {ARM_EXT_V6, 0xf84d0500, 0xfe5fffe0, "srs%23?id%24?ba %16-19r%21'!, %0-4d"},
+  {ARM_EXT_V6, 0x06a00010, 0x0fe00ff0, "ssat%c %12-15R, %16-20W, %0-3R"},
+  {ARM_EXT_V6, 0x06a00010, 0x0fe00070, "ssat%c %12-15R, %16-20W, %0-3R, lsl %7-11d"},
+  {ARM_EXT_V6, 0x06a00050, 0x0fe00070, "ssat%c %12-15R, %16-20W, %0-3R, asr %7-11d"},
+  {ARM_EXT_V6, 0x06a00f30, 0x0ff00ff0, "ssat16%c %12-15r, %16-19W, %0-3r"},
   {ARM_EXT_V6, 0x01800f90, 0x0ff00ff0, "strex%c %12-15R, %0-3R, [%16-19R]"},
   {ARM_EXT_V6, 0x00400090, 0x0ff000f0, "umaal%c %12-15R, %16-19R, %0-3R, %8-11R"},
   {ARM_EXT_V6, 0x0780f010, 0x0ff0f0f0, "usad8%c %16-19R, %0-3R, %8-11R"},
   {ARM_EXT_V6, 0x07800010, 0x0ff000f0, "usada8%c %16-19R, %0-3R, %8-11R, %12-15R"},
-  {ARM_EXT_V6, 0x06e00010, 0x0fe00ff0, "usat%c %12-15R, #%16-20d, %0-3R"},
-  {ARM_EXT_V6, 0x06e00010, 0x0fe00070, "usat%c %12-15R, #%16-20d, %0-3R, lsl #%7-11d"},
-  {ARM_EXT_V6, 0x06e00050, 0x0fe00070, "usat%c %12-15R, #%16-20d, %0-3R, asr #%7-11d"},
-  {ARM_EXT_V6, 0x06e00f30, 0x0ff00ff0, "usat16%c %12-15R, #%16-19d, %0-3R"},
+  {ARM_EXT_V6, 0x06e00010, 0x0fe00ff0, "usat%c %12-15R, %16-20d, %0-3R"},
+  {ARM_EXT_V6, 0x06e00010, 0x0fe00070, "usat%c %12-15R, %16-20d, %0-3R, lsl %7-11d"},
+  {ARM_EXT_V6, 0x06e00050, 0x0fe00070, "usat%c %12-15R, %16-20d, %0-3R, asr %7-11d"},
+  {ARM_EXT_V6, 0x06e00f30, 0x0ff00ff0, "usat16%c %12-15R, %16-19d, %0-3R"},
 
   /* V5J instruction.  */
   {ARM_EXT_V5J, 0x012fff20, 0x0ffffff0, "bxj%c %0-3R"},
@@ -1124,7 +1119,7 @@ static const struct opcode32 arm_opcodes[] =
   {ARM_EXT_V5ExP, 0x01600050, 0x0ff00ff0, "qdsub%c %12-15R, %0-3R, %16-19R"},
 
   /* ARM Instructions.  */
-  {ARM_EXT_V1, 0x052d0004, 0x0fff0fff, "push%c {%12-15r}"}, //  ; (str%c %12-15r, %a)"},
+  {ARM_EXT_V1, 0x052d0004, 0x0fff0fff, "push%c {%12-15r}  ; (str%c %12-15r, %a)"},
   
   {ARM_EXT_V1, 0x04400000, 0x0e500000, "strb%t%c %12-15R, %a"},
   {ARM_EXT_V1, 0x04000000, 0x0e500000, "str%t%c %12-15r, %a"},
@@ -1216,7 +1211,7 @@ static const struct opcode32 arm_opcodes[] =
   {ARM_EXT_V1, 0x01e00010, 0x0fe00090, "mvn%20's%c %12-15R, %o"},
 
   {ARM_EXT_V1, 0x06000010, 0x0e000010, UNDEFINED_INSTRUCTION},
-  {ARM_EXT_V1, 0x049d0004, 0x0fff0fff, "pop%c {%12-15r}"},//  ; (ldr%c %12-15r, %a)"},
+  {ARM_EXT_V1, 0x049d0004, 0x0fff0fff, "pop%c {%12-15r}  ; (ldr%c %12-15r, %a)"},
   
   {ARM_EXT_V1, 0x04500000, 0x0c500000, "ldrb%t%c %12-15R, %a"},
 
@@ -1337,7 +1332,7 @@ static const struct opcode16 thumb_opcodes[] =
   /* This is BLX(2).  BLX(1) is a 32-bit instruction.  */
   {ARM_EXT_V5T, 0x4780, 0xff87, "blx%c %3-6r%x"},	/* note: 4 bit register number.  */
   /* ARM V4T ISA (Thumb v1).  */
-  {ARM_EXT_V4T, 0x46C0, 0xFFFF, "nop%c"}, //   ; (mov r8, r8)"},
+  {ARM_EXT_V4T, 0x46C0, 0xFFFF, "nop%c   ; (mov r8, r8)"},
   /* Format 4.  */
   {ARM_EXT_V4T, 0x4000, 0xFFC0, "and%C %0-2r, %3-5r"},
   {ARM_EXT_V4T, 0x4040, 0xFFC0, "eor%C %0-2r, %3-5r"},
@@ -1356,8 +1351,8 @@ static const struct opcode16 thumb_opcodes[] =
   {ARM_EXT_V4T, 0x4380, 0xFFC0, "bic%C %0-2r, %3-5r"},
   {ARM_EXT_V4T, 0x43C0, 0xFFC0, "mvn%C %0-2r, %3-5r"},
   /* format 13 */
-  {ARM_EXT_V4T, 0xB000, 0xFF80, "add%c sp, #%0-6W"},
-  {ARM_EXT_V4T, 0xB080, 0xFF80, "sub%c sp, #%0-6W"},
+  {ARM_EXT_V4T, 0xB000, 0xFF80, "add%c sp, %0-6W"},
+  {ARM_EXT_V4T, 0xB080, 0xFF80, "sub%c sp, %0-6W"},
   /* format 5 */
   {ARM_EXT_V4T, 0x4700, 0xFF80, "bx%c %S%x"},
   {ARM_EXT_V4T, 0x4400, 0xFF00, "add%c %D, %S"},
@@ -1369,8 +1364,8 @@ static const struct opcode16 thumb_opcodes[] =
   /* format 2 */
   {ARM_EXT_V4T, 0x1800, 0xFE00, "add%C %0-2r, %3-5r, %6-8r"},
   {ARM_EXT_V4T, 0x1A00, 0xFE00, "sub%C %0-2r, %3-5r, %6-8r"},
-  {ARM_EXT_V4T, 0x1C00, 0xFE00, "add%C %0-2r, %3-5r, #%6-8d"},
-  {ARM_EXT_V4T, 0x1E00, 0xFE00, "sub%C %0-2r, %3-5r, #%6-8d"},
+  {ARM_EXT_V4T, 0x1C00, 0xFE00, "add%C %0-2r, %3-5r, %6-8d"},
+  {ARM_EXT_V4T, 0x1E00, 0xFE00, "sub%C %0-2r, %3-5r, %6-8d"},
   /* format 8 */
   {ARM_EXT_V4T, 0x5200, 0xFE00, "strh%c %0-2r, [%3-5r, %6-8r]"},
   {ARM_EXT_V4T, 0x5A00, 0xFE00, "ldrh%c %0-2r, [%3-5r, %6-8r]"},
@@ -1380,30 +1375,30 @@ static const struct opcode16 thumb_opcodes[] =
   {ARM_EXT_V4T, 0x5800, 0xFA00, "ldr%10'b%c %0-2r, [%3-5r, %6-8r]"},
   /* format 1 */
   {ARM_EXT_V4T, 0x0000, 0xFFC0, "mov%C %0-2r, %3-5r"},
-  {ARM_EXT_V4T, 0x0000, 0xF800, "lsl%C %0-2r, %3-5r, #%6-10d"},
+  {ARM_EXT_V4T, 0x0000, 0xF800, "lsl%C %0-2r, %3-5r, %6-10d"},
   {ARM_EXT_V4T, 0x0800, 0xF800, "lsr%C %0-2r, %3-5r, %s"},
   {ARM_EXT_V4T, 0x1000, 0xF800, "asr%C %0-2r, %3-5r, %s"},
   /* format 3 */
-  {ARM_EXT_V4T, 0x2000, 0xF800, "mov%C %8-10r, #%0-7d"},
-  {ARM_EXT_V4T, 0x2800, 0xF800, "cmp%c %8-10r, #%0-7d"},
-  {ARM_EXT_V4T, 0x3000, 0xF800, "add%C %8-10r, #%0-7d"},
-  {ARM_EXT_V4T, 0x3800, 0xF800, "sub%C %8-10r, #%0-7d"},
+  {ARM_EXT_V4T, 0x2000, 0xF800, "mov%C %8-10r, %0-7d"},
+  {ARM_EXT_V4T, 0x2800, 0xF800, "cmp%c %8-10r, %0-7d"},
+  {ARM_EXT_V4T, 0x3000, 0xF800, "add%C %8-10r, %0-7d"},
+  {ARM_EXT_V4T, 0x3800, 0xF800, "sub%C %8-10r, %0-7d"},
   /* format 6 */
-  {ARM_EXT_V4T, 0x4800, 0xF800, "ldr%c %8-10r, [pc, #%0-7W] ; (%0-7a)"},  /* TODO: Disassemble PC relative "LDR rD,=<symbolic>" */
+  {ARM_EXT_V4T, 0x4800, 0xF800, "ldr%c %8-10r, [pc, %0-7W] ; (%0-7a)"},  /* TODO: Disassemble PC relative "LDR rD,=<symbolic>" */
   /* format 9 */
-  {ARM_EXT_V4T, 0x6000, 0xF800, "str%c %0-2r, [%3-5r, #%6-10W]"},
-  {ARM_EXT_V4T, 0x6800, 0xF800, "ldr%c %0-2r, [%3-5r, #%6-10W]"},
-  {ARM_EXT_V4T, 0x7000, 0xF800, "strb%c %0-2r, [%3-5r, #%6-10d]"},
-  {ARM_EXT_V4T, 0x7800, 0xF800, "ldrb%c %0-2r, [%3-5r, #%6-10d]"},
+  {ARM_EXT_V4T, 0x6000, 0xF800, "str%c %0-2r, [%3-5r, %6-10W]"},
+  {ARM_EXT_V4T, 0x6800, 0xF800, "ldr%c %0-2r, [%3-5r, %6-10W]"},
+  {ARM_EXT_V4T, 0x7000, 0xF800, "strb%c %0-2r, [%3-5r, %6-10d]"},
+  {ARM_EXT_V4T, 0x7800, 0xF800, "ldrb%c %0-2r, [%3-5r, %6-10d]"},
   /* format 10 */
-  {ARM_EXT_V4T, 0x8000, 0xF800, "strh%c %0-2r, [%3-5r, #%6-10H]"},
-  {ARM_EXT_V4T, 0x8800, 0xF800, "ldrh%c %0-2r, [%3-5r, #%6-10H]"},
+  {ARM_EXT_V4T, 0x8000, 0xF800, "strh%c %0-2r, [%3-5r, %6-10H]"},
+  {ARM_EXT_V4T, 0x8800, 0xF800, "ldrh%c %0-2r, [%3-5r, %6-10H]"},
   /* format 11 */
-  {ARM_EXT_V4T, 0x9000, 0xF800, "str%c %8-10r, [sp, #%0-7W]"},
-  {ARM_EXT_V4T, 0x9800, 0xF800, "ldr%c %8-10r, [sp, #%0-7W]"},
+  {ARM_EXT_V4T, 0x9000, 0xF800, "str%c %8-10r, [sp, %0-7W]"},
+  {ARM_EXT_V4T, 0x9800, 0xF800, "ldr%c %8-10r, [sp, %0-7W]"},
   /* format 12 */
-  {ARM_EXT_V4T, 0xA000, 0xF800, "add%c %8-10r, pc, #%0-7W ; (adr %8-10r, %0-7a)"},
-  {ARM_EXT_V4T, 0xA800, 0xF800, "add%c %8-10r, sp, #%0-7W"},
+  {ARM_EXT_V4T, 0xA000, 0xF800, "add%c %8-10r, pc, %0-7W ; (adr %8-10r, %0-7a)"},
+  {ARM_EXT_V4T, 0xA800, 0xF800, "add%c %8-10r, sp, %0-7W"},
   /* format 15 */
   {ARM_EXT_V4T, 0xC000, 0xF800, "stmia%c %8-10r!, %M"},
   {ARM_EXT_V4T, 0xC800, 0xF800, "ldmia%c %8-10r%W, %M"},
@@ -1495,7 +1490,7 @@ static const struct opcode32 thumb32_opcodes[] =
 
   /* V7 instructions.  */
   {ARM_EXT_V7, 0xf910f000, 0xff70f000, "pli%c %a"},
-  {ARM_EXT_V7, 0xf3af80f0, 0xfffffff0, "dbg%c #%0-3d"},
+  {ARM_EXT_V7, 0xf3af80f0, 0xfffffff0, "dbg%c %0-3d"},
   {ARM_EXT_V8, 0xf3bf8f51, 0xfffffff3, "dmb%c %U"},
   {ARM_EXT_V8, 0xf3bf8f41, 0xfffffff3, "dsb%c %U"},
   {ARM_EXT_V7, 0xf3bf8f50, 0xfffffff0, "dmb%c %U"},
@@ -1529,17 +1524,17 @@ static const struct opcode32 thumb32_opcodes[] =
   {ARM_EXT_V6T2, 0xe810c000, 0xffd0ffff, "rfedb%c %16-19r%21'!"},
   {ARM_EXT_V6T2, 0xe990c000, 0xffd0ffff, "rfeia%c %16-19r%21'!"},
   {ARM_EXT_V6T2, 0xf3e08000, 0xffe0f000, "mrs%c %8-11r, %D"},
-  {ARM_EXT_V6T2, 0xf3af8100, 0xffffffe0, "cps #%0-4d%X"},
+  {ARM_EXT_V6T2, 0xf3af8100, 0xffffffe0, "cps %0-4d%X"},
   {ARM_EXT_V6T2, 0xe8d0f000, 0xfff0fff0, "tbb%c [%16-19r, %0-3r]%x"},
   {ARM_EXT_V6T2, 0xe8d0f010, 0xfff0fff0, "tbh%c [%16-19r, %0-3r, lsl #1]%x"},
-  {ARM_EXT_V6T2, 0xf3af8500, 0xffffff00, "cpsie %7'a%6'i%5'f, #%0-4d%X"},
-  {ARM_EXT_V6T2, 0xf3af8700, 0xffffff00, "cpsid %7'a%6'i%5'f, #%0-4d%X"},
-  {ARM_EXT_V6T2, 0xf3de8f00, 0xffffff00, "subs%c pc, lr, #%0-7d"},
+  {ARM_EXT_V6T2, 0xf3af8500, 0xffffff00, "cpsie %7'a%6'i%5'f, %0-4d%X"},
+  {ARM_EXT_V6T2, 0xf3af8700, 0xffffff00, "cpsid %7'a%6'i%5'f, %0-4d%X"},
+  {ARM_EXT_V6T2, 0xf3de8f00, 0xffffff00, "subs%c pc, lr, %0-7d"},
   {ARM_EXT_V6T2, 0xf3808000, 0xffe0f000, "msr%c %C, %16-19r"},
   {ARM_EXT_V6T2, 0xe8500f00, 0xfff00fff, "ldrex%c %12-15r, [%16-19r]"},
   {ARM_EXT_V6T2, 0xe8d00f4f, 0xfff00fef, "ldrex%4?hb%c %12-15r, [%16-19r]"},
-  {ARM_EXT_V6T2, 0xe800c000, 0xffd0ffe0, "srsdb%c %16-19r%21'!, #%0-4d"},
-  {ARM_EXT_V6T2, 0xe980c000, 0xffd0ffe0, "srsia%c %16-19r%21'!, #%0-4d"},
+  {ARM_EXT_V6T2, 0xe800c000, 0xffd0ffe0, "srsdb%c %16-19r%21'!, %0-4d"},
+  {ARM_EXT_V6T2, 0xe980c000, 0xffd0ffe0, "srsia%c %16-19r%21'!, %0-4d"},
   {ARM_EXT_V6T2, 0xfa0ff080, 0xfffff0c0, "sxth%c.w %8-11r, %0-3r%R"},
   {ARM_EXT_V6T2, 0xfa1ff080, 0xfffff0c0, "uxth%c.w %8-11r, %0-3r%R"},
   {ARM_EXT_V6T2, 0xfa2ff080, 0xfffff0c0, "sxtb16%c %8-11r, %0-3r%R"},
@@ -1601,8 +1596,8 @@ static const struct opcode32 thumb32_opcodes[] =
   {ARM_EXT_V6T2, 0xfa40f000, 0xffe0f0f0, "asr%20's%c.w %8-11R, %16-19R, %0-3R"},
   {ARM_EXT_V6T2, 0xfa60f000, 0xffe0f0f0, "ror%20's%c.w %8-11r, %16-19r, %0-3r"},
   {ARM_EXT_V6T2, 0xe8c00f40, 0xfff00fe0, "strex%4?hb%c %0-3r, %12-15r, [%16-19r]"},
-  {ARM_EXT_V6T2, 0xf3200000, 0xfff0f0e0, "ssat16%c %8-11r, #%0-4d, %16-19r"},
-  {ARM_EXT_V6T2, 0xf3a00000, 0xfff0f0e0, "usat16%c %8-11r, #%0-4d, %16-19r"},
+  {ARM_EXT_V6T2, 0xf3200000, 0xfff0f0e0, "ssat16%c %8-11r, %0-4d, %16-19r"},
+  {ARM_EXT_V6T2, 0xf3a00000, 0xfff0f0e0, "usat16%c %8-11r, %0-4d, %16-19r"},
   {ARM_EXT_V6T2, 0xfb20f000, 0xfff0f0e0, "smuad%4'x%c %8-11r, %16-19r, %0-3r"},
   {ARM_EXT_V6T2, 0xfb30f000, 0xfff0f0e0, "smulw%4?tb%c %8-11r, %16-19r, %0-3r"},
   {ARM_EXT_V6T2, 0xfb40f000, 0xfff0f0e0, "smusd%4'x%c %8-11r, %16-19r, %0-3r"},
@@ -1634,7 +1629,7 @@ static const struct opcode32 thumb32_opcodes[] =
   {ARM_EXT_V6T2, 0xfbc00000, 0xfff000f0, "smlal%c %12-15R, %8-11R, %16-19R, %0-3R"},
   {ARM_EXT_V6T2, 0xfbe00000, 0xfff000f0, "umlal%c %12-15R, %8-11R, %16-19R, %0-3R"},
   {ARM_EXT_V6T2, 0xfbe00060, 0xfff000f0, "umaal%c %12-15R, %8-11R, %16-19R, %0-3R"},
-  {ARM_EXT_V6T2, 0xe8500f00, 0xfff00f00, "ldrex%c %12-15r, [%16-19r, #%0-7W]"},
+  {ARM_EXT_V6T2, 0xe8500f00, 0xfff00f00, "ldrex%c %12-15r, [%16-19r, %0-7W]"},
   {ARM_EXT_V6T2, 0xf04f0000, 0xfbef8000, "mov%20's%c.w %8-11r, %M"},
   {ARM_EXT_V6T2, 0xf06f0000, 0xfbef8000, "mvn%20's%c.w %8-11r, %M"},
   {ARM_EXT_V6T2, 0xf810f000, 0xff70f000, "pld%c %a"},
@@ -1654,8 +1649,8 @@ static const struct opcode32 thumb32_opcodes[] =
   {ARM_EXT_V6T2, 0xfbc00080, 0xfff000c0, "smlal%5?tb%4?tb%c %12-15r, %8-11r, %16-19r, %0-3r"},
   {ARM_EXT_V6T2, 0xf3600000, 0xfff08020, "bfi%c %8-11r, %16-19r, %E"},
   {ARM_EXT_V6T2, 0xf8100e00, 0xfe900f00, "ldr%wt%c %12-15r, %a"},
-  {ARM_EXT_V6T2, 0xf3000000, 0xffd08020, "ssat%c %8-11r, #%0-4d, %16-19r%s"},
-  {ARM_EXT_V6T2, 0xf3800000, 0xffd08020, "usat%c %8-11r, #%0-4d, %16-19r%s"},
+  {ARM_EXT_V6T2, 0xf3000000, 0xffd08020, "ssat%c %8-11r, %0-4d, %16-19r%s"},
+  {ARM_EXT_V6T2, 0xf3800000, 0xffd08020, "usat%c %8-11r, %0-4d, %16-19r%s"},
   {ARM_EXT_V6T2, 0xf2000000, 0xfbf08000, "addw%c %8-11r, %16-19r, %I"},
   {ARM_EXT_V6T2, 0xf2400000, 0xfbf08000, "movw%c %8-11r, %J"},
   {ARM_EXT_V6T2, 0xf2a00000, 0xfbf08000, "subw%c %8-11r, %16-19r, %I"},
@@ -1670,7 +1665,7 @@ static const struct opcode32 thumb32_opcodes[] =
   {ARM_EXT_V6T2, 0xeb600000, 0xffe08000, "sbc%20's%c.w %8-11r, %16-19r, %S"},
   {ARM_EXT_V6T2, 0xeba00000, 0xffe08000, "sub%20's%c.w %8-11r, %16-19r, %S"},
   {ARM_EXT_V6T2, 0xebc00000, 0xffe08000, "rsb%20's%c %8-11r, %16-19r, %S"},
-  {ARM_EXT_V6T2, 0xe8400000, 0xfff00000, "strex%c %8-11r, %12-15r, [%16-19r, #%0-7W]"},
+  {ARM_EXT_V6T2, 0xe8400000, 0xfff00000, "strex%c %8-11r, %12-15r, [%16-19r, %0-7W]"},
   {ARM_EXT_V6T2, 0xf0000000, 0xfbe08000, "and%20's%c.w %8-11r, %16-19r, %M"},
   {ARM_EXT_V6T2, 0xf0200000, 0xfbe08000, "bic%20's%c.w %8-11r, %16-19r, %M"},
   {ARM_EXT_V6T2, 0xf0400000, 0xfbe08000, "orr%20's%c.w %8-11r, %16-19r, %M"},
@@ -1687,10 +1682,10 @@ static const struct opcode32 thumb32_opcodes[] =
   {ARM_EXT_V6T2, 0xe9100000, 0xffd00000, "ldmdb%c %16-19r%21'!, %m"},
   {ARM_EXT_V6T2, 0xe9c00000, 0xffd000ff, "strd%c %12-15r, %8-11r, [%16-19r]"},
   {ARM_EXT_V6T2, 0xe9d00000, 0xffd000ff, "ldrd%c %12-15r, %8-11r, [%16-19r]"},
-  {ARM_EXT_V6T2, 0xe9400000, 0xff500000, "strd%c %12-15r, %8-11r, [%16-19r, #%23`-%0-7W]%21'!%L"},
-  {ARM_EXT_V6T2, 0xe9500000, 0xff500000, "ldrd%c %12-15r, %8-11r, [%16-19r, #%23`-%0-7W]%21'!%L"},
-  {ARM_EXT_V6T2, 0xe8600000, 0xff700000, "strd%c %12-15r, %8-11r, [%16-19r], #%23`-%0-7W%L"},
-  {ARM_EXT_V6T2, 0xe8700000, 0xff700000, "ldrd%c %12-15r, %8-11r, [%16-19r], #%23`-%0-7W%L"},
+  {ARM_EXT_V6T2, 0xe9400000, 0xff500000, "strd%c %12-15r, %8-11r, [%16-19r, %23`-%0-7W]%21'!%L"},
+  {ARM_EXT_V6T2, 0xe9500000, 0xff500000, "ldrd%c %12-15r, %8-11r, [%16-19r, %23`-%0-7W]%21'!%L"},
+  {ARM_EXT_V6T2, 0xe8600000, 0xff700000, "strd%c %12-15r, %8-11r, [%16-19r], %23`-%0-7W%L"},
+  {ARM_EXT_V6T2, 0xe8700000, 0xff700000, "ldrd%c %12-15r, %8-11r, [%16-19r], %23`-%0-7W%L"},
   {ARM_EXT_V6T2, 0xf8000000, 0xff100000, "str%w%c.w %12-15r, %a"},
   {ARM_EXT_V6T2, 0xf8100000, 0xfe100000, "ldr%w%c.w %12-15r, %a"},
 
@@ -1928,18 +1923,16 @@ print_insn_coprocessor (bfd_vma pc,
       if (insn->arch == 0)
 	switch (insn->value)
 	  {
-#define bfd_mach_arm_iWMMXt    12
-#define bfd_mach_arm_iWMMXt2   13
-
+#if 0
 	  case SENTINEL_IWMMXT_START:
 	    if (info->mach != bfd_mach_arm_XScale
 		&& info->mach != bfd_mach_arm_iWMMXt
-		&& info->mach != bfd_mach_arm_iWMMXt2)
+		&& info->mach != bfd_mach_arm_iWMMXT2)
 	      do
 		insn++;
 	      while (insn->arch != 0 && insn->value != SENTINEL_IWMMXT_END);
 	    continue;
-
+#endif
 	  case SENTINEL_IWMMXT_END:
 	    continue;
 
@@ -2018,7 +2011,7 @@ print_insn_coprocessor (bfd_vma pc,
 		    if (PRE_BIT_SET)
 		      {
 			if (offset)
-			  func (stream, ", 0x%x]%s",
+			  func (stream, ", %d]%s",
 				(int) offset,
 				WRITEBACK_BIT_SET ? "!" : "");
 			else if (NEGATIVE_BIT_SET)
@@ -2033,13 +2026,13 @@ print_insn_coprocessor (bfd_vma pc,
 			if (WRITEBACK_BIT_SET)
 			  {
 			    if (offset)
-			      func (stream, ", 0x%x", (int) offset);
+			      func (stream, ", %d", (int) offset);
 			    else if (NEGATIVE_BIT_SET)
 			      func (stream, ", #-0");
 			  }
 			else
 			  {
-			    func (stream, ", {%s0x%x}",
+			    func (stream, ", {%s%d}",
 				  (NEGATIVE_BIT_SET && !offset) ? "-" : "",
 				  (int) offset);
 			    value_in_comment = offset;
@@ -2047,6 +2040,7 @@ print_insn_coprocessor (bfd_vma pc,
 		      }
 		    if (rn == 15 && (PRE_BIT_SET || WRITEBACK_BIT_SET))
 		      {
+#if COMMENTS
 			func (stream, " ; ");
 			/* For unaligned PCs, apply off-by-alignment
 			   correction.  */
@@ -2054,6 +2048,7 @@ print_insn_coprocessor (bfd_vma pc,
 						  + info->bytes_per_chunk * 2
 						  - (pc & 3),
 				 		  info);
+#endif
 		      }
 		  }
 		  break;
@@ -2095,7 +2090,7 @@ print_insn_coprocessor (bfd_vma pc,
 		    if (imm & 0x40)
 		      imm |= (-1 << 7);
 
-		    func (stream, "0x%x", imm);
+		    func (stream, "%d", imm);
 		  }
 
 		  break;
@@ -2211,13 +2206,13 @@ print_insn_coprocessor (bfd_vma pc,
 		      case 'k':
 			{
 			  int from = (given & (1 << 7)) ? 32 : 16;
-			  func (stream, "0x%lx", from - value);
+			  func (stream, "%ld", from - value);
 			}
 			break;
 
 		      case 'f':
 			if (value > 7)
-			  func (stream, "#%s", arm_fp_const[value & 7]);
+			  func (stream, "%s", arm_fp_const[value & 7]);
 			else
 			  func (stream, "f%ld", value);
 			break;
@@ -2382,7 +2377,7 @@ print_insn_coprocessor (bfd_vma pc,
 		    {
 		      /* given (20, 23) | given (0, 3) */
 		      value = ((given >> 16) & 0xf0) | (given & 0xf);
-		      func (stream, "0x%x", (int) value);
+		      func (stream, "%d", (int) value);
 		    }
 		    break;
 
@@ -2406,12 +2401,12 @@ print_insn_coprocessor (bfd_vma pc,
 		      if (offset)
 			{
 			  if (PRE_BIT_SET)
-			    func (stream, ", %s0x%x]%s",
+			    func (stream, ", %s%d]%s",
 				  NEGATIVE_BIT_SET ? "-" : "",
 				  offset * multiplier,
 				  WRITEBACK_BIT_SET ? "!" : "");
 			  else
-			    func (stream, "], %s0x%x",
+			    func (stream, "], %s%d",
 				  NEGATIVE_BIT_SET ? "-" : "",
 				  offset * multiplier);
 			}
@@ -2459,7 +2454,7 @@ print_insn_coprocessor (bfd_vma pc,
 		    {
 		      long imm5;
 		      imm5 = ((given & 0x100) >> 4) | (given & 0xf);
-		      func (stream, "0x%lx", (imm5 == 0) ? 32 : imm5);
+		      func (stream, "%ld", (imm5 == 0) ? 32 : imm5);
 		    }
 		    break;
 
@@ -2472,8 +2467,8 @@ print_insn_coprocessor (bfd_vma pc,
 	    func (stream, "%c", *c);
 	}
 
-#if 0
-      if (value_in_comment > 32 || value_in_comment < -16)
+#if COMMENTS
+      if (value_in_comment > 64 || value_in_comment < -16)
 	func (stream, " ; 0x%lx", (value_in_comment & 0xffffffffUL));
 #endif
 
@@ -2509,7 +2504,7 @@ print_arm_address (bfd_vma pc, struct disassemble_info *info, long given)
 	  /* Pre-indexed.  Elide offset of positive zero when
 	     non-writeback.  */
 	  if (WRITEBACK_BIT_SET || NEGATIVE_BIT_SET || offset)
-	    func (stream, ", %s0x%x", NEGATIVE_BIT_SET ? "-" : "", (int) offset);
+	    func (stream, ", %s%d", NEGATIVE_BIT_SET ? "-" : "", (int) offset);
 
 	  if (NEGATIVE_BIT_SET)
 	    offset = -offset;
@@ -2524,13 +2519,13 @@ print_arm_address (bfd_vma pc, struct disassemble_info *info, long given)
 	}
       else  /* Post indexed.  */
 	{
-	  func (stream, "], %s0x%x", NEGATIVE_BIT_SET ? "-" : "", (int) offset);
+	  func (stream, "], %s%d", NEGATIVE_BIT_SET ? "-" : "", (int) offset);
 
 	  /* Ie ignore the offset.  */
 	  offset = pc + 8;
 	}
 
-#if 0
+#if COMMENTS
       func (stream, " ; ");
       info->print_address_func (offset, info);
 #endif
@@ -2548,7 +2543,7 @@ print_arm_address (bfd_vma pc, struct disassemble_info *info, long given)
 	      /* Elide offset of positive zero when non-writeback.  */
 	      offset = given & 0xfff;
 	      if (WRITEBACK_BIT_SET || NEGATIVE_BIT_SET || offset)
-		func (stream, ", %s0x%x", NEGATIVE_BIT_SET ? "-" : "", (int) offset);
+		func (stream, ", %s%d", NEGATIVE_BIT_SET ? "-" : "", (int) offset);
 	    }
 	  else
 	    {
@@ -2565,8 +2560,8 @@ print_arm_address (bfd_vma pc, struct disassemble_info *info, long given)
 	    {
 	      /* Always show offset.  */
 	      offset = given & 0xfff;
-	      func (stream, "], 0x%x",(int)offset);
-		    //NEGATIVE_BIT_SET ? "-" : "", (int) offset);
+	      func (stream, "], %s%d",
+		    NEGATIVE_BIT_SET ? "-" : "", (int) offset);
 	    }
 	  else
 	    {
@@ -2895,18 +2890,20 @@ print_insn_neon (struct disassemble_info *info, long given, bfd_boolean thumb)
                         switch (size)
                           {
                           case 8:
-			    func (stream, "0x%lx", value);
+			    func (stream, "%ld", value); // ; 0x%.2lx", value, value);
                             break;
                           
                           case 16:
-                            func (stream, "0x%lx", value);
+                            func (stream, "%ld", value); // ; 0x%.4lx", value, value);
                             break;
 
                           case 32:
                             if (isfloat)
                               {
                                 unsigned char valbytes[4];
-                                //double fvalue;
+#if HAVE_FLOAT
+                                double fvalue;
+#endif
                                 
                                 /* Do this a byte at a time so we don't have to
                                    worry about the host's endianness.  */
@@ -2915,23 +2912,31 @@ print_insn_neon (struct disassemble_info *info, long given, bfd_boolean thumb)
                                 valbytes[2] = (value >> 16) & 0xff;
                                 valbytes[3] = (value >> 24) & 0xff;
                                 
-				func (stream, "XXX: TODO floatformat_to_double\n");
-#if XXX
+#if HAVE_FLOAT
                                 floatformat_to_double 
                                   (& floatformat_ieee_single_little, valbytes,
                                   & fvalue);
-                                func (stream, " XXX #%.7g ; 0x%.8lx", fvalue,
+                                                                
+                                func (stream, "%.7g ; 0x%.8lx", fvalue,
                                       value);
+#else
+                                func (stream, "<TODO:float>");
 #endif
                               }
                             else
-                              func (stream, "0x%lx",
+                              { 
+                                func (stream, "0x%lx", value);
+#if 0
+                                func (stream, "%ld ; 0x%.8lx",
 				    (long) (((value & 0x80000000L) != 0) 
-					    ? value | ~0xffffffffL : value));
+					    ? value | ~0xffffffffL : value),
+				    value);
+#endif
+                              } 
                             break;
 
                           case 64:
-                            func (stream, "#0x%.8lx%.8lx", hival, value);
+                            func (stream, "0x%.8lx%.8lx", hival, value);
                             break;
                           
                           default:
@@ -3066,14 +3071,14 @@ banked_regname (unsigned reg)
   switch (reg)
     {
       case 15: return "CPSR";
-      case 32: return "R8_usr"; 
+      case 32: return "R8_usr";
       case 33: return "R9_usr";
       case 34: return "R10_usr";
       case 35: return "R11_usr";
       case 36: return "R12_usr";
       case 37: return "SP_usr";
       case 38: return "LR_usr";
-      case 40: return "R8_fiq"; 
+      case 40: return "R8_fiq";
       case 41: return "R9_fiq";
       case 42: return "R10_fiq";
       case 43: return "R11_fiq";
@@ -3349,9 +3354,9 @@ print_insn_arm (bfd_vma pc, struct disassemble_info *info, long given)
 			      break;
 
 			  if (i != rotate)
-			    func (stream, "0x%x, %d", immed, rotate);
+			    func (stream, "%d, %d", immed, rotate);
 			  else
-			    func (stream, "0x%x", a);
+			    func (stream, "%d", a);
 			  value_in_comment = a;
 			}
 		      else
@@ -3387,7 +3392,7 @@ print_insn_arm (bfd_vma pc, struct disassemble_info *info, long given)
 			if (PRE_BIT_SET)
 			  {
 			    if (offset)
-			      func (stream, ", #%d]%s",
+			      func (stream, ", %d]%s",
 				    (int) value_in_comment,
 				    WRITEBACK_BIT_SET ? "!" : "");
 			    else
@@ -3400,7 +3405,7 @@ print_insn_arm (bfd_vma pc, struct disassemble_info *info, long given)
 			    if (WRITEBACK_BIT_SET)
 			      {
 				if (offset)
-				  func (stream, ", #%d", (int) value_in_comment);
+				  func (stream, ", %d", (int) value_in_comment);
 			      }
 			    else
 			      {
@@ -3525,22 +3530,19 @@ print_insn_arm (bfd_vma pc, struct disassemble_info *info, long given)
 			    func (stream, "%s", arm_regnames[value]);
 			    break;
 			  case 'd':
-			    func (stream, "0x%lx", value);
+			    func (stream, "%ld", value);
 			    value_in_comment = value;
 			    break;
 			  case 'b':
-			    func (stream, "0x%lx", value * 8);
+			    func (stream, "%ld", value * 8);
 			    value_in_comment = value * 8;
 			    break;
 			  case 'W':
-			    func (stream, "0x%lx", value + 1);
+			    func (stream, "%ld", value + 1);
 			    value_in_comment = value + 1;
 			    break;
 			  case 'x':
-			    if (value)
-				    func (stream, "0x%lx", value);
-			    else
-				    func (stream, "0");
+			    func (stream, "0x%08lx", value);
 
 			    /* Some SWI instructions have special
 			       meanings.  */
@@ -3591,7 +3593,7 @@ print_insn_arm (bfd_vma pc, struct disassemble_info *info, long given)
 			  long w = msb - lsb + 1;
 
 			  if (w > 0)
-			    func (stream, "%lu, #%lu", lsb, w);
+			    func (stream, "%lu, %lu", lsb, w);
 			  else
 			    func (stream, "(invalid: %lu:%lu)", lsb, msb);
 			}
@@ -3634,7 +3636,6 @@ print_insn_arm (bfd_vma pc, struct disassemble_info *info, long given)
 	      else
 		func (stream, "%c", *c);
 	    }
-
 #if 0
 	  if (value_in_comment > 32 || value_in_comment < -16)
 	    func (stream, " ; 0x%lx", (value_in_comment & 0xffffffffUL));
@@ -3809,7 +3810,7 @@ print_insn_thumb16 (bfd_vma pc, struct disassemble_info *info, long given)
 		  long imm = (given & 0x07c0) >> 6;
 		  if (imm == 0)
 		    imm = 32;
-		  func (stream, "0x%lx", imm);
+		  func (stream, "%ld", imm);
 		}
 		break;
 
@@ -3848,12 +3849,12 @@ print_insn_thumb16 (bfd_vma pc, struct disassemble_info *info, long given)
 			    break;
 
 			  case 'H':
-			    func (stream, "0x%lx", (long) (reg << 1));
+			    func (stream, "%ld", (long) (reg << 1));
 			    value_in_comment = reg << 1;
 			    break;
 
 			  case 'W':
-			    func (stream, "0x%lx", (long) (reg << 2));
+			    func (stream, "%ld", (long) (reg << 2));
 			    value_in_comment = reg << 2;
 			    break;
 
@@ -3867,10 +3868,7 @@ print_insn_thumb16 (bfd_vma pc, struct disassemble_info *info, long given)
 			    break;
 
 			  case 'x':
-			    if (reg) {
-				    func (stream, "0x%lx", (long) reg);
-			    }else
-				    func (stream, "0");
+			    func (stream, "0x%04lx", (long) reg);
 			    break;
 
 			  case 'B':
@@ -3915,8 +3913,9 @@ print_insn_thumb16 (bfd_vma pc, struct disassemble_info *info, long given)
 	  }
 
 #if 0
-	if (value_in_comment > 32 || value_in_comment < -16)
+	if (value_in_comment > 64|| value_in_comment < -16) {
 	  func (stream, " ; 0x%lx", value_in_comment);
+	}
 #endif
 	return;
       }
@@ -4009,7 +4008,7 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		  imm12 |= (given & 0x000000ffu);
 		  imm12 |= (given & 0x00007000u) >> 4;
 		  imm12 |= (given & 0x04000000u) >> 15;
-		  func (stream, "0x%x", imm12);
+		  func (stream, "%u", imm12);
 		  value_in_comment = imm12;
 		}
 		break;
@@ -4034,7 +4033,7 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		      imm8 = (bits & 0x07f) | 0x80;
 		      imm  = (((imm8 << (32 - mod)) | (imm8 >> mod)) & 0xffffffff);
 		    }
-		  func (stream, "0x%x", imm);
+		  func (stream, "%u", imm);
 		  value_in_comment = imm;
 		}
 		break;
@@ -4047,7 +4046,7 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		  imm |= (given & 0x00007000u) >> 4;
 		  imm |= (given & 0x04000000u) >> 15;
 		  imm |= (given & 0x000f0000u) >> 4;
-		  func (stream, "0x%x", imm);
+		  func (stream, "%u", imm);
 		  value_in_comment = imm;
 		}
 		break;
@@ -4059,7 +4058,7 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		  imm |= (given & 0x000f0000u) >> 16;
 		  imm |= (given & 0x00000ff0u) >> 0;
 		  imm |= (given & 0x0000000fu) << 12;
-		  func (stream, "0x%x", imm);
+		  func (stream, "%u", imm);
 		  value_in_comment = imm;
 		}
 		break;
@@ -4070,7 +4069,7 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 
 		  imm |= (given & 0x00000fffu);
 		  imm |= (given & 0x000f0000u) >> 4;
-		  func (stream, "0x%x", imm);
+		  func (stream, "%u", imm);
 		  value_in_comment = imm;
 		}
 		break;
@@ -4088,26 +4087,26 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		    {
 		    case 0:
 		      if (imm > 0)
-			func (stream, ", lsl #%u", imm);
+			func (stream, ", lsl %u", imm);
 		      break;
 
 		    case 1:
 		      if (imm == 0)
 			imm = 32;
-		      func (stream, ", lsr #%u", imm);
+		      func (stream, ", lsr %u", imm);
 		      break;
 
 		    case 2:
 		      if (imm == 0)
 			imm = 32;
-		      func (stream, ", asr #%u", imm);
+		      func (stream, ", asr %u", imm);
 		      break;
 
 		    case 3:
 		      if (imm == 0)
 			func (stream, ", rrx");
 		      else
-			func (stream, ", ror #%u", imm);
+			func (stream, ", ror %u", imm);
 		    }
 		}
 		break;
@@ -4138,7 +4137,7 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 
 		      func (stream, ", %s", arm_regnames[Rm]);
 		      if (sh)
-			func (stream, ", lsl #%u", sh);
+			func (stream, ", lsl %u", sh);
 		      func (stream, "]");
 		      break;
 		    }
@@ -4178,18 +4177,20 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		    }
 
 		  if (postind)
-		    func (stream, "], 0x%x", (int) offset);
+		    func (stream, "], %d", (int) offset);
 		  else
 		    {
 		      if (offset)
-			func (stream, ", 0x%x", (int) offset);
+			func (stream, ", %d", (int) offset);
 		      func (stream, writeback ? "]!" : "]");
 		    }
 
 		  if (Rn == 15)
 		    {
+#if COMMENTS
 		      func (stream, " ; ");
 		      info->print_address_func (((pc + 4) & ~3) + offset, info);
+#endif
 		    }
 		}
 	      skip:
@@ -4340,9 +4341,9 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		  shift |= (given & 0x000000c0u) >> 6;
 		  shift |= (given & 0x00007000u) >> 10;
 		  if (WRITEBACK_BIT_SET)
-		    func (stream, ", asr #%u", shift);
+		    func (stream, ", asr %u", shift);
 		  else if (shift)
-		    func (stream, ", lsl #%u", shift);
+		    func (stream, ", lsl %u", shift);
 		  /* else print nothing - lsl #0 */
 		}
 		break;
@@ -4352,7 +4353,7 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		  unsigned int rot = (given & 0x00000030) >> 4;
 
 		  if (rot)
-		    func (stream, ", ror #%u", rot * 8);
+		    func (stream, ", ror %u", rot * 8);
 		}
 		break;
 
@@ -4363,7 +4364,7 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		      {
 			case 0xf: func (stream, "sy"); break;
 			default:
-			  func (stream, "0x%x", (int) given & 0xf);
+			  func (stream, "%d", (int) given & 0xf);
 			      break;
 		      }
 		  }
@@ -4373,7 +4374,7 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		    if (opt != NULL)
 		      func (stream, "%s", opt);
 		    else
-		      func (stream, "0x%x", (int) given & 0xf);
+		      func (stream, "%d", (int) given & 0xf);
 		   }
 		break;
 
@@ -4441,7 +4442,7 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		  switch (*c)
 		    {
 		    case 'd':
-		      func (stream, "%ld", val);
+		      func (stream, "%lu", val);
 		      value_in_comment = val;
 		      break;
 
@@ -4499,8 +4500,10 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 
 		    if ((given & (1 << 23)) == 0)
 		      offset = - offset;
-		    func (stream, "; ");
+#if COMMENTS
+		    func (stream, " ; ");
 		    info->print_address_func ((pc & ~3) + 4 + offset, info);
+#endif
 		  }
 		break;
 
@@ -4509,9 +4512,9 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 	      }
 	  }
 
-#if 0
-	if (value_in_comment > 32 || value_in_comment < -16)
-	  func (stream, "; 0x%lx", value_in_comment);
+#if COMMENTS
+	if (value_in_comment > 64 || value_in_comment < -16)
+	  func (stream, " ; 0x%lx", value_in_comment);
 #endif
 
 	if (is_unpredictable)
@@ -4603,6 +4606,7 @@ parse_arm_disassembler_option (char *option)
 /* Parse the string of disassembler options, spliting it at whitespaces
    or commas.  (Whitespace separators supported for backwards compatibility).  */
 
+#define ISSPACE(x) (x==' '||x=='\t')
 static void
 parse_disassembler_options (char *options)
 {
@@ -4709,7 +4713,19 @@ static int
 is_mapping_symbol (struct disassemble_info *info, int n,
 		   enum map_type *map_type)
 {
-return FALSE;
+  const char *name;
+
+  name = bfd_asymbol_name (info->symtab[n]);
+  if (name[0] == '$' && (name[1] == 'a' || name[1] == 't' || name[1] == 'd')
+      && (name[2] == 0 || name[2] == '.'))
+    {
+      *map_type = ((name[1] == 'a') ? MAP_ARM
+		   : (name[1] == 't') ? MAP_THUMB
+		   : MAP_DATA);
+      return TRUE;
+    }
+
+  return FALSE;
 }
 
 /* Try to infer the code type (ARM or Thumb) from a mapping symbol.
@@ -4729,14 +4745,13 @@ get_map_sym_type (struct disassemble_info *info,
 
 /* Try to infer the code type (ARM or Thumb) from a non-mapping symbol.
    Returns nonzero if *MAP_TYPE was set.  */
+#if 0
 
 static int
 get_sym_code_type (struct disassemble_info *info,
 		   int n,
 		   enum map_type *map_type)
 {
-return FALSE;
-#if 0
   elf_symbol_type *es;
   unsigned int type;
 
@@ -4758,8 +4773,8 @@ return FALSE;
     }
 
   return FALSE;
-#endif
 }
+#endif
 
 /* Given a bfd_mach_arm_XXX value, this function fills in the fields
    of the supplied arm_feature_set structure with bitmasks indicating
@@ -4826,10 +4841,6 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
       /* To avoid repeated parsing of these options, we remove them here.  */
       info->disassembler_options = NULL;
     }
-
-  if (info->bytes_per_line==2)  {
-    is_thumb = TRUE;
-  } else is_thumb = FALSE;
 
   /* PR 10288: Control which instructions will be disassembled.  */
   if (info->private_data == NULL)
@@ -4963,6 +4974,7 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
 
       /* Next search for function symbols to separate ARM from Thumb
 	 in binaries without mapping symbols.  */
+#if 0
       if (!found)
 	{
 	  /* Scan up to the location being disassembled.  */
@@ -4993,10 +5005,11 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
 		}
 	    }
 	}
+#endif
 
       private_data->last_mapping_sym = last_sym;
       private_data->last_type = type;
-      //is_thumb = (private_data->last_type == MAP_THUMB);
+      is_thumb = (private_data->last_type == MAP_THUMB);
       is_data = (private_data->last_type == MAP_DATA);
 
       /* Look a little bit ahead to see if we should print out
@@ -5056,11 +5069,10 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
 		      || type == STT_ARM_16BIT);
 	}
     }
+#endif
 
   if (force_thumb)
     is_thumb = TRUE;
-#endif
-
 
   if (is_data)
     info->display_endian = little ? BFD_ENDIAN_LITTLE : BFD_ENDIAN_BIG;
@@ -5069,10 +5081,8 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
 
   info->bytes_per_line = 4;
 
-//little = 0;
-//little_code=0;
   /* PR 10263: Disassemble data if requested to do so by the user.  */
-  if (0&&is_data && ((info->flags & DISASSEMBLE_DATA) == 0))
+  if (is_data && ((info->flags & DISASSEMBLE_DATA) == 0))
     {
       int i;
 
@@ -5112,18 +5122,15 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
       printer = print_insn_thumb16;
       info->bytes_per_chunk = 2;
       size = 2;
-//printf ("THUMB MODE \n");
 
       status = info->read_memory_func (pc, (bfd_byte *) b, 2, info);
-      if (!little_code)
+      if (little_code)
 	given = (b[0]) | (b[1] << 8);
       else
 	given = (b[1]) | (b[0] << 8);
 
-status = 0;
       if (!status)
 	{
-
 	  /* These bit patterns signal a four-byte Thumb
 	     instruction.  */
 	  if ((given & 0xF800) == 0xF800

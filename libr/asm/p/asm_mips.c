@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake, nibble */
+/* radare - LGPL - Copyright 2009-2013 - pancake, nibble */
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -55,7 +55,7 @@ static int buf_fprintf(void *stream, const char *format, ...) {
 	return R_TRUE;
 }
 
-static int disassemble(struct r_asm_t *a, struct r_asm_op_t *op, const ut8 *buf, ut64 len) {
+static int disassemble(struct r_asm_t *a, struct r_asm_op_t *op, const ut8 *buf, int len) {
 	static struct disassemble_info disasm_obj;
 	if (len<4) return -1;
 	buf_global = op->buf_asm;
@@ -63,7 +63,7 @@ static int disassemble(struct r_asm_t *a, struct r_asm_op_t *op, const ut8 *buf,
 	memcpy (bytes, buf, 4); // TODO handle thumb
 
 	/* prepare disassembler */
-	memset (&disasm_obj,'\0', sizeof(struct disassemble_info));
+	memset (&disasm_obj,'\0', sizeof (struct disassemble_info));
 	mips_mode = a->bits;
 	disasm_obj.arch = CPU_LOONGSON_2F;
 	disasm_obj.buffer = bytes;
@@ -87,7 +87,9 @@ static int disassemble(struct r_asm_t *a, struct r_asm_op_t *op, const ut8 *buf,
 }
 
 static int assemble(RAsm *a, RAsmOp *op, const char *str) {
-	return mips_assemble (str, a->pc, op->buf);
+	int ret = mips_assemble (str, a->pc, op->buf);
+	r_mem_copyendian (op->buf, op->buf, 4, !a->big_endian);
+	return ret;
 }
 
 RAsmPlugin r_asm_plugin_mips = {

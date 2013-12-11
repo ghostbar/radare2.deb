@@ -84,7 +84,7 @@ R_API int r_meta_del(RMeta *m, int type, ut64 from, ut64 size, const char *str) 
 
 	r_list_foreach_safe (m->data, iter, iter_tmp, d) {
 		if (d->type == type || type == R_META_TYPE_ANY) {
-			if (str != NULL && !strstr (d->str, str))
+			if (str && d->str && !strstr (d->str, str))
 				continue;
 			if (size==UT64_MAX || (from+size >= d->from && from <= d->to+size)) {
 				free (d->str);
@@ -123,7 +123,7 @@ R_API int r_meta_cleanup(RMeta *m, ut64 from, ut64 to) {
 #endif
 			if (to>d->from && to<d->to) {
 				d->from = to;
-				ret= R_TRUE;
+				ret = R_TRUE;
 			} else
 			if (from>d->from && from<d->to &&to>d->to) {
 				d->to = from;
@@ -157,13 +157,15 @@ R_API RMetaItem *r_meta_item_new(int type) {
 }
 
 // TODO: This is ultraslow. must accelerate with hashtables
-R_API int r_meta_comment_check (RMeta *m, const char *s) {
+R_API int r_meta_comment_check (RMeta *m, const char *s, ut64 addr) {
 	RMetaItem *d;
 	RListIter *iter;
 
 	r_list_foreach (m->data, iter, d) {
-		if (d->type == R_META_TYPE_COMMENT && (!strcmp (s, d->str)))
-			return R_TRUE;
+		if (d->type == R_META_TYPE_COMMENT)
+			if (d->from == addr)
+				if (!strcmp (s, d->str))
+					return R_TRUE;
 	}
 
 	return R_FALSE;
@@ -173,6 +175,7 @@ R_API int r_meta_add(RMeta *m, int type, ut64 from, ut64 to, const char *str) {
 	RMetaItem *mi;
 	if (to<from)
 		to = from+to;
+
 	switch (type) {
 	case R_META_TYPE_HIDE:
 	case R_META_TYPE_CODE:
@@ -180,17 +183,17 @@ R_API int r_meta_add(RMeta *m, int type, ut64 from, ut64 to, const char *str) {
 	case R_META_TYPE_STRING:
 	case R_META_TYPE_FORMAT:
 		/* we should remove overlapped types and so on.. */
-		r_meta_cleanup (m, from, to);
+		//r_meta_cleanup (m, from, to);
 	case R_META_TYPE_COMMENT:
 		if (type == R_META_TYPE_COMMENT)
-			if (r_meta_comment_check (m, str))
+			if (r_meta_comment_check (m, str, from))
 				return R_FALSE;
 		mi = r_meta_item_new (type);
-		mi->size = R_ABS (to-from);//size;
+		mi->size = to-from;
 		mi->type = type;
 		mi->from = from;
 		mi->to = to;
-		mi->str = str? strdup (str): NULL;
+		mi->str = (str&&*str)? strdup (str): NULL;
 		r_list_append (m->data, mi);
 		break;
 	default:
@@ -287,12 +290,14 @@ struct r_range_t *r_meta_ranges(RMeta *m)
 #endif
 
 static void printmetaitem(RMeta *m, RMetaItem *d, int rad) {
-	char *str = r_str_unscape (d->str);
+	char *pstr, *str = r_str_unscape (d->str);
 	if (str) {
 		if (d->type=='s' && !*str)
 			return;
-		if (d->type != 'C')
+		if (d->type != 'C') {
 			r_name_filter (str, 0);
+			pstr = str;
+		} else pstr = d->str;
 //		r_str_sanitize (str);
 		switch (rad) {
 		case 'j':
@@ -305,9 +310,9 @@ static void printmetaitem(RMeta *m, RMetaItem *d, int rad) {
 		case 1:
 		case '*':
 		default:
-			m->printf ("%s %d %s@0x%08"PFMT64x"\n",
-				r_meta_type_to_string (d->type),
-				(int)(d->to-d->from), str, d->from);
+			m->printf ("\"%s %s\" @ 0x%08"PFMT64x"\n",
+				r_meta_type_to_string (d->type), pstr, d->from);
+				// (int)(d->to-d->from), 
 			break;
 		}
 		free (str);

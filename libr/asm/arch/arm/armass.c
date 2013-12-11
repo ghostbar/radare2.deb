@@ -124,6 +124,7 @@ static char *getrange(char *s) {
 	return p;
 }
 
+#if 0
 static int getshift_unused (const char *s) {
 	int i;
 	const char *shifts[] = { "lsl", "lsr", "asr", "ror", NULL };
@@ -132,6 +133,7 @@ static int getshift_unused (const char *s) {
 			return i * 0x20;
 	return 0; 
 }
+#endif
 
 static int getreg(const char *str) {
 	int i;
@@ -143,6 +145,17 @@ static int getreg(const char *str) {
 	for (i=0; aliases[i]; i++)
 		if (!strcmp (str, aliases[i]))
 			return 10+i;
+	return -1;
+}
+
+static int thumb_getreg(const char *str) {
+	if (!str)
+		return -1;
+	if (*str=='r')
+		return atoi (str+1);
+	//FIXME Note that pc is only allowed un pop, lr in push in Thumb1 mode.
+	if (!strcmp (str, "pc") || !strcmp(str,"lr"))
+		return 8;
 	return -1;
 }
 
@@ -260,6 +273,44 @@ static inline int arm_opcode_cond(ArmOpcode *ao, int delta) {
 
 // TODO: group similar instructions like for non-thumb
 static int thumb_assemble(ArmOpcode *ao, const char *str) {
+	int reg, j;
+	if (!strcmp (ao->op, "pop") && ao->a[0]) {
+		ao->o = 0xbc;
+		if (*ao->a[0]++=='{') {
+			for (j=0; j<16; j++) {
+				if (ao->a[j] && *ao->a[j]) {
+					getrange (ao->a[j]); // XXX filter regname string
+					reg = thumb_getreg (ao->a[j]);
+					if (reg != -1) {
+						if (reg<8)
+							ao->o |= 1<<(8+reg);
+						if (reg==8){
+							ao->o |= 1;
+						}
+					//	else ignore...
+					}
+				}
+			}
+		} else ao->o |= getnum (ao->a[0])<<24; // ???
+	} else
+	if (!strcmp (ao->op, "push") && ao->a[0]) {
+		ao->o = 0xb4;
+		if (*ao->a[0]++=='{') {
+			for (j=0; j<16; j++) {
+				if (ao->a[j] && *ao->a[j]) {
+					getrange (ao->a[j]); // XXX filter regname string
+					reg = thumb_getreg (ao->a[j]);
+					if (reg != -1) {
+						if (reg<8)
+							ao->o |= 1<<(8+reg);
+						if (reg==8)
+							ao->o |= 1;
+					//	else ignore...
+					}
+				}
+			}
+		} else ao->o |= getnum (ao->a[0])<<24; // ???
+	} else
 	if (!strcmp (ao->op, "ldmia")) {
 		ao->o = 0xc8 + getreg (ao->a[0]);
 		ao->o |= getlist(ao->opstr) << 8;
@@ -524,7 +575,7 @@ static int arm_assemble(ArmOpcode *ao, const char *str) {
 							}
 						}
 					}
-				} else ao->o |= getnum(ao->a[0])<<24; // ???
+				} else ao->o |= getnum (ao->a[0])<<24; // ???
 				break;
 			case TYPE_BRA:
 				if ((ret = getreg (ao->a[0])) == -1) {
@@ -532,6 +583,7 @@ static int arm_assemble(ArmOpcode *ao, const char *str) {
 					ret = (getnum(ao->a[0])-ao->off-8)/4;
 					ao->o |= ((ret>>8)&0xff)<<16;
 					ao->o |= ((ret)&0xff)<<24;
+					if (ret<0) ao->o |= (0xff<<8); // MAKE IT NEGATIVE!
 				} else {
 					printf("This branch does not accept reg as arg\n");
 					return 0;
@@ -632,6 +684,7 @@ int armass_assemble(const char *str, unsigned long off, int thumb) {
 	}
 	buf[i] = 0;
 	arm_opcode_parse (&aop, buf);
+	aop.off = off;
 	if (!assemble[thumb] (&aop, buf)) {
 		printf ("armass: Unknown opcode (%s)\n", buf);
 		return -1;

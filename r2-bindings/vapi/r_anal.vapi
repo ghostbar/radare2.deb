@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2010-2012 pancake<@nopcode.org> */
+/* radare - LGPL - Copyright 2010-2013 pancake<@nopcode.org> */
 
 /* this vapi is broken as shit... we need to rename some stuff here ..
    if we can just avoid to use cname CCode attribute... */
@@ -24,6 +24,8 @@ namespace Radare {
 		*/
 
 		public RAnal ();
+		public bool op_hexstr(uint64 addr, string hexstr);
+		public bool esil_eval (string str);
 		public bool set_bits (int bits);
 		public bool set_big_endian (bool big);
 		//public bool set_pc (uint64 addr);
@@ -48,12 +50,14 @@ namespace Radare {
 			public RReg.Item regdelta;
 		}
 
+/*
 		[Compact]
 		[CCode (cname="RAnalCond")]
 		public class Cond {
 			public int type;
-			public RAnal.Value arg[2];
+			public Value arg[2];
 		}
+*/
 
 		[CCode (cname="int", cprefix="R_ANAL_COND_")]
 		public enum Cnd {
@@ -120,7 +124,7 @@ namespace Radare {
 		public enum Stack {
 			NULL,
 			NOP,
-			INCSTACK,
+			INC,
 			GET,
 			SET
 		}
@@ -226,15 +230,18 @@ namespace Radare {
 			public uint64 jump;
 			public uint64 fail;
 			public uint32 selector;
-/*
-			public int64 ref;
-			public uint64 value;
-*/
+			public int64 ptr;
+			public uint64 val;
 			public int64 stackptr;
+			public bool refptr;
+			public char esil[64];
 			//TODO public uint64 ref;
 			public Value src[3];
 			public Value dst;
 		}
+
+		public string op_to_string(Op op);
+		public unowned string op_to_esil_string(Op op);
 
 		[Compact]
 		[CCode (cprefix="r_anal_diff_", cname="RAnalDiff")]
@@ -248,6 +255,8 @@ namespace Radare {
 		public class Function {
 			public string name;
 			public string dsc;
+			public int size;
+			public int bits;
 			public short type;
 			public short rets;
 			public short fmod;
@@ -259,7 +268,7 @@ namespace Radare {
 			public int ninstr;
 			public int nargs;
 			public int depth;
-			public Type args;
+			//public Type args;
 			// MUST BE deprecated public VarSub varsubs[32];
 
 			public Diff diff;
@@ -279,8 +288,8 @@ namespace Radare {
 		[CCode (cname="RAnalVar")]
 		public class Var {
 			public string name;
+			public string type;
 			public int delta;
-			public Type type;
 			public RList<RAnal.VarAccess> accesses;
 		}
 
@@ -298,7 +307,6 @@ namespace Radare {
 			public char pat[1024];
 			public char sub[1024];
 		}
-#endif
 
 		[Compact]
 		[CCode (cname="RAnalType")]
@@ -308,6 +316,7 @@ namespace Radare {
 			public int type;
 			// TODO. add custom union type here
 		}
+#endif
 /*
 		[Compact]
 		[CCode (cname="RAnalVarType")]

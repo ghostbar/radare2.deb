@@ -1,34 +1,51 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake, nibbl */
+/* radare - LGPL - Copyright 2009-2013 - pancake, nibble */
+
+static void algolist(int mode) {
+	const char *name;
+	ut64 bits;
+	int i;
+	for (i=0; ; i++) {
+		bits = 1<<i;
+		name = r_hash_name (bits);
+		if (!name||!*name) break;
+		if (mode) {
+			r_cons_printf ("%s\n", name);
+		} else {
+			r_cons_printf (" #%s", name);
+			if (!((i+1)%10)) r_cons_newline ();
+		}
+	}
+	if (!mode) r_cons_printf ("\n");
+}
 
 static int cmd_hash(void *data, const char *input) {
 	char *p, algo[32];
 	RCore *core = (RCore *)data;
-	ut32 i, len = core->blocksize;
+	ut32 i, osize, len = core->blocksize;
 	const char *ptr;
 
 	if (input[0]==' ') return 0;
+	if (input[0]=='#' && !input[1]) {
+		algolist (1);
+		return R_TRUE;
+	}
 	if (input[0]=='!') {
-#if 0
-	TODO: Honor OOBI
-		#!lua < file
-		#!lua <<EOF
-		#!lua
-		#!lua foo bar
-                        //r_lang_run (core->lang, p+1, strlen (p+1));
-                                //core->oobi, core->oobi_len);
-#endif
-		if (input[1]=='?' || input[1]=='*' || input[1]=='\0') {
+		const char *lang = input+1;
+		if (*lang==' ') {
+			RLangPlugin *p = r_lang_get_by_extension (core->lang, input+2);
+			if (p && p->name) lang = p->name;
+		} else if (input[1]=='?' || input[1]=='*' || input[1]=='\0') {
 			r_lang_list (core->lang);
 			return R_TRUE;
 		}
-		p = strchr (input+1, ' ');
+		p = strchr (input, ' ');
 		if (p) *p=0;
 		// TODO: set argv here
-		if (r_lang_use (core->lang, input+1)) {
+		if (r_lang_use (core->lang, lang)) {
 			r_lang_setup (core->lang);
 			if (p) r_lang_run_file (core->lang, p+1);
 			else r_lang_prompt (core->lang);
-		} else eprintf ("Invalid hashbang plugin name. Try '#!'\n");
+		} else eprintf ("Invalid hashbang. See '#!' for help.\n");
 		return R_TRUE;
 	}
 
@@ -37,7 +54,11 @@ static int cmd_hash(void *data, const char *input) {
 	if (ptr != NULL) {
 		int nlen = r_num_math (core->num, ptr+1);
 		if (nlen>0) len = nlen;
-	}
+		osize = core->blocksize;
+		if (nlen>core->blocksize) {
+			r_core_block_size (core, nlen);
+		}
+	} else osize =0;
 	/* TODO: Simplify this spaguetti monster */
 	if (!r_str_ccmp (input, "md4", ' ')) {
 		RHash *ctx = r_hash_new (R_TRUE, R_HASH_MD4);
@@ -45,6 +66,11 @@ static int cmd_hash(void *data, const char *input) {
 		for (i=0; i<R_HASH_SIZE_MD4; i++) r_cons_printf ("%02x", c[i]);
 		r_cons_newline ();
 		r_hash_free (ctx);
+	} else
+	if (!r_str_ccmp (input, "adler32", ' ')) {
+		ut32 hn = r_hash_adler32 (core->block, len);
+		ut8 *b = (ut8*)&hn;
+		r_cons_printf ("%02x%02x%02x%02x\n", b[0], b[1], b[2], b[3]);
 	} else
 	if (!r_str_ccmp (input, "md5", ' ')) {
 		RHash *ctx = r_hash_new (R_TRUE, R_HASH_MD5);
@@ -95,26 +121,20 @@ static int cmd_hash(void *data, const char *input) {
 	if (input[0]=='?') {
 		r_cons_printf (
 		"Usage: #algo <size> @ addr\n"
-		" #xor                 ; calculate xor of all bytes in current block\n"
-		" #crc32               ; calculate crc32 of current block\n"
-		" #crc32 < /etc/fstab  ; calculate crc32 of this file\n"
-		" #pcprint             ; count printable chars in current block\n"
-		" #hamdist             ; calculate hamming distance in current block\n"
-		" #entropy             ; calculate entropy of current block\n"
-		" #md4                 ; calculate md4\n"
-		" #md5 128K @ edi      ; calculate md5 of 128K from 'edi'\n"
-		" #sha1                ; calculate SHA-1\n"
-		" #sha256              ; calculate SHA-256\n"
-		" #sha512              ; calculate SHA-512\n"
+		" # this is a comment   note the space after the sharp sign\n"
+		" ##                    List hash/checksum algorithms.\n"
+		" #sha256 10K @ 33      calculate sha256 of 10K at 33\n"
+		"Hashes:\n");
+		algolist (0);
+		r_cons_printf (
 		"Usage #!interpreter [<args>] [<file] [<<eof]\n"
-		" #!                   ; list all available interpreters\n"
-		" #!python             ; run python commandline\n"
-		" #!python < foo.py    ; run foo.py python script\n"
-		" #!python <<EOF       ; get python code until 'EOF' mark\n"
-		" #!python arg0 a1 <<q ; set arg0 and arg1 and read until 'q'\n"
-		"Comments:\n"
-		" # this is a comment  ; note the space after the sharp sign\n");
+		" #!                    list all available interpreters\n"
+		" #!python              run python commandline\n"
+		" #!python foo.py       run foo.py python script (same as '. foo.py')\n"
+		//" #!python <<EOF        get python code until 'EOF' mark\n"
+		" #!python arg0 a1 <<q  set arg0 and arg1 and read until 'q'\n");
 	}
+	if (osize)
+		r_core_block_size (core, osize);
 	return 0;
 }
-

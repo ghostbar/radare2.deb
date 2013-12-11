@@ -10,6 +10,8 @@
 #include <list.h>
 #include "../config.h"
 
+R_LIB_VERSION(r_bin);
+
 static RBinPlugin *bin_static_plugins[] = { R_BIN_STATIC_PLUGINS };
 static RBinXtrPlugin *bin_xtr_static_plugins[] = { R_BIN_XTR_STATIC_PLUGINS };
 
@@ -18,9 +20,12 @@ static void get_strings_range(RBinArch *arch, RList *list, int min, ut64 from, u
 	int i, matches = 0, ctr = 0;
 	RBinString *ptr = NULL;
 
-	if (arch && arch->buf && to > arch->buf->length)
+	if (!arch->rawstr)
+		if (!arch->curplugin || !arch->curplugin->info)
+			return;
+	if (arch && arch->buf && (!to || to > arch->buf->length))
 		to = arch->buf->length;
-	if (to > 0xf00000) {
+	if (to<1 || to > 0xf00000) {
 		eprintf ("WARNING: bin_strings buffer is too big at 0x%08"PFMT64x"\n", from);
 		return;
 	}
@@ -48,7 +53,11 @@ static void get_strings_range(RBinArch *arch, RList *list, int min, ut64 from, u
 			}
 			str[matches] = '\0';
 			ptr->offset = i-matches;
-			ptr->rva = ptr->offset-from+scnrva;
+			if (scnrva) {
+				ptr->rva = (ptr->offset-from+scnrva);
+			} else {
+				ptr->rva = ptr->offset;
+			}
 			//HACK if (scnrva) ptr->rva = ptr->offset-from+scnrva; else ptr->rva = ptr->offset;
 			ptr->size = matches+1;
 			ptr->ordinal = ctr;
@@ -86,7 +95,7 @@ static RList* get_strings(RBinArch *a, int min) {
 		return NULL;
 	}
 	ret->free = free;
-	if (a->o->sections) {
+	if (a->o->sections && !a->rawstr) {
 		r_list_foreach (a->o->sections, iter, section) {
 			if (is_data_section (a, section)) {
 				count++;
@@ -96,20 +105,45 @@ static RList* get_strings(RBinArch *a, int min) {
 					section->rva);
 			}
 		}	
+		if (r_list_empty (a->o->sections)) {
+			int i, next = 0, from = 0, funn = 0, to = 0;
+			ut8 *buf = a->buf->buf;
+			for (i=0; i<a->buf->length; i++) {
+				if (!buf[i] || IS_PRINTABLE (buf[i])) {
+					if (buf[i]) {
+						if (!from) from = i;
+						funn++;
+						next = 0;
+					}
+				} else {
+					next++;
+					if (next>5) from = 0;
+					if (!to) to = i;
+					to = i;
+					if (from && next==5 && funn>16) {
+						get_strings_range (a, ret, min, from, to, 0);
+				//eprintf ("FUNN %d\n", funn);
+				//eprintf ("MIN %d %d\n", from, to);
+						funn = 0;
+						from = 0;
+						to = 0;
+					}
+				}
+			}
+		}
+	} else {
+		get_strings_range (a, ret, min,
+			0, a->size, 0);
 	}
-	if (r_list_empty (a->o->sections))
-		get_strings_range (a, ret, min, 0, a->size, 0);
 	return ret;
 }
 
-// public api?
-static void load_languages(RBin *bin) {
-	/* load objc information if available */
-	if (r_bin_lang_objc (bin)) //->cur.o))
-		eprintf ("ObjectiveC information loaded\n");
-	else if (r_bin_lang_cxx (bin)) //->cur.o))
-		eprintf ("C++ information loaded\n");
-	/* TODO : do the same for dex, java and c++ name demangling? */
+R_API int r_bin_load_languages(RBin *bin) {
+	if (r_bin_lang_objc (bin))
+		return R_BIN_NM_OBJC;
+	if (r_bin_lang_cxx (bin))
+		return R_BIN_NM_CXX;
+	return R_BIN_NM_NONE;
 }
 
 static int r_bin_init_items(RBin *bin, int dummy) {
@@ -119,7 +153,7 @@ static int r_bin_init_items(RBin *bin, int dummy) {
 	RBinArch *a = &bin->cur;
 	RBinObject *o = a->o;
 	a->curplugin = NULL;
-// DEBUG eprintf ("LOAD\n");
+
 	r_list_foreach (bin->plugins, it, plugin) {
 		if ((dummy && !strncmp (plugin->name, "any", 5)) ||
 			(!dummy && (plugin->check && plugin->check (&bin->cur)))) {
@@ -127,16 +161,17 @@ static int r_bin_init_items(RBin *bin, int dummy) {
 			break;
 		}
 	}
-	cp = bin->cur.curplugin;
+	cp = a->curplugin;
 	if (minlen<0) {
 		if (cp && cp->minstrlen) 
 			minlen = cp->minstrlen;
 		else minlen = -minlen;
 	}
 	if (!cp || !cp->load || !cp->load (a)) {
-		r_buf_free (a->buf);
+		// already freed in format/pe/pe.c:r_bin_pe_free()
+		// r_buf_free (a->buf);
 		a->buf = r_buf_mmap (bin->cur.file, 0);
-		a->size = a->buf->length;
+		a->size = a->buf? a->buf->length: 0;
 		o->strings = get_strings (a, minlen);
 		return R_FALSE;
 	}
@@ -158,7 +193,7 @@ static int r_bin_init_items(RBin *bin, int dummy) {
 	if (cp->symbols) o->symbols = cp->symbols (a);
 	if (cp->classes) o->classes = cp->classes (a);
 	if (cp->lines) o->lines = cp->lines (a);
-	load_languages (bin);
+	o->lang = r_bin_load_languages (bin);
 
 	return R_TRUE;
 }
@@ -186,7 +221,7 @@ static void r_bin_free_items(RBin *bin) {
 		a->curplugin->destroy (a);
 }
 
-static void r_bin_init(RBin *bin) {
+static void r_bin_init(RBin *bin, int rawstr) {
 	RListIter *it;
 	RBinXtrPlugin *xtr;
 
@@ -207,6 +242,7 @@ static void r_bin_init(RBin *bin) {
 	}
 	if (bin->curxtr && bin->curxtr->load)
 		bin->curxtr->load (bin);
+	bin->cur.rawstr = rawstr;
 }
 
 static int r_bin_extract(RBin *bin, int idx) {
@@ -278,7 +314,7 @@ R_API int r_bin_load(RBin *bin, const char *file, int dummy) {
 	if (!bin || !file)
 		return R_FALSE;
 	bin->file = r_file_abspath (file);
-	r_bin_init (bin);
+	r_bin_init (bin, bin->cur.rawstr);
 	bin->narch = r_bin_extract (bin, 0);
 	if (bin->narch == 0)
 		return R_FALSE;
@@ -362,6 +398,8 @@ R_API int r_bin_is_stripped (RBin *bin) {
 }
 
 R_API int r_bin_is_static (RBin *bin) {
+	if (r_list_length (bin->cur.o->libs)>0)
+		return R_FALSE;
 	return R_BIN_DBG_STATIC (bin->cur.o->info->dbg_info);
 }
 
@@ -455,9 +493,9 @@ R_API void r_bin_list_archs(RBin *bin) {
 	for (i = 0; i < bin->narch; i++)
 		if (r_bin_select_idx (bin, i)) {
 			RBinInfo *info = bin->cur.o->info;
-			printf ("%03i 0x%08"PFMT64x" %d %s_%i %s\n", i, 
+			printf ("%03i 0x%08"PFMT64x" %d %s_%i %s %s\n", i, 
 				bin->cur.offset, bin->cur.size, info->arch,
-				info->bits, info->machine);
+				info->bits, info->machine, bin->cur.file);
 		} else eprintf ("%03i 0x%08"PFMT64x" %d unknown_0\n", i,
 				bin->cur.offset, bin->cur.size);
 }

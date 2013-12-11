@@ -125,15 +125,31 @@ R_API int r_cons_arrow_to_hjkl(int ch) {
 // XXX no control for max length here?!?!
 R_API int r_cons_fgets(char *buf, int len, int argc, const char **argv) {
 	RCons *cons = r_cons_singleton ();
+	int color = cons->pal.input && *cons->pal.input;
 	if (cons->user_fgets)
 		return cons->user_fgets (buf, len);
 	*buf = '\0';
 	fflush (cons->fdin);
-	if (fgets (buf, len, cons->fdin) == NULL)
+	if (color) {
+		const char *p = cons->pal.input;
+		int len = p? strlen (p):0;
+		if (len>0)
+			fwrite (p, len, 1, stdout);
+		fflush (stdout);
+	}
+	if (fgets (buf, len, cons->fdin) == NULL) {
+		if (color) {
+			printf (Color_RESET);
+			fflush (stdout);
+		}
 		return -1;
-	if (feof (cons->fdin))
+	}
+	if (feof (cons->fdin)) {
+		if (color) printf (Color_RESET);
 		return -2;
+	}
 	buf[strlen (buf)-1] = '\0';
+	if (color) printf (Color_RESET);
 	return strlen (buf);
 }
 
@@ -146,7 +162,6 @@ R_API void r_cons_any_key() {
 
 R_API int r_cons_readchar() {
 	char buf[2];
-	buf[0] = -1;
 #if __WINDOWS__
 	BOOL ret;
 	DWORD out;
@@ -154,12 +169,14 @@ R_API int r_cons_readchar() {
 	HANDLE h = GetStdHandle (STD_INPUT_HANDLE);
 	GetConsoleMode (h, &mode);
 	SetConsoleMode (h, 0); // RAW
+	buf[0] = -1;
 	ret = ReadConsole (h, buf, 1, &out, NULL);
 	if (!ret)
 		return -1;
 	SetConsoleMode (h, mode);
 #else
 	r_cons_set_raw (1);
+	buf[0] = -1;
 	if (read (0, buf, 1)==-1)
 		return -1;
 	r_cons_set_raw (0);
@@ -179,7 +196,7 @@ R_API int r_cons_yesno(int def, const char *fmt, ...) {
 	write (2, "\n", 1);
 	if (key == 'Y')
 		key = 'y';
-	r_cons_set_raw (1); // XXX with set_raw(0) causes problems wtf
+	r_cons_set_raw (0);
 	if (key=='\n' || key=='\r')
 		key = def;
 	return key=='y';

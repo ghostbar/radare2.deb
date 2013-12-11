@@ -666,7 +666,7 @@ static inline void
 dump_qualifier_sequence (const aarch64_opnd_qualifier_t *qualifier)
 {
   int i;
-  printf ("#### \t");
+  printf ("#### ");
   for (i = 0; i < AARCH64_MAX_OPND_NUM; ++i, ++qualifier)
     printf ("%s,", aarch64_get_qualifier_name (*qualifier));
   printf ("\n");
@@ -1724,10 +1724,10 @@ operand_general_constraint_met_p (const aarch64_opnd_info *opnds, int idx,
 	  assert (idx == 1);
 	  if (aarch64_get_qualifier_esize (opnds[0].qualifier) != 8)
 	    {
-	      /* uimm8 */
-	      if (!value_in_range_p (opnd->imm.value, 0, 255))
+	      /* uimm8 or simm8 */
+	      if (!value_in_range_p (opnd->imm.value, -128, 255))
 		{
-		  set_imm_out_of_range_error (mismatch_detail, idx, 0, 255);
+		  set_imm_out_of_range_error (mismatch_detail, idx, -128, 255);
 		  return 0;
 		}
 	    }
@@ -2256,7 +2256,7 @@ print_register_offset_address (char *buf, size_t size,
   if (print_extend_p)
     {
       if (print_amount_p)
-	snprintf (tb, tblen, ",%s #%d", shift_name, opnd->shifter.amount);
+	snprintf (tb, tblen, ",%s %d", shift_name, opnd->shifter.amount); // #
       else
 	snprintf (tb, tblen, ",%s", shift_name);
     }
@@ -2352,7 +2352,7 @@ aarch64_print_operand (char *buf, size_t size, bfd_vma pc,
 	    }
 	}
       if (opnd->shifter.amount)
-	snprintf (buf, size, "%s, %s #%d",
+	snprintf (buf, size, "%s, %s %d", // #%d
 		  get_int_reg_name (opnd->reg.regno, opnd->qualifier, 0),
 		  aarch64_operand_modifiers[kind].name,
 		  opnd->shifter.amount);
@@ -2369,7 +2369,7 @@ aarch64_print_operand (char *buf, size_t size, bfd_vma pc,
 	snprintf (buf, size, "%s",
 		  get_int_reg_name (opnd->reg.regno, opnd->qualifier, 0));
       else
-	snprintf (buf, size, "%s, %s #%d",
+	snprintf (buf, size, "%s, %s %d", // #%d
 		  get_int_reg_name (opnd->reg.regno, opnd->qualifier, 0),
 		  aarch64_operand_modifiers[opnd->shifter.kind].name,
 		  opnd->shifter.amount);
@@ -2433,7 +2433,7 @@ aarch64_print_operand (char *buf, size_t size, bfd_vma pc,
     case AARCH64_OPND_IMMR:
     case AARCH64_OPND_IMMS:
     case AARCH64_OPND_FBITS:
-      snprintf (buf, size, "#%" PRIi64, opnd->imm.value);
+      snprintf (buf, size, "%" PRIi64, opnd->imm.value); // #
       break;
 
     case AARCH64_OPND_IMM_MOV:
@@ -2442,38 +2442,40 @@ aarch64_print_operand (char *buf, size_t size, bfd_vma pc,
 	case 4:	/* e.g. MOV Wd, #<imm32>.  */
 	    {
 	      int imm32 = opnd->imm.value;
-	      snprintf (buf, size, "#0x%-20x\t// #%d", imm32, imm32);
+	      snprintf (buf, size, "0x%x", imm32);
+	      //snprintf (buf, size, "#0x%-20x // #%d", imm32, imm32);
 	    }
 	  break;
 	case 8:	/* e.g. MOV Xd, #<imm64>.  */
-	  snprintf (buf, size, "#0x%-20" PRIx64 "\t// #%" PRIi64,
-		    opnd->imm.value, opnd->imm.value);
+	  snprintf (buf, size, "0x%" PRIx64, opnd->imm.value);
+	  //snprintf (buf, size, "#0x%-20" PRIx64 " // #%" PRIi64,
+	  //	    opnd->imm.value, opnd->imm.value);
 	  break;
 	default: assert (0);
 	}
       break;
 
     case AARCH64_OPND_FPIMM0:
-      snprintf (buf, size, "#0.0");
+      snprintf (buf, size, "0.0");
       break;
 
     case AARCH64_OPND_LIMM:
     case AARCH64_OPND_AIMM:
     case AARCH64_OPND_HALF:
       if (opnd->shifter.amount)
-	snprintf (buf, size, "#0x%" PRIx64 ", lsl #%d", opnd->imm.value,
+	snprintf (buf, size, "0x%" PRIx64 ", lsl %d", opnd->imm.value, // #
 		  opnd->shifter.amount);
       else
-	snprintf (buf, size, "#0x%" PRIx64, opnd->imm.value);
+	snprintf (buf, size, "0x%" PRIx64, opnd->imm.value);
       break;
 
     case AARCH64_OPND_SIMD_IMM:
     case AARCH64_OPND_SIMD_IMM_SFT:
       if ((! opnd->shifter.amount && opnd->shifter.kind == AARCH64_MOD_LSL)
 	  || opnd->shifter.kind == AARCH64_MOD_NONE)
-	snprintf (buf, size, "#0x%" PRIx64, opnd->imm.value);
+	snprintf (buf, size, "0x%" PRIx64, opnd->imm.value);
       else
-	snprintf (buf, size, "#0x%" PRIx64 ", %s #%d", opnd->imm.value,
+	snprintf (buf, size, "0x%" PRIx64 ", %s %d", opnd->imm.value, // #
 		  aarch64_operand_modifiers[opnd->shifter.kind].name,
 		  opnd->shifter.amount);
       break;
@@ -2486,14 +2488,14 @@ aarch64_print_operand (char *buf, size_t size, bfd_vma pc,
 	    {
 	      single_conv_t c;
 	      c.i = expand_fp_imm (0, opnd->imm.value);
-	      snprintf (buf, size,  "#%.18e", c.f);
+	      snprintf (buf, size,  "%.18e", c.f); // #
 	    }
 	  break;
 	case 8:	/* e.g. FMOV <Sd>, #<imm>.  */
 	    {
 	      double_conv_t c;
 	      c.i = expand_fp_imm (1, opnd->imm.value);
-	      snprintf (buf, size,  "#%.18e", c.d);
+	      snprintf (buf, size,  "%.18e", c.d); // #
 	    }
 	  break;
 	default: assert (0);
@@ -2510,7 +2512,7 @@ aarch64_print_operand (char *buf, size_t size, bfd_vma pc,
 	      (int64_t) get_optional_operand_default_value (opcode)))
 	/* Omit the operand, e.g. DCPS1.  */
 	break;
-      snprintf (buf, size, "#0x%x", (unsigned int)opnd->imm.value);
+      snprintf (buf, size, "0x%x", (unsigned int)opnd->imm.value);
       break;
 
     case AARCH64_OPND_COND:
@@ -2528,7 +2530,7 @@ aarch64_print_operand (char *buf, size_t size, bfd_vma pc,
 	 in the disassemble_info will take care of the printing.  But some
 	 other callers may be still interested in getting the string in *STR,
 	 so here we do snprintf regardless.  */
-      snprintf (buf, size, "#0x%" PRIx64, addr);
+      snprintf (buf, size, "0x%" PRIx64, addr);
       break;
 
     case AARCH64_OPND_ADDR_PCREL14:
@@ -2544,7 +2546,7 @@ aarch64_print_operand (char *buf, size_t size, bfd_vma pc,
 	 in the disassemble_info will take care of the printing.  But some
 	 other callers may be still interested in getting the string in *STR,
 	 so here we do snprintf regardless.  */
-      snprintf (buf, size, "#0x%" PRIx64, addr);
+      snprintf (buf, size, "0x%" PRIx64, addr);
       break;
 
     case AARCH64_OPND_ADDR_SIMPLE:
@@ -2556,7 +2558,7 @@ aarch64_print_operand (char *buf, size_t size, bfd_vma pc,
 	  if (opnd->addr.offset.is_reg)
 	    snprintf (buf, size, "[%s], x%d", name, opnd->addr.offset.regno);
 	  else
-	    snprintf (buf, size, "[%s], #%d", name, opnd->addr.offset.imm);
+	    snprintf (buf, size, "[%s], %d", name, opnd->addr.offset.imm); // #
 	}
       else
 	snprintf (buf, size, "[%s]", name);
@@ -2573,14 +2575,14 @@ aarch64_print_operand (char *buf, size_t size, bfd_vma pc,
       if (opnd->addr.writeback)
 	{
 	  if (opnd->addr.preind)
-	    snprintf (buf, size, "[%s,#%d]!", name, opnd->addr.offset.imm);
+	    snprintf (buf, size, "[%s, %d]!", name, opnd->addr.offset.imm); // #
 	  else
-	    snprintf (buf, size, "[%s],#%d", name, opnd->addr.offset.imm);
+	    snprintf (buf, size, "[%s], %d", name, opnd->addr.offset.imm); // #
 	}
       else
 	{
 	  if (opnd->addr.offset.imm)
-	    snprintf (buf, size, "[%s,#%d]", name, opnd->addr.offset.imm);
+	    snprintf (buf, size, "[%s, %d]", name, opnd->addr.offset.imm); // #
 	  else
 	    snprintf (buf, size, "[%s]", name);
 	}
@@ -2589,7 +2591,7 @@ aarch64_print_operand (char *buf, size_t size, bfd_vma pc,
     case AARCH64_OPND_ADDR_UIMM12:
       name = get_64bit_int_reg_name (opnd->addr.base_regno, 1);
       if (opnd->addr.offset.imm)
-	snprintf (buf, size, "[%s,#%d]", name, opnd->addr.offset.imm);
+	snprintf (buf, size, "[%s, %d]", name, opnd->addr.offset.imm); // #
       else
 	snprintf (buf, size, "[%s]", name);
       break;
@@ -2634,14 +2636,14 @@ aarch64_print_operand (char *buf, size_t size, bfd_vma pc,
       if (! optional_operand_p (opcode, idx)
 	  || (opnd->barrier->value
 	      != get_optional_operand_default_value (opcode)))
-	snprintf (buf, size, "#0x%x", opnd->barrier->value);
+	snprintf (buf, size, "0x%x", opnd->barrier->value);
       break;
 
     case AARCH64_OPND_PRFOP:
       if (opnd->prfop->name != NULL)
 	snprintf (buf, size, "%s", opnd->prfop->name);
       else
-	snprintf (buf, size, "#0x%02x", opnd->prfop->value);
+	snprintf (buf, size, "0x%02x", opnd->prfop->value);
       break;
 
     default:

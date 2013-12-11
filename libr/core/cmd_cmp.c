@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 R_API void r_core_cmpwatch_free (RCoreCmpWatcher *w) {
 	free (w->ndata);
@@ -174,10 +174,25 @@ static int cmd_cmp(void *data, const char *input) {
 	FILE *fd;
 	ut8 *buf;
 	int ret;
+	ut16 v16;
 	ut32 v32;
 	ut64 v64;
 
 	switch (*input) {
+	case 'a':
+		{
+			int sz;
+			char *p = strchr (input+1, ' ');
+			if (p) {
+				char *data = r_file_slurp (p+1, &sz);
+				if (data) {
+					r_cons_memcat (data, sz);
+					free (data);
+				} else eprintf ("No such file or directory\n");
+			} else eprintf ("Usage: cat [file]\n");
+		}
+		break;
+		break;
 	case 'w':
 		cmd_cmp_watcher (core, input+1);
 		break;
@@ -197,7 +212,8 @@ static int cmd_cmp(void *data, const char *input) {
 		break;
 	case 'X':
 		buf = malloc (core->blocksize);
-		ret = r_io_read_at (core->io, r_num_math (core->num, input+1), buf, core->blocksize);
+		ret = r_io_read_at (core->io, r_num_math (core->num, input+1),
+			buf, core->blocksize);
 		radare_compare (core, core->block, buf, ret);
 		free (buf);
 		break;
@@ -217,13 +233,22 @@ static int cmd_cmp(void *data, const char *input) {
 		radare_compare (core, core->block, buf, core->blocksize);
 		free (buf);
 		break;
-	case 'q':
-		v64 = (ut64) r_num_math (core->num, input+1);
-		radare_compare (core, core->block, (ut8*)&v64, sizeof (v64));
-		break;
 	case 'd':
+		while (input[1]==' ') input++;
+		if (r_sandbox_chdir (input+1)==-1)
+			eprintf ("Cannot chdir\n");
+		break;
+	case '2':
+		v16 = (ut16) r_num_math (core->num, input+1);
+		radare_compare (core, core->block, (ut8*)&v16, sizeof (v16));
+		break;
+	case '4':
 		v32 = (ut32) r_num_math (core->num, input+1);
 		radare_compare (core, core->block, (ut8*)&v32, sizeof (v32));
+		break;
+	case '8':
+		v64 = (ut64) r_num_math (core->num, input+1);
+		radare_compare (core, core->block, (ut8*)&v64, sizeof (v64));
 		break;
 #if 0
 	case 'c':
@@ -249,11 +274,8 @@ static int cmd_cmp(void *data, const char *input) {
 		if (!b) return 0;
 		memset (b, 0xff, core->blocksize);
 		r_core_read_at (core, addr, b, core->blocksize);
-#if 0
-		r_io_seek (core->io, addr, R_IO_SEEK_SET);
-		r_io_read (core->io, b, core->blocksize);
-#endif
-		r_print_hexdiff (core->print, core->offset, core->block, addr, b, core->blocksize, col);
+		r_print_hexdiff (core->print, core->offset, core->block,
+			addr, b, core->blocksize, col);
 		free (b);
 		}
 		break;
@@ -293,7 +315,8 @@ static int cmd_cmp(void *data, const char *input) {
                 r_anal_diff_setup (core->anal, diffops, -1, -1);
                 r_anal_diff_setup (core2->anal, diffops, -1, -1);
 
-		r_core_bin_load (core2, file2);
+		r_core_bin_load (core2, file2,
+			r_config_get_i (core->config, "bin.baddr"));
 		r_core_gdiff (core, core2);
 		r_core_diff_show (core, core2);
 		r_core_free (core2);
@@ -301,21 +324,27 @@ static int cmd_cmp(void *data, const char *input) {
 		break;
 	case '?':
 		r_cons_strcat (
-		"Usage: c[?cdfx] [argument]\n"
+		"Usage: c[?dfx] [argument]\n"
 		" c  [string]    Compares a plain with escaped chars string\n"
 		" cc [at] [(at)] Compares in two hexdump columns of block size\n"
 		//" cc [offset]   Code bindiff current block against offset\n"
-		" cd [value]     Compare a doubleword from a math expression\n"
+		" c4 [value]     Compare a doubleword from a math expression\n"
 		//" cD [file]     Like above, but using radiff -b\n");
-		" cq [value]     Compare a quadword from a math expression\n"
+		" c8 [value]     Compare a quadword from a math expression\n"
 		" cx [hexpair]   Compare hexpair string\n"
 		" cX [addr]      Like 'cc' but using hexdiff output\n"
 		" cf [file]      Compare contents of file at current seek\n"
 		" cg[o] [file]   Graphdiff current file and [file]\n"
-		" cw[us?] [...]  Compare memory watchers\n");
+		" cw[us?] [...]  Compare memory watchers\n"
+		" cat  [file]    Show contents of file (see pwd, ls)\n"
+		" cl|cls|clear   Clear screen\n");
+		break;
+	case 'l':
+		r_cons_clear ();
+		r_cons_gotoxy (0, 0);
 		break;
 	default:
-		eprintf ("Usage: c[?cDdxfw] [argument]\n");
+		eprintf ("Usage: c[?48cdDxfw] [argument]\n");
 	}
 	return 0;
 }

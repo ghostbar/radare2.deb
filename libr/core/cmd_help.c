@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 static int cmd_help(void *data, const char *input) {
 	RCore *core = (RCore *)data;
@@ -28,11 +28,9 @@ static int cmd_help(void *data, const char *input) {
 		}
 		break;
 	case 'b':
-		{
 		n = r_num_get (core->num, input+1);
 		r_num_to_bits (out, n);
-		r_cons_printf ("%s\n", out);
-		}
+		r_cons_printf ("%sb\n", out);
 		break;
 	case 'B':
 		k = r_str_chop_ro (input+1);
@@ -47,6 +45,11 @@ static int cmd_help(void *data, const char *input) {
 				free (d);
 			} else eprintf ("Unknown opcode\n");
 		} else eprintf ("Use: ?d [opcode]    to get the description of the opcode\n");
+		break;
+	case 'h':
+		if (input[1]==' ') {
+			r_cons_printf ("0x%08x\n", (ut32)r_str_hash (input+2));
+		} else eprintf ("Usage: ?h [string-to-hash]\n");
 		break;
 	case 'y':
 		for (input++; input[0]==' '; input++);
@@ -79,37 +82,45 @@ static int cmd_help(void *data, const char *input) {
 			free (p);
 		} else eprintf ("Whitespace expected after '?f'\n");
 		break;
+	case 'o':
+		n = r_num_math (core->num, input+1);
+		r_cons_printf ("0%"PFMT64o"\n", n);
+		break;
+	case 'u':
+		{
+			char unit[32];
+			n = r_num_math (core->num, input+1);
+			r_num_units (unit, n);
+			r_cons_printf ("%s\n", unit);
+		}
+		break;
 	case ' ':
 		{
-		ut32 n32, s, a;
-		float f;
-		n = r_num_math (core->num, input+1);
-		n32 = (ut32)n;
-		memcpy (&f, &n32, sizeof (f));
-		/* decimal, hexa, octal */
-		s = n>>16<<12;
-		a = n & 0x0fff;
-		r_cons_printf ("%"PFMT64d" 0x%"PFMT64x" 0%"PFMT64o" %04x:%04x ",
-			n, n, n, s, a);
-		if (n>>32) {
-			r_cons_printf ("%"PFMT64d" ", (st64)n);
-		} else {
-			r_cons_printf ("%d ", (st32)n);
-		}
-		/* binary and floating point */
-		r_str_bits (out, (const ut8*)&n, sizeof (n), NULL);
-		r_cons_printf ("%s %.01lf %f\n", out, core->num->fvalue, f);
+			char unit[32];
+			ut32 n32, s, a;
+			float f;
+			n = r_num_math (core->num, input+1);
+			n32 = (ut32)n;
+			memcpy (&f, &n32, sizeof (f));
+			/* decimal, hexa, octal */
+			s = n>>16<<12;
+			a = n & 0x0fff;
+			r_num_units (unit, n);
+			r_cons_printf ("%"PFMT64d" 0x%"PFMT64x" 0%"PFMT64o" %s %04x:%04x ",
+				n, n, n, unit, s, a);
+			if (n>>32) r_cons_printf ("%"PFMT64d" ", (st64)n);
+			else r_cons_printf ("%d ", (st32)n);
+			/* binary and floating point */
+			r_str_bits (out, (const ut8*)&n, sizeof (n), NULL);
+			r_cons_printf ("%s %.01lf %f\n", out, core->num->fvalue, f);
 		}
 		break;
 	case 'v':
 		n = (input[1] != '\0') ? r_num_math (core->num, input+2) : 0;
 		switch (input[1]) {
 		case 'i':
-			if (n>>32) {
-				r_cons_printf ("%"PFMT64d"\n", (st64)n);
-			} else {
-				r_cons_printf ("%d\n", (st32)n);
-			}
+			if (n>>32) r_cons_printf ("%"PFMT64d"\n", (st64)n);
+			else r_cons_printf ("%d\n", (st32)n);
 			break;
 		case 'd':
 			r_cons_printf ("%"PFMT64d"\n", n);
@@ -125,21 +136,18 @@ static int cmd_help(void *data, const char *input) {
 		} else r_cons_printf ("0x%"PFMT64x"\n", core->num->value);
 		break;
 	case '+':
-//eprintf ("NUMVAL %llx\n", core->num->value);
 		if (input[1]) {
 			st64 n = (st64)core->num->value;
 			if (n>0) r_core_cmd (core, input+1, 0);
 		} else r_cons_printf ("0x%"PFMT64x"\n", core->num->value);
 		break;
 	case '-':
-//eprintf ("NUMVAL %llx\n", core->num->value);
 		if (input[1]) {
 			st64 n = (st64)core->num->value;
 			if (n<0) r_core_cmd (core, input+1, 0);
 		} else r_cons_printf ("0x%"PFMT64x"\n", core->num->value);
 		break;
 	case '!': // ??
-//eprintf ("NUMVAL %llx\n", core->num->value);
 		if (input[1]) {
 			if (!core->num->value)
 				r_core_cmd (core, input+1, 0);
@@ -179,30 +187,33 @@ static int cmd_help(void *data, const char *input) {
 	case '$':
 		r_cons_printf (
 		"RNum $variables usable in math expressions:\n"
-		" $$  = here (current virtual seek)\n"
-		" $o  = here (current disk io offset)\n"
-		" $s  = file size\n"
-		" $b  = block size\n"
-		" $w  = get word size, 4 if asm.bits=32, 8 if 64, ...\n"
-		" $S  = section offset\n"
-		" $SS = section size\n"
-		" $j  = jump address (e.g. jmp 0x10, jz 0x10 => 0x10)\n"
-		" $f  = jump fail address (e.g. jz 0x10 => next instruction)\n"
-		" $I  = number of instructions of current function\n"
-		" $F  = current function size \n"
-		" $Jn = get nth jump of function\n"
-		" $Cn = get nth call of function\n"
-		" $Dn = get nth data reference in function\n"
-		" $Xn = get nth xref of function\n"
-		" $r  = opcode memory reference (e.g. mov eax,[0x10] => 0x10)\n"
-		" $l  = opcode length\n"
-		" $e  = 1 if end of block, else 0\n"
-		" ${eval} = get value of eval config variable # TODO: use ?k too\n"
-		" $?  = last comparision value\n"
+		" $$     here (current virtual seek)\n"
+		" $o     here (current disk io offset)\n"
+		" $s     file size\n"
+		" $b     block size\n"
+		" $w     get word size, 4 if asm.bits=32, 8 if 64, ...\n"
+		" $c,$r  get width and height of terminal\n"
+		" $S     section offset\n"
+		" $SS    section size\n"
+		" $j     jump address (e.g. jmp 0x10, jz 0x10 => 0x10)\n"
+		" $f     jump fail address (e.g. jz 0x10 => next instruction)\n"
+		" $I     number of instructions of current function\n"
+		" $F     current function size \n"
+		" $Jn    get nth jump of function\n"
+		" $Cn    get nth call of function\n"
+		" $Dn    get nth data reference in function\n"
+		" $Xn    get nth xref of function\n"
+		" $m     opcode memory reference (e.g. mov eax,[0x10] => 0x10)\n"
+		" $l     opcode length\n"
+		" $e     1 if end of block, else 0\n"
+		" ${ev}  get value of eval config variable # TODO: use ?k too\n"
+		" $?     last comparision value\n"
 		);
 		return R_TRUE;
 	case 'V':
-		r_cons_printf ("%s\n", R2_VERSION);
+		if (!strcmp (R2_VERSION, GIT_TAP))
+			r_cons_printf ("%s\n", R2_VERSION);
+		else r_cons_printf ("%s aka %s\n", R2_VERSION, GIT_TAP);
 		break;
 	case 'l':
 		for (input++; input[0]==' '; input++);
@@ -258,9 +269,7 @@ static int cmd_help(void *data, const char *input) {
 				r_num_math (core->num, input+2): core->offset;
 			o = r_io_section_offset_to_vaddr (core->io, n);
 			r_cons_printf ("0x%08"PFMT64x"\n", o);
-		} else {
-			eprintf ("io.va is false\n");
-		}
+		} else eprintf ("io.va is false\n");
 		break;
 	case 'p':
 		if (core->io->va) {
@@ -269,9 +278,7 @@ static int cmd_help(void *data, const char *input) {
 				r_num_math (core->num, input+2): core->offset;
 			o = r_io_section_vaddr_to_offset (core->io, n);
 			r_cons_printf ("0x%08"PFMT64x"\n", o);
-		} else {
-			eprintf ("Virtual addresses not enabled!\n");
-		}
+		} else eprintf ("Virtual addresses not enabled!\n");
 		break;
 	case 'S': {
 		// section name
@@ -287,25 +294,24 @@ static int cmd_help(void *data, const char *input) {
 		free (core->yank_buf);
 		for (input++; *input==' '; input++);
 		core->yank_buf = (ut8*)r_cons_hud_file (input);
-		core->yank_len = core->yank_buf? strlen ((const char *)core->yank_buf): 0;
+		core->yank_len = core->yank_buf? strlen (
+			(const char *)core->yank_buf): 0;
 		break;
 	case 'k': // key=value utility
 		switch (input[1]) {
 		case ' ':
-			{
-			char *p = strchr (input+1, '='); 
+			p = strchr (input+1, '='); 
 			if (p) {
 				// set
 				*p = 0;
 				r_pair_set (core->kv, input+2, p+1);
 			} else {
 				// get
-				char *g = r_pair_get (core->kv, input+2);
-				if (g) {
-					r_cons_printf ("%s\n", g);
-					free (g);
+				p = r_pair_get (core->kv, input+2);
+				if (p) {
+					r_cons_printf ("%s\n", p);
+					free (p);
 				}
-			}
 			}
 			break;
 		case 's':
@@ -390,6 +396,10 @@ static int cmd_help(void *data, const char *input) {
 		} break;
 	case '?': // ???
 		if (input[1]=='?') {
+			if (input[2]=='?') {
+				r_cons_printf ("What are you doing?\n");
+				return 0;
+			}
 			if (input[2]) {
 				if (core->num->value)
 					r_core_cmd (core, input+1, 0);
@@ -407,6 +417,7 @@ static int cmd_help(void *data, const char *input) {
 			" ?d opcode         describe opcode for asm.arch\n"
 			" ?e string         echo string\n"
 			" ?f [num] [str]    map each bit of the number as flag string index\n"
+			" ?h [str]          calculate hash for given string\n"
 			" ?iy prompt        yesno input prompt\n"
 			" ?i[ynmkp] arg     prompt for number or Yes,No,Msg,Key,Path and store in $$?\n"
 			" ?in prompt        yesno input prompt\n"
@@ -414,12 +425,14 @@ static int cmd_help(void *data, const char *input) {
 			" ?ik               press any key input dialog\n"
 			" ?k k[=v]          key-value temporal storage for the user\n"
 			" ?l str            returns the length of string (0 if null)\n"
+			" ?o num            get octal value\n"
 			" ?p vaddr          get physical address for given virtual address\n"
 			" ?P paddr          get virtual address for given physical one\n"
 			" ?r [from] [to]    generate random number between from-to\n"
 			" ?s from to step   sequence of numbers from to by steps\n"
 			" ?S addr           return section name of given address\n"
 			" ?t cmd            returns the time to run a command\n"
+			" ?u num            get value in human units (KB, MB, GB, TB)\n"
 			" ?v eip-0x804800   show hex value of math expr\n"
 			" ?vi rsp-rbp       show decimal value of math expr\n"
 			" ?V                show library version of r_core\n"
@@ -435,23 +448,21 @@ static int cmd_help(void *data, const char *input) {
 		if (input[1]) {
 			if (core->num->value == UT64_MIN)
 				r_core_cmd (core, input+1, 0);
-		} else r_cons_printf ("0x%"PFMT64x"\n", core->num->value);
+		} else r_cons_printf ("%"PFMT64d"\n", core->num->value);
 		break;
 	case '\0':
 	default:
 		r_cons_printf (
-		"Usage: [.][repeat][command][~grep][@[@iter]address!size][|>pipe]\n"
+		"Usage: [.][times][cmd][~grep][@[@iter]addr!size][|>pipe] ; ...\n"
 		"Append '?' to any char command to get detailed help\n"
 		"Prefix with number to repeat command N times (f.ex: 3x)\n"
 		" $alias=value          alias commands (simple macros)\n"
+		" (macro arg0 arg1)     manage scripting macros\n"
+		" .[ -|file|!sh|cmd]    interpret cparse, r2 or rlang file (see -?)\n"
+		" = [cmd]               run this command via rap://\n"
 		" /[xmp/]               search for bytes, regexps, patterns, ..\n"
 		" ![cmd]                run given command as in system(3)\n"
-		" = [cmd]               run this command via rap://\n"
-		" (macro arg0 arg1)     define scripting macros\n"
 		" #[algo] [len]         calculate hash checksum of current block\n"
-		" .[ file|!sh|cmd]      interpret as radare commands\n"
-		" q [ret]               quit program with a return value\n"
-		" :/;                   (:) manage command plugins, (;) separator\n"
 		" a                     perform analysis of code\n"
 		" b [bsz]               get or change block size\n"
 		" c[dqxXfg] [arg]       compare block with given data\n"
@@ -466,8 +477,9 @@ static int cmd_help(void *data, const char *input) {
 		" o [file] (addr)       open file at optional address\n"
 		" p[?] [len]            print current block with format and length\n"
 		" P[osi?]               project management utilities\n"
+		" q [ret]               quit program with a return value\n"
 		" r[+- ][len]           resize file\n"
-		" s [addr]              seek to address\n"
+		" s [addr]              seek to address (also for '0x', '0x1' == 's 0x1')\n"
 		" S?[size] [vaddr]      io section manipulation information\n"
 		" V[vcmds]              enter visual mode (vcmds=visualvisual  keystrokes)\n"
 		" w[mode] [arg]         multiple write operations\n"

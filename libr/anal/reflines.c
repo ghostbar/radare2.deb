@@ -1,7 +1,9 @@
 /* radare - LGPL - Copyright 2009-2013 - pancake, nibble */
 
-#include <r_anal.h>
+//#include <r_anal.h>
+#include <r_core.h>
 #include <r_util.h>
+#include <r_cons.h>
 
 R_API struct r_anal_refline_t *r_anal_reflines_get(struct r_anal_t *anal,
 	ut64 addr, ut8 *buf, ut64 len, int nlines, int linesout, int linescall)
@@ -33,14 +35,13 @@ R_API struct r_anal_refline_t *r_anal_reflines_get(struct r_anal_t *anal,
 			}
 		}
 #endif
-
 		addr += sz;
 		// This can segflauta if opcode length and buffer check fails
 		r_anal_op_fini (&op);
 		sz = r_anal_op (anal, &op, addr, ptr, (int)(end-ptr));
 		if (sz > 0) {
 			/* store data */
-			switch(op.type) {
+			switch (op.type) {
 			case R_ANAL_OP_TYPE_CALL:
 				if (!linescall)
 					break;
@@ -65,54 +66,6 @@ R_API struct r_anal_refline_t *r_anal_reflines_get(struct r_anal_t *anal,
 	return list;
 }
 
-// TODO: this is TOO SLOW. do not iterate over all reflines or gtfo
-/* umf..this should probably be outside this file */
-R_API char* r_anal_reflines_str(RAnal *anal, RAnalRefline *list, ut64 addr, int opts) {
-	int l, linestyle = opts & R_ANAL_REFLINE_TYPE_STYLE;
-	int dir = 0, wide = opts & R_ANAL_REFLINE_TYPE_WIDE;
-	char ch = ' ', *str = NULL;
-	struct list_head *pos;
-	RAnalRefline *ref;
-
-	if (!list) return NULL;
-	str = r_str_concat (str, " ");
-	for (pos = linestyle?(&(list->list))->next:(&(list->list))->prev;
-		pos != (&(list->list)); pos = linestyle?pos->next:pos->prev) {
-		ref = list_entry (pos, RAnalRefline, list);
-		dir = (addr == ref->to)? 1: (addr == ref->from)? 2: dir;
-		if (addr == ref->to) {
-			str = r_str_concat (str, (ref->from>ref->to)?".":"`");
-			ch = '-';
-		} else if (addr == ref->from) {
-			str = r_str_concat (str, (ref->from>ref->to)?"`":",");
-			ch = '=';
-		} else if (ref->from < ref->to) {
-			if (addr > ref->from && addr < ref->to) {
-				if (ch=='-'||ch=='=')
-					str = r_str_concatch (str, ch);
-				else str = r_str_concatch (str, '|');
-			} else str = r_str_concatch (str, ch);
-		} else {
-			if (addr < ref->from && addr > ref->to) {
-				if (ch=='-'||ch=='=')
-					str = r_str_concatch (str, ch);
-				else str = r_str_concatch (str, '|');
-			} else str = r_str_concatch (str, ch);
-		}
-		if (wide)
-			str = r_str_concatch (str, (ch=='='||ch=='-')?ch:' ');
-	}
-	str = r_str_concat (str, (dir==1)?"-> ":(dir==2)?"=< ":"   ");
-	if (anal->lineswidth>0) {
-		l = strlen (str);
-		if (l>anal->lineswidth)
-			r_str_cpy (str, str+l-anal->lineswidth);
-	}
-	for (l = anal->lineswidth-strlen (str);l-->0;)
-		str = r_str_prefix (str, " ");
-	return str;
-}
-
 R_API int r_anal_reflines_middle(RAnal *a, RAnalRefline *list, ut64 addr, int len) {
 	struct list_head *pos;
 	for (pos = (&(list->list))->next; pos != (&(list->list)); pos = pos->next) {
@@ -121,4 +74,77 @@ R_API int r_anal_reflines_middle(RAnal *a, RAnalRefline *list, ut64 addr, int le
 			return R_TRUE;
 	}
 	return R_FALSE;
+}
+
+// TODO: move into another file
+// TODO: this is TOO SLOW. do not iterate over all reflines or gtfo
+R_API char* r_anal_reflines_str(void *core, ut64 addr, int opts) {
+	int l, linestyle = opts & R_ANAL_REFLINE_TYPE_STYLE;
+	int dir = 0, wide = opts & R_ANAL_REFLINE_TYPE_WIDE;
+	char ch = ' ', *str = NULL;
+	struct list_head *pos;
+	RAnalRefline *ref, *list = ((RCore*)core)->reflines;
+
+	if (!list) return NULL;
+	str = r_str_concat (str, " ");
+	for (pos = linestyle?(&(list->list))->next:(&(list->list))->prev;
+		pos != (&(list->list)); pos = linestyle?pos->next:pos->prev) {
+		ref = list_entry (pos, RAnalRefline, list);
+		dir = (addr == ref->to)? 1: (addr == ref->from)? 2: dir;
+		if (addr == ref->to) {
+			str = r_str_concat (str, (ref->from>ref->to)? "." : "`");
+			ch = '-';
+		} else if (addr == ref->from) {
+			str = r_str_concat (str, (ref->from>ref->to)? "`" : ",");
+			ch = '=';
+		} else if (ref->from < ref->to) {
+			if (addr > ref->from && addr < ref->to) {
+				if (ch=='-' || ch=='=')
+					str = r_str_concatch (str, ch);
+				//else str = r_str_concat (str, ((RCore*)core)->cons->vline[LINE_VERT]);
+				else str = r_str_concatch (str, '|');
+			} else str = r_str_concatch (str, ch);
+		} else {
+			if (addr < ref->from && addr > ref->to) {
+				if (ch=='-' || ch=='=')
+					str = r_str_concatch (str, ch);
+				//else str = r_str_concat (str, ((RCore*)core)->cons->vline[LINE_VERT]);
+				else str = r_str_concatch (str, '|');
+			} else str = r_str_concatch (str, ch);
+		}
+		if (wide)
+			str = r_str_concatch (str, (ch=='=' || ch=='-')? ch : ' ');
+	}
+	if (((RCore*)core)->anal->lineswidth>0) {
+		int lw = ((RCore*)core)->anal->lineswidth;
+		l = strlen (str);
+		if (l > lw) {
+			r_str_cpy (str, str + l - lw);
+		} else {
+			char pfx[128];
+			lw-=l;
+			memset (pfx, ' ', sizeof (pfx));
+			if (lw>=sizeof (pfx)) lw = sizeof (pfx);
+			pfx[lw] = 0;
+			if (lw>0) str = r_str_prefix (str, pfx);
+		}
+	}
+	str = r_str_concat (str, (dir==1)? "-> "
+		: (dir==2)? "=< " : "   ");
+
+	/* HACK */
+	if (((RCore*)core)->utf8 && ((RCore*)core)->cons->vline) {
+		RCons *c = ((RCore*)core)->cons;
+		//str = r_str_replace (str, "=", "-", 1);
+		str = r_str_replace (str, "<", c->vline[ARROW_LEFT], 1);
+		str = r_str_replace (str, ">", c->vline[ARROW_RIGHT], 1);
+		str = r_str_replace (str, "|", c->vline[LINE_VERT], 1);
+		str = r_str_replace (str, "=", c->vline[LINE_HORIZ], 1);
+		str = r_str_replace (str, "-", c->vline[LINE_HORIZ], 1);
+		//str = r_str_replace (str, ".", "\xe2\x94\x8c", 1);
+		str = r_str_replace (str, ",", c->vline[LUP_CORNER], 1);
+		str = r_str_replace (str, ".", c->vline[LUP_CORNER], 1);
+		str = r_str_replace (str, "`", c->vline[LDWN_CORNER], 1);
+	}
+	return str;
 }

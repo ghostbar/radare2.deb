@@ -5,42 +5,36 @@
 #include <r_flags.h>
 #include <r_core.h>
 
-static char *r_core_project_file(const char *file) {
-	char buf[128];
-	if (!strchr (file, '/')) {
-		snprintf (buf, sizeof (buf), ".radare2/rdb/%s", file);
-		return r_str_home (buf);
-	}
-	return strdup (file);
+static char *r_core_project_file(RCore *core, const char *file) {
+	char *ret = r_file_abspath (r_config_get (
+		core->config, "dir.projects"));
+	ret = r_str_concat (ret, "/");
+	return r_str_concat (ret, file);
 }
 
-static int r_core_project_init() {
-	int ret;
-	char *str = r_str_home (".radare2");
-	if (str && (ret = r_sys_mkdir (str))) {
-		if (!ret) {
-			free (str);
-			str = r_str_home (".radare2/plugins");
-			ret = r_sys_mkdir (str);
-			if (ret) eprintf ("Cannot create ~/.radare2/plugins\n");
-		}
-	}
-	str = r_str_home (".radare2/rdb");
-	ret = r_sys_mkdir (str);
-	free (str);
+static int r_core_project_init(RCore *core) {
+	char *prjdir = r_file_abspath (r_config_get (
+		core->config, "dir.projects"));
+	int ret = r_sys_rmkdir (prjdir);
+	if (!ret) eprintf ("Cannot mkdir dir.projects\n");
+	free (prjdir);
 	return ret;
 }
 
 R_API int r_core_project_open(RCore *core, const char *prjfile) {
 	int ret;
-	char *prj = r_core_project_file (prjfile);
+	char *prj;
+	if (!prjfile || !*prjfile)
+		return R_FALSE;
+	prj = r_core_project_file (core, prjfile);
 	ret = r_core_cmd_file (core, prj);
+	r_anal_project_load (core->anal, prjfile);
 	free (prj);
 	return ret;
 }
 
 R_API char *r_core_project_info(RCore *core, const char *prjfile) {
-	char buf[256], *file = NULL, *prj = r_core_project_file (prjfile);
+	char buf[256], *file = NULL, *prj = r_core_project_file (core, prjfile);
 	FILE *fd = prj? r_sandbox_fopen (prj, "r"): NULL;
 	for (;fd;) {
 		fgets (buf, sizeof (buf), fd);
@@ -52,7 +46,7 @@ R_API char *r_core_project_info(RCore *core, const char *prjfile) {
 			break;
 		}
 	}
-	fclose (fd);
+	if (fd) fclose (fd);
 	r_cons_printf ("Project : %s\n", prj);
 	if (file) r_cons_printf ("FilePath: %s\n", file);
 	free (prj);
@@ -66,8 +60,9 @@ R_API int r_core_project_save(RCore *core, const char *file) {
 	if (file == NULL || *file == '\0')
 		return R_FALSE;
 
-	prj = r_core_project_file (file);
-	r_core_project_init ();
+	prj = r_core_project_file (core, file);
+	r_core_project_init (core);
+	r_anal_project_save (core->anal, prj);
 	fd = r_sandbox_open (prj, O_BINARY|O_RDWR|O_CREAT, 0644);
 	if (fd != -1) {
 		fdold = r_cons_singleton ()->fdout;
@@ -90,6 +85,12 @@ R_API int r_core_project_save(RCore *core, const char *file) {
 		r_str_write (fd, "# meta\n");
 		r_meta_list (core->anal->meta, R_META_TYPE_ANY, 1);
 		r_cons_flush ();
+		 {
+			char buf[1024];
+			snprintf (buf, sizeof(buf), "%s.d/xrefs", prj);
+			sdb_file (core->anal->sdb_xrefs, buf);
+			sdb_sync (core->anal->sdb_xrefs);
+		 }
 		r_core_cmd (core, "ar*", 0);
 		r_cons_flush ();
 		r_core_cmd (core, "af*", 0);

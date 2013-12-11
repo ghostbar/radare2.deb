@@ -139,7 +139,10 @@ static int c = 0;
 static inline void print_search_progress(ut64 at, ut64 to, int n) {
 	if ((++c%64))
 		return;
-	eprintf ("\r[  ]  0x%08"PFMT64x" < 0x%08"PFMT64x"  hits = %d                      \r%s",
+	if (r_cons_singleton()->columns<50)
+		eprintf ("\r[  ]  0x%08"PFMT64x"  hits = %d   \r%s",
+				at, n, (c%2)?"[ #]":"[# ]");
+	else eprintf ("\r[  ]  0x%08"PFMT64x" < 0x%08"PFMT64x"  hits = %d   \r%s",
 			at, to, n, (c%2)?"[ #]":"[# ]");
 }
 
@@ -390,7 +393,7 @@ c = 0;
 	case 'e': /* match regexp */
 		{
 		char *inp = strdup (input+2);
-		char *res = r_str_lchr (inp+1, inp[0]);
+		char *res = (char *)r_str_lchr (inp+1, inp[0]);
 		char *opt = NULL;
 		if (res > inp) {
 			opt = strdup (res+1);

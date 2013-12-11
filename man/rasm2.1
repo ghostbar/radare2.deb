@@ -1,9 +1,8 @@
-.Dd Feb 24, 2013
-.Dt RASM2 1
-.Os
-.Sh NAME
-.Nm rasm2
-.Nd radare2 assembler and disassembler tool
+.Em
+.TH "RASM2" "1" "" ""
+.SH "NAME"
+rasm2 \- radare2 assembler and disassembler tool
+.Dd Jun 25, 2013
 .Sh SYNOPSIS
 .Nm rasm2
 .Op Fl dDfBCLevw
@@ -11,41 +10,47 @@
 .Op Fl o Ar offset
 .Op Fl a Ar arch
 .Op Fl b Ar bits
+.Op Fl c Ar cpu
 .Op Fl s Ar syntax
+.Op Fl i Ar int
 .Op Fl l Ar int
 .Op ARG
 .Sh DESCRIPTION
-TODO: This manpage is incomplete.
+This tool uses r_asm to assemble and disassemble files or hexpair strings. It supports a large list of architectures which can be listed using the -L flag.
 .Pp
 .Bl -tag -width Fl
-.It Fl d
-Disassemble hexpair bytes. rasm2 \-d 9090
-.It Fl D
-Disassemble showing hexpair and opcode
-.It Fl f
-Read data from file instead of ARG.
-.It Fl F Ar in:out
-Specify input and/or output filters (att2intel, x86.pseudo, ...)
-.It Fl o Ar offset
-Offset of the opcode to assemble (default is 0)
 .It Fl a Ar arch
 Set architecture plugin
 .It Fl b Ar bits
 Set architecture bits
-.It Fl s Ar syntax
-Select syntax output (intel, att)
 .It Fl B
 Binary input/output (\-l is mandatory for binary input)
-.It Fl l Ar int
-Input/Output length
+.It Fl c Ar cpu
+Select specific CPU (depends on -a arch)
 .It Fl C
 Output in C format
-.It Fl L
-List supported asm plugins
+.It Fl d
+Disassemble hexpair bytes. rasm2 \-d 9090
+.It Fl D
+Disassemble showing hexpair and opcode
 .It Fl e
-Use big endian
+Use big endian (or swap endianness if used more than once)
+.It Fl f
+Read data from file instead of ARG.
+.It Fl F Ar in:out
+Specify input and/or output filters (att2intel, x86.pseudo, ...)
 .It Fl h
 Show usage help message.
+.It Fl l Ar int
+Input/Output length
+.It Fl i Ar int
+Ignore/skip N bytes from the begining of the input buffer
+.It Fl L
+List supported asm plugins
+.It Fl o Ar offset
+Offset of the opcode to assemble (default is 0)
+.It Fl s Ar syntax
+Select syntax output (intel, att)
 .It Fl w
 Describe opcode (whats op)
 .El
@@ -53,11 +58,11 @@ Describe opcode (whats op)
 .Pp
 Assemble opcode:
 .Pp
-  $ rasm2 -a x86 -b 32 'mov eax, 33'
+  $ rasm2 \-a x86 \-b 32 'mov eax, 33'
 .Pp
 Disassemble opcode: 
 .Pp
-  $ rasm2 -d 90
+  $ rasm2 \-d 90
 .Sh SEE ALSO
 .Pp
 .Xr radare2(1) ,

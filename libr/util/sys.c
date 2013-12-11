@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 #include <sys/types.h>
 #include <dirent.h>
@@ -7,15 +7,52 @@
 #if __linux__ && __GNU_LIBRARY__
 # include <execinfo.h>
 #endif
+#if __APPLE__
+#include <errno.h>
+#include <execinfo.h>
+# ifndef PROC_PIDPATHINFO_MAXSIZE
+#  define PROC_PIDPATHINFO_MAXSIZE 1024
+int proc_pidpath(int pid, void * buffer, uint32_t  buffersize);
+//#  include <libproc.h>
+# endif
+#endif
 #if __UNIX__
 # include <sys/wait.h>
 # include <sys/stat.h>
 # include <errno.h>
 # include <signal.h>
+#ifdef __HAIKU__
+# define Sleep sleep
+#endif
 #elif __WINDOWS__
 # include <io.h>
 # include <winbase.h>
 #endif
+
+R_LIB_VERSION(r_util);
+
+struct {const char* name; ut64 bit;} const static arch_bit_array[] = {
+    {"x86", R_SYS_ARCH_X86},
+    {"arm", R_SYS_ARCH_ARM},
+    {"ppc", R_SYS_ARCH_PPC},
+    {"m68k", R_SYS_ARCH_M68K},
+    {"java", R_SYS_ARCH_JAVA},
+    {"mips", R_SYS_ARCH_MIPS},
+    {"sparc", R_SYS_ARCH_SPARC},
+    {"csr", R_SYS_ARCH_CSR},
+    {"c55+", R_SYS_ARCH_C55PLUS},
+    {"msil", R_SYS_ARCH_MSIL},
+    {"objd", R_SYS_ARCH_OBJD},
+    {"bf", R_SYS_ARCH_BF},
+    {"sh", R_SYS_ARCH_SH},
+    {"avr", R_SYS_ARCH_AVR},
+    {"dalvik", R_SYS_ARCH_DALVIK},
+    {"z80", R_SYS_ARCH_Z80},
+    {"arc", R_SYS_ARCH_ARC},
+    {"i8080", R_SYS_ARCH_I8080},
+    {"rar", R_SYS_ARCH_RAR},
+    {NULL, 0}
+};
 
 /* TODO: import stuff fron bininfo/p/bininfo_addr2line */
 /* TODO: check endianness issues here */
@@ -44,10 +81,7 @@ R_API int r_sys_truncate(const char *file, int sz) {
 
 R_API RList *r_sys_dir(const char *path) {
 	struct dirent *entry;
-	DIR *dir;
-	if (!path || (r_sandbox_enable (0) && !r_sandbox_check_path (path)))
-		return NULL;
-	dir = opendir (path);
+	DIR *dir = r_sandbox_opendir (path);
 	if (dir) {
 		RList *list = r_list_new ();
 		if (list) {
@@ -83,7 +117,7 @@ R_API void r_sys_backtrace(void) {
 #if (__linux__ && __GNU_LIBRARY__) || (__APPLE__ && APPLE_WITH_BACKTRACE)
         void *array[10];
         size_t i, size = backtrace (array, 10);
-        char **strings = backtrace_symbols (array, size);
+        char **strings = (char **)(size_t)backtrace_symbols (array, size);
         printf ("Backtrace %zd stack frames.\n", size);
         for (i = 0; i < size; i++)
                 printf ("%s\n", strings[i]);
@@ -111,7 +145,7 @@ R_API void r_sys_backtrace(void) {
 
 R_API int r_sys_sleep(int secs) {
 #if __UNIX__
-	return sleep(secs);
+	return sleep (secs);
 #else
 	Sleep (secs * 1000); // W32
 	return 0;
@@ -120,8 +154,11 @@ R_API int r_sys_sleep(int secs) {
 
 R_API int r_sys_usleep(int usecs) {
 #if __UNIX__
+	// unix api uses microseconds
 	return usleep (usecs);
 #else
+	// w32 api uses milliseconds
+	usecs /= 1000;
 	Sleep (usecs); // W32
 	return 0;
 #endif
@@ -359,6 +396,21 @@ R_API int r_sys_cmdf (const char *fmt, ...) {
 	return ret;
 }
 
+R_API int r_sys_cmdbg (const char *str) {
+#if __UNIX__
+	int ret, pid = fork ();
+	if (pid == -1) return -1;
+	if (pid) return pid;
+	ret = r_sandbox_system (str, 0);
+	eprintf ("{exit: %d, pid: %d, cmd: \"%s\"}", ret, pid, str);
+	exit (0);
+	return -1;
+#else
+#warning r_sys_cmdbg is not implemented for this platform
+	return -1;
+#endif
+}
+
 R_API int r_sys_cmd (const char *str) {
 #if __FreeBSD__
 	/* freebsd system() is broken */
@@ -439,65 +491,104 @@ R_API void r_sys_perror(const char *fun) {
 #endif
 }
 
-// TODO: use array :P
 R_API int r_sys_arch_id(const char *arch) {
-	if (!strcmp (arch, "x86")) return R_SYS_ARCH_X86;
-	if (!strcmp (arch, "arm")) return R_SYS_ARCH_ARM;
-	if (!strcmp (arch, "ppc")) return R_SYS_ARCH_PPC;
-	if (!strcmp (arch, "m68k")) return R_SYS_ARCH_M68K;
-	if (!strcmp (arch, "java")) return R_SYS_ARCH_JAVA;
-	if (!strcmp (arch, "mips")) return R_SYS_ARCH_MIPS;
-	if (!strcmp (arch, "sparc")) return R_SYS_ARCH_SPARC;
-	if (!strcmp (arch, "csr")) return R_SYS_ARCH_CSR;
-	if (!strcmp (arch, "msil")) return R_SYS_ARCH_MSIL;
-	if (!strcmp (arch, "objd")) return R_SYS_ARCH_OBJD;
-	if (!strcmp (arch, "bf")) return R_SYS_ARCH_BF;
-	if (!strcmp (arch, "sh")) return R_SYS_ARCH_SH;
-	if (!strcmp (arch, "avr")) return R_SYS_ARCH_AVR;
-	if (!strcmp (arch, "dalvik")) return R_SYS_ARCH_DALVIK;
-	if (!strcmp (arch, "z80")) return R_SYS_ARCH_Z80;
-	if (!strcmp (arch, "arc")) return R_SYS_ARCH_ARC;
-	if (!strcmp (arch, "i8080")) return R_SYS_ARCH_I8080;
-	if (!strcmp (arch, "rar")) return R_SYS_ARCH_RAR;
-	return 0;
+    int i;
+    for (i=0; arch_bit_array[i].name; i++)
+        if (!strcmp (arch, arch_bit_array[i].name))
+            return arch_bit_array[i].bit;
+    return 0;
 }
 
 R_API const char *r_sys_arch_str(int arch) {
-	if (arch & R_SYS_ARCH_X86) return "x86";
-	if (arch & R_SYS_ARCH_ARM) return "arm";
-	if (arch & R_SYS_ARCH_PPC) return "ppc";
-	if (arch & R_SYS_ARCH_M68K) return "m68k";
-	if (arch & R_SYS_ARCH_JAVA) return "java";
-	if (arch & R_SYS_ARCH_MIPS) return "mips";
-	if (arch & R_SYS_ARCH_SPARC) return "sparc";
-	if (arch & R_SYS_ARCH_CSR) return "csr";
-	if (arch & R_SYS_ARCH_MSIL) return "msil";
-	if (arch & R_SYS_ARCH_OBJD) return "objd";
-	if (arch & R_SYS_ARCH_BF) return "bf";
-	if (arch & R_SYS_ARCH_SH) return "sh";
-	if (arch & R_SYS_ARCH_AVR) return "avr";
-	if (arch & R_SYS_ARCH_DALVIK) return "dalvik";
-	if (arch & R_SYS_ARCH_Z80) return "z80";
-	if (arch & R_SYS_ARCH_ARC) return "arc";
-	if (arch & R_SYS_ARCH_I8080) return "i8080";
-	if (arch & R_SYS_ARCH_RAR) return "rar";
+    int i;
+    for (i=0; arch_bit_array[i].name; i++)
+        if (arch & arch_bit_array[i].bit)
+            return arch_bit_array[i].name;
 	return "none";
 }
 
+#define USE_FORK 0
 R_API int r_sys_run(const ut8 *buf, int len) {
 	const int sz = 4096;
-	int ret, (*cb)();
+	int pdelta, ret, (*cb)();
+#if USE_FORK
+	int st, pid;
+#endif
+// TODO: define R_SYS_ALIGN_FORWARD in r_util.h
 	ut8 *ptr, *p = malloc ((sz+len)<<1);
-	ptr = (ut8*)R_MEM_ALIGN (p);
-	if (!ptr) {
+	ptr = p;
+	pdelta = ((size_t)(p)) & (4096-1);
+	if (pdelta)
+		ptr += (4096-pdelta);
+	if (!ptr || !buf) {
+		eprintf ("r_sys_run: Cannot run empty buffer\n");
 		free (p);
 		return R_FALSE;
 	}
 	memcpy (ptr, buf, sz);
 	r_mem_protect (ptr, sz, "rx");
-	r_mem_protect (ptr, sz, "rwx"); // try, ignore if fail
+	//r_mem_protect (ptr, sz, "rwx"); // try, ignore if fail
 	cb = (void*)ptr;
+#if USE_FORK
+#if __UNIX__
+	pid = fork ();
+	//pid = -1;
+#else
+	pid = -1;
+#endif
+	if (pid<0) {
+		return cb ();
+	} else if (!pid) {
+		ret = cb ();
+		exit (ret);
+		return ret;
+	}
+	st = 0;
+	waitpid (pid, &st, 0);
+	if (WIFSIGNALED (st)) {
+		int num = WTERMSIG(st);
+		eprintf ("Got signal %d\n", num);
+		ret = num;
+	} else {
+		ret = WEXITSTATUS (st);
+	}
+#else
 	ret = cb ();
+#endif
 	free (p);
 	return ret;
+}
+
+R_API int r_is_heap (void *p) {
+	void *q = malloc (8);
+	ut64 mask = UT64_MAX;
+	ut64 addr = (ut64)(size_t)q;
+	addr>>=16;
+	addr<<=16;
+	mask>>=16;
+	mask<<=16;
+	free (q);
+	return (((ut64)(size_t)p) == mask);
+}
+
+R_API char *r_sys_pid_to_path(int pid) {
+#if __WINDOWS__
+	// TODO: implement r_sys_pid_to_path on W32
+	return NULL;
+#elif __APPLE__
+	char pathbuf[PROC_PIDPATHINFO_MAXSIZE];
+	int ret = proc_pidpath (pid, pathbuf, sizeof (pathbuf));
+	if (ret <= 0)
+		return NULL;
+	return strdup (pathbuf);
+#else
+	int ret;
+	char buf[128], pathbuf[1024];
+	snprintf (buf, sizeof (buf), "/proc/%d/exe", pid);
+	ret = readlink (buf, pathbuf, sizeof (pathbuf));
+	if (ret<1)
+		return NULL;
+	pathbuf[ret] = 0;
+	return strdup (pathbuf);
+#endif
 }

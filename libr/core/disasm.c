@@ -1,6 +1,33 @@
 /* radare - LGPL - Copyright 2009-2013 - nibble, pancake */
 
 #include "r_core.h"
+#include "r_cons.h"
+
+#define HASRETRY 1
+
+static const char* r_vline_a[] = {
+	"|", // LINE_VERT
+	"|-", // LINE_CROSS
+	"/", // RUP_CORNER
+	"\\", // RDWN_CORNER
+	"->", // ARROW_RIGHT
+	"=<", // ARROW_LEFT
+	"-", // LINE_HORIZ
+	",", // LUP_CORNER
+	"`", // LDWN_CORNER
+};
+
+static const char* r_vline_u[] = {
+	"│", // LINE_VERT
+	"├", // LINE_CROSS
+	"╒", // RUP_CORNER
+	"╘", // RDWN_CORNER
+	">", // ARROW_RIGHT
+	"<", // ARROW_LEFT
+	"─", // LINE_HORIZ
+	"┌", // LUP_CORNER
+	"└", // LDWN_CORNER
+};
 
 R_API RAnalHint *r_core_hint_begin (RCore *core, RAnalHint* hint, ut64 at) {
 // XXX not here
@@ -36,47 +63,136 @@ R_API RAnalHint *r_core_hint_begin (RCore *core, RAnalHint* hint, ut64 at) {
 	return hint;
 }
 
-static char *filter_refline(const char *str) {
+// this is another random hack for reflines.. crappy stuff
+static char *filter_refline2(RCore *core, const char *str) {
 	char *p, *s = strdup (str);
-	p = strstr (s, "->");
-	if (p) p[0]=p[1]=' ';
-	p = strstr (s, "=<");
-	if (p) p[0]=p[1]=' ';
+	char n = '|';
 	for (p=s; *p; p++) {
-		if (*p=='`') *p = '|';
-		if (*p=='-') *p = ' ';
-		if (*p=='=') *p = '|';
+		switch (*p) {
+		case '`':
+		case '|':
+			*p = n;
+			break;
+		case ',':
+			if (p[1]=='|') n = ' ';
+		default:
+			*p = ' ';
+			break;
+		}
 	}
+	s = r_str_replace (s, "|", core->cons->vline[LINE_VERT], 1);
+	s = r_str_replace (s, "`", core->cons->vline[LINE_VERT], 1);
 	return s;
 }
 
-static void printoffset(ut64 off, int show_color, int invert, int opt) {
-	if (show_color) {
-		if (invert)
-			r_cons_invert (R_TRUE, R_TRUE);
-		if (opt) {
-			ut32 s, a;
-			a = off & 0xffff;
-			s = (off-a)>>4;
-			r_cons_printf (Color_GREEN"%04x:%04x"Color_RESET, s, a);
-		} else r_cons_printf (Color_GREEN"0x%08"PFMT64x""Color_RESET, off);
-		if (invert)
-			r_cons_printf (Color_RESET);
-		r_cons_puts ("  ");
-	} else r_cons_printf ("0x%08"PFMT64x"  ", off);
+static char *filter_refline(RCore *core, const char *str) {
+	char *p, *s = strdup (str);
+
+	p = s;
+	p = r_str_replace (strdup (p), "`",
+		core->cons->vline[LINE_VERT], 1); // "`" -> "|"
+	p = r_str_replace (strdup (p),
+		core->cons->vline[LINE_HORIZ], " ", 1); // "-" -> " "
+	p = r_str_replace (strdup (p),
+		core->cons->vline[LINE_HORIZ],
+		core->cons->vline[LINE_VERT], 1); // "=" -> "|"
+	p = strstr (s, core->cons->vline[ARROW_RIGHT]);
+	if (p)
+		p = r_str_replace (strdup (p), core->cons->vline[ARROW_RIGHT], " ", 0);
+
+	p = strstr (s, core->cons->vline[ARROW_LEFT]);
+	if (p)
+		p = r_str_replace (strdup (p), core->cons->vline[ARROW_LEFT], " ", 0);
+	return s;
+}
+
+static void colorize_opcode (char *p, const char *reg, const char *num) {
+	int i, j, k, is_mod, is_arg = 0;
+	int is_jmp = (*p == 'j' || ((*p == 'c') && (p[1] == 'a')))? 1: 0;
+	char *o;
+	if (is_jmp)
+		return;
+	o = malloc (1024);
+	for (i=j=0; p[i]; i++,j++) {
+		/* colorize numbers */
+		switch (p[i]) {
+		case 0x1b:
+			/* skip until 'm' */
+			for (++i;p[i] && p[i]!='m'; i++)
+				o[j] = p[i];
+			continue;
+		case '+':
+		case '-':
+		case '/':
+		case '>':
+		case '<':
+		case '(':
+		case ')':
+		case '*':
+		case '%':
+		case ']':
+		case '[':
+		case ',':
+			if (is_arg) {
+				strcpy (o+j, Color_RESET);
+				j += strlen (Color_RESET);
+				o[j++] = p[i];
+				if (p[i]=='$' || ((p[i] > '0') && (p[i] < '9'))) {
+					strcpy (o+j, num);
+					j += strlen (num)-1;
+				} else {
+					strcpy (o+j, reg);
+					j += strlen (reg)-1;
+				}
+				continue;
+			}
+			break;
+		case ' ':
+			is_arg = 1;
+			// find if next ',' before ' ' is found
+			is_mod = 0;
+			for (k = i+1; p[k]; k++) {
+				if (p[k]==' ')
+					break;
+				if (p[k]==',') {
+					is_mod = 1;
+					break;
+				}
+			}
+			if (!p[k]) is_mod = 1;
+			if (!is_jmp && is_mod) {
+				// COLOR FOR REGISTER
+				strcpy (o+j, reg);
+				j += strlen (reg);
+			}
+			break;
+		case '0':
+			if (!is_jmp && p[i+1]== 'x') {
+				strcpy (o+j, num);
+				j += strlen (num);
+			}
+			break;
+		}
+		o[j] = p[i];
+	}
+	// decolorize at the end
+	strcpy (o+j, Color_RESET);
+	strcpy (p, o); // may overflow .. but shouldnt because asm.buf_asm is big enought
+	free (o);
 }
 
 // int l is for lines
 R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int len, int l, int invbreak, int cbytes) {
-	/* hints */
 	RAnalHint *hint = NULL;
+	const char *pal_comment = core->cons->pal.comment;
 	/* other */
 	int ret, idx = 0, i, j, k, lines, ostackptr = 0, stackptr = 0;
 	char *line = NULL, *comment = NULL, *opstr, *osl = NULL; // old source line
 	int continueoninvbreak = (len == l) && invbreak;
-	char str[128], strsub[128];
+	char str[512], strsub[512];
 	RAnalFunction *f = NULL;
 	char *refline = NULL;
+	char *refline2 = NULL;
 	RAnalCC cc = {0};
 	ut8 *nbuf = NULL;
 	int counter = 0;
@@ -89,6 +205,9 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 	int oplen = 0;
 	int tries = 3;
 
+	opstr = NULL;
+	memset(str, 0, sizeof(str));
+
 	//r_cons_printf ("len =%d l=%d ib=%d limit=%d\n", len, l, invbreak, p->limit);
 	// TODO: import values from debugger is possible
 	// TODO: allow to get those register snapshots from traces
@@ -96,6 +215,8 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 
 	// TODO: All those options must be print flags
 	int show_color = r_config_get_i (core->config, "scr.color");
+	int colorop = r_config_get_i (core->config, "scr.colorops");
+	//int show_utf8 = r_config_get_i (core->config, "scr.utf8");
 	int acase = r_config_get_i (core->config, "asm.ucase");
 	int atabs = r_config_get_i (core->config, "asm.tabs");
 	int decode = r_config_get_i (core->config, "asm.decode");
@@ -116,6 +237,7 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 	int show_flags = r_config_get_i (core->config, "asm.flags");
 	int show_bytes = r_config_get_i (core->config, "asm.bytes");
 	int show_comments = r_config_get_i (core->config, "asm.comments");
+	int show_cmtflgrefs = r_config_get_i (core->config, "asm.cmtflgrefs");
 	int show_stackptr = r_config_get_i (core->config, "asm.stackptr");
 	int show_xrefs = r_config_get_i (core->config, "asm.xrefs");
 	int show_functions = r_config_get_i (core->config, "asm.functions");
@@ -124,12 +246,40 @@ R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int l
 	int flagspace_ports = r_flag_space_get (core->flags, "ports");
 	int lbytes = r_config_get_i (core->config, "asm.lbytes");
 	int show_comment_right = 0;
-	const char *pre = "  ";
+	char *pre = "  ";
 	char *ocomment = NULL;
 	int linesopts = 0;
 	int lastfail = 0;
+	int oldbits = 0;
 	int ocols = 0;
 	int lcols = 0;
+
+/* color palette */
+#define P(x) (core->cons && core->cons->pal.x)? core->cons->pal.x
+	// TODO: only if show_color?
+	const char *color_comment = P(comment): Color_CYAN;
+	const char *color_fname = P(fname): Color_RED;
+	const char *color_floc = P(floc): Color_MAGENTA;
+	const char *color_fline = P(fline): Color_CYAN;
+	const char *color_flow = P(flow): Color_CYAN;
+	const char *color_flag = P(flag): Color_CYAN;
+	const char *color_label = P(label): Color_CYAN;
+	const char *color_other = P(other): Color_WHITE;
+	const char *color_nop = P(nop): Color_BLUE;
+	const char *color_bin = P(bin): Color_YELLOW;
+	const char *color_math = P(math): Color_YELLOW;
+	const char *color_jmp = P(jmp): Color_GREEN;
+	const char *color_cjmp = P(cjmp): Color_GREEN;
+	const char *color_call = P(call): Color_BGREEN;
+	const char *color_cmp = P(cmp): Color_MAGENTA;
+	const char *color_swi = P(swi): Color_MAGENTA;
+	const char *color_trap = P(trap): Color_BRED;
+	const char *color_ret = P(ret): Color_RED;
+	const char *color_push = P(push): Color_YELLOW;
+	const char *color_pop = P(pop): Color_BYELLOW;
+	const char *color_reg = P(reg): Color_YELLOW;
+	const char *color_num = P(num): Color_YELLOW;
+	const char *color_invalid = P(invalid): Color_BRED;
 
 	if (show_lines) ocols += 10; // XXX
 	if (show_offset) ocols += 14;
@@ -171,6 +321,9 @@ toro:
 		}
 	}
 #endif
+	core->cons->vline = r_config_get_i (core->config, "scr.utf8")?
+		r_vline_u: r_vline_a;
+
 	if (core->print->cur_enabled) {
 		// TODO: support in-the-middle-of-instruction too
 		if (r_anal_op (core->anal, &analop, core->offset+core->print->cur,
@@ -204,46 +357,102 @@ toro:
 			addr, buf, len, -1, linesout, 1);
 	} else core->reflines = core->reflines2 = NULL;
 
+	/* reset jmp table if not a bad block */
+	if (buf[0] != 0xff) // hack
+		for (i=0; i<10; i++)
+			core->asmqjmps[i] = UT64_MAX;
+
 	oplen = 1;
+	r_cons_break (NULL, NULL);
 	for (i=idx=ret=0; idx < len && lines < l; idx+=oplen,i++, lines++) {
 		ut64 at = addr + idx;
+		if (r_cons_singleton ()->breaked)
+			break;
 
+		r_core_seek_archbits (core, at); // slow but safe
 		hint = r_core_hint_begin (core, hint, at);
 		if (cbytes && idx>=l)
 			break;
 		r_asm_set_pc (core->assembler, at);
 		if (show_lines) {
-			line = r_anal_reflines_str (core->anal,
-				core->reflines, at, linesopts);
-			refline = filter_refline (line);
+			line = r_anal_reflines_str (core, at, linesopts);
+			refline = filter_refline (core, line);
+			refline2 = filter_refline2 (core, refline);
 		} else {
 			line = NULL;
 			refline = strdup ("");
+			refline2 = strdup ("");
 		}
+
+		/* show type links */
+		r_core_cmdf (core, "tf 0x%08"PFMT64x, at);
+
 		f = show_functions? r_anal_fcn_find (core->anal, at,
 			R_ANAL_FCN_TYPE_NULL): NULL;
+		if (!hint || !hint->bits) {
+			if (f) {
+				if (f->bits) {
+					if (!oldbits)
+						oldbits = r_config_get_i (core->config, "asm.bits");
+					if (oldbits != f->bits) {
+						r_config_set_i (core->config, "asm.bits", f->bits);
+					}
+				} else {
+					if (oldbits) {
+						r_config_set_i (core->config, "asm.bits", oldbits);
+						oldbits = 0;
+					}
+				}
+			} else {
+				if (oldbits) {
+					r_config_set_i (core->config, "asm.bits", oldbits);
+					oldbits = 0;
+				}
+			}
+		}
 		// Show xrefs
 		if (show_xrefs) {
 			RList *xrefs;
 			RAnalRef *refi;
 			RListIter *iter;
+
+			/* show reverse refs */
+
+			/* show xrefs */
 			if ((xrefs = r_anal_xref_get (core->anal, at))) {
 				r_list_foreach (xrefs, iter, refi) {
+#if 0
+			r_list_foreach (core->anal->refs, iter, refi)
+#endif
+				if (refi->addr == at) {
 					RAnalFunction *fun = r_anal_fcn_find (
-						core->anal, refi->addr,
-						R_ANAL_FCN_TYPE_NULL);
-					r_cons_printf ("%c %s", ((f&&f->type==R_ANAL_FCN_TYPE_FCN)
-						&&f->addr==at)?' ':'|',refline);
-					if (show_color)
-					r_cons_printf (Color_TURQOISE"; %s XREF 0x%08"PFMT64x" (%s)"Color_RESET"\n",
-						refi->type==R_ANAL_REF_TYPE_CODE?"CODE (JMP)":
-						refi->type==R_ANAL_REF_TYPE_CALL?"CODE (CALL)":"DATA", refi->addr,
-						fun?fun->name:"unk");
-					else r_cons_printf ("; %s XREF 0x%08"PFMT64x" (%s)\n",
-						refi->type==R_ANAL_REF_TYPE_CODE?"CODE (JMP)":
-						refi->type==R_ANAL_REF_TYPE_CALL?"CODE (CALL)":"DATA", refi->addr,
-						fun?fun->name:"unk");
+						core->anal, refi->at,
+						R_ANAL_FCN_TYPE_FCN |
+						R_ANAL_FCN_TYPE_ROOT);
+#if 1
+// THAT'S OK
+					if (show_color) {
+						r_cons_printf ("%s%s "Color_RESET"%s%s"Color_RESET, color_fline,
+							((f&&f->type==R_ANAL_FCN_TYPE_FCN)&&f->addr==at)
+							?" ":core->cons->vline[LINE_VERT], color_flow, refline2);
+					} else {
+						r_cons_printf ("%s %s", ((f&&f->type==R_ANAL_FCN_TYPE_FCN)
+							&& f->addr==at)?" ":core->cons->vline[LINE_VERT], refline2);
+					}
+#endif
+					if (show_color) {
+						r_cons_printf ("%s; %s XREF from 0x%08"PFMT64x" (%s)"Color_RESET"\n",
+							pal_comment, refi->type==R_ANAL_REF_TYPE_CODE?"CODE (JMP)":
+							refi->type=='C'?"CODE (CALL)":"DATA", refi->at,
+							fun?fun->name:"unk");
+					} else {
+						r_cons_printf ("; %s XREF from 0x%08"PFMT64x" (%s)\n",
+							refi->type=='c'?"CODE (JMP)":
+							refi->type=='C'?"CODE (CALL)":"DATA", refi->at,
+							fun?fun->name: "unk");
+					}
 				}
+			}
 				r_list_free (xrefs);
 			}
 		}
@@ -272,14 +481,39 @@ toro:
 					}
 				}
 				if (!show_comment_right) {
-					int mycols = lcols;
+					int infun, mycols = lcols;
 					if (mycols + linelen + 10 > core->cons->columns)
 						mycols = 0;
 					mycols /= 2;
-					if (show_color) r_cons_strcat (Color_TURQOISE);
-// XXX: always prefix with ; the comments
-				//	if (*comment != ';') r_cons_strcat ("  ;  ");
+					if (show_color) r_cons_strcat (pal_comment);
+#if OLD_COMMENTS
+					r_cons_strcat ("; ");
+					// XXX: always prefix with ; the comments
+					if (*comment != ';') r_cons_strcat ("  ;  ");
 					r_cons_strcat_justify (comment, mycols, ';');
+#else
+					infun = f && (f->addr != at);
+					if (infun) {
+						char str[64];
+						if (show_color)
+							strcpy (str, color_fline);
+						else str[0]=0;
+						strcat (str, core->cons->vline[LINE_VERT]);
+						if (show_color)
+							strcat (str, color_flow);
+// color refline
+						strcat (str, " ");
+						strcat (str, refline2);
+// color comment
+						if (show_color)
+							strcat (str, color_comment);
+						strcat (str, ";  ");
+						comment = r_str_prefix_all (comment, str);
+					} else {
+						comment = r_str_prefix_all (comment, "   ;      ");
+					}
+					r_cons_strcat (comment);
+#endif
 					if (show_color) r_cons_strcat (Color_RESET);
 					if (!strchr (comment, '\n')) r_cons_newline ();
 					free (comment);
@@ -287,7 +521,7 @@ toro:
 
 					/* flag one */
 					if (item && item->comment && ocomment != item->comment) {
-						if (show_color) r_cons_strcat (Color_TURQOISE);
+						if (show_color) r_cons_strcat (pal_comment);
 						r_cons_newline ();
 						r_cons_strcat ("  ;  ");
 						r_cons_strcat_justify (item->comment, mycols, ';');
@@ -300,10 +534,11 @@ toro:
 		// TODO : line analysis must respect data types! shouldnt be interpreted as code
 		ret = r_asm_disassemble (core->assembler, &asmop, buf+idx, len-idx);
 		if (ret<1) { // XXX: move to r_asm_disassemble ()
-			oplen = ret = 1;
+			oplen = 1;
+			ret = -1;
 			//eprintf ("** invalid opcode at 0x%08"PFMT64x" %d %d**\n",
 			//	core->assembler->pc + ret, l, len);
-#if 1
+#if HASRETRY
 //eprintf ("~~~~~~LEN~~~~ %d %d %d\n", l, len, lines);
 			if (!cbytes && tries>0) { //1||l < len) {
 //eprintf ("~~~~~~~~~~~~~ %d %d\n", idx, core->blocksize);
@@ -320,26 +555,31 @@ toro:
 			sprintf (asmop.buf_hex, "%02x", buf[idx]);
 		} else {
 			lastfail = 0;
-			if (hint && hint->length)
-				oplen = hint->length;
-			else oplen = r_asm_op_get_size (&asmop);
+			oplen = (hint && hint->length)?
+				hint->length: r_asm_op_get_size (&asmop);
+		}
+		if (pseudo) {
+			r_parse_parse (core->parser, opstr?
+				opstr: asmop.buf_asm, str);
+			free (opstr);
+			opstr = strdup (str);
 		}
 		if (acase)
 			r_str_case (asmop.buf_asm, 1);
+		if (show_color && colorop)
+			colorize_opcode (asmop.buf_asm, color_reg, color_num);
 		if (atabs) {
-			int i = 0;
-			char *b = asmop.buf_asm;
-			for (;*b;b++,i++) {
-				if (*b==' ') {
-					//*b = '\t';
-					int n = (10-i);
-					char *t = strdup (b+1); //XXX slow!
-					if (n<1) n = 1;
-					memset (b, ' ', n);
-					b += n;
-					strcpy (b, t);
-					free (t);
-				}
+			int n, i = 0;
+			char *t, *b = asmop.buf_asm;
+			for (; *b; b++, i++) {
+				if (*b!=' ') continue;
+				n = (12-i);
+				t = strdup (b+1); //XXX slow!
+				if (n<1) n = 1;
+				memset (b, ' ', n);
+				b += n;
+				strcpy (b, t);
+				free (t);
 			}
 		}
 		// TODO: store previous oplen in core->dec
@@ -349,8 +589,11 @@ toro:
 		r_anal_op_fini (&analop);
 		if (!lastfail)
 			r_anal_op (core->anal, &analop, at, buf+idx, (int)(len-idx));
-		if (hint && hint->length)
-			analop.length = hint->length;
+		if (ret<1) analop.type = R_ANAL_OP_TYPE_ILL;
+		if (hint) {
+			if (hint->length) analop.length = hint->length;
+			if (hint->ptr) analop.ptr = hint->ptr;
+		}
 		{
 			RAnalValue *src;
 			switch (analop.type) {
@@ -391,7 +634,8 @@ toro:
 						r_core_read_at (core, ptr, b, sizeof (b)); //memref);
 						off = r_mem_get_num (b, memref, 1);
 						item = r_flag_get_i (core->flags, off);
-						{ char s[64];
+						{
+						char s[64];
 						r_str_ncpy (s, (const char *)b, sizeof (s));
 						r_cons_printf ("; LEA %s = [0x%"PFMT64x"] = 0x%"PFMT64x" \"%s\"\n",
 								dst->reg->name, ptr, off, item?item->name: s);
@@ -401,57 +645,141 @@ toro:
 #endif
 			}
 		}
+		if (show_comments && show_cmtflgrefs) {
+			RFlagItem *item;
+			switch (analop.type) {
+			case R_ANAL_OP_TYPE_JMP:
+			case R_ANAL_OP_TYPE_CJMP:
+			case R_ANAL_OP_TYPE_CALL:
+				item = r_flag_get_i (core->flags, analop.jump);
+				if (item && item->comment) {
+					if (show_color) r_cons_strcat (pal_comment);
+					r_cons_printf ("  ; ref to %s: %s\n", item->name, item->comment);
+					if (show_color) r_cons_strcat (Color_RESET);
+				}
+				break;
+			}
+		}
 		if (adistrick)
 			middle = r_anal_reflines_middle (core->anal,
 					core->reflines, at, analop.length);
 		/* XXX: This is really cpu consuming.. need to be fixed */
 		if (show_functions) {
+			//pre = "  ";
 			if (f) {
-//eprintf ("fun    0x%llx 0x%llx\n", at, f->addr+f->size-analop.length);
-				pre = "  ";
-
+				if (f->locals != NULL) {
+					RAnalFcnLocal *f_loc;
+					RListIter *l_iter;
+					r_list_foreach (f->locals, l_iter, f_loc) {
+						if (f_loc && f_loc->addr == at) {
+							if (show_color) {
+								r_cons_printf ("%s%s"Color_RESET, color_fline, pre); // "|"
+							} else
+								r_cons_printf (pre); //"| "
+							if (show_lines && refline) {
+								r_cons_printf ("%s%s"Color_RESET, color_flow, refline);
+							}
+							if (show_offset)
+								r_cons_printf ("; -- ");
+							if (show_color)
+								r_cons_printf ("%s %s"Color_RESET"\n",
+									color_label, f_loc->name?f_loc->name:"unk");
+							else r_cons_printf (" %s\n", f_loc->name?f_loc->name:"unk");
+						}
+					}
+				}
 				if (f->addr == at) {
 					char *sign = r_anal_fcn_to_string (core->anal, f);
 					if (f->type == R_ANAL_FCN_TYPE_LOC) {
-						r_cons_printf ("|- %s (%d)\n| ", f->name, f->size);
+						if (show_color) {
+							r_cons_printf ("%s%s ", color_fline,
+								core->cons->vline[LINE_CROSS]); // |-
+							r_cons_printf ("%s%s"Color_RESET" %d\n",
+								color_floc, f->name, f->size);
+							r_cons_printf ("%s%s "Color_RESET,
+								color_fline, core->cons->vline[LINE_VERT]); // |
+						} else {
+							r_cons_printf ("%s %s %d\n| ", core->cons->vline[LINE_CROSS],
+								f->name, f->size); // |-
+
+						}
 					} else {
-						const char *fmt = show_color? 
-							"/ "Color_MAGENTA"%s: "Color_YELLOW"%s"Color_RESET" (%d)\n| ":
-							"/ %s: %s (%d)\n| ";
-						r_cons_printf (fmt, 
-							(f->type==R_ANAL_FCN_TYPE_FCN||f->type==R_ANAL_FCN_TYPE_SYM)?"function":
-							(f->type==R_ANAL_FCN_TYPE_IMP)?"import":"loc",
-							f->name, f->size);
+						int corner = (f->size <= analop.length)? RDWN_CORNER: LINE_VERT;
+						const char *fmt = show_color?
+							"%s%s "Color_RESET"%s(%s) %s"Color_RESET" %d\n":
+							"%s (%s) %s %d\n%s ";
+						if (show_color) {
+							r_cons_printf (fmt, color_fline,
+								core->cons->vline[RUP_CORNER], color_fname,
+								(f->type==R_ANAL_FCN_TYPE_FCN || f->type==R_ANAL_FCN_TYPE_SYM)?"fcn":
+								(f->type==R_ANAL_FCN_TYPE_IMP)?"imp":"loc",
+								f->name, f->size, corner);
+							r_cons_printf ("%s%s "Color_RESET,
+								color_fline, core->cons->vline[corner]);
+						} else {
+							r_cons_printf (fmt, core->cons->vline[RUP_CORNER],
+								(f->type==R_ANAL_FCN_TYPE_FCN||f->type==R_ANAL_FCN_TYPE_SYM)?"fcn":
+								(f->type==R_ANAL_FCN_TYPE_IMP)?"imp":"loc",
+								f->name, f->size, core->cons->vline[corner]);
+						}
 					}
 					if (sign) r_cons_printf ("// %s\n", sign);
 					free (sign);
-					pre = "| ";
+					//pre = "| "; // TOFIX!
+					pre = strdup (core->cons->vline[LINE_VERT]);
+					pre = r_str_concat (pre, " ");
 					stackptr = 0;
 				} else if (f->addr+f->size-analop.length == at) {
-					r_cons_printf ("\\ ");
+					if (show_color) {
+						r_cons_printf ("%s%s "Color_RESET,
+							color_fline, core->cons->vline[RDWN_CORNER]);
+					} else {
+						r_cons_printf ("%s ", core->cons->vline[RDWN_CORNER]);
+					}
 				} else if (at > f->addr && at < f->addr+f->size-1) {
-					r_cons_printf ("| ");
-					pre = "| ";
+					if (show_color) {
+						r_cons_printf ("%s%s "Color_RESET,
+							color_fline, core->cons->vline[LINE_VERT]);
+					} else {
+						r_cons_printf ("%s ", core->cons->vline[LINE_VERT]);
+					}
+					//pre = "| "; // TOFIX!
+					pre = strdup (core->cons->vline[LINE_VERT]);
+					pre = r_str_concat (pre, " ");
 				} else f = NULL;
-				if (f && at == f->addr+f->size-analop.length) // HACK
-					pre = "\\ ";
-			} else pre = "  "; //r_cons_printf ("  ");
+				if (f && at == f->addr+f->size-analop.length) { // HACK
+					//pre = R_LINE_BOTTOM_DCORNER" ";
+					pre = strdup (core->cons->vline[RDWN_CORNER]);
+					pre = r_str_concat (pre, " ");
+				}
+			} else r_cons_printf ("  ");
 		}
 		if (show_flags) {
 			flag = r_flag_get_i (core->flags, at);
-			if (flag) {
-				if (show_lines && refline)
-					r_cons_strcat (refline);
-				if (show_offset)
-					r_cons_printf ("; -------- ");
-				if (show_functions)
-					r_cons_printf ("%s:\n%s", flag->name, f?pre:"");
+			if (flag && (!f || (f && strcmp (f->name, flag->name)))) {
+				if (show_lines && refline) {
+					if (show_color) {
+						r_cons_printf ("%s%s"Color_RESET, color_flow, refline2);
+					} else r_cons_printf (refline);
+				}
+				if (show_offset) r_cons_printf (";-- ");
+				if (show_color) r_cons_strcat (color_flag);
+				if (show_functions) r_cons_printf ("%s:\n", flag->name);
 				else r_cons_printf ("%s:\n", flag->name);
+				if (show_color) {
+					r_cons_printf (Color_RESET"%s%s"Color_RESET, color_fline,
+						f ? pre : "  ");
+				} else r_cons_printf (f ? pre : "  ");
 			}
 		}
-		if (!linesright && show_lines && line) r_cons_strcat (line);
+		if (!linesright && show_lines && line) {
+			if (show_color) {
+// XXX line is too long wtf
+				r_cons_printf ("%s%s"Color_RESET, color_flow, line);
+			} else r_cons_printf (line);
+		}
 		if (show_offset)
-			printoffset (at, show_color, (at==dest), show_offseg);
+			r_print_offset (core->print, at, (at==dest), show_offseg);
 		if (show_size)
 			r_cons_printf ("%d ", analop.length);
 		if (show_trace) {
@@ -488,7 +816,8 @@ toro:
 			i += mi->size-1; // wtf?
 			free (line);
 			free (refline);
-			line = refline = NULL;
+			free (refline2);
+			line = refline = refline2 = NULL;
 			continue;
 		case R_META_TYPE_HIDE:
 			r_cons_printf ("(%d bytes hidden)\n", mi->size);
@@ -502,13 +831,15 @@ toro:
 					hexlen = mi->size;
 				core->print->flags &= ~R_PRINT_FLAGS_HEADER;
 				r_cons_printf ("hex length=%lld delta=%d\n", mi->size , delta);
-				r_print_hexdump (core->print, at, buf+idx, hexlen, 16, 1);
+				r_print_hexdump (core->print, at,
+					buf+idx, hexlen-delta, 16, 1);
 			core->inc = 16;
 				core->print->flags |= R_PRINT_FLAGS_HEADER;
 				oplen = ret = (int)mi->size; //-delta;
 				free (line);
 				free (refline);
-				line = refline = NULL;
+				free (refline2);
+				line = refline = refline2 = NULL;
 			}
 			continue;
 		case R_META_TYPE_FORMAT:
@@ -518,7 +849,8 @@ toro:
 			oplen = ret = (int)mi->size;
 			free (line);
 			free (refline);
-			line = refline = NULL;
+			free (refline2);
+			line = refline = refline2 = NULL;
 			continue;
 		}
 		/* show cursor */
@@ -533,6 +865,7 @@ toro:
 			strcpy (extra, " ");
 			flag = NULL; // HACK
 			if (!flag) {
+
 				str = strdup (asmop.buf_hex);
 				if (r_str_ansi_len (str) > nb) {
 					char *p = (char *)r_str_ansi_chrn (str, nb);
@@ -569,50 +902,79 @@ toro:
 				pad[j] = '\0';
 			}
 			if (show_color)
-				r_cons_printf (" %s %s %s"Color_RESET, pad, str, extra);
-			else r_cons_printf (" %s %s %s", pad, str, extra);
+				r_cons_printf ("%s %s %s"Color_RESET, pad, str, extra);
+			else r_cons_printf ("%s %s %s", pad, str, extra);
 			free (str);
 		}
 
-		if (linesright && show_lines && line) r_cons_strcat (line);
+		if (linesright && show_lines && line) {
+			if (show_color) {
+				r_cons_printf ("%s%s"Color_RESET, color_flow, line);
+			} else r_cons_printf (line);
+		}
 		if (show_color) {
 			switch (analop.type) {
 			case R_ANAL_OP_TYPE_NOP:
-				r_cons_printf (Color_BLUE);
+				r_cons_strcat (color_nop);
+				break;
+			case R_ANAL_OP_TYPE_ADD:
+			case R_ANAL_OP_TYPE_SUB:
+			case R_ANAL_OP_TYPE_MUL:
+			case R_ANAL_OP_TYPE_DIV:
+				r_cons_strcat (color_math);
+				break;
+			case R_ANAL_OP_TYPE_AND:
+			case R_ANAL_OP_TYPE_OR:
+			case R_ANAL_OP_TYPE_XOR:
+			case R_ANAL_OP_TYPE_NOT:
+			case R_ANAL_OP_TYPE_SHL:
+			case R_ANAL_OP_TYPE_SHR:
+			case R_ANAL_OP_TYPE_ROL:
+			case R_ANAL_OP_TYPE_ROR:
+				r_cons_strcat (color_bin);
 				break;
 			case R_ANAL_OP_TYPE_JMP:
-			case R_ANAL_OP_TYPE_CJMP:
 			case R_ANAL_OP_TYPE_UJMP:
-				r_cons_printf (Color_GREEN);
+				r_cons_strcat (color_jmp);
+				break;
+			case R_ANAL_OP_TYPE_CJMP:
+				r_cons_strcat (color_cjmp);
 				break;
 			case R_ANAL_OP_TYPE_CMP:
-				r_cons_printf (Color_BMAGENTA);
+				r_cons_strcat (color_cmp);
 				break;
 			case R_ANAL_OP_TYPE_UCALL:
 			case R_ANAL_OP_TYPE_CALL:
-				r_cons_printf (Color_BGREEN);
+				r_cons_strcat (color_call);
 				break;
 			case R_ANAL_OP_TYPE_SWI:
-				r_cons_printf (Color_MAGENTA);
+				r_cons_strcat (color_swi);
 				break;
+			case R_ANAL_OP_TYPE_ILL:
 			case R_ANAL_OP_TYPE_TRAP:
-				r_cons_printf (Color_BRED);
+				r_cons_strcat (color_trap);
 				break;
+			case R_ANAL_OP_TYPE_CRET:
 			case R_ANAL_OP_TYPE_RET:
-				r_cons_printf (Color_RED);
+				r_cons_strcat (color_ret);
 				break;
 			case R_ANAL_OP_TYPE_PUSH:
 			case R_ANAL_OP_TYPE_UPUSH:
 			case R_ANAL_OP_TYPE_LOAD:
-				r_cons_printf (Color_YELLOW);
+				r_cons_strcat (color_push);
 				break;
 			case R_ANAL_OP_TYPE_POP:
 			case R_ANAL_OP_TYPE_STORE:
-				r_cons_printf (Color_BYELLOW);
+				r_cons_strcat (color_pop);
+				break;
+			case R_ANAL_OP_TYPE_NULL:
+				r_cons_strcat (color_other);
+				break;
+			case R_ANAL_OP_TYPE_UNK:
+				r_cons_strcat (color_invalid);
 				break;
 			}
 		}
-		opstr = NULL;
 		if (decode) {
 			char *tmpopstr = r_anal_op_to_string (core->anal, &analop);
 			// TODO: Use data from code analysis..not raw analop here
@@ -620,7 +982,8 @@ toro:
 			opstr = tmpopstr? tmpopstr: strdup (asmop.buf_asm);
 		}
 		if (hint && hint->opcode) {
-			free (opstr);
+			if (opstr)
+				free (opstr);
 			opstr = strdup (hint->opcode);
 		}
 		if (filter) {
@@ -641,16 +1004,13 @@ toro:
 			r_parse_filter (core->parser, core->flags,
 				opstr? opstr: asmop.buf_asm, str, sizeof (str));
 			core->parser->flagspace = ofs;
-			free (opstr);
+			if (opstr)
+				free (opstr);
 			opstr = strdup (str);
 			core->parser->flagspace = ofs; // ???
-		} else 
-		if (!opstr) opstr = strdup (asmop.buf_asm);
-		if (pseudo) {
-			r_parse_parse (core->parser, opstr?
-				opstr:asmop.buf_asm, str);
-			free (opstr);
-			opstr = strdup (str);
+		} else {
+			if (!opstr)
+				opstr = strdup (asmop.buf_asm);
 		}
 		if (varsub) {
 			RAnalFunction *f = r_anal_fcn_find (core->anal,
@@ -662,11 +1022,68 @@ toro:
 				opstr = strdup (strsub);
 			}
 		}
+
 		r_cons_strcat (opstr);
+
+		{ /* show function name */
+			ut8 have_local = 0;
+			RAnalFunction *f, *cf;
+			switch (analop.type) {
+			case R_ANAL_OP_TYPE_JMP:
+		//	case R_ANAL_OP_TYPE_CJMP:
+			case R_ANAL_OP_TYPE_CALL:
+				cf = r_anal_fcn_find (core->anal, /* current function */
+					at, R_ANAL_FCN_TYPE_NULL);
+				f = r_anal_fcn_find (core->anal,
+					analop.jump, R_ANAL_FCN_TYPE_NULL);
+				if (f && !strstr (opstr, f->name)) {
+					if (f->locals != NULL) {
+						RAnalFcnLocal *l;
+						RListIter *iter;
+						r_list_foreach (f->locals, iter, l) {
+							if (analop.jump == l->addr) {
+								if ((cf != NULL) && (f->addr == cf->addr)) {
+									if (show_color) {
+										r_cons_strcat (color_label);
+										r_cons_printf ("; (%s)", l->name);
+										r_cons_strcat (Color_RESET);
+									} else {
+										r_cons_printf ("; (%s)", l->name);
+									}
+								} else {
+									if (show_color) {
+										r_cons_strcat (color_fname);
+										r_cons_printf ("; (%s", f->name);
+										r_cons_strcat (Color_RESET);
+										r_cons_strcat (color_label);
+										r_cons_printf (".%s)", l->name);
+										r_cons_strcat (Color_RESET);
+									} else {
+										r_cons_printf ("; (%s", f->name);
+										r_cons_strcat (color_label);
+										r_cons_printf (".%s)", l->name);
+									}
+								}
+								have_local = 1;
+								break;
+							}
+						}
+					}
+					if (!have_local) {
+						r_cons_strcat (color_fname);
+						r_cons_printf (" ; (%s)", f->name);
+						r_cons_strcat (Color_RESET);
+					}
+				}
+				break;
+			}
+		}
 		free (opstr);
 		opstr = NULL;
+
 		if (show_color)
 			r_cons_strcat (Color_RESET);
+
 		if (show_dwarf) {
 			char *sl = r_bin_meta_get_source_line (core->bin, at);
 			int len = strlen (opstr);
@@ -676,8 +1093,8 @@ toro:
 					while (len--)
 						r_cons_strcat (" ");
 					if (show_color)
-						r_cons_printf (Color_TURQOISE
-						"  ; %s"Color_RESET"%s", sl, pre);
+						r_cons_printf ("%s  ; %s"Color_RESET"%s",
+								pal_comment, l, pre);
 					else r_cons_printf ("  ; %s\n%s", sl, pre);
 					free (osl);
 					osl = sl;
@@ -702,39 +1119,55 @@ toro:
 			r_asm_set_syntax (core->assembler, os);
 		}
 
+		if (core->vmode) {
+			switch (analop.type) {
+			case R_ANAL_OP_TYPE_JMP:
+			case R_ANAL_OP_TYPE_CJMP:
+			case R_ANAL_OP_TYPE_CALL:
+				counter++;
+				if (counter<10) {
+					core->asmqjmps[counter] = analop.jump;
+					r_cons_printf (" ;[%d]", counter);
+				} else r_cons_strcat (" ;[?]");
+				break;
+			}
+		}
 		if (!r_anal_cc_update (core->anal, &cc, &analop)) {
 			if (show_functions) {
+				char tmp[128];
 				char *ccstr = r_anal_cc_to_string (core->anal, &cc);
 				if (ccstr) {
 					RFlagItem *flag = r_flag_get_at (core->flags, cc.jump);
+					if (flag && ccstr) {
+						int delta = 0;
+						if (f) { delta = cc.jump-flag->offset; }
+						if (!strncmp (flag->name, ccstr, strlen (flag->name))) {
+							if (ccstr[strlen (flag->name)] == '(') {
+								tmp[0] = 0;
+							} else {
+								if (delta)
+									snprintf (tmp, sizeof (tmp), " ; %s+%d", flag->name, delta);
+								else snprintf (tmp, sizeof (tmp), " ; %s", flag->name);
+							}
+						} else {
+							if (delta)
+								snprintf (tmp, sizeof (tmp), " ; %s+%d", flag->name, delta);
+							else snprintf (tmp, sizeof (tmp), " ; %s", flag->name);
+						}
+					}
 					if (show_color)
-						r_cons_printf ("\n%s%s   "Color_TURQOISE"; %s (%s+%d)"Color_RESET,
-							f?pre:"", refline, ccstr, flag? flag->name: "", (f&&flag)? cc.jump-flag->offset: 0);
-					else r_cons_printf ("\n%s%s    ; %s (%s+%d)",
-						pre, refline, ccstr,
-						flag?flag->name:"", flag? cc.jump-flag->offset: 0);
+						r_cons_printf ("\n%s%s"Color_RESET"%s%s"Color_RESET"   %s%s"Color_RESET,
+							color_fline, pre, color_flow, refline, ccstr, tmp);
+					else r_cons_printf ("\n%s%s   %s%s", pre, refline, ccstr, tmp);
 					free (ccstr);
 				}
 			}
 			r_anal_cc_reset (&cc);
 		}
-
-		if (core->vmode)
-		switch (analop.type) {
-		case R_ANAL_OP_TYPE_JMP:
-		case R_ANAL_OP_TYPE_CJMP:
-		case R_ANAL_OP_TYPE_CALL:
-			counter++;
-			if (counter<10){
-				core->asmqjmps[counter] = analop.jump;
-				r_cons_printf (" [%d]", counter);
-			} else r_cons_strcat (" [?]");
-			break;
-		}
 		switch (analop.type) {
 		case R_ANAL_OP_TYPE_PUSH:
-			if (analop.value) {
-				RFlagItem *flag = r_flag_get_i (core->flags, analop.value);
+			if (analop.val) {
+				RFlagItem *flag = r_flag_get_i (core->flags, analop.val);
 				if (flag) r_cons_printf (" ; %s", flag->name);
 			}
 			break;
@@ -745,52 +1178,59 @@ toro:
 			ut32 word4 = 0;
 			int ret;
 			if (core->assembler->bits==64) {
-				ret = r_io_read_at (core->io, analop.ref,
-					(void *)&word8, sizeof (word8))
-					== sizeof (word8);
+				ret = r_io_read_at (core->io, analop.ptr, (void *)&word8,
+					sizeof (word8)) == sizeof (word8);
 			} else {
-				ret = r_io_read_at (core->io, analop.ref,
+				ret = r_io_read_at (core->io, analop.ptr,
 					(void *)&word4, sizeof (word4))
 					== sizeof (word4);
 				word8 = word4;
 			}
-			
+
 			if (ret) {
 				RMetaItem *mi2 = r_meta_find (core->anal->meta, word8,
 					R_META_TYPE_ANY, R_META_WHERE_HERE);
-				if (!mi2) {
-					mi2 = r_meta_find (core->anal->meta, (ut64)analop.ref,
+				if (mi2) {
+					switch (mi2->type) {
+					case R_META_TYPE_STRING:
+						{ char *str = r_str_unscape (mi2->str);
+						r_cons_printf (" (at=0x%08"PFMT64x") (len=%"PFMT64d
+							") \"%s\" ", word8, mi2->size, str);
+						free (str);
+						}
+						break;
+					case 'd':
+						r_cons_printf (" (data)");
+						break;
+					default:
+						eprintf ("unknown type '%c'\n", mi2->type);
+						break;
+					} 
+				} else {
+					mi2 = r_meta_find (core->anal->meta, (ut64)analop.ptr,
 						R_META_TYPE_ANY, R_META_WHERE_HERE);
 					if (mi2) {
 						char *str = r_str_unscape (mi2->str);
 						r_cons_printf (" \"%s\" @ 0x%08"PFMT64x":%"PFMT64d,
-								str, analop.ref, mi2->size);
+								str, analop.ptr, mi2->size);
 						free (str);
 					} else r_cons_printf (" ; 0x%08x [0x%"PFMT64x"]",
-							word8, analop.ref);
-				} else {
-					if (mi2->type == R_META_TYPE_STRING) {
-						char *str = r_str_unscape (mi2->str);
-						r_cons_printf (" (at=0x%08"PFMT64x") (len=%"PFMT64d
-							") \"%s\" ", word8, mi2->size, str);
-						free (str);
-					} else r_cons_printf ("unknown type '%c'\n", mi2->type);
+							word8, analop.ptr);
 				}
 			} else {
-				st64 sref = analop.ref;
+				st64 sref = analop.ptr;
 				if (sref>0)
-					r_cons_printf (" ; 0x%08"PFMT64x"\n", analop.ref); //addr+idx+analop.ref);
+					r_cons_printf (" ; 0x%08"PFMT64x"\n", analop.ptr);
 			}
 		} else {
-			if (analop.ref != UT64_MAX && analop.ref) {
-				r_cons_printf (" ; 0x%08"PFMT64x" ", analop.ref);
-			}
+			if (analop.ptr != UT64_MAX && analop.ptr)
+				r_cons_printf (" ; 0x%08"PFMT64x" ", analop.ptr);
 		}
 		if (show_comments && show_comment_right && comment) {
 			int c = r_cons_get_column ();
 			if (c<ocols)
-				r_cons_memset (' ',ocols-c);
-			if (show_color) r_cons_strcat (Color_TURQOISE);
+				r_cons_memset (' ', ocols-c);
+			if (show_color) r_cons_strcat (color_comment);
 			r_cons_strcat ("  ; ");
 	//		r_cons_strcat_justify (comment, strlen (refline) + 5, ';');
 			r_cons_strcat (comment);
@@ -799,22 +1239,31 @@ toro:
 			comment = NULL;
 		} else r_cons_newline ();
 		if (line) {
+#if 0
 			if (show_lines && analop.type == R_ANAL_OP_TYPE_RET) {
 				if (strchr (line, '>'))
-					memset (line, ' ', strlen (line));
-				r_cons_printf ("%s%s; ------------\n", (f&&show_functions)?"  ":"", line);
+					memset (line, ' ', r_str_len_utf8 (line));
+				if (show_color) {
+					r_cons_printf ("%s %s%s"Color_RESET"; --\n",
+						core->cons->vline[LINE_VERT], color_flow, line);
+				} else
+					r_cons_printf ("  %s; --\n", line);
 			}
+#endif
 			free (line);
 			free (refline);
-			line = refline = NULL;
+			free (refline2);
+			line = refline = refline2 = NULL;
 		}
 	}
 	if (nbuf == buf) {
 		free (buf);
 		buf = NULL;
 	}
-#if 1
-	if (!cbytes && idx>=len) {// && (invbreak && !lastfail)) {
+	r_cons_break_end ();
+#if HASRETRY
+	//if (!cbytes && idx>=len) {// && (invbreak && !lastfail)) {
+	if (!cbytes && lines<l) {
 	retry:
 		if (len<4) len = 4;
 		buf = nbuf = malloc (len);
@@ -838,6 +1287,10 @@ toro:
 			goto toro;
 	}
 #endif
+	if (oldbits) {
+		r_config_set_i (core->config, "asm.bits", oldbits);
+		oldbits = 0;
+	}
 	r_anal_op_fini (&analop);
 	if (hint) r_anal_hint_free (hint);
 	free (osl);
@@ -884,14 +1337,16 @@ R_API int r_core_print_disasm_json(RCore *core, ut64 addr, ut8 *buf, int len) {
 }
 
 R_API int r_core_print_disasm_instructions (RCore *core, int len, int l) {
-	RAsmOp asmop;
-	char *opstr, *tmpopstr;
-	int i, j, ret, err = 0;
+	int decode = r_config_get_i (core->config, "asm.decode");
 	const ut8 *buf = core->block;
 	int bs = core->blocksize;
-	RAnalOp analop = {0};
 	RAnalHint *hint = NULL;
-	int decode = r_config_get_i (core->config, "asm.decode");
+	char *opstr, *tmpopstr;
+	int i, j, ret, err = 0;
+	RAnalOp analop = {0};
+	RAnalFunction *f;
+	int oldbits = 0;
+	RAsmOp asmop;
 	ut64 at;
 
 	if (len>core->blocksize)
@@ -899,12 +1354,36 @@ R_API int r_core_print_disasm_instructions (RCore *core, int len, int l) {
 	if (l==0) l = len;
 	for (i=j=0; i<bs && i<len && j<l; i+=ret, j++) {
 		at = core->offset +i;
+		r_core_seek_archbits (core, at);
 		if (hint) {
 			r_anal_hint_free (hint);
 			hint = NULL;
 		}
 		hint = r_core_hint_begin (core, hint, at);
 		r_asm_set_pc (core->assembler, at);
+	// XXX copypasta from main disassembler function
+		f = r_anal_fcn_find (core->anal, at, R_ANAL_FCN_TYPE_NULL);
+		if (!hint || !hint->bits) {
+			if (f) {
+				if (f->bits) {
+					if (!oldbits)
+						oldbits = r_config_get_i (core->config, "asm.bits");
+					if (oldbits != f->bits) {
+						r_config_set_i (core->config, "asm.bits", f->bits);
+					}
+				} else {
+					if (oldbits != 0) {
+						r_config_set_i (core->config, "asm.bits", oldbits);
+						oldbits = 0;
+					}
+				}
+			} else {
+				if (oldbits) {
+					r_config_set_i (core->config, "asm.bits", oldbits);
+					oldbits = 0;
+				}
+			}
+		}
 		ret = r_asm_disassemble (core->assembler,
 			&asmop, buf+i, core->blocksize-i);
 		//r_cons_printf ("0x%08"PFMT64x"  ", core->offset+i);
@@ -926,6 +1405,10 @@ R_API int r_core_print_disasm_instructions (RCore *core, int len, int l) {
 			r_cons_printf ("%s\n", opstr);
 			free (opstr);
 		}
+	}
+	if(oldbits) {
+		r_config_set_i (core->config, "asm.bits", oldbits);
+		oldbits = 0;
 	}
 	if (hint) r_anal_hint_free (hint);
 	return 0;

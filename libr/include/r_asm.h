@@ -9,6 +9,12 @@
 #include <r_util.h>
 #include <r_parse.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+R_LIB_VERSION_HEADER(r_asm);
+
 #define R_ASM_OPCODES_PATH R2_LIBDIR"/radare2/"R2_VERSION"/opcodes"
 // XXX too big!
 #define R_ASM_BUFSIZE 1024
@@ -76,18 +82,21 @@ typedef struct {
 	char *value;
 } RAsmEqu;
 
+#define _RAsmPlugin struct r_asm_plugin_t
 typedef struct r_asm_t {
-	int  bits;
-	int  big_endian;
-	int  syntax;
+	char *cpu;
+	int bits;
+	int big_endian;
+	int syntax;
 	ut64 pc;
 	void *user;
-	struct r_asm_plugin_t *cur;
+	_RAsmPlugin *cur;
 	RList *plugins;
 	RBinBind binb;
 	RParse *ifilter;
 	RParse *ofilter;
 	RPair *pair;
+	RSyscall *syscall;
 	RNum *num;
 } RAsm;
 
@@ -102,7 +111,7 @@ typedef struct r_asm_plugin_t {
 	int *bits;
 	int (*init)(void *user);
 	int (*fini)(void *user);
-	int (*disassemble)(RAsm *a, RAsmOp *op, const ut8 *buf, ut64 len);
+	int (*disassemble)(RAsm *a, RAsmOp *op, const ut8 *buf, int len);
 	int (*assemble)(RAsm *a, RAsmOp *op, const char *buf);
 	RAsmModifyCallback modify;
 	int (*set_subarch)(RAsm *a, const char *buf);
@@ -119,12 +128,13 @@ R_API int r_asm_add(RAsm *a, RAsmPlugin *foo);
 R_API int r_asm_setup(RAsm *a, const char *arch, int bits, int big_endian);
 R_API int r_asm_use(RAsm *a, const char *name);
 R_API int r_asm_set_bits(RAsm *a, int bits);
+R_API void r_asm_set_cpu(RAsm *a, const char *cpu);
 R_API int r_asm_set_big_endian(RAsm *a, int boolean);
 R_API int r_asm_set_syntax(RAsm *a, int syntax);
 R_API int r_asm_set_pc(RAsm *a, ut64 pc);
-R_API int r_asm_disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, ut64 len);
+R_API int r_asm_disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len);
 R_API int r_asm_assemble(RAsm *a, RAsmOp *op, const char *buf);
-R_API RAsmCode* r_asm_mdisassemble(RAsm *a, ut8 *buf, ut64 len);
+R_API RAsmCode* r_asm_mdisassemble(RAsm *a, const ut8 *buf, int len);
 R_API RAsmCode* r_asm_mdisassemble_hexstr(RAsm *a, const char *hexstr);
 R_API RAsmCode* r_asm_massemble(RAsm *a, const char *buf);
 R_API RAsmCode* r_asm_assemble_file(RAsm *a, const char *file);
@@ -170,6 +180,12 @@ extern RAsmPlugin r_asm_plugin_m68k;
 extern RAsmPlugin r_asm_plugin_arc;
 extern RAsmPlugin r_asm_plugin_rar;
 extern RAsmPlugin r_asm_plugin_dcpu16;
+extern RAsmPlugin r_asm_plugin_8051;
+extern RAsmPlugin r_asm_plugin_c55plus;
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif

@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2012 pancake */
+/* radare - LGPL - Copyright 2008-2013 - pancake */
 
 // TODO: implement a more inteligent way to store cached memory
 // TODO: define limit of max mem to cache
@@ -89,7 +89,6 @@ R_API int r_io_cache_write(RIO *io, ut64 addr, const ut8 *buf, int len) {
 	ch->size = len;
 	ch->data = (ut8*)malloc (len);
 	memcpy (ch->data, buf, len);
-
 	r_list_append (io->cache, ch);
 	return len;
 }
@@ -116,7 +115,9 @@ R_API int r_io_cache_read(RIO *io, ut64 addr, ut8 *buf, int len) {
 			}
 			if (l>len)
 				l = len;
-			if (l<1) l = 1; // XXX: fail
+			if (l<1) {
+				l = 1; // XXX: fail
+			}
 			memcpy (buf+da, c->data+db, l);
 		}
 	}

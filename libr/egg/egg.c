@@ -1,7 +1,9 @@
-/* radare - LGPL - Copyright 2011-2012 - pancake */
+/* radare - LGPL - Copyright 2011-2013 - pancake */
 
 #include <r_egg.h>
 #include "../config.h"
+
+R_LIB_VERSION (r_egg);
 
 // TODO: must be plugins
 extern REggEmit emit_x86;
@@ -248,14 +250,20 @@ R_API int r_egg_compile(REgg *egg) {
 	if (!b || !egg->emit)
 		return R_FALSE;
 	// only emit begin if code is found
+#if 0
 	if (*b)
 	if (egg->emit) {
 		if (egg->emit->init)
 			egg->emit->init (egg);
 	}
+#endif
 	for (; *b; b++) {
 		r_egg_lang_parsechar (egg, *b);
 		// XXX: some parse fail errors are false positives :(
+	}
+	if (egg->context>0) {
+		eprintf ("ERROR: expected '}' at the end of the file. %d left\n", egg->context);
+		return R_FALSE;
 	}
 	// TODO: handle errors here
 	return R_TRUE;

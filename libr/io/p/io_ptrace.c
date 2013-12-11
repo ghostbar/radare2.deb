@@ -100,8 +100,11 @@ static void open_pidmem (RIOPtrace *iop) {
 	char pidmem[32];
 	snprintf (pidmem, sizeof (pidmem), "/proc/%d/mem", iop->pid);
 	iop->fd = open (pidmem, O_RDWR);
+#if 0
 	if (iop->fd == -1)
-		eprintf ("Cannot use /proc/%d/mem. Fallback to ptrace io.\n", iop->fd);
+		eprintf ("Warning: Cannot open /proc/%d/mem. "
+			"Fallback to ptrace io.\n", iop->pid);
+#endif
 }
 
 static void close_pidmem(RIOPtrace *iop) {
@@ -120,6 +123,7 @@ static int __plugin_open(struct r_io_t *io, const char *file) {
 }
 
 static RIODesc *__open(struct r_io_t *io, const char *file, int rw, int mode) {
+	char *pidpath;
 	int ret = -1;
 	if (__plugin_open (io, file)) {
 		int pid = atoi (file+9);
@@ -147,10 +151,15 @@ static RIODesc *__open(struct r_io_t *io, const char *file, int rw, int mode) {
 			ret = pid;
 		else eprintf ("Error in waitpid\n");
 		if (ret != -1) {
+			RIODesc *desc;
 			RIOPtrace *riop = R_NEW (RIOPtrace);
 			riop->pid = riop->tid = pid;
 			open_pidmem (riop);
-			return r_io_desc_new (&r_io_plugin_ptrace, pid, file, R_TRUE, mode, riop);
+			pidpath = r_sys_pid_to_path (pid);
+			desc = r_io_desc_new (&r_io_plugin_ptrace, pid,
+				pidpath, R_TRUE, mode, riop);
+			free (pidpath);
+			return desc;
 		}
 	}
 	return NULL;

@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - nibble, pancake */
+/* radare - LGPL - Copyright 2009-2013 - nibble, pancake */
 
 #include <stdio.h>
 
@@ -6,6 +6,8 @@
 #include <r_parse.h>
 #include <list.h>
 #include "../config.h"
+
+R_LIB_VERSION (r_parse);
 
 static RParsePlugin *parse_static_plugins[] =
 	{ R_PARSE_STATIC_PLUGINS };
@@ -85,7 +87,71 @@ R_API int r_parse_parse(RParse *p, const char *data, char *str) {
 	return R_FALSE;
 }
 
+#define isx86separator(x) ( \
+	(x)==' '||(x)=='\t'||(x)=='\n'|| (x)=='\r'||(x)==' '|| \
+	(x)==','||(x)==';'||(x)=='['||(x)==']'|| \
+	(x)=='('||(x)==')'||(x)=='{'||(x)=='}'||(x)=='\x1b')
+
+static int isvalidflag(RFlagItem *flag) {
+	if (flag && strchr (flag->name, '.')) {
+		return 1; //strlen (flag->name)>3) {
+	}
+	return 0;
+}
+
+static int filter(RParse *p, RFlag *f, char *data, char *str, int len) {
+	char *ptr = data, *ptr2;
+	RAnalFunction *fcn;
+	RFlagItem *flag;
+	ut64 off;
+	int x86 = (p&&p->cur&&p->cur->name)?
+		(strstr (p->cur->name, "x86")? 1: 0): 0;
+
+	ptr2 = NULL;
+	while ((ptr = strstr (ptr, "0x"))) {
+		if (x86) for (ptr2 = ptr; *ptr2 && !isx86separator (*ptr2); ptr2++);
+		else for (ptr2 = ptr; *ptr2 && ((*ptr2=='\x1b')||!isseparator (*ptr2)); ptr2++);
+		off = r_num_math (NULL, ptr);
+		if (!off) {
+			ptr = ptr2;
+			continue;
+		}
+		fcn = r_anal_fcn_find (p->anal, off, 0);
+		if (fcn) {
+			if (fcn->addr == off) {
+				*ptr = 0;
+				snprintf (str, len, "%s%s%s", data, fcn->name,
+						(ptr!=ptr2)? ptr2: "");
+				return R_TRUE;
+			}
+		}
+		if (f) {
+			flag = r_flag_get_i2 (f, off);
+			if (isvalidflag (flag)) {
+
+				if (p->notin_flagspace != -1) {
+					if (p->flagspace == flag->space)
+						continue;
+				} else
+				if (p->flagspace != -1 && \
+						(p->flagspace != flag->space)) {
+					ptr = ptr2;
+					continue;
+				}
+				*ptr = 0;
+				snprintf (str, len, "%s%s%s", data, flag->name,
+					(ptr!=ptr2)? ptr2: "");
+				return R_TRUE;
+			}
+		}
+		ptr = ptr2;
+	}
+	strncpy (str, data, len);
+	return R_FALSE;
+}
+
 R_API int r_parse_filter(RParse *p, RFlag *f, char *data, char *str, int len) {
+	filter (p, f, data, str, len);
 	if (p->cur && p->cur->filter)
 		return p->cur->filter (p, f, data, str, len);
 	return R_FALSE;
@@ -115,4 +181,3 @@ R_API int r_parse_list(RParse *p) {
 	}
 	return R_FALSE;
 }
-

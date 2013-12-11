@@ -4,6 +4,10 @@
 #include <r_types.h>
 #include <r_flist.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // TODO: implement r_list_foreach_prev
 
 #ifndef _INCLUDE_R_LIST_HEAD_H_
@@ -58,6 +62,7 @@ R_API RList *r_list_new();
 R_API RList *r_list_newf(RListFree f);
 //R_API void r_list_iter_free (RListIter *x);
 R_API RListIter *r_list_iter_get_next(RListIter *list);
+R_API int r_list_set_n(RList *list, int n, void *p);
 R_API void *r_list_iter_get_data(RListIter *list);
 R_API RListIter *r_list_append(RList *list, void *data);
 R_API RListIter *r_list_prepend(RList *list, void *data);
@@ -109,6 +114,10 @@ R_API RListIter *r_list_contains (RList *list, void *p);
 		r_list_foreach (x, iter, ptr) \
 			r_flist_set (x->array, idx++, ptr); \
 	} x->array;
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif

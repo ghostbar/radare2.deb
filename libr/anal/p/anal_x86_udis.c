@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - nibble */
+/* radare - LGPL - Copyright 2009-2013 - nibble, pancake */
 
 #include <r_lib.h>
 #include <r_types.h>
@@ -8,8 +8,107 @@
 #include "udis86/types.h"
 #include "udis86/extern.h"
 
+static st64 getval(ud_operand_t *op);
+// XXX Copypasta from udis
+#define UD_REG_TAB_SIZE (sizeof (ud_reg_tab)/sizeof (*ud_reg_tab))
+static const char* ud_reg_tab[] =
+{
+  "al",   "cl",   "dl",   "bl",
+  "ah",   "ch",   "dh",   "bh",
+  "spl",  "bpl",    "sil",    "dil",
+  "r8b",  "r9b",    "r10b",   "r11b",
+  "r12b", "r13b",   "r14b",   "r15b",
+
+  "ax",   "cx",   "dx",   "bx",
+  "sp",   "bp",   "si",   "di",
+  "r8w",  "r9w",    "r10w",   "r11w",
+  "r12w", "r13w"  , "r14w",   "r15w",
+
+  "eax",  "ecx",    "edx",    "ebx",
+  "esp",  "ebp",    "esi",    "edi",
+  "r8d",  "r9d",    "r10d",   "r11d",
+  "r12d", "r13d",   "r14d",   "r15d",
+
+  "rax",  "rcx",    "rdx",    "rbx",
+  "rsp",  "rbp",    "rsi",    "rdi",
+  "r8",   "r9",   "r10",    "r11",
+  "r12",  "r13",    "r14",    "r15",
+
+  "es",   "cs",   "ss",   "ds",
+  "fs",   "gs",
+
+  "cr0",  "cr1",    "cr2",    "cr3",
+  "cr4",  "cr5",    "cr6",    "cr7",
+  "cr8",  "cr9",    "cr10",   "cr11",
+  "cr12", "cr13",   "cr14",   "cr15",
+
+  "dr0",  "dr1",    "dr2",    "dr3",
+  "dr4",  "dr5",    "dr6",    "dr7",
+  "dr8",  "dr9",    "dr10",   "dr11",
+  "dr12", "dr13",   "dr14",   "dr15",
+
+  "mm0",  "mm1",    "mm2",    "mm3",
+  "mm4",  "mm5",    "mm6",    "mm7",
+
+  "st0",  "st1",    "st2",    "st3",
+  "st4",  "st5",    "st6",    "st7",
+
+  "xmm0", "xmm1",   "xmm2",   "xmm3",
+  "xmm4", "xmm5",   "xmm6",   "xmm7",
+  "xmm8", "xmm9",   "xmm10",  "xmm11",
+  "xmm12",  "xmm13",  "xmm14",  "xmm15",
+
+  "rip"
+};
+
+static int getarg(char *src, struct ud *u, int idx) {
+	ud_operand_t *op = &u->operand[idx];
+	st64 n;
+	src[0] = 0;
+	switch (op->type) {
+	case UD_OP_PTR:
+	case UD_OP_CONST:
+	case UD_OP_JIMM:
+	case UD_OP_IMM:
+		n = getval (op);
+		if (op->type == UD_OP_JIMM) {
+			n += u->pc;
+		}
+		if (n>=0 && n<256)
+			sprintf (src, "%"PFMT64d, n);
+		else sprintf (src, "0x%"PFMT64x, n);
+		break;
+	case UD_OP_REG:
+		idx = op->base-UD_R_AL;
+		if (idx>=0 && idx<UD_REG_TAB_SIZE)
+			strcpy (src, ud_reg_tab[op->base - UD_R_AL]);
+		break;
+	case UD_OP_MEM:
+		n = getval (op);
+		// TODO ->scale
+		if (op->base != UD_NONE) {
+			idx = op->base-UD_R_AL;
+			if (idx>=0 && idx<UD_REG_TAB_SIZE) {
+				if (u->mnemonic == UD_Ilea)
+					sprintf (src, "%s+%d", ud_reg_tab[idx], 0);
+				else sprintf (src, "[%s+%d]", ud_reg_tab[idx], (int)n);
+			}
+		}
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+
 static st64 getval(ud_operand_t *op) {
 	int bits = op->size;
+	switch (op->type) {
+	case UD_OP_PTR:
+		return (op->lval.ptr.seg<<4) | (op->lval.ptr.off & 0xFFFF);
+default:
+	break;
+	}
 	switch (bits) {
 	case 8: return (char)op->lval.sbyte;
 	case 16: return (short) op->lval.uword;
@@ -20,8 +119,19 @@ static st64 getval(ud_operand_t *op) {
 }
 
 int x86_udis86_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len) {
-	int oplen;
+	const char *pc = anal->bits==64? "rip": anal->bits==32? "eip": "ip";
+	const char *sp = anal->bits==64? "rsp": anal->bits==32? "esp": "sp";
+	int oplen, regsz = 4;
+	char str[64], src[32], dst[32];
 	struct ud u;
+	ut64 n;
+
+	switch (anal->bits) {
+	case 64: regsz = 8; break;
+	case 16: regsz = 2; break;
+	default:
+	case 32: regsz = 4; break;
+	}
 	ud_init (&u);
 	ud_set_pc (&u, addr);
 	ud_set_mode (&u, anal->bits);
@@ -31,18 +141,237 @@ int x86_udis86_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len)
 	memset (op, '\0', sizeof (RAnalOp));
 	op->addr = addr;
 	op->jump = op->fail = -1;
-	op->ref = op->value = -1;
+	op->ptr = op->val = -1;
 	oplen = op->length = ud_insn_len (&u);
+
+	op->esil[0] = 0;
+	if (anal->decode) {
+		switch (u.mnemonic) {
+		case UD_Ijz: // TODO: carry flag
+			getarg (src, &u, 0);
+			sprintf (op->esil, "?zf,%s=%s", pc, src);
+			break;
+		case UD_Ijnz: // TODO: carry flag
+			getarg (src, &u, 0);
+			sprintf (op->esil, "?!zf,%s=%s", pc, src);
+			break;
+		case UD_Ijmp: // TODO: carry flag
+			getarg (src, &u, 0);
+			sprintf (op->esil, "%s=%s", pc, src);
+			break;
+		case UD_Icall: // TODO: carry flag
+			getarg (src, &u, 0);
+			sprintf (op->esil, "%s-=%d,%d[%s]=%s,%s=%s",
+				sp, regsz, regsz, sp, pc, pc, src);
+			break;
+		case UD_Ishl: // TODO: carry flag
+			getarg (src, &u, 0);
+			getarg (dst, &u, 1);
+			sprintf (op->esil, "%s<<=%s", src, dst);
+			break;
+		case UD_Ishr: // TODO: carry flag
+			getarg (src, &u, 0);
+			getarg (dst, &u, 1);
+			sprintf (op->esil, "%s>>=%s", src, dst);
+			break;
+		case UD_Iadd: // TODO: carry flag
+			getarg (src, &u, 0);
+			getarg (dst, &u, 1);
+			sprintf (op->esil, "%s+=%s", src, dst);
+			break;
+		case UD_Isub: // TODO: below flag
+			getarg (src, &u, 0);
+			getarg (dst, &u, 1);
+			sprintf (op->esil, "%s-=%s", src, dst);
+			break;
+		case UD_Iand:
+			getarg (src, &u, 0);
+			getarg (dst, &u, 1);
+			sprintf (op->esil, "%s&=%s", src, dst);
+			break;
+		case UD_Isyscall:
+			strcpy (op->esil, "$");
+			break;
+		case UD_Iint:
+			n = getval (&u.operand[0]);
+			sprintf (op->esil, "$0x%"PFMT64x",%s+=%d", n, pc, oplen);
+			break;
+		case UD_Ilea:
+		case UD_Imov:
+			getarg (src, &u, 0);
+			getarg (dst, &u, 1);
+			sprintf (op->esil, "%s=%s,%s+=%d", src, dst, pc, oplen);
+			break;
+		case UD_Ipush:
+			getarg (str, &u, 0);
+			sprintf (op->esil, "%s-=%d,%d[%s]=%s,%s+=%d",
+				sp, regsz, regsz, sp, str, pc, oplen);
+			break;
+		default:
+			break;
+		}
+	}
+
 	switch (u.mnemonic) {
+	case UD_Itest:
+	case UD_Icmp:
+	case UD_Isalc:
+		op->type = R_ANAL_OP_TYPE_CMP;
+		break;
+	case UD_Ixor:
+		op->type = R_ANAL_OP_TYPE_XOR;
+		break;
+	case UD_Ior:
+		op->type = R_ANAL_OP_TYPE_OR;
+		break;
+	case UD_Iand:
+		op->type = R_ANAL_OP_TYPE_AND;
+		break;
+	case UD_Ishl:
+		op->type = R_ANAL_OP_TYPE_SHL;
+		break;
+	case UD_Ishr:
+		op->type = R_ANAL_OP_TYPE_SHR;
+		break;
+	case UD_Irol:
+		op->type = R_ANAL_OP_TYPE_ROL;
+		break;
+	case UD_Iror:
+		op->type = R_ANAL_OP_TYPE_ROR;
+		break;
+	case UD_Iint3:
+		op->type = R_ANAL_OP_TYPE_TRAP;
+		break;
+	case UD_Iint:
+		op->type = R_ANAL_OP_TYPE_SWI;
+		break;
+	case UD_Ilea:
+	case UD_Imov:
+		op->type = R_ANAL_OP_TYPE_MOV;
+		switch (u.operand[1].type) {
+		case UD_OP_MEM:
+			op->type = R_ANAL_OP_TYPE_MOV;
+			if (u.operand[1].base == UD_R_RIP) {
+				int delta = u.operand[1].lval.uword;
+				op->ptr = addr + oplen + delta;
+			}
+			break;
+		default:
+			op->type = R_ANAL_OP_TYPE_MOV;
+			// XX
+			break;
+		}
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = regsz;
+		break;
+	case UD_Ipush:
+	case UD_Ipusha:
+	case UD_Ipushad:
+	case UD_Ipushfq:
+	case UD_Ipushfd:
+	case UD_Ipushfw:
+		switch (u.operand[0].type) {
+		case UD_OP_CONST:
+		case UD_OP_JIMM:
+		case UD_OP_IMM:
+			op->type = R_ANAL_OP_TYPE_PUSH;
+			op->ptr = getval (&u.operand[0]);
+			break;
+		case UD_OP_REG:
+		case UD_OP_PTR:
+		case UD_OP_MEM:
+		default:
+			op->type = R_ANAL_OP_TYPE_UPUSH;
+			op->ptr = 0;
+			break;
+		}
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = regsz;
+		break;
+	case UD_Ipop:
+	case UD_Ipopa:
+	case UD_Ipopad:
+	case UD_Ipopfw:
+	case UD_Ipopfd:
+	case UD_Ipopfq:
+		op->type = R_ANAL_OP_TYPE_POP;
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = -regsz;
+		break;
+	case UD_Ileave:
+		op->type = R_ANAL_OP_TYPE_MOV;
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = -regsz;
+		break;
+	case UD_Iadd:
+	case UD_Isub:
+		op->type = (u.mnemonic==UD_Iadd)? R_ANAL_OP_TYPE_ADD: R_ANAL_OP_TYPE_SUB;
+		op->ptr = 0;
+		op->stackptr = 0;
+		if (u.operand[0].type == UD_OP_REG) {
+			if (u.operand[0].base == UD_R_RSP) {
+				int o = (int)getval (&u.operand[1]);
+				op->stackop = R_ANAL_STACK_INC;
+				if (u.mnemonic ==UD_Iadd) {
+					op->stackptr = -o;
+				} else {
+					op->stackptr = o;
+				}
+			}
+		}
+		op->stackptr = 4;
+		break;
+	case UD_Iadc:
+	case UD_Iinc:
+		op->type = R_ANAL_OP_TYPE_ADD;
+		break;
+	case UD_Isbb:
+	case UD_Idec:
+		op->type = R_ANAL_OP_TYPE_SUB;
+		break;
 	case UD_Ijmp:
-		op->type = R_ANAL_OP_TYPE_JMP;
-		op->jump = addr + oplen + getval (&u.operand[0]);
+		switch (u.operand[0].type) {
+		case UD_OP_MEM:
+		case UD_OP_REG:
+			op->type = R_ANAL_OP_TYPE_UJMP;
+			break;
+		default:
+			op->type = R_ANAL_OP_TYPE_JMP;
+#if 0
+{
+ut16 a = (op->lval.ptr.seg & 0xFFFF);
+ut16 b = (op->lval.ptr.off);
+switch (op->size) {
+case 32:
+	sprintf (src, "%04x:%04x", a, b & 0xFFFF);
+	break;
+case 48:
+	sprintf (src, "%04x:%04x", a, b);
+	break;
+default:
+	eprintf ("FUCK YOU\n");
+}
+}
+#endif
+			if (u.operand[0].type==UD_OP_PTR) {
+				op->jump = getval (&u.operand[0]);
+			} else {
+				if (anal->bits==16) {
+					// honor segment
+					op->jump = (addr&0xf0000) + oplen + \
+						(((addr&0xffff)+getval (&u.operand[0])&0xffff));
+				} else {
+					op->jump = addr + oplen + (int)getval (&u.operand[0]);
+				}
+			}
+		}
 		break;
 	case UD_Ijz:
 	case UD_Ijnz:
 	case UD_Ijb:
 	case UD_Ijbe:
 	case UD_Ija:
+	case UD_Ijae:
 	case UD_Ijs:
 	case UD_Ijns:
 	case UD_Ijo:
@@ -54,19 +383,34 @@ int x86_udis86_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len)
 	case UD_Ijle:
 	case UD_Ijg:
 	case UD_Ijcxz:
+	case UD_Iloop:
 		op->type = R_ANAL_OP_TYPE_CJMP;
-		op->jump = addr + oplen + getval (&u.operand[0]);
+		op->jump = addr + oplen + (int)getval (&u.operand[0]);
 		op->fail = addr+oplen;
 		break;
 	case UD_Icall:
 		op->type = R_ANAL_OP_TYPE_CALL;
-		op->jump = oplen + getval (&u.operand[0]);
-		op->fail = addr+oplen;
+		switch (u.operand[0].type) {
+		case UD_OP_REG:
+			op->jump = 0; // EAX, EBX, ... use anal->reg
+			break;
+		case UD_OP_IMM:
+		case UD_OP_MEM:
+		case UD_OP_PTR:
+		default:
+			op->jump = addr + oplen + (int)getval (&u.operand[0]);
+		}
+		op->fail = addr + oplen;
+		break;
+	case UD_Ihlt:
+		op->type = R_ANAL_OP_TYPE_TRAP;
 		break;
 	case UD_Iret:
 	case UD_Iretf:
 	case UD_Isysret:
 		op->type = R_ANAL_OP_TYPE_RET;
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = -regsz;
 		break;
 	case UD_Isyscall:
 		op->type = R_ANAL_OP_TYPE_SWI;
