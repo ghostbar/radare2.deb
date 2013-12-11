@@ -1,10 +1,12 @@
-/* radare - LGPL - Copyright 2011-2012 - pancake */
+/* radare - LGPL - Copyright 2011-2013 - pancake */
 
 #include <r_fs.h>
 #include "../config.h"
 #include "types.h"
 #include <errno.h>
 #include "p/grub/include/grub/msdos_partition.h"
+
+R_LIB_VERSION(r_fs);
 
 static RFSPlugin *fs_static_plugins[] = { R_FS_STATIC_PLUGINS };
 
@@ -567,7 +569,7 @@ R_API int r_fs_prompt (RFS *fs, const char *root) {
 			while (*input == ' ')
 				input++;
 			if (!strcmp (input, "..")) {
-				char *p = r_str_lchr (path, '/');
+				char *p = (char *)r_str_lchr (path, '/');
 				if (p) p[(p==path)?1:0]=0;
 			} else {
 				strcat (path, "/");

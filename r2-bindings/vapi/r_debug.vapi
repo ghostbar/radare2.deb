@@ -3,8 +3,33 @@
 [Compact]
 [CCode (cheader_filename="r_debug.h", cname="RDebug", free_function="r_debug_free", cprefix="r_debug_")]
 public class Radare.RDebug {
+	public int arch;
+	public int bits;
+	public int pid;
+	public int tid;
+	public bool swstep;
+	public int steps;
+	public int newstate;
+	public int reason;
+	public int signum;
+
 	public RBreakpoint bp;
 	public RDebug(int hard);
+/*
+	public int steps;
+	public int pid;
+	public int tid;
+	public bool swstep;
+	public int newstate;
+	//public RDebug.Trace *trace;
+	public RDebug.Trace trace;
+	public bool stop_all_threads;
+	public RReg reg;
+	public RAnal anal;
+
+	public RList<RDebug.Map> maps;
+	public RList<RDebug.Map> maps_user;
+*/
 
 	public bool use(string plugin);
 
@@ -34,23 +59,23 @@ public class Radare.RDebug {
 	public bool continue_syscall(int syscall);
 
 	//public bool map_list(RDebug.Map map);
-	public bool map_alloc (RDebug.Map map);
 	public bool map_dealloc (RDebug.Map map);
 	//public RList<RDebug.Map> map_list_new ();
 	//public void map_list_free (RList<RDebug.Map> maps);
 	public void map_list (uint64 addr, bool rad);
-	public RDebug.Map map_get(uint64 addr);
+	public RDebug.Map map_get (uint64 addr);
+	public RDebug.Map map_alloc (uint64 addr, int size);
 	public bool map_sync ();
 
-	public bool fork ();
-	public bool clone();
+	public bool child_fork ();
+	public bool child_clone();
 
 	// TODO: public RList<RDebug.Frame> frames ();
 
 	public uint64 arg_get (int fast, int num);
 	public bool arg_set (int fast, int num, uint64 val);
 
-	public uint64 execute(uint8 *buf, int len); // XXX: uint8
+	public uint64 execute(uint8 *buf, int len, bool restore); // XXX: uint8
 	public int desc_open (string path);
 	public int desc_close (int fd);
 	public int desc_dup (int fd, int newfd);
@@ -138,8 +163,8 @@ public class Radare.RDebug {
 		//public Map(string name, uint64 addr, uint64 addr_end, int perm, int user);
 	}
 
-	[CCode (cname="RDebugTrace")]
-	public struct Trace {
+	[CCode (cname="RDebugTrace", free_function="", unref_function="")]
+	public class Trace {
 		RList<RDebug.Tracepoint> traces;
 		int count;
 		int enabled;
@@ -149,7 +174,7 @@ public class Radare.RDebug {
 	}
 
 	[Compact]
-	[CCode (cname="RDebugTracepoint", free_function="")]
+	[CCode (cname="RDebugTracepoint", free_function="", unref_function="")]
 	public class Tracepoint {
 		uint64 addr;
 		uint64 tags;
@@ -160,18 +185,6 @@ public class Radare.RDebug {
 		uint64 stamp;
 	}
 
-	public int steps;
-	public int pid;
-	public int tid;
-	public bool swstep;
-	public int newstate;
-	public RDebug.Trace *trace;
-	public bool stop_all_threads;
-	public RReg reg;
-	public RAnal anal;
-
-	public RList<RDebug.Map> maps;
-	public RList<RDebug.Map> maps_user;
 
 
 	//public int pid_add();

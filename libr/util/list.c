@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2012 - pancake */
+/* radare - LGPL - Copyright 2007-2013 - pancake */
 // TODO: RRef - reference counting
 
 #include <stdio.h>
@@ -38,7 +38,6 @@ void *r_list_get (RList *list) {
 RListIter *r_list_get_next (RListIter *list) {
 	return list->n;
 }
-
 
 R_API void r_list_init(RList *list) {
 	list->head = NULL;
@@ -300,6 +299,19 @@ R_API void r_list_sort(RList *list, RListComparator cmp) {
 R_API void r_list_add_sorted(RList *list, void *data, RListComparator cmp) {
 	if (r_list_append (list, data))
 		r_list_sort (list, cmp); // TODO: inefficient
+}
+
+R_API int r_list_set_n(RList *list, int n, void *p) {
+	RListIter *it;
+	int i;
+	if (list)
+	for (it = list->head, i = 0; it && it->data; it = it->n, i++) {
+		if (i == n) {
+			it->data = p;
+			return R_TRUE;
+		}
+	}
+	return R_FALSE;
 }
 
 R_API void *r_list_get_n(RList *list, int n) {

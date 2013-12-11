@@ -22,7 +22,7 @@ R_API ut16 r_num_ntohs (ut16 foo) {
         (((x) & 0x00000000000000ffLL) << 56))
 
 R_API ut64 r_num_htonq(ut64 value) {
-        ut64 ret  = value;
+        ut64 ret = value;
 #if LIL_ENDIAN
         r_mem_copyendian ((ut8*)&ret, (ut8*)&value, 8, 0);
 #endif
@@ -39,7 +39,7 @@ R_API int r_num_rand(int max) {
 		r_num_irand ();
 		rand_initialized = 1;
 	}
-	if (max==0) max=1;
+	if (!max) max = 1;
 	return rand()%max;
 }
 
@@ -68,13 +68,31 @@ R_API RNum *r_num_new(RNumCallback cb, void *ptr) {
 	return num;
 }
 
+#define KB (1024)
+#define MB (1024*KB)
+#define GB (1024*MB)
+#define TB (1024*GB)
+
+R_API char *r_num_units(char *buf, ut64 num) {
+	char unit;
+	double fnum;
+	if (!buf) buf = malloc (32);
+	//if (num>TB) { unit = 'T'; fnum = num/TB; } else
+	if (num>GB) { unit = 'G'; fnum = num/GB; } else
+	if (num>MB) { unit = 'M'; fnum = num/MB; } else
+	if (num>KB) { unit = 'K'; fnum = num/KB; } else
+		{ unit = 0; fnum = num; }
+	snprintf (buf, 32, "%.1f%c", fnum, unit);
+	return buf;
+}
+
 // TODO: try to avoid the use of sscanf
 /* old get_offset */
 R_API ut64 r_num_get(RNum *num, const char *str) {
-	int i, j;
-	ut32 s, a;
+	int i, j, ok;
 	char lch, len;
 	ut64 ret = 0LL;
+	ut32 s, a;
 
 	if (!str) return 0;
 	for (; *str==' '; ) str++;
@@ -82,7 +100,7 @@ R_API ut64 r_num_get(RNum *num, const char *str) {
 
 	/* resolve string with an external callback */
 	if (num && num->callback) {
-		int ok = 0;
+		ok = 0;
 		ret = num->callback (num->userptr, str, &ok);
 		if (ok) return ret;
 	}
@@ -92,23 +110,35 @@ R_API ut64 r_num_get(RNum *num, const char *str) {
 
 	len = strlen (str);
 	if (len>3 && str[4] == ':') {
-		if (sscanf (str, "%04x", &s)==1) if (sscanf (str+5, "%04x", &a)==1) return (ut64) ((s<<4) + a);
+		if (sscanf (str, "%04x", &s)==1)
+			if (sscanf (str+5, "%04x", &a)==1)
+				return (ut64) ((s<<4) + a);
 	} else if (len>6 && str[6] == ':') {
-		if (sscanf (str, "0x%04x:0x%04x", &s, &a) == 2) return (ut64) ((s<<4) + a);
-		if (sscanf (str, "0x%04x:%04x", &s, &a) == 2) return (ut64) ((s<<4) + a);
+		if (sscanf (str, "0x%04x:0x%04x", &s, &a) == 2)
+			return (ut64) ((s<<4) + a);
+		if (sscanf (str, "0x%04x:%04x", &s, &a) == 2)
+			return (ut64) ((s<<4) + a);
 	}
+	if (str[0]=='0' && str[1]=='b') {
+		ret = 0;
+		for (j=0, i=strlen (str)-1; i>0; i--, j++) {
+			if (str[i]=='1') ret|=1<<j;
+			else if (str[i]!='0') break;
+		}
+		sscanf (str, "0x%"PFMT64x, &ret);
+	} else
 	if (str[0]=='0' && str[1]=='x') {
-		sscanf (str, "0x%"PFMT64x"", &ret);
+		sscanf (str, "0x%"PFMT64x, &ret);
 	} else {
 		lch = str[len>0?len-1:0];
 		if (*str=='0' && lch != 'b' && lch != 'h')
 			lch = 'o';
 		switch (lch) {
 		case 'h': // hexa
-			sscanf (str, "%"PFMT64x"", &ret);
+			sscanf (str, "%"PFMT64x, &ret);
 			break;
 		case 'o': // octal
-			sscanf (str, "%"PFMT64o"", &ret);
+			sscanf (str, "%"PFMT64o, &ret);
 			break;
 		case 'b': // binary
 			ret = 0;
@@ -118,26 +148,24 @@ R_API ut64 r_num_get(RNum *num, const char *str) {
 			}
 			break;
 		case 'K': case 'k':
-			sscanf (str, "%"PFMT64d"", &ret);
+			sscanf (str, "%"PFMT64d, &ret);
 			ret *= 1024;
 			break;
 		case 'M': case 'm':
-			sscanf (str, "%"PFMT64d"", &ret);
+			sscanf (str, "%"PFMT64d, &ret);
 			ret *= 1024*1024;
 			break;
 		case 'G': case 'g':
-			sscanf (str, "%"PFMT64d"", &ret);
+			sscanf (str, "%"PFMT64d, &ret);
 			ret *= 1024*1024*1024;
 			break;
 		default:
-			sscanf (str, "%"PFMT64d"", &ret);
+			sscanf (str, "%"PFMT64d, &ret);
 			break;
 		}
 	}
-
 	if (num != NULL)
 		num->value = ret;
-
 	return ret;
 }
 
@@ -260,14 +288,29 @@ R_API double r_num_get_float(struct r_num_t *num, const char *str) {
 R_API int r_num_to_bits (char *out, ut64 num) {
 	int size = 64, i;
 
-	if (num&0xff000000) size = 32;
+	if (num&0xff00000000) size = 64;
+	else if (num&0xff000000) size = 32;
 	else if (num&0xff0000) size = 24;
 	else if (num&0xff00) size = 16;
 	else if (num&0xff) size = 8;
 	if (out) {
-		for (i=0; i<size; i++)
-			out[size-1-i] = (num>>i&1)? '1': '0';
-		out[size] = '\0'; //Maybe not nesesary?
+		int pos = 0;
+		int realsize = 0;
+		int hasbit = 0;
+		for (i=0; i<size; i++) {
+			char bit = ((num>>(size-i-1))&1)? '1': '0';
+			if (hasbit || bit=='1') {
+				out[pos++] = bit;//size-1-i] = bit; 
+			}
+			if (!hasbit && bit=='1') {
+				hasbit=1;
+				realsize = size-i;
+			}
+		}
+		if (realsize==0)
+		out[realsize++] = '0';
+		out[realsize] = '\0'; //Maybe not nesesary?
+
 	}
 	return size;
 }

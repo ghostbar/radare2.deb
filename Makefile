@@ -3,33 +3,34 @@ include global.mk
 
 DLIBDIR=$(DESTDIR)/$(LIBDIR)
 R2BINS=$(shell cd binr ; echo r*2)
-DATADIRS=libr/asm/d libr/syscall/d libr/magic/d
+DATADIRS=libr/cons/d libr/asm/d libr/syscall/d libr/magic/d
 #binr/ragg2/d
 STRIP?=strip
-ifneq ($(shell bsdtar -h 2>/dev/null|grep bsdtar),)
-TAR=bsdtar czvf
+#ifneq ($(shell bsdtar -h 2>/dev/null|grep bsdtar),)
+ifneq ($(shell xz --help 2>/dev/null|grep improve),)
+TAR=tar -cvf
+TAREXT=tar.xz
+CZ=xz -f
 else
-TAR=tar -czvf
+TAR=bsdtar cvf
+TAREXT=tar.gz
+CZ=gzip -f
 endif
 PWD=$(shell pwd)
 
 all: plugins.cfg
-	${MAKE} libr
-	${MAKE} binr
+	${MAKE} -C libr/util
+	${MAKE} -C shlr
+	${MAKE} -C libr
+	${MAKE} -C binr
 
 plugins.cfg:
 	@if [ ! -e config-user.mk ]; then echo ; \
 	echo "  Please, run ./configure first" ; echo ; exit 1 ; fi
 	./configure-plugins
 
-binr libr:
-	cd $@ && ${MAKE} all
-
 w32:
-	${MAKE} clean
-	# TODO: add support for debian
-	./configure --without-ssl --without-gmp --with-compiler=i486-mingw32-gcc --with-ostype=windows --host=i486-unknown-windows
-	${MAKE}
+	sys/mingw32.sh
 
 .PHONY: depgraph.png
 depgraph.png:
@@ -61,7 +62,7 @@ w32dist:
 	zip -r radare2-w32-${VERSION}.zip radare2-w32-${VERSION}
 
 clean:
-	for a in libr binr shlr ; do (cd $$a ; ${MAKE} clean) ; done
+	for a in shlr libr binr ; do (cd $$a ; ${MAKE} clean) ; done
 
 distclean mrproper:
 	for a in libr binr shlr ; do ( cd $$a ; ${MAKE} mrproper) ; done
@@ -88,28 +89,33 @@ install-doc:
 
 install-doc-symlink:
 	${INSTALL_DIR} ${PFX}/share/doc/radare2
-	cd doc ; for a in * ; do ln -fs ${PWD}/doc/$$a ${PFX}/share/doc/radare2 ; done
+	cd doc ; for a in * ; do \
+		ln -fs ${PWD}/doc/$$a ${PFX}/share/doc/radare2 ; done
 
 install: install-doc install-man install-www
 	cd libr && ${MAKE} install PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	cd binr && ${MAKE} install PREFIX=${PREFIX} DESTDIR=${DESTDIR}
+	cd shlr && ${MAKE} install PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	for a in ${DATADIRS} ; do \
 	(cd $$a ; ${MAKE} install LIBDIR=${LIBDIR} PREFIX=${PREFIX} DESTDIR=${DESTDIR} ); \
 	done
-	mkdir -p ${DESTDIR}/${LIBDIR}/radare2/${VERSION}/hud
-	cp -f shlr/hud/main ${DESTDIR}/${LIBDIR}/radare2/${VERSION}/hud/
+	mkdir -p ${DLIBDIR}/radare2/${VERSION}/hud
+	cp -f doc/hud ${DLIBDIR}/radare2/${VERSION}/hud/main
+	cp ${PWD}/libr/lang/p/radare.lua ${DLIBDIR}/radare2/${VERSION}/radare.lua
+	sys/ldconfig.sh
 
 install-www:
 	rm -rf ${DESTDIR}/${WWWROOT}
+	rm -rf ${DLIBDIR}/radare2/${VERSION}/www # old dir
 	mkdir -p ${DESTDIR}/${WWWROOT}
 	cp -rf shlr/www/* ${DESTDIR}/${WWWROOT}
 
 symstall-www:
 	rm -rf ${DESTDIR}/${WWWROOT}
+	rm -rf ${DLIBDIR}/radare2/${VERSION}/www # old dir
 	mkdir -p ${DESTDIR}/${WWWROOT}
 	cd ${DESTDIR}/${WWWROOT} ; for a in ${PWD}/shlr/www/* ; do \
-		ln -fs $$a ${DLIBDIR}/radare2/${VERSION}/www ; done
-
+		ln -fs $$a ${DESTDIR}/${DATADIR}/radare2/${VERSION}/www ; done
 
 install-pkgconfig-symlink:
 	@${INSTALL_DIR} ${DLIBDIR}/pkgconfig
@@ -118,17 +124,21 @@ install-pkgconfig-symlink:
 symstall install-symlink: install-man-symlink install-doc-symlink install-pkgconfig-symlink symstall-www
 	cd libr && ${MAKE} install-symlink PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	cd binr && ${MAKE} install-symlink PREFIX=${PREFIX} DESTDIR=${DESTDIR}
+	cd shlr && ${MAKE} install-symlink PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	for a in ${DATADIRS} ; do (\
 		cd $$a ; \
 		echo $$a ; \
 		${MAKE} install-symlink LIBDIR=${LIBDIR} PREFIX=${PREFIX} DESTDIR=${DESTDIR} ); \
 	done
 	mkdir -p ${DLIBDIR}/radare2/${VERSION}/hud
-	ln -fs ${PWD}/shlr/hud/main ${DLIBDIR}/radare2/${VERSION}/hud/main
+	ln -fs ${PWD}/doc/hud ${DLIBDIR}/radare2/${VERSION}/hud/main
+	ln -fs ${PWD}/libr/lang/p/radare.lua ${DLIBDIR}/radare2/${VERSION}/radare.lua
+	sys/ldconfig.sh
 
 deinstall uninstall:
 	cd libr && ${MAKE} uninstall PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	cd binr && ${MAKE} uninstall PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR}
+	cd shlr && ${MAKE} uninstall PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR}
 	cd libr/syscall/d && ${MAKE} uninstall PARENT=1 PREFIX=${PREFIX} DESTDIR=${DESTDIR} LIBDIR=${LIBDIR}
 	@echo
 	@echo "Run 'make purge' to also remove installed files from previous versions of r2"
@@ -156,26 +166,30 @@ purge: purge-doc purge-dev
 	rm -rf ${DESTDIR}/${INCLUDEDIR}/libr
 
 dist:
+	-[ configure -nt config-user.mk ] && ./configure --prefix=${PREFIX}
 	git log $$(git show-ref `git tag |tail -n1`)..HEAD > ChangeLog
 	DIR=`basename $$PWD` ; \
 	FILES=`git ls-files | sed -e s,^,radare2-${VERSION}/,` ; \
 	cd .. && mv $${DIR} radare2-${VERSION} && \
-	${TAR} radare2-${VERSION}.tar.gz $${FILES} radare2-${VERSION}/ChangeLog ;\
+	${TAR} radare2-${VERSION}.tar $${FILES} radare2-${VERSION}/ChangeLog ;\
+	${CZ} radare2-${VERSION}.tar ; \
 	mv radare2-${VERSION} $${DIR}
 
 shot:
 	DATE=`date '+%Y%m%d'` ; \
 	FILES=`git ls-files | sed -e s,^,radare2-${DATE}/,` ; \
 	cd .. && mv radare2 radare2-$${DATE} && \
-	${TAR} radare2-$${DATE}.tar.gz $${FILES} ;\
+	${TAR} radare2-$${DATE}.tar $${FILES} ;\
+	${CZ} radare2-$${DATE}.tar ;\
 	mv radare2-$${DATE} radare2 && \
-	scp radare2-$${DATE}.tar.gz radare.org:/srv/http/radareorg/get/shot
+	scp radare2-$${DATE}.${TAREXT} \
+		radare.org:/srv/http/radareorg/get/shot
 
 tests:
 	@if [ -d r2-regressions ]; then \
 		cd r2-regressions ; git clean -xdf ; git pull ; \
 	else \
-		git clone git://github.com/vext01/r2-regressions.git ; \
+		git clone git://github.com/radare/r2-regressions.git ; \
 	fi
 	cd r2-regressions ; ${MAKE}
 

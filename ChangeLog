@@ -1,2112 +1,4087 @@
-commit c829b88c3ff579e11baafa42176219ab42765d96
+commit fd27df8af09fa008edbc3e97f11e41f990870be0
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Mar 21 13:52:29 2013 +0100
+Date:   Sun Nov 10 23:40:39 2013 +0100
 
-    Bump for the 0.9.4 release
+    Bump 0.9.6
 
-commit 52990edf3766e8aa6e30664407e5e10f9741fab2
+commit 0903ccc9f420cb4ca07fcb9553c01f9c41bd081c
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Mar 20 03:52:59 2013 +0100
+Date:   Sun Nov 10 22:57:08 2013 +0100
 
-    Update sdb from git
+    Fix #337 - Fix 'y -1' segfault
 
-commit ce4382abb73286ed06c0501862e14dc17ba96ab4
+commit 13707310aa480198feca694153e7c583e5034be1
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Mar 19 10:27:57 2013 +0100
+Date:   Sun Nov 10 05:09:36 2013 +0100
 
-    Use anal-udis86 by default instead of anal-im86
+    Fix android library mismatch warning
 
-commit 837489a5ed15ff347cf3ea43349d7f602a7e888a
+commit 1b2ba18c0ead3428d6684c2f7db25a0219fa4aaf
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Mar 19 02:36:14 2013 +0000
+Date:   Sun Nov 10 04:33:12 2013 +0100
 
-    Faster ptrace io and fixed software stepping in ARM
+    Fix #270 - ragg2 crashs on false-conditions loops
+
+commit 654b7256bb105bfbf08d55a97d3c48ba850da05d
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Nov 10 03:43:16 2013 +0100
+
+    Add '0x' alias for 's 0x'
+
+commit 36b9fef27e10e5a5447c3bae3834515c82ac4c95
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Nov 10 02:49:32 2013 +0100
+
+    Fix #316 - Wrong analysis/colorization of ARM opcodes
+
+commit 6eeeea6d6b7e7009f1a51da59512722d2330a739
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Nov 10 02:33:02 2013 +0100
+
+    Fix 'Vx' (visual xrefs navigation)
+
+commit 1d0eeb9955f433052274347bdda1e77847af46f7
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Nov 10 02:04:22 2013 +0100
+
+    Use ';' comment prefix in branch keys comments in disasm
+
+commit 86d65b12f28f141d265ca09e9a7ff64ee0bd2f1c
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Nov 9 04:33:08 2013 +0100
+
+    Remove '#' from decimal values
+
+commit 4a669b2663efd5698f7f733ab09e811aad0fc128
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Nov 9 03:42:20 2013 +0100
+
+    Update rabin2 manpage
+
+commit 75b59283d81af7aac012235c6a97775299373bed
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Nov 9 03:34:11 2013 +0100
+
+    Fix #318 - file.analyze doesn't work
+
+commit ec9b04e758b90e54080aa57aceeae5afcc07af48
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Nov 9 03:25:43 2013 +0100
+
+    Fix #319 - Fix recursive loading the same script
+
+commit b97e19cae3ca1961452ddac0be284ab45e231a1b
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Nov 9 03:11:03 2013 +0100
+
+    Fix #323 - rabin2 should provide an option to show everything
+
+commit 69bb3b2c1f63c11d89ef0682e5fc6bfc0ae587ec
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Nov 9 00:28:58 2013 +0100
+
+    Fix #321 - rabin2 -zz should ignore sections
+
+commit 603b595e532c2ae72c13dc5f063912c4d365a20a
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Nov 7 15:13:33 2013 +0100
+
+    Fix reflines overflow
+
+commit a0d5af18757f9f8f83c777499ba0d8fa9af70e20
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Nov 7 02:07:10 2013 +0100
+
+    Fix #310 - Wrong disassembly when seeking backwards
     
-    Fix software stepping in arm
-    p/io_ptrace now supports /proc/pid/mem io
-    Added =!help =!mem and =!ptrace to io/ptrace
-    Hide invalid section sizes messages
+    Handle ~/.config/radare2/radare2rc script
+    Add 'cls' command
+    Use '?' instead of 'K'
 
-commit d0d9a963a703fed433d1280c9e14379a02fa91d8
-Author: Roi Martin (@nibble_ds) <jroi.martin@gmail.com>
-Date:   Mon Mar 18 23:42:44 2013 +0100
-
-    Add new opcodes to anal_x86_udis86
-
-commit c11bf6c1cb42289db9ffcfbdb8e8fa58fc4fc6c3
+commit 50fe2fdd1fd4677790e1759015b6fe75e9f32b54
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Mar 18 00:38:04 2013 +0100
+Date:   Wed Nov 6 23:15:16 2013 +0100
 
-    Fix partial IO read, show flags under visual cursor
-    
-    Show flags in @@ and visual title with cursor
-    Port 80 is now default for r2 -C
-    Key 'q' will quit -C mode
-    Fix visual core_read() issue with chrome
-    Fix io.va issue in partial reads
-    Fix r_io_next_section() code
+    Fix #315 - Changing bin.rawstr on runtime doesn't updates RBin info
 
-commit 14eee2a3258e6506bb09ba229b38e338ec0dec5f
-Author: chous <chous@acm-sl.org>
-Date:   Sat Mar 16 22:56:21 2013 +0100
-
-    Added support for invokedynamic opcode.
-
-commit 361d169be073626bb76adbcd17dac5372807d7ae
-Author: Roi Martin (@nibble_ds) <jroi.martin@gmail.com>
-Date:   Sat Mar 16 04:54:01 2013 +0100
-
-    Refactoring of r_socket_http_answer
-    Fix http client (r2 -C)
-
-commit 8846cb79cf001d37052952c08f52f25a6469dc7e
+commit 3b950365562bb3f322f16e3ec063670530fbcbef
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Mar 14 02:32:53 2013 +0100
+Date:   Wed Nov 6 11:15:36 2013 +0100
 
-    Pass t/test.arm, new cmd !123 to run historic command
-    
-    Fix all opcode constructions listed in t/test.arm
-    Add 'hlt' opcode for arm.
-    Minor changes in arm disassembly output
-    Typing !#number you re-run the command in !history
-    !history is now listed (! is an alias)
-    Added API to access history from dietline
+    Fix mips-endian regression
 
-commit 67f0794b82bdc8c9a8f3293d9acb0c6d5caed500
+commit 1a3ffe1fc09ceec5b3745d80a039e152f6db163a
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Mar 13 17:57:40 2013 +0100
+Date:   Wed Nov 6 10:42:00 2013 +0100
 
-    Fix disasm indent. Add 'mvn' and 'cmp r, n' opcodes
+    Fix 'r2 -s0' issue (reported by cipher)
 
-commit fcbe3cac4aac3c4e19491a8345c650ed96185984
+commit 58dae4eaa0df24b2336e95ff871998d73494ef04
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Mar 13 13:30:28 2013 +0100
+Date:   Wed Nov 6 02:52:34 2013 +0100
 
-    Fix #64 (handle 8 char length section names in PE and TE)
+    Purge io.maxblk
 
-commit 89992670e10271e6208ca6f875c878ce90601750
+commit 9bb51ca3296fc1b990f6358a9ddaee85fdcb4c37
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Mar 13 12:42:05 2013 +0100
+Date:   Wed Nov 6 02:37:25 2013 +0100
 
-    Fix segfault in ELF parsing
+    Implement 'pcJ' to print block in Javascript
 
-commit 352dde392bd77b5d54422147b48ba1352af2f046
+commit 3918ccd63af9a246fd755e8234faabdd946bd4e8
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Mar 13 11:58:36 2013 +0100
+Date:   Wed Nov 6 02:24:02 2013 +0100
 
-    Update to the latest sdb from git
+    p6 is now an alias for p6e. And fix 'pc' help
 
-commit f0a485d10829d23e3adaa8c4d706eda18b679af1
+commit 486b87a870410b5d0fdb0ae973d03604724f9fec
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Mar 13 10:45:41 2013 +0100
+Date:   Wed Nov 6 02:10:53 2013 +0100
 
-    Add support for bkpt (arm) and cmovz (x86.nz) opcodes in assembler
+    Re-enable disasm retries and add test
 
-commit 83259dbd1ec20044b74041a438844dbcd1ff2af9
+commit 2a4b961c5dbc96d098ad5ac9097da79112cc8eb3
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Mar 12 14:31:24 2013 +0100
+Date:   Wed Nov 6 01:55:12 2013 +0100
 
-    Fix load ELF64 and remove debug printf in binr/blob
+    Fix testsuite
 
-commit dacede5ae9368d661235b8a5c405c6f3cc0ef5d5
+commit 19165d308adcc557d3dd4b54e9e1802bf9509246
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Mar 12 13:24:48 2013 +0100
+Date:   Wed Nov 6 01:48:55 2013 +0100
 
-    Initial port of io-mmap to w32
+    Fix #309 - Wrong symbol in reflines if UTF8
 
-commit 8f4d23a5ce693a3ca815041b45909733416c61c6
+commit e63271e6880b0caeac20a838d2418fa5f9a60b95
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Mar 12 01:50:55 2013 +0100
+Date:   Wed Nov 6 01:36:40 2013 +0100
 
-    Initial implementation of io.map plugin
+    Fix build
 
-commit dc7289e1f3b385ed370a32dac2537edca2dc026f
+commit f1c9943df299c397048df82f13a971f6a37fdefb
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Mar 10 14:27:01 2013 +0100
+Date:   Wed Nov 6 01:32:24 2013 +0100
 
-    Fix rabin2 -O help, rahash2 -a all -s, add filter input
-    
-    Added input filter in r_cons/dietline to avoid trashy chars
-    rahash2 -s now works with multiple -a
+    Fix #313 - Add bin.baddr and r2 -B to set base address for r_bin
 
-commit 4f7df37ce1519d4ac5c3adf3a24b0ae941ac3fcc
+commit 1cec548b68e0c1fd9eb53dd2c722c24a2bff7d5e
 Author: pancake <pancake@nopcode.org>
-Date:   Fri Mar 8 16:10:44 2013 +0100
+Date:   Wed Nov 6 00:30:35 2013 +0100
 
-    Fix string terminator in method names for DEX
+    Fix #288 - r_str_replace() - realloc invalid next size
 
-commit 6806c1179202b19f9c2fc7951db849241e9f8a97
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Mar 8 12:58:03 2013 +0100
-
-    Better ARM analysis, Fix blockread in V[0-9]
-
-commit b9177a1bd9160c745a1c5791edc66bca68fb2e13
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Mar 8 01:15:04 2013 +0100
-
-    Add 'powered by r2' images
-
-commit 3cf0dd14077d45c68be2bb0546d575aa4fc69870
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Mar 8 01:03:37 2013 +0100
-
-    Fix the last bugs found during the training
-    
-    Comments lost spaces when saved to the project
-    Do not show address offsets when using @@=
-    Do not fail forever with /m if magic is file not found
-
-commit 42f76858a1c70f2c0b722907c70f85fea47e668d
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Mar 8 00:50:54 2013 +0100
-
-    Fix VA with curset
-
-commit 619e07c21b14aeeeda6da453a1d8ac9177386a33
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Mar 8 00:31:58 2013 +0100
-
-    Fix ELF loading when headers are really fucked up
-
-commit ba3ad8112ad480392e6080d60a72150db5d9407c
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Mar 7 23:47:41 2013 +0100
-
-    ELF parser more permissive, add 'fsr' and other fixes
-    
-    Make ELF loader more permissive
-    Add 'fsr' to rename flagspaces
-    Fix parsing issue in 'yy'
-    Fix crash in r_num
-
-commit 5f4623ed4613879627be7afd445bae62029f5e8f
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Mar 7 13:08:05 2013 +0100
-
-    Fix some bugs appeeared during the training course
-    
-    Fix segfault in "rasm2 'xor e'"
-    Fix overflow in 'ad@esp' when long strings are analyzed
-    Fix null pointer check in r_num
-
-commit 7e7be66fcaabeb51ec02242076b345df3cb548a1
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Mar 6 01:09:43 2013 +0100
-
-    Autocomplete 'dml' and add 'TE' in the README list
-
-commit 50408b2e8a1bb27e325fab0dd0dffacca0507189
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Mar 5 19:59:29 2013 +0100
-
-    Add rahash2 -q and fix -a crc32 endianness issue
-
-commit cea398e34576a12e2b58531cfc0f6eb0b345d431
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Mar 5 01:28:32 2013 +0100
-
-    Add rax2 -n for binary numeric values
-
-commit 27c38164cff05e55782472f62abdec3f7defa2b1
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Mar 4 00:44:46 2013 +0100
-
-    Fix race condition in make and exit status of rahash2
-
-commit 53cf98c8df1dcae2e080a6f7fe71fd7de4958736
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Mar 4 00:33:14 2013 +0100
-
-    New command pDi, Fix Vf- to remove flags, fix hamdist
-
-commit 007faa5f6121aa06f95432eb28a1b62a40f48a2a
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Mar 3 17:47:07 2013 +0100
-
-    Fixes in radiff2
-
-commit 242b820647dbd42c71c82ea80be967bec024e265
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Mar 3 17:28:06 2013 +0100
-
-    rahash2 accept multiple files, fixes for http_client and r_num_rand
-
-commit a68605910b5e3da7b7e593b243120b0296aa46e8
+commit 172eb79fe7483d8d73da2bbf517e306e37b88c2a
 Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Sun Mar 3 14:01:49 2013 +0400
+Date:   Sun Oct 20 11:14:34 2013 +0400
 
-    Fixed x86 bits config for TE format plugin
+    Added 64bit C enum types support [stage 1]
 
-commit ca7296c84862e34184280ad4c438fd685a11e1c5
+commit 6a18cc7bdc103832fe89227d49e0be5919d1ff0c
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Nov 5 04:26:16 2013 +0100
+
+    Partial fix for socket listen on w32
+
+commit aa088cc341dfe1ecb88d61be3f5fec6050b65c97
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Nov 5 04:14:07 2013 +0100
+
+    Implement ansi gotoxy for w32 RCons output
+
+commit 438d502646a796277e9b1f5b02e15b7eebb54fbd
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Nov 5 03:23:29 2013 +0100
+
+    Fix #309 - Use utf8 vertical line in comments
+
+commit 0d683351c213944a81b0b25c2506d96a3bebf8f5
+Author: jvoisin <julien.voisin@dustri.org>
+Date:   Tue Nov 5 02:58:00 2013 +0100
+
+    Fix #292 - Overhaul config.c
+
+commit 179e58e0648c28bf1e5978f5b2952506ecf1ccff
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Nov 5 02:29:17 2013 +0100
+
+    Fix #308 - rabin2 -B doesn't works
+
+commit 37a655a889970a3b5befa32af7601fdd683c8704
 Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Sun Mar 3 13:34:22 2013 +0400
+Date:   Mon Nov 4 18:58:18 2013 +0400
 
-    TE format plugin cleanups - removed unused code
+    Fix #309 - wrong refline symbol on references lines
 
-commit 5d6703322075683b407c542ecbc7ef6db4a0c762
+commit 1769a767cd72f8df2c1eb25720d0d668675605da
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Mar 3 06:00:57 2013 +0100
+Date:   Mon Nov 4 04:50:37 2013 +0100
 
-    Support == in conditionals, Add r2 -C to connect
+    Fix cpp warnings
 
-commit b45f07a39aab8526eb365fb139181fa63e74cab6
+commit d0f40d6e48638df6a63064284e7ae2e9c8bb7a3c
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Mar 3 05:47:33 2013 +0100
+Date:   Mon Nov 4 04:38:57 2013 +0100
 
-    dtc now uses r_cons_printf
+    Aim to fix #208 and #288 - r_str_replace issue
 
-commit ab32c7bb956e665224dd42a92b2981a993916199
+commit 2a909d6302a2344f34f07792b8c89e3799a74b3b
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Mar 3 05:28:42 2013 +0100
+Date:   Thu Sep 5 01:44:05 2013 +0200
 
-    Fix [] memory references syntax for r_num
+    Fix #300 - (64bit dr= indentation) and fix r_sys_pid_to_path on linux
 
-commit 99f6ae9fe31a27ebdda89b37bd487fc8d1624b1e
+commit 2f76003fd0aed8ed9c468d0e2a35ba5e112d2107
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Mar 3 05:09:16 2013 +0100
+Date:   Mon Nov 4 04:07:58 2013 +0100
 
-    Remove annoying debug printf message
+    Another fix for asm.segoff
 
-commit 97484a7b6cc9be06f38cf8eb7385520e80370201
+commit 76b756180544002b6ee027d2962b585f75fa324d
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Mar 3 05:03:48 2013 +0100
+Date:   Mon Nov 4 03:50:30 2013 +0100
 
-    Add conditionals, 'dsi' to continua !, Fix bindings build
-    
-    Added r_num_conditional function to stop the instruction set. I is accessible in vuu¡
+    Fix #307 - e asm.segoff toggle is wrong
 
-commit 133f2dc157f5801e5c04c91de3c65698c79b20a8
+commit e92ee874f2d53229e5796630c42e7e62fe728fef
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Mar 3 03:23:52 2013 +0100
-
-    Better r2 -L output. Sync spaces with rasm2/rabin2 -L
-
-commit 2e8677af2440b782d2c435a024a6187133fa7b46
-Merge: 57f2f1e b2f7037
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Mar 3 01:12:48 2013 +0100
-
-    Merge git://github.com/XVilka/radare2
-
-commit 57f2f1e4cfc0567bcddc802d6ff4ba1a22ab662d
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Mar 3 01:11:44 2013 +0100
-
-    Fix 'e?..' command + random code cleanup
-
-commit b2f7037336f53d964e18f6462c9b51f0228fdc85
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Sun Mar 3 03:57:56 2013 +0400
-
-    Fixed sections offset calculation
-
-commit ff4d3c8009c75ddedc618e78c49e3db1113dd1fd
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Sun Mar 3 03:48:59 2013 +0400
-
-    Fix reading sections
-
-commit 8fd68f14293fa63906dd7cab049a2a0e0613a34d
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Sun Mar 3 03:33:05 2013 +0400
-
-    Build fixes for TE plugin
-
-commit 5a895cf2b10e928dba843f5e328e7bc2bd5bb7c0
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Sun Mar 3 03:26:16 2013 +0400
-
-    Enable TE format plugin by default
-
-commit f6a7dde0706be22606dc87f3064299d846be84d3
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Sun Mar 3 03:09:51 2013 +0400
-
-    Forgot to add TE plugin in list :)
-
-commit 67a99780fa117852083f5a309cff744acc7561b2
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Sun Mar 3 02:45:40 2013 +0400
-
-    Added check function for TE format plugin
-
-commit d580e72a70abc3bdc62fc050056fa8cd1f9d11ba
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Sat Mar 2 01:08:31 2013 +0400
-
-    Initial TE format support
-
-commit 701a43fc23069055a897b0ad47643800d25ff6ac
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Mar 2 19:44:10 2013 +0100
-
-    Use r_sandbox_kill instead of kill
-
-commit 13bbde408a58337e98f2592df26afbb6cb4f2c3a
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Mar 1 17:48:35 2013 +0100
-
-    Fix #58 : Vvvq navigation
-
-commit dc0c939008257b70e6e3fc2bc237897389511b1b
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Mar 1 17:09:26 2013 +0100
-
-    Fix 'io' argument parse
-
-commit 3a0fdd6a249d61ee59ea7b071f2b0f4cf17d3841
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Mar 1 12:20:18 2013 +0100
-
-    Fix #55 and add Cj to list metadata in json format
-
-commit bf5d2ba3daad152688dcfa0edebdb911246a579e
-Author: oblique <psyberbits@gmail.com>
-Date:   Fri Mar 1 01:57:36 2013 +0200
-
-    Check if debug is dead in r_debug_kill function.
-
-commit 4c244a818cfb4bd3a9b6d4aaf95a98782243fbef
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Mar 1 09:57:30 2013 +0100
-
-    Add 'Ch', handle c++ lang in rbin and obey cursor in V:
-
-commit bdd616141c090d8f10159d2df1890bd8f03b19c7
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Mar 1 02:00:22 2013 +0100
-
-    Update io_ewf plugin for latest API. Fix in configure
-
-commit b6b756521d138d0668d5e7e040535ea9852e4b02
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Feb 28 09:50:59 2013 +0100
-
-    Add rahash2 -n to specify number of blocks instead of blocksize
-
-commit 0fa2a74ac516db2292bb337b7bc28deff884b70d
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Feb 27 01:40:26 2013 +0100
-
-    Add cmd.visual config var, show empty flag list in Vt
-
-commit 06787d0972c17d2d50c5906f77eef2262037591b
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Feb 26 22:03:02 2013 +0100
-
-    Fix 'ad' command (r_anal_data was broken)
-
-commit a7925a8a4f39770c4bc9b79e57984c44d6e58b4c
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Feb 26 15:35:24 2013 +0100
-
-    Add aach64 (ARMv8) support to the ELF parser
-
-commit 57503ff1fecf02b430ffb718773dbb6f26fabbf5
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Feb 26 09:27:09 2013 +0100
-
-    Fixes for arm64 disasm, string filter in rarun2 arg directives
-
-commit 400fecdf47ff55d6c0daabcd30bfac5d46af6b77
-Author: schrotthaufen <dont@contact.me>
-Date:   Tue Feb 26 02:52:17 2013 +0100
-
-    Fix aarch64 build
-
-commit 19a1f84f1fdf02f30889f34e164cc72a736196b0
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Feb 26 01:37:42 2013 +0100
-
-    Initial import of the GNU aarch64 disassembler from binutils
-    
-    $ r2 -a arm -b 64 -
-
-commit 0042752a08e8dbd0bcfb8ef15b3bec1af485d5bd
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Feb 25 22:52:57 2013 +0100
-
-    Fix 'r_magic_free' definiton (thanks @tautschnig)
-    
-    > The function magic_close has return type void, but x is of a pointer type.
-    > Yet the C standard requires that the second and third argument of the
-    > conditional operator ?: are both void or compatible pointer types (there
-    > are several other cases, see 6.5.15 of the C Standard). Failing this, the
-    > compiler may produce arbitrary code.
-    > The best way to fix this is likely changing the definition to
-    >  { if(x) {magic_close(x);} }.
-
-commit 5cd3b3f28b8dc4e284beac15c157ec1238ea84c5
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Feb 25 11:48:38 2013 +0100
-
-    Remove useless debugging message
-
-commit 22647633363b920b80e68623afc521f9601a357c
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Feb 25 11:09:24 2013 +0100
-
-    Fix some bugs reported by clang-analyzer
-
-commit fc6e799c261a5c44811e137d4a99d23bbc50d221
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Feb 25 09:36:07 2013 +0100
-
-    Add pfD (disasm). Fix VI and Vi with+without cursor
-    
-    Simplify r_print_string
-    Fix r_io write boundaries
-
-commit 25529090fec825ec228cf70c21b45fbb419b775c
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Feb 25 03:23:13 2013 +0100
-
-    Add xxhash algorithm and add rahash2 -L
-
-commit 6ee9ea23c5848cb96f89b685a8e901c1acf2f32e
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Feb 25 02:46:41 2013 +0100
-
-    Fix search regression test
-
-commit e17e5b6b0562ab07dd6fbeacb2c8d0ebc588d08d
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Feb 25 02:35:16 2013 +0100
-
-    Fix ';x' syntax commands
-
-commit 16bf36e55c2f91f40201c7d6f9034c1db6784135
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Feb 25 01:47:55 2013 +0100
-
-    Implement http.allow firewall rule
-    
-    Fix socket transfer for http server
-    Shorter io descriptions for io_zip and io_gdb plugins
-
-commit 7fbe9071ceee14803b8fc2498fbc64a15775626f
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Feb 24 21:12:30 2013 +0100
-
-    Add rasm2 -w to describe opcodes, fix massemble
-    
-    Add rasm2 -w to get opcode description
-    Fix multiopcode/multiline comments parsing
-    Avoid multiple load when there are no sub-bins
-    Fix r_str_replace_char
-
-commit e9c38878de7ffcf95a851e7148bec9483f02c82b
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Feb 22 21:05:08 2013 +0100
-
-    Fix endian stuff in r_print
-
-commit 958e855173024951e956f5884f911177bce39b18
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Fri Feb 22 13:06:35 2013 +0400
-
-    Add IRET and IRETD opcodes in x86 assembler
-
-commit 34decb02e1240465733baa66bf2bd71c7924bf54
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Feb 22 02:45:46 2013 +0100
-
-    Implement push/pop {segment} for x86
-
-commit 5225c95d1835e3aab4365d1f22255c78a8cc2b77
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Feb 21 11:31:04 2013 +0100
-
-    Fix 'ad', 'a8' and add more test cases for x86/arm assemblers
-    
-    Fix 'a8' command
-    Honor argument in 'ad'
-    Add more tests for x86 and arm assemblers
-
-commit 27643193f8aa2d6b3c3e7d7029c3684d25671699
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Feb 20 02:24:37 2013 +0100
-
-    Fix segfault in java disassemler, and cleaner output.
-
-commit 8186395ebd1d162276771bd09fcd11ceae99ff88
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Feb 19 21:21:39 2013 +0100
-
-    Fix rax2 -S and ragg2-cc -x, better radiff2 error msg
-    
-    rax2 -S is now obeying 0 input length for stdin streams
-    ragg2-cc -x is now working properly (needed rax2 -S)
-    Fix stupid parsing bug introduced in previous commit in armass
-
-commit 018b3833447c930bddb27bcdc1fc2d38d6b07377
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Feb 19 19:32:02 2013 +0100
-
-    Fixes in the Java CLASS parser and arm assembler
-    
-    Some fixes in the java class parser (still leaky and buggy)
-    Ignore '#' char in armass and support upper/camel-case input
-
-commit 263816f52d68cd8de95712b837219fbf6edcae2c
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Feb 19 03:03:05 2013 +0100
-
-    Minor fixes for ctypes bindings
-
-commit 0ef623d4acad904dc8c1b5f4ada09a05724ca007
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Feb 18 04:40:18 2013 +0100
-
-    Add test-bin.py for ctypes bindings and fix few r_bin vapi issues
-
-commit 53b7f837497ca71a790a8e6c15cf1bb094d39220
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Feb 15 13:24:09 2013 +0100
-
-    Fix rafind2 help, honor rasm2 -l and fix objc demangle
-    
-    Fix overflow in objc method name demangling
-
-commit d5c68d97665b86a1b89ffd89acd28ce393de1cbf
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Feb 14 20:08:42 2013 +0100
-
-    Add rafind2 -Z, fix rasm2 -dfB, check chroot() return in rarun2
-
-commit 770f556e9d3610e5f4ac0aa5b1c98c181ec25949
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Feb 13 17:54:20 2013 +0100
-
-    Reverse walk all xrefs as a tmp fix the broken analysis (SLOW)
-
-commit 1daa05e12597880c21d2b4c7bd511820697a1345
-Merge: 766563c fe50744
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Feb 13 01:31:12 2013 +0100
-
-    Merge branch 'master' of github.com:radare/radare2
-
-commit 766563cc6eb39775c0eae2b24eaae3be5b3b2c20
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Feb 13 01:20:42 2013 +0100
-
-    Big endian for arm.winedbg and addn randomart in rax2 -k
-    
-    r_asm: Add support for big endian arm.winedbg
-    rax2: Add -k randomart to rax2, -k is now -B
-    rax2: Handle multiple flags on a single argument
-    rax2: update manpage
-
-commit fe50744f7eb9a5ee78bfa8835ed813e48aeb6fb3
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Feb 12 09:41:53 2013 +0100
-
-    Fix crash when trying to rahash directories
-
-commit b5ee410124f1aa9a45fce9a75944732c990eea35
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Feb 12 02:55:22 2013 +0100
-
-    Fix offset in randomart for rahash2
-
-commit 84270da643064ab259772692aad1cf42314d2678
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Feb 12 02:42:34 2013 +0100
-
-    Add randomart print mode (pk/pK commands and rahash2 -k)
-    
-    Random code cleanup
-    Remove borders in webui/two
-
-commit a436b496add047062c160e5998c7028d33eddc9d
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Feb 11 11:28:27 2013 +0100
-
-    Fix off-by-one in 'pvj'
-
-commit 3bfa61946eca7d765de28339d47f4abb586a0d52
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Feb 11 10:51:45 2013 +0100
-
-    Cleaner pvj, fix tinype load, and honor 'ao N's help
-    
-    Fix TinyPE loading
-    'ao' arg is now number of opcodes, not bytes
-    'pvj' output is now cleaner
-    Random refactorings
-
-commit 36b3177d9269a9bd1815604fd8be21317ca830b4
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Feb 11 04:08:21 2013 +0100
-
-    Lot of enhacements in the webui, add Cz
-    
-    Code cleanup and fixes for 'afr'
-    WebUI (enyo) is much more usable now
-    New command 'Cz' as an alias for 'Cs len'
-
-commit bab19e41645112875099c41ec7fd8a095fd8684b
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Feb 10 03:18:20 2013 +0100
-
-    Implement colorbar in webui, rename p% to pv
-
-commit 2fa48384adc79633948a86f6b7a55d24349b7a86
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Feb 8 11:42:46 2013 +0100
-
-    Fix some bugs reported by clang-analyzer
-
-commit 5cf42dc0513a956d59fbc19d85a553afe6045635
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Feb 7 19:31:18 2013 +0100
-
-    Fix clang-analyzer script
-
-commit af2d3de5b4cc11a5de3361ffde4f13e80a8e64f8
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Feb 7 09:41:05 2013 +0100
-
-    Code cleanup
-
-commit c443ab1f3036596b2621ff7f8225ab8276bf7d68
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Feb 7 03:09:53 2013 +0100
-
-    Implemented 'p%' in api form. Handl p%h and p%j
-    
-    Added json and histogram table p% views
-    Add ?B command to get boundaries (use api)
-    Rename ahA into ahs
-
-commit f70dbe784b084343e539c6268ad39d13365f45b6
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Feb 6 11:47:31 2013 +0100
-
-    Fix --host crosscompile (acr 0.9.2)
-
-commit febfb770bc6ead2df4c01731bb78c3146df7c293
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Feb 6 10:35:23 2013 +0100
-
-    Added http client shell, fixes in http server and random dev
-    
-    Initial RCoreAnalStats
-    =h accepts ports argument for listening
-    'r' command now supports flags (thanks @earada!)
-    Added http mutex to avoid running more than one server
-    Added http.uri /cmd/ redirect
-    Added support for http remote shell
-    Enhacements in the r_socket_http api
-    Handle http:// uri in socket connections
-
-commit db77c97df1c495295d9c6da4a2bf5be2a7bc5785
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Feb 1 10:44:05 2013 +0100
-
-    Add missing files
-
-commit dc2690e5294a201aeef96a038ddf152fc9f69257
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Feb 1 03:15:48 2013 +0100
-
-    Support get/set introspection in 'pf' and handle scr.stride in px
-    
-    Rename pf$ to pf.
-    Add support for introspecting and setting named pf fields
-    Introspection supports get and set
-    Add scr.stride property for 'px'
-    Initial work on slist
-    Add judy arrays implementation (not integrated)
-
-commit f37df0d2c6429465d09e975e6722648913ba9dc1
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jan 29 19:39:41 2013 +0100
-
-    Fix fatmach0 extract when unknown files are inside
-    
-    Fix segfault in java class header parser
-    Fix help message of 'wt' command
-
-commit 05a2d60270e1d5e95f81a4ecd590ecc30b485426
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jan 29 14:56:57 2013 +0100
-
-    Fix r_io section load for big binaries (hello chromium!)
-
-commit c38d77ecfd8580d1e68553f7ee57aa46827d01dd
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Jan 26 03:43:07 2013 +0100
-
-    webui: openPage(0) when tapping a symbol
-
-commit 76e9e63c89c6bb98de10788a4213831a15bceda7
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Jan 26 03:33:13 2013 +0100
-
-    More work on webui
-
-commit 2bcee70f41e5f1cd57f3bc6c277bdfa2ecbdb145
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jan 25 03:47:09 2013 +0100
-
-    Fix r_num_irand(), add pI command, support http.port=0 as random
-
-commit 1f6174c6ae7e1275908bc492960bc10bd68dfc98
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jan 25 03:22:09 2013 +0100
-
-    Better webui, 'pi' counts opcodes and remove /new and htmlgraph
-    
-    pi honors number of instructions, not bytes
-    Remove htmlgraph and lungo webui
-    More work on the enyo webui
-
-commit 98da9c80f5197bf6481202568fa67c9e8ee6f268
-Author: Sebastián Guerrero <s.guerrero0@gmail.com>
-Date:   Fri Jan 25 02:03:57 2013 +0100
-
-    Fix some bugs reported by scan-build
-
-commit b228ed9093483b38abed1c0f89d9cc4d3a347516
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jan 24 16:35:08 2013 +0100
-
-    Complain when trying to interpret unexistent files (-i)
-
-commit 1c93e8a7278789fce53ada1c9e5d39fd87ab4c9f
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jan 24 03:48:24 2013 +0100
-
-    Better webui, fix segfault in ag, add agj for json graphs
-    
-    More work on the webui
-    New 'agj' command to get function graphs in json
-    Fix segfault in 'ag' command
-    'agv' now launches the internal http server
-    Initial refactoring for RAnalHint integration into RCore
-    Add basic mime-type support in the http server
-    Enhace the graph view style
-
-commit 150c43d33c889696a1360dc3402c5f22b42ef063
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jan 23 18:41:31 2013 +0100
-
-    Oops. w32 typo
-
-commit 9b1df626093b4f45b862398a325886cc0844862a
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jan 23 18:38:08 2013 +0100
-
-    Fix mmap and other minor issues on w32
-
-commit d82c53224f30ce3e3975ccb3c357bbad604c7668
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jan 23 14:50:50 2013 +0100
+Date:   Mon Nov 4 03:37:43 2013 +0100
 
     Fix w32 build
 
-commit 3fcc031083016385fa201b3885896c758393d7f4
-Author: Tim Strazzere <Tim.Strazzere@mylookout.com>
-Date:   Tue Jan 22 17:35:34 2013 -0800
+commit 497cb0e2e19e960243599ceddb4dfa1dd09c1139
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Nov 4 03:30:46 2013 +0100
 
-    Accept newer dex magic bytes and attempt to parse future versions.
+    Fix #57 - 'is' does not work for attached process
+
+commit 571291f5edc399614110bea9142410d96063b7e1
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Sun Nov 3 20:07:58 2013 +0400
+
+    ARC* disassembly code cleanup
+
+commit ede55b55c458effd85b2597d4f862c34748b57bc
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Nov 3 13:47:34 2013 +0100
+
+    Fix r_mem_mem and handle 'K' in visual cursor mode to see manpages
+
+commit 0e470adc274cc4389e4a47548c36a82b0c2f7808
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Nov 3 03:05:00 2013 +0100
+
+    Fix #258 - Hide SIGTRAP signals
+
+commit 708dc29b3bd8e1f5adcc072cb64d2970b566449e
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Nov 3 02:48:13 2013 +0100
+
+    Fix #304 - debugger breakpoints not handled properly on Linux
+
+commit 29b238b0a5c43d04603a6d7c91a4fb1504f14ae6
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Sun Oct 27 18:28:18 2013 +0400
+
+    Fixed multiline comments, start implementing struc
+
+commit 724630896b2ae035c4304a44ce1012a867f8994c
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Nov 2 12:14:39 2013 +0100
+
+    Fix #301 - Invalid size: 5 while disassembling x86 TE binary
+
+commit 567bccae92a0f5dac7bc41de872e2931956faf8b
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Nov 2 12:10:25 2013 +0100
+
+    Fix #302 - Visual mode seeking in w32 sleeps longer
+
+commit cbecfb8f4ab88d5735a4718e30d48258eefb953e
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Nov 2 11:49:32 2013 +0100
+
+    Initial import of rahash2 '-S' seed and '-i' iterations
+
+commit 5879f302977da6fff40eae3b38b83bfb8874d638
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Oct 31 02:39:24 2013 +0100
+
+    Disable dbg.trace by default, more fixes for 'dr=' and 'drd'
+
+commit 629c64c85149b74696698ea7bc4c8c3aadb9cf0d
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Oct 31 01:53:17 2013 +0100
+
+    Fix 'dr=' columns width for 64bit registers
+
+commit 403baf93e73be1fc42071a619e8f5c96cf437937
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Oct 30 20:12:02 2013 +0100
+
+    Fix register diff 'drd' (affects #30)
+
+commit 21d6bce30d811f30ecaee9e2ac5e6d81d7ac4567
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Oct 28 02:43:47 2013 +0100
+
+    Fixes shl,sar,.. in x86-64 assembler
+
+commit d900345a6604032e663ed0c8e21ef1557b2dbc5b
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Oct 28 02:05:18 2013 +0100
+
+    Fix #266 - [ragg2] exit on invalid input (again)
+
+commit d9724df92c16c2ce1c87957c9201716293859e39
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Oct 27 23:27:11 2013 +0100
+
+    Oops
+
+commit ed184ce7f314fe40016b614935e3b57b3ed32ee6
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Oct 27 22:52:15 2013 +0100
+
+    Switch to radare2 regressions and bump npmjs version
+
+commit ed1d87f19db8bfcdbbd40632bb036aa7b0d08f12
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Oct 27 02:34:31 2013 +0100
+
+    Fix #289 - Oops. Negative function size at ...
     
-    Currently if a ICS+ extended opcode file was passed to radare2 it
-    would fail to parse it properly. This checks for the two conditions
-    'dex\n035\0' and 'dex\n036\0' - and will also just attempt to parse
-    it if the magic bytes 'dex\n' are available. This should suffice since
-    the last four bytes are the versioning bytes.
+    - Negative values is the status, not a negative length
 
-commit 4ffa7952a26aea355a125e874c9bfc37d44296ce
+commit 8cc4809c3af45d39d554ea68a0c3dbc3007c7721
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Jan 23 01:53:32 2013 +0100
+Date:   Sun Oct 27 02:20:36 2013 +0100
 
-    Fix segfault in DEX parser, remove more r_print refs
+    Refix for #288 and do not stop on invalid reflines
 
-commit 4c2ad6cd583721fcc99258e5100203fe99022195
+commit 195396099f7ad9f14847b14bc100dc348839f47e
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Jan 23 00:51:25 2013 +0100
+Date:   Sun Oct 27 01:40:39 2013 +0200
 
-    Fix build
+    Fix #295 - SIGSEGV in `/r $number`
 
-commit 2365918652a3b977f643b6a267429a1b01a80333
+commit 01ac786b5e6efcd3f230093882abcaba0526fe5f
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Jan 22 18:08:33 2013 +0100
+Date:   Sun Oct 27 01:13:13 2013 +0200
 
-    Fix slow ELF loading and add anal hints support to projects
+    Fix #297 - Error: read (shdr) on a crackme
+
+commit f2ce3f277bf49ab4379c42607263b404d3eef20e
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Oct 26 23:53:50 2013 +0200
+
+    Fix off-by-one in r_str_replace
+
+commit c99497170bdbe95a593d621531ec2d155882eaea
+Author: jvoisin <julien.voisin@dustri.org>
+Date:   Sat Oct 26 16:17:16 2013 +0100
+
+    Remove spagetti
+
+commit 64b6750ee38530e94dd41553095671b27ff81ba0
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Oct 25 10:42:46 2013 +0200
+
+    Fix #277 - Segfault in radiff2 - Thanks nibble!
+
+commit fd1baa4a37a4bf1da6d6dfae9899bee253f9ddc9
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Sat Oct 19 21:25:12 2013 +0400
+
+    Script for converting *.idc to radare2 format
+
+commit e26763a49663244e691c8397856f688feeb7a626
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Oct 25 02:06:00 2013 +0200
+
+    Fix some more regression tests. Implement ahc/ahf, COND,REP are now op flags
+
+commit d63037790552fbe41b9015e7fd81964c413f7799
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Oct 25 00:45:30 2013 +0200
+
+    Fix java nop opcode analysis
+
+commit a72e7d34a10b1a77e8bbb089289c71d2ac3b94c0
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Oct 25 00:31:09 2013 +0200
+
+    Fix another overlapped strcpy
+
+commit a7dff22c7ea90ed2035d8698b15bf5cbdf5142c0
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Oct 25 00:29:00 2013 +0200
+
+    Fix strcpy on overlapped region
+
+commit 84481c53ecbb43cd58e3407d5ee833fc2cfd5fd1
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Oct 24 23:11:56 2013 +0200
+
+    Fix ARCompact disassembly
+
+commit dd050b3dfbc125db977ba91cdec14bdc96cb729c
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Oct 24 14:08:03 2013 +0200
+
+    Add -static-libgcc for mingw32 builds
+
+commit bec4f5b63a819aed4eec34c55ff4e129d3b857bf
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Oct 24 13:59:19 2013 +0200
+
+    Fix radiff2, Ps segfaults and ARC syntax
     
-    Fix slow ELF loading when shstr section was huge
-    Added 'ahj' command to list anal hints in json
-    Add 'ah*' and use it from r_core_project
-    Fix 'i*' command
+    - Fix some nullptr derefs on uninitialized graphdiff structs
+    - 'ar' is now r_cons compliant and rnum friendly (add arj)
+    - Fix some arc disasm syntax issues
+    - Fix segfault when saving analysis info in projects
+    - ARCompact analysis needs to be rewritten
 
-commit fc9301b14b74ef06301a41178dc2367414e7a550
+commit bd100e9853487282e60922c8fae46bcc9da59c1b
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Jan 22 05:06:12 2013 +0100
+Date:   Thu Oct 24 00:58:27 2013 +0200
 
-    Add hints and named print formats and more
+    Oops
+
+commit d025bd66f3d799c8a50e963ef3f692b5d0f4c994
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Oct 24 00:51:26 2013 +0200
+
+    Fix #287 - ragg2 segfaults on uneven number of accolades
+
+commit 61042a4cb9aa23ee462c62cd47bb1b9907d5adde
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Oct 24 00:36:07 2013 +0200
+
+    Fix #290 - Sigsegv while saving project
+
+commit 892a33ef23cdb834f940c5ca1698385d12d9dc5c
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Oct 24 00:27:07 2013 +0200
+
+    Fix build and some warnings
+
+commit d1aaa61c58299007104d10025ff8f4d9cbb2e82d
+Author: jvoisin <julien.voisin@dustri.org>
+Date:   Tue Oct 22 14:59:32 2013 +0100
+
+    Minor optimisation of grep.c
+
+commit 1b690e5638b910d45a78cf7281d5feffaa5a2d50
+Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+Date:   Tue Oct 22 22:38:47 2013 -0500
+
+    - Fixed number of issues
+    1) Fixed CP Object off-by-one bug, which led too
+    2) Fixed the listing in consoles so now fully qualified Obj names and descriptions are right
+    3) Implemented byte look-ups using an array.
+
+commit 5dae70cb7da217b7f86946d1e94836e5a9ded32e
+Author: Alberto Ortega <null@example.com>
+Date:   Mon Oct 21 12:54:34 2013 +0200
+
+    Fix segfault when p cmd is mistyped
+
+commit 2715948a89ee5994d4402de8f8771e420dd7b80e
+Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+Date:   Sun Oct 20 23:52:06 2013 -0500
+
+    Forgot to include the required java update
+
+commit 14975e552e70aca41c7eefe16601052697edbd88
+Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+Date:   Sun Oct 20 23:42:53 2013 -0500
+
+    Fixed Java CP Obj references and disassembly printouts
+
+commit 6637be7a7d2e3ff58c6df08afe97bd69ae451c9c
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Oct 20 23:32:08 2013 +0200
+
+    Show line information in rasm2 assemble errors /Ref #271
+
+commit 409fcd898ab93cc12747b115fe28bf14476c3add
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Oct 20 23:17:38 2013 +0200
+
+    Implement 'cmp' with memory ref on x86.nz assembler
+
+commit 28c15f1e2b939a536a0df5008d507a56268ab69e
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Oct 20 22:29:00 2013 +0200
+
+    Fix #281 - comments are not saved properly in project
+
+commit 68844ea0f331e0a520fa10b4566519b48597aef7
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Sun Oct 20 11:04:07 2013 +0400
+
+    Removed sections stuff from C parsing code
+
+commit 04e8ebff198e7ce598495d479c84ad0469873d5e
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Sat Oct 19 21:32:40 2013 +0400
+
+    Removed unused code
+
+commit 36055d5c1fef37a5867cf601f0881e85b096850e
+Merge: d814a5b a5b9d91
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Oct 20 02:13:57 2013 +0200
+
+    Merge branch 'master' of https://github.com/radare/radare2
+
+commit d814a5b01b1bbfdc5411cba72a0f613e2c2fa3f6
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Oct 20 02:09:03 2013 +0200
+
+    Fix #264 - Add a command to display changed registers
+
+commit a5b9d9126a66c1c56875b45b8c34e19266ce3534
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Oct 20 00:25:37 2013 +0200
+
+    Code analysis fixes, add 'sf' command and add visual seek feedback
+
+commit 30666e25bf4b71db23e1c75e27912f65e4f0d303
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Oct 19 23:35:39 2013 +0200
+
+    Add new command 'pxs' to deprecate scr.sparse
+
+commit 6d4c0fcdaf7808918f05f65817bb8e1403fa785b
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Oct 19 23:10:08 2013 +0200
+
+    Fix #273 - pxo segfaults, add 'bm' command and 'pd' honors ^C
+
+commit 31466db132783a8299461f4fd86f095c617a0cc3
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Oct 19 22:06:00 2013 +0200
+
+    Remove '#' prefix from numbers in arm
+
+commit f18b9a1fb8e604eb6b78aac885202ef6340e024a
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Oct 19 21:56:45 2013 +0200
+
+    Fix #278 - Problem with rasm2 (LE and BE)
+
+commit a52b4eaf6dd2832448614d6c978a318546d4a28d
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Oct 19 01:13:44 2013 +0200
+
+    Handle type 'd' in disasm
+
+commit 6d49594261d0be7c61ade11a13de62afe0b6b561
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Oct 19 00:58:46 2013 +0200
+
+    Fix leftpanel in enyo ui
+
+commit 6bd8fe03944d0a2cf919fe8f64a7595eb263c546
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Oct 19 00:41:38 2013 +0200
+
+    Include share directory for android
+
+commit 686ba6ccc0067a6298f769b0629e3399716a0d0a
+Author: Alberto Ortega <null@example.com>
+Date:   Thu Oct 17 09:48:52 2013 +0200
+
+    Fixed segfault when malformed ELF
+
+commit e036c283e287a2759437049c5947a91c5d53cfcf
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Oct 18 23:49:40 2013 +0200
+
+    android-install fix
+
+commit ed412ec76efaa743041635fae25a9502778e8156
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Oct 18 23:24:58 2013 +0200
+
+    Fix rasm2 -e -d
+
+commit 5ff25ef62e14b55785dcff21aa57e578b53fb567
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Oct 17 01:04:05 2013 +0200
+
+    Fix fcnsize calculation
+
+commit f02b0b29403066ee9abab6732aa28ccc02c6408f
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Oct 16 23:25:35 2013 +0200
+
+    Minor refactor in rax2
+
+commit 1fba89085b501f1c1a07eb447f72741d2c7c5c3c
+Author: Alberto Ortega <null@example.com>
+Date:   Wed Oct 16 17:33:22 2013 +0200
+
+    Fix malformed ELF segfault, re-enable warning
+
+commit 4b58282fecebe478d13a783264520b0d2b654826
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Oct 16 03:12:28 2013 +0200
+
+    Fix #226 - Hash names are now insensitives in r_hash_name_to_bits
+
+commit 39750e68f995d4386b2db8683aa0f0df7d4fd12d
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Oct 16 02:45:03 2013 +0200
+
+    Handle shift-tab to toggle px/pxa in visual
     
-    Initial implementation of anal hints (ah?)
-    Use anal hints in core/disasm. Needs more work
-    New data structure StrHT (string hashtable)
-    Simplify core/libs.c with cpp macros
-    Added r_cons_color() wip function for ansi256 consoles
-    RPrint no longer depends on r_cons
-    Sort 'a?' help commands
-    Add support for named print formats with pf$ command
-    Add support for 64 bit string pointers in 'pf' ('S')
-    Add r_print_mute and r_print_format_length functions
-    Bump r2 nodejs bindings version number
-    Merge r_print into r_util
+    - Support non-colorized pxa output
 
-commit 9b1ed0341a0c7d8a6c30dde127c6c5f419d023a7
+commit f390898d14f544a6255506c0065ac7dfa6ef85dd
+Author: jvoisin <julien.voisin@dustri.org>
+Date:   Sat Oct 12 00:21:24 2013 +0100
+
+    r_hash_name_to_bits is now case-insensitive
+
+commit 9a655d02905a49b86cf6d4d497b5bfb7c16148c1
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Jan 17 16:19:14 2013 +0100
+Date:   Wed Oct 16 01:10:27 2013 +0200
 
-    Fix build of swig bindings (thanks gnutoo for reporting!)
+    Several fixes for 'pxa' and visual mode interaction
 
-commit 18ff639bd60cc7dc89fc65a8a1260c82b58cba4d
+commit 1e1f84c7c4d15e32eb9ea8a37cbd9eac801fc481
+Author: Alberto Ortega <null@example.com>
+Date:   Tue Oct 15 11:39:17 2013 +0200
+
+    Fix segfault when loading malformed ELF, improve invalid sections loading
+
+commit 3e9f2f98d87a900fee5c431f2d9b8d33e8fcf8c7
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Jan 17 03:29:46 2013 +0100
+Date:   Tue Oct 15 03:56:01 2013 +0200
 
-    Add 'fj' and 'fsj' commands to show json instead of blocks
+    New wip command: 'pxa' stands for anonated hexdump
 
-commit a4c8b96e2061213ed5b7ff2c3f1caf81ba3243dc
+commit 502add8914135f3048fbe244402c5d4ceed373ef
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Jan 16 12:17:14 2013 +0100
+Date:   Tue Oct 15 01:54:37 2013 +0200
 
-    Added 'fj' command, multiple @ per command and more
+    Fix #240 - rasm2 have -l but not -S to skip bytes from the beginning of the file
+
+commit 6e54a0c7a7fe6e22e9543db210d66abee9907656
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Oct 15 01:17:54 2013 +0200
+
+    Fix #255 - Too much function informations
+
+commit b1140b99aaaa7d4ae815646d50cd4cbdaee594cf
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Oct 15 00:26:17 2013 +0200
+
+    Fix 'pu'. Add 'pxw' and fix some 'pc' subcommands
+
+commit a5844a241f51a00c31c1f66c75ca2460c298c8dd
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Oct 14 23:48:18 2013 +0200
+
+    Add r_cons_color_random() and handle 'random' as color
+
+commit de857fa91dcccf622434edb41c7a83707eede165
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Oct 14 23:28:17 2013 +0200
+
+    Fix #251 - Segmentation fault running "rabin2 -I classes.dex"
+
+commit 077ab188462fec8e1ebbd5d92448bd7da43c43c8
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Oct 14 22:51:27 2013 +0200
+
+    Fix #253 - Memory leak when opening malformed PE
+
+commit d319a42f54207c926f24d998828d961c49d71719
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Oct 14 22:44:11 2013 +0200
+
+    Fix #254 - radiff2 -C segfault
+
+commit 47faadf31bc73f4653d7f4f4d62f8418ea22752f
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Oct 14 22:23:05 2013 +0200
+
+    Fix #260 - "dr all" is broken
+
+commit 7af16bdd340c65290287bce0252588677c0d95e9
+Author: Eduardo de la Arada <eduardo.arada@gmail.com>
+Date:   Mon Oct 14 16:15:55 2013 +0200
+
+    Fix Issue #257
+
+commit 3a52fdd57d56733eef7eb0ae34ac7b3fbc360012
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Oct 14 03:30:12 2013 +0200
+
+    Fix another x86-16bit issue and add x/ gdb-like command
+
+commit 572f5cab2ac56f5e8b904b4674dd107c2bde6101
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Oct 14 02:25:01 2013 +0200
+
+    Handle x86 16bit segment boundaries in disasm and analysis
+
+commit 3406d5eb52bc79c340fa9c92614a57d224ebd9f2
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Oct 14 01:12:09 2013 +0200
+
+    Fix visual jmp keys reset and malloc:// write error
+
+commit 49bbd3963936d38b163e1fce0a53c40bafd61f1f
+Author: Jaume Delclòs Coll <cosa.rara97@gmail.com>
+Date:   Sun Oct 13 01:44:54 2013 +0200
+
+    Set Thumb's BLX type to call, fix B detection and add long branch with link in ARM analysis
+
+commit 230896cd65ab144ec832524874a8915ee77107c3
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Oct 12 02:32:35 2013 +0200
+
+    Fix code analysis issue
+
+commit d8e41ac26bbcdeb1cbb286c6156c60edc992f7a4
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Oct 12 02:19:01 2013 +0200
+
+    Fix code analysis issue (code vs data)
+
+commit 342e5db5ecd498efc1f11de3f93d256baaebd5ce
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Oct 11 04:25:46 2013 +0200
+
+    Fixes for r_num_to_bits()
+
+commit e173008266b870ff4dc4e8fae6c401b91ef24464
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Oct 11 03:11:15 2013 +0200
+
+    Fixes on io maps and fd descs
+
+commit 78ebdd876e663b9246c38feec7a02c08abac4789
+Merge: 888bd62 42ec08d
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Oct 11 01:24:49 2013 +0200
+
+    Merge branch 'master' of https://github.com/radare/radare2
+
+commit 888bd62819a68472e91d3edec0c4b48bf08c6c8f
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Oct 11 01:24:30 2013 +0200
+
+    Add 'on' as in 'r2 -n'
+
+commit 42ec08d4445fa0a2caec985be7806065d7c60a03
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Oct 11 00:37:56 2013 +0200
+
+    Do not output ansi codes in visual prompt mode
+
+commit 903bd49dfd234bbcc5fad756831ce9dc3c0bbd8e
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Oct 11 00:06:26 2013 +0200
+
+    Fix io/cache test case
+
+commit 7867d8cdc18a571daa4d4ac68b75aab1bb60009c
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Oct 10 00:59:12 2013 +0200
+
+    Handle 'hlt' x86 instruction as trap in analysis
+
+commit 4565790b2f5a8e383efc15a439ed18237ea8220f
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Oct 9 03:00:05 2013 +0200
+
+    Rename '_' macro as 'B'
+
+commit f5188d6d478a14a427b69175192a64060c2f4e2f
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Oct 9 02:53:25 2013 +0200
+
+    Enhace graphs and handle relocs in webui
+
+commit d100e603c98217cffc3ea132e28e9935bcd505c8
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Oct 9 00:29:49 2013 +0200
+
+    Fix #157 - sandbox issue in webui
     
-    Support multiple @ for a single command (define offset+bytes)
-    Add 'fj' command to show flags in json format
-    Use monospaced font in vdoc
-    More work on the webui
+    - add 'f' and ':' print formats
+    - fix nocolor disasm artifact
+    - add VW command to launch webui
+    - rename sN to sp (seek to previous hit)
 
-commit b5b8a78e87ee967e7e550f6259333c7361c6c94a
+commit 8b2238ef4ccb0a03c1a4eacb03b3d4e87fdea6dc
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Jan 15 09:47:29 2013 +0100
+Date:   Tue Oct 8 17:21:10 2013 +0200
 
-    Support ';' comments in rasm2 and add asm in webui
+    Add some more fortune messages
+
+commit 1ab8dc27ea174c787994d2fe6f4024fea7ec5353
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Oct 8 16:07:17 2013 +0200
+
+    Fix Android tarball creation and add 'echo' command
+
+commit 1578ae90cb661c5502846396aae394ad506d48c1
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Oct 8 14:20:21 2013 +0200
+
+    Add recurse limit in analysis to avoid stack exhaustion
+
+commit 2cfa371ccd3b3f4e89cca082cd2a23e59d71441d
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Oct 8 05:06:00 2013 +0200
+
+    Library version check only happens in r2 -v
+
+commit 32816c46699449b54388032dc952e82dfd6424b6
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Oct 8 04:58:51 2013 +0200
+
+    Rewrite the code flow analysis logic
+
+commit 921065658987adf9808871be7804e66fda2ae436
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Oct 8 02:08:59 2013 +0200
+
+    Fix visual glitch for one-op functions in disasm
+
+commit a1a2e38363cdcd7e0cd89452bcdecb59a176f007
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Oct 6 18:55:02 2013 +0200
+
+    Fix #243 - rahash2 -s flag order matters
+
+commit 88278928f558907faf582012713996ee54608ba8
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Oct 6 18:44:26 2013 +0200
+
+    Handle '@' and ':' and '"' strings in rarun2 args
+
+commit 876c18f664e34539eb5c2832df6f9a0d7e70279e
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Oct 6 15:23:06 2013 +0200
+
+    Add 'ecd' command to set default color palette. Fix #247
+
+commit 77add194c42ac9d91f0cc35fb449a8760a1a1406
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Oct 6 15:15:23 2013 +0200
+
+    F2 honors visual cursor and fix 'dbs' breakpoint toggle
+
+commit 05b66c36a98de42794b52be3c46838063467c129
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Oct 6 15:06:30 2013 +0200
+
+    Fix bug in Ve->Vt ghost flagspaces
+
+commit b3c57e53aa006b48c94c1ad319b8c1ebb03067d4
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Oct 6 15:04:19 2013 +0200
+
+    Add 'exit' alias for 'q'. Implement JSON output for 'dm'
+
+commit 117a462424c4756d0eebf2914c065ee047562c22
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Oct 6 03:54:19 2013 +0200
+
+    Fix rarun2 preload for latest OSX. Add il help and fix R_EGG constants
+
+commit 653881eb3a625d04d75530886c0fe166d3455aef
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Oct 4 13:57:49 2013 +0200
+
+    Merge and fix jvoisin #235 #236
+
+commit a1cddb68cfd10def1e2adbe0223a0c65cd0f99ae
+Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+Date:   Thu Oct 3 06:51:09 2013 -0500
+
+    - Fixed an issue where r_bin_java_get_entrypoints  will return an RList*
+      directly rather than relying on the entries in libr/bin/p/bin_java to
+      perform the conversion.
+
+commit 9928ceb99cd6610a7017a75a5f079a587fb96837
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Oct 1 23:06:21 2013 +0200
+
+    Use ar qv instead or qvf
+
+commit c054c43507805fedca9dd779a3759e2ac6c21b29
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Oct 1 19:54:59 2013 +0200
+
+    Fix libr/parse/t build
+
+commit 913a6484cd6f033fdb01a6173eed7d256dfd1764
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Oct 1 17:21:29 2013 +0200
+
+    Fix 'entry0' warning
+
+commit ae317798affc9155fba22ddc80facc12d5fdd99c
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Oct 1 17:20:16 2013 +0200
+
+    Fix warnings in bin_elf.c
+
+commit ab3c27bda362923b2b2f39a1bc63f84257271089
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Oct 1 17:14:50 2013 +0200
+
+    Fix iOS build
+
+commit d8603f250269262730fe8cd25b59ba3ec01d2dd6
+Author: jvoisin <julien.voisin@dustri.org>
+Date:   Tue Oct 1 01:08:18 2013 +0100
+
+    Remove spagetti code
+
+commit f3d6ad2eec1f391965040c86b0bf4445573d7b1f
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Sep 30 12:56:00 2013 +0200
+
+    Fix colorization of dalvik opcodes
+
+commit 2b2813655aeab2ff817559854be9879451a4705f
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Sep 30 04:36:32 2013 +0200
+
+    Completely kill '#' prefix from arm64 disassembler
+
+commit ab654dea325ba3babda7b526ee689220c72b3348
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Sep 30 04:23:58 2013 +0200
+
+    Fixes in analysis, add 'R' in visual to randomize colors
+
+commit 1f4c8aee8dbbc24822788fce3dd3f04b4810e6e6
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Sep 30 03:59:00 2013 +0200
+
+    Handle INT and INT3 instructions in x86 analysis
+
+commit 08cce66e681f55b6a121f217ceb2eab0617b3707
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Sep 30 03:49:08 2013 +0200
+
+    Initial arm64 analysis. Fix loading mach0 kernels. Fix #230
+
+commit 70e4d294b3a4797732395ef1e53e7f967434b9e3
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Sep 30 02:19:19 2013 +0200
+
+    Minor fixes to make testsuite happy
+
+commit 0a10106b1651e6382b48e2cda6542cdc0194a973
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Sep 30 01:34:14 2013 +0200
+
+    Fix segfault in "x"@y command
+
+commit 722659005deb72cb1b89fd5e944f36821751fdce
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Sep 30 01:14:04 2013 +0200
+
+    Better brainfuck and arm64 support. Fix some bugs
     
-    Add a working assembler panel for enyo
-    Allow ';' as comments in multiline assembly
+    - Fix infinite loop bug in dietline using quoted commands
+    - Update brainfuck disassembler and analyzer
+    - Fix #232 - r2 error on corkami's standard.elf (missing strtab)
+    - Honor 'other' color palete
+    - Fix bug in disasm.c filtering flag replacements
+    - Removed '#' prefix for numeric arguments in aarch64 disasembler
+    - Fix infinite loop in '">"' command
 
-commit 30cfe3f15ced9fe827a926e64e328c16e8a88661
+commit 81d7e5a8a3f4257a34e507a08f3c80568aca90c6
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Jan 15 00:23:10 2013 +0100
+Date:   Sun Sep 29 20:20:47 2013 +0200
 
-    Initial working enyo console
+    Better support for ARM64 and OS autodetect for MACH0 binaries
 
-commit 5656505e79872aab372f3b2306074c564c49fb5b
+commit 525b06fab446ac5c1d62e8c497f1a5b00bfb94fd
+Author: jvoisin <julien.voisin@dustri.org>
+Date:   Sun Sep 29 16:19:16 2013 +0100
+
+    Remove duplicates and add some missing opcodes
+
+commit 666954b00e98923817630a7206ec625f159a6791
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Jan 13 03:19:32 2013 +0100
+Date:   Sat Sep 28 23:58:55 2013 +0200
 
-    Draft anal_hint. Fix build and fix build (armass.c)
+    Filter trash in import names for PE
+
+commit b62f60c07cc0d6f231afedef298e6278f082a23c
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Sep 28 19:23:37 2013 +0200
+
+    Fix two minor bugs reported by jvoisin
+
+commit 604f6adf64ec2405fb6fd841b1f555aeaed480b6
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Sep 28 18:50:23 2013 +0200
+
+    Fix segfault in PE loader (thanks a0rtega for reporting)
+
+commit b11793df40d98554d0e00647f033c9caeaba9c77
+Author: jvoisin <julien.voisin@dustri.org>
+Date:   Fri Sep 27 22:55:14 2013 +0100
+
+    md5 now use memmove and memset instead of for loops
+
+commit 93b1e2e9aa640ec62cfb8cfd9b57fc0efb9cdfa2
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Sep 28 11:44:43 2013 +0200
+
+    Fix segfault in ELF parser (thanks a0rtega)
+
+commit db1996f5e6adb45ec328ab3d2577e9f9091f59a8
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Sep 27 21:10:09 2013 +0200
+
+    ctypes bindings no longer need __init_methods__() hack
+
+commit 4caad05a0acecf9ab920bc839c58b1c7b2dbec5e
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Sep 27 20:24:59 2013 +0200
+
+    Fix r_cons_flush race condition in rabin2
+
+commit 06b02592d556decf4c82b6b68abcd8faf8db1806
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Sep 27 20:14:18 2013 +0200
+
+    Fix crash in rabin2 (unnecessary free of const string)
+
+commit 9e12c60702e69087b22fc41e0d2f75213a5f1737
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Sep 27 19:50:48 2013 +0200
+
+    Fix #223 - Hardening flags for radare2 $ HARDEN=1 sys/install.sh
+
+commit c3673bbdb1296b70e906a26fd7ee625a310ea418
+Author: jvoisin <julien.voisin@dustri.org>
+Date:   Thu Sep 26 20:39:18 2013 +0100
+
+    Fix a weird comparison
+
+commit 00e78b4fd50cb0059ff19e2e81f5ff84c52f7dae
+Author: jvoisin <julien.voisin@dustri.org>
+Date:   Thu Sep 26 20:38:03 2013 +0100
+
+    Silent two clang warnings
     
-    Minor update in the enyo $webui
+    Thoses variables could be used unassigned
 
-commit 60a951e9b1cd903d7ef6ed1e461a274d98dbe7ea
+commit da002cc95d3e2697ff1b951bd2a425177c308c43
+Author: jvoisin <julien.voisin@dustri.org>
+Date:   Wed Sep 25 19:34:01 2013 +0100
+
+    Fix a memory leak
+
+commit edc7a9284ec87cb8b07c74812b0cbe3144e3b216
+Author: jvoisin <julien.voisin@dustri.org>
+Date:   Wed Sep 25 19:30:40 2013 +0100
+
+    Fix a memory leak
+
+commit b3c42c9545fe5d2d31442c9db46845b7dfca3a00
 Author: pancake <pancake@nopcode.org>
-Date:   Sat Jan 12 04:29:45 2013 +0100
+Date:   Fri Sep 27 17:57:33 2013 +0200
 
-    New io.buffer cache system and refactorized RHashTable
-    
-    Implement io.buffer for fast IO (work in progress)
-    Rewrite util/cache.c and use it form io/buffer.c
-    Refactor util/ht.c and util/ht64.c to reuse code
-    Various minor fixes in RIO api
-    cache.c must be rewritten into r_buf for
+    Handle ARM64 MACH0 headers in RBin
 
-commit ebe2f35630b3020d39c9c94f55d759c2a89f7e33
+commit 5781931227c395bb100366ea03abcc96f82b9d99
 Author: pancake <pancake@nopcode.org>
-Date:   Fri Jan 11 14:21:23 2013 +0100
+Date:   Fri Sep 27 01:38:49 2013 +0200
 
-    Fix arm thumb disassembler (needs testing)
+    Add test-r_dehug example and minor bindings update
 
-commit 3f12cb2cb1bb2a36e202ba3f9c0df534c1ee7aca
+commit cf78623a28cd3ecdc6889256d8b678201bc10afe
 Author: pancake <pancake@nopcode.org>
-Date:   Fri Jan 11 04:33:00 2013 +0100
+Date:   Fri Sep 27 01:37:57 2013 +0200
 
-    Update enyo from git and huge refactoring in r2wui
+    Fix #222 - Malformed ARM ELF causes segfault
 
-commit 88797964273c75b7c14ed19cb3aed2dad41a1de3
+commit 998af1b660bee47c6574647bc980194a76f6472d
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Jan 10 18:20:36 2013 +0100
+Date:   Wed Sep 25 11:07:04 2013 +0200
 
-    Fix 'dr*' command
+    Fix #220 - `agfl` graphs the whole file instead of the supplied function
 
-commit 510e2e36ad29301ca0f2a44d6cf5b46d25153582
-Author: Eduard Burtescu <edy.burt@gmail.com>
-Date:   Tue Jan 8 14:54:01 2013 +0200
-
-    VAPI: More fixes for r_bin.
-
-commit d9bfe2f408f24aacc4402c562c57bf078bb6ff88
+commit 800c1de3a48ddcd2005a071a0a09eec01b8b1a21
 Author: pancake <pancake@nopcode.org>
-Date:   Sat Jan 5 00:01:08 2013 +0100
+Date:   Tue Sep 24 23:03:39 2013 +0200
 
-    Hide dummy draggable register window in webui
+    More work on ctypes+rcore
 
-commit 6b829390826f8aa6a8a2e160784ab886205da1ca
+commit 360222d31e816a8688010f9fefe92f9ecb36decf
 Author: pancake <pancake@nopcode.org>
-Date:   Fri Jan 4 23:24:37 2013 +0100
+Date:   Tue Sep 24 00:43:31 2013 +0200
 
-    Fix 'last' symlink (thanks @poliva)
+    vmenus cleanup and add f= command for flag percents
 
-commit 8aa889b098ef42d62cd7607e238af78ab8ede73f
+commit 9536a6fa3326626dbf57545a1be722e82c8152ce
 Author: pancake <pancake@nopcode.org>
-Date:   Fri Jan 4 17:58:02 2013 +0100
+Date:   Sat Sep 21 17:50:09 2013 +0200
 
-    Fix one byte access in r_str_uri_encode
+    Enhace Vt
 
-commit aed2fd9aa5cb9273f2b9fd9540f7543960ca64a5
+commit 9155b9fb3e87a245fb5f5fc058e03a43a544683a
 Author: pancake <pancake@nopcode.org>
-Date:   Fri Jan 4 14:51:21 2013 +0100
+Date:   Sat Sep 21 17:26:05 2013 +0200
 
-    Apply zlul's enhacements for html.sh
+    Fix 'wo' command
 
-commit da837ad4ce950eeb41a44cf255e41107605f4fa6
+commit 308d3560ca737ca6983c3fd33da26d531855450b
 Author: pancake <pancake@nopcode.org>
-Date:   Fri Jan 4 14:34:58 2013 +0100
+Date:   Sat Sep 21 10:58:26 2013 +0200
 
-    Fix static build. Generate single libr.a
+    Completely remove DEVEL_MODE from r2-bindings
 
-commit 3635f85336711a5d5ecd0fd6b28da3ea15118214
+commit 571a1eada4084b1cf8431c50105ce9642e1a73a7
 Author: pancake <pancake@nopcode.org>
-Date:   Fri Jan 4 10:16:41 2013 +0100
+Date:   Thu Sep 19 01:30:56 2013 +0200
 
-    Better http support and handle asm.offset in 'px'.
-    
-    Implement dirlisting in http
-    get in /up/. Honor asm.offset in 'px'.
-    Fix r_file_root and crosspath vuln in http server
+    Fix #187 - git is not mandatory to build r2
 
-commit 21de8af9812e8f19382e93a82b7515147d7bb3d2
+commit 17afae1dee8fff64cecaf9de88cd29869fcd0ee0
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Jan 3 18:11:31 2013 +0100
+Date:   Thu Sep 19 00:03:39 2013 +0200
 
-    fix keepr2 proportions
+    Fix #221 - do not show output if file redirect fails and add 'rm' command
 
-commit b8a02eb703068c4e0a4b5cea61832be01433a394
-Author: nion <nion@binarybase.org>
-Date:   Thu Jan 3 15:54:58 2013 +0100
-
-    rasm_asm: do not free acode result before returning its length
-
-commit 0db543039102c393d5378e01c9fc37e0634ab5d1
+commit 02a0e2bed0d06b75178fdce1019bd29ddc7cc403
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Jan 3 11:18:00 2013 +0100
+Date:   Wed Sep 18 22:16:18 2013 +0200
 
-    Add keep calm r2 images
+    Implement 'cat', 'cd' and 'ls' commands. Better version info in ?V
 
-commit 35808e31f83f4f46869feb740b793aa5f3817e2e
+commit 354bd7cbaa91eba85cc23416a75ee6fd7d0b4ede
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Jan 3 01:43:23 2013 +0100
+Date:   Wed Sep 18 17:24:43 2013 +0200
 
-    Add io.zeromap to toggle old buggy mode doublemapping file to 0
-    
-    Add http.maxsize to define the maximum file size to be uploaded
-    Add http.upget config var (not yet implemented)
+    Apply modified patch of @jjdredd to handle ^x^e to run editor from rline
 
-commit a8a4c5e3e877dc06c5b9200879eddb9f9f6a00b4
+commit 9a6c149768a0ab14bbaf009edb348c79a33b4727
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Jan 3 00:47:58 2013 +0100
+Date:   Wed Sep 18 03:44:11 2013 +0200
 
-    Initial implementation of http.upload (disabled by default)
-    
-    Open http://localhost:9090/upload.html to upload
-    curl -F file=@/bin/ls http://localhost:9090/up/ls.bin
-    Tested on 10MB files without problems
-    Default upload directory is $TMPDIR
+    Implement 'dd-' using code injection
 
-commit 3fb4c7dd5e85827908e5ba146464a5442d8c5f21
+commit f1d70a76c80c8bdeef953835f67165f5377cfe9a
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Jan 2 18:37:48 2013 +0100
+Date:   Wed Sep 18 03:28:57 2013 +0200
 
-    Use encodeURI in r2.js and implement http upload support
+    Handle signals on OSX debugger backend
 
-commit 16581dde3f038bc73c1320fa296e99e0ce51ddc1
+commit 7b931261fe03af67860e53630d1ae28f711074be
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Jan 2 03:34:17 2013 +0100
+Date:   Wed Sep 18 02:55:51 2013 +0200
 
-    Fix output of 'i'. fix rap:// connect
+    Fix #184 - support skip+cont attributes in 'dk' for signal handling
 
-commit eaefe56897a40220db0c0f3775c15ec7b5d1c021
+commit 46dfca529eb910595bceebe750ad1bdf03d74e56
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Jan 2 02:49:18 2013 +0100
+Date:   Wed Sep 18 02:23:07 2013 +0200
 
-    Add backtrace support for iOS>=4 and OSX>=10.7
-    
-    Round corners of ios app
+    Workaround for '$' relocs (OSX bins)
 
-commit 582ec87f2999ac3f7ac5a716c5f51bac8c2f15ea
+commit 24d52285e78f0165970e5ec01046295b3424219f
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Dec 31 16:12:42 2012 +0100
+Date:   Wed Sep 18 02:17:54 2013 +0200
 
-    Add missing index.html, fixes on the iOS app
+    Oops for 'dk'
 
-commit 583918e999df0055529b603d8045a61eed20947c
+commit 7403b1d671915a5f4959df77fcffe2606dfe1f30
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Dec 31 12:37:58 2012 +0100
+Date:   Wed Sep 18 02:11:23 2013 +0200
 
-    Add media stuff
+    Implement 'dk' to handle signal events in debugger
 
-commit c402674b5dfd4d91bcc5340a4e4734eda978f2d3
+commit 6315842d5bb2f93a6f82901c3ac325af08b51e6a
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Dec 30 23:45:13 2012 +0100
+Date:   Tue Sep 17 17:27:52 2013 +0200
 
-    Add client and server rap examples in python
+    Add 'unsetenv' and 'envfile' directives in rarun2
 
-commit 9e0ebe9def8d139953f5777069f49e9be2eb90ab
+commit 92bdbf0c0a1b5184b456d4eecbcac26725d43acf
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Dec 30 23:40:17 2012 +0100
+Date:   Mon Sep 16 04:08:08 2013 +0200
 
-    Handle ^C in rap://, add rap listen command =:9999
+    Add scr.fgets and fix rax2 -s for emscripten
 
-commit e600bf9168d74003531d6d12ea8e458dd2d74e51
+commit c1629360f982a2ea002277989f00f345fbba8b71
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Dec 30 01:05:12 2012 +0100
+Date:   Mon Sep 16 02:50:37 2013 +0200
 
-    Fix s/ command and autocomplete e?
+    Better rax2.html - See http://rada.re/js/rax2
 
-commit 562480a01d3951db1e38a6eeb1ec4d7b778eac02
+commit 0f2fd99986fc7cdfed725a2e3e4b850c92f5e6b8
 Author: pancake <pancake@nopcode.org>
-Date:   Sat Dec 29 19:27:08 2012 +0100
+Date:   Sun Sep 15 23:57:22 2013 +0200
 
-    Fix build again O:) (thanks vsp)
+    Fix some warnings and add a specific plugins.cfg for emscripten
 
-commit 6a186b72b081cbde8c651b11e12e21573e0e111b
+commit b0c644ea8b74d0ff77cb78d0427b059e1c3e4f66
 Author: pancake <pancake@nopcode.org>
-Date:   Sat Dec 29 02:21:42 2012 +0100
+Date:   Sun Sep 15 23:13:51 2013 +0200
 
-    Fix issue #43 Thanks @ggonzalez
+    Fix c55+ disassembler and clean all warns
 
-commit d8f0ea6ed9e73644555ffa3e02e69f70e00e8943
+commit 662fd4507ea359ce4867845c26136cd45e35a722
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Dec 26 02:01:26 2012 +0100
+Date:   Sun Sep 15 23:13:25 2013 +0200
 
-    Use RCore in rabin2 to fix nullptr in RConfig (fixes #44)
+    Bump enyo with uglify
 
-commit 04b325fa5c23811771eb3073f0a88b28d3c28370
-Author: Eduard Burtescu <edy.burt@gmail.com>
-Date:   Tue Dec 25 22:55:34 2012 +0200
-
-    VAPI: changed all RBinSection fields to uint64.
-
-commit 8890b33d212b2498f731b4f44a096dc747c90b6c
+commit 16fdd4587b81caa2686de0567d6983f17d7b0b79
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Dec 24 00:18:33 2012 +0100
+Date:   Sun Sep 15 22:28:18 2013 +0200
 
-    Add 'asm' utility in webui, fix section auto init
+    Fix build on some linux systems
 
-commit d1c351bcb48c81b96bec6d6e953bcf598a78140a
+commit 5372d0acb2bb6388e4541b2fc0ea7255968ece9d
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Dec 23 22:44:33 2012 +0100
+Date:   Sun Sep 15 02:24:23 2013 +0200
 
-    The lungo web ui is now the default, enhace disasm+hexdump
+    Add 'woR' and 'dd-' commands. Update enyo and add missing PNGs.
 
-commit ff8e5afe929c3fd6fbb5d236448b3eb0cfb2c9a0
+commit ae97789986e3079d47df65c13f954b6b098ce14a
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Dec 23 20:51:23 2012 +0100
+Date:   Sat Sep 14 14:04:08 2013 +0200
 
-    Implement 'ij' command.
+    Fix lot of warnings
 
-commit d28ad72e42bb8cebfa8cc4527437e233f218ee54
-Author: Eduard Burtescu <edy.burt@gmail.com>
-Date:   Sun Dec 23 20:39:34 2012 +0200
-
-    VAPI: a couple of fixes to RBin and RBuffer.
-
-commit 7f5dd344da27cb4a3d67c6fede4f17db1291b2cb
+commit dece987ca3235ac1dde5698732e6173b24867390
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Dec 23 19:32:39 2012 +0100
+Date:   Sat Sep 14 02:42:02 2013 +0200
 
-    More work on the lungo web ui
+    Fix various bugs on 64bits (mach0 entry, assembler, ragg)
 
-commit f4d743d58ca7b3c3795ea4fa5c3a913eea5ba53f
+commit b59b8aa7e4abc32268ebfc7e9cbaab26ad491197
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Dec 23 18:34:30 2012 +0100
+Date:   Sat Sep 14 00:51:42 2013 +0200
 
-    Update LungoJS to 2.1git
+    Add support for @naked in ragg2
 
-commit 802d9ffd48e830a1a84a16fb4bf9eebc6d9bc0a0
+commit d08d45598284459691ef43f27383c5ea170bbcaf
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Dec 23 15:19:11 2012 +0100
+Date:   Sat Sep 14 00:45:49 2013 +0200
 
-    Fixes in RCoreLog and add log chat test in shlr/www/log.html
+    Fix install issues
 
-commit 2d0dd302beac1ca7a43765cabfd1f5edeb31bb4d
+commit e5ce1cd5d402fd90c83ea74701e846444e895c49
 Author: pancake <pancake@nopcode.org>
-Date:   Sun Dec 23 13:52:57 2012 +0100
+Date:   Thu Aug 29 19:46:48 2013 +0200
 
-    Add RCoreLog API ('l' command), '-' cmd is now '$'
-    
-    Fix in disasm comments
-    Fix bugs in r_strpool api
-    Log API allows rss-like messaging
+    Implement 'cat' and 'cd' and do some fixes for 'di' code injection
 
-commit 0d04880367e223eda3104d7e1932bc9bd5e29f69
+commit c05c77343190d96f5f094238dfb6b521b1e5f600
 Author: pancake <pancake@nopcode.org>
-Date:   Sat Dec 22 04:28:19 2012 +0100
+Date:   Thu Aug 29 19:06:23 2013 +0200
 
-    Add support for small push in x86.nz assembler
-    
-    Better Visual Assembler and help ('?' show help)
+    Implement 'cd' and handle pipes on quoted commands
 
-commit 1f1b0f32e9f3d27511569adfc9a0654ce3971a7c
+commit f1e42d94485cc67d37f940050ab39b0508ce68a7
 Author: pancake <pancake@nopcode.org>
-Date:   Sat Dec 22 03:37:50 2012 +0100
+Date:   Thu Aug 29 18:04:31 2013 +0200
 
-    Better help for '?' '???' '?$?' '@' and others..
+    Fix null ptr deref
 
-commit 4d22fcb806f96995c0082cf271e6ad743f69289f
+commit 353ecec16c436c5c600bd363707fc187b1eb9bed
 Author: pancake <pancake@nopcode.org>
-Date:   Sat Dec 22 02:37:01 2012 +0100
+Date:   Fri Sep 13 01:21:42 2013 +0200
 
-    Implement VA (Visual Assemlber), readline with callback and chs
-    
-    r_cons_readline now have a callback api
-    r_num_chs() to convert from disk CHS to real address.
+    Rollback #195
 
-commit fd32fca1ab340dcc79930f406b3412019589324c
+commit 81146b0f1d87287073bb299d97186f9efbb4e704
 Author: pancake <pancake@nopcode.org>
-Date:   Fri Dec 21 18:36:28 2012 +0100
+Date:   Fri Sep 13 01:04:06 2013 +0200
 
-    Support segmented addressing in x86.pseudo plugin
+    More arena fix
 
-commit 2596d11fc3fb6b37de965e5bf2b01c8e364161ac
+commit 87a63e5a0243a8ddf159cffb8072259d69b9a384
 Author: pancake <pancake@nopcode.org>
-Date:   Fri Dec 21 14:40:26 2012 +0100
+Date:   Thu Aug 29 17:12:13 2013 +0200
 
-    Fix buffer overflow in arm assembler (fix #41)
+    Another RRegArena bugfix
 
-commit 736208b394fa326333c148465c997d556ba7b2a2
+commit 341da1d154532729d3ddecb7941addb0eabb1e49
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Dec 20 12:11:09 2012 +0100
+Date:   Thu Aug 29 16:59:24 2013 +0200
 
-    Fix w32 sandbox call (thanks xvilka for reporting)
+    Various fixes in RRegArena and add 'dcs' command
 
-commit 48f710abe8c3649b0935ce49e15ae907816d9e38
+commit f67f8cefdd85c75e2a403dd020a97ce512221233
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Dec 20 11:31:38 2012 +0100
-
-    Share RBinJavaObj to RAsmJava plugin, better java and fixes in config
-    
-    Some more work to get java support back (analysis, disasm, bin share)
-    Honor ordinal field in java r_bin methods
-    Fix segfault in 'af*' on FreeBSD (thanks idwer for reporting!)
-    Fix some valgrind warnings
-    Better io.maxblk handling
-    Fix div by zero when blocksize is 0
-    Fix disasm lines when no function and extra code comments
-
-commit 4647109763270516a683c723438395f8af50608f
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Dec 19 12:15:35 2012 +0100
-
-    Honor asm.segoff in r_print for hexdumps and use dec in pcj
-
-commit 51b7147df6ce0beed567f09af103fc7e213397a5
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Dec 19 01:28:34 2012 +0100
-
-    Add asm.linesright to show lines before opcode instead of offset
-
-commit 0f6b4e34e1d21c0f26f4ce176162949e95c4f6da
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Dec 18 15:46:00 2012 +0100
-
-    Fix null pointer in disasm
-
-commit fd244a97ba2a6e8546eda2ef41c0e62e33fe3f7d
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Dec 14 17:46:33 2012 +0100
-
-    Remove GMP library check in configure.acr
-
-commit baae1f6e6a3be1532676eba2e383ea8290e7abbc
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Dec 14 10:51:25 2012 +0100
-
-    Honor $. variables to get regs and fix Ps string filter bug
-
-commit caaccaddc9691520e0f3a31beec1b60593fb3d39
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Dec 13 18:32:26 2012 +0100
+Date:   Thu Sep 12 02:02:08 2013 +0200
 
     Fix some warnings
 
-commit 59f70255cf93d1d1c67987fdb7a5f93d3ff9e595
+commit 60d40a6374eb4c0d8ad8d24627683db383bf61bd
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Dec 13 10:21:57 2012 +0100
+Date:   Thu Sep 12 01:55:45 2013 +0200
 
-    Add bin.strings and fix other bin.* load issues
+    Add 's.' command
 
-commit 03ef6071c741c5516437b3588fc4af639e37dee6
+commit 3b90a8c10a92bdb19f4fc7fbbb6de8fdc362b2f4
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Dec 13 09:22:17 2012 +0100
+Date:   Thu Aug 29 08:43:43 2013 +0200
 
-    Define evals before loading bin, honor bin.rawstr=0 by default
+    Fix search.in debugger mode
 
-commit e54cd2bf2b7dab36aaa4d80501374d8ee1d65a9b
+commit 719fc8b7b1fd9d4c49b6b21d52292d9c72b98d6f
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Dec 12 23:58:18 2012 +0100
+Date:   Thu Sep 12 00:46:39 2013 +0200
 
-    Fix some bugs in .: command
+    Fix r_parse bindings
 
-commit b20de181b01425fd4cc3f60ea99d9db5874eb6c4
+commit 8ce16cb8a5366423f013e77d293b4575b00ec84f
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Dec 12 19:27:25 2012 +0100
+Date:   Thu Sep 12 00:41:01 2013 +0200
 
-    DEVELOPERS~=s/hg/git/ . thanks srm!
+    Fix #195 and close pull #199
 
-commit 488ea96089a605b0611944c662c1aae95a3b653f
+commit b8badee419195564e4d3281158b6f899f49c2824
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Dec 12 13:26:26 2012 +0100
+Date:   Thu Sep 12 00:36:38 2013 +0200
 
-    Remove r_socket_*later() hacky methods
+    Oops. Missing ;
 
-commit c8de9fe3a7b3d8ce5b621d70b36159937e41d4b5
+commit eaf33b44e2f519339136875a3d48bc70468bee9f
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Dec 12 04:10:44 2012 +0100
+Date:   Thu Sep 12 00:28:44 2013 +0200
 
-    Fix http server spurious close syscall
+    Aim to fix 32bit target debugging on 32bit host
 
-commit c98cc9d1aba7a87765498c9993cac4ebd0a95071
+commit f058b5e0ad2be3bd77bc5f86d0d225dfb53f29e6
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Dec 10 16:25:57 2012 +0100
+Date:   Wed Sep 11 23:41:40 2013 +0200
 
-    Fix some bugs and add close_later() methods in RSocket
+    Handle \n as well as ; for line separators in r_core_cmd
+
+commit a1aafc6adc48407e156fc12a5b4df7ac35f6295c
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Sep 7 02:39:26 2013 +0200
+
+    Do not allow to create flags starting with a number
+
+commit ee3669101719b6441115cf87928d9d4c63a5e5a0
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Sep 7 02:23:28 2013 +0200
+
+    Oops
+
+commit 18cc767292744c3077c9bb4dc971cffc1b07c196
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Sep 7 02:20:38 2013 +0200
+
+    More emscripten/android build fixes
+
+commit cc5122e3bdee5ee05cad97c3bcb36ac6182b57de
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Sep 7 01:35:11 2013 +0200
+
+    Working emscripten build
+
+commit 7855f4952f325df36894e1b523aec18ed4fdead5
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Sep 7 00:39:08 2013 +0200
+
+    Initial work supporting emscripten compilation
+
+commit da5bf8db45838808c706aa527deaca83a52a6ec5
+Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+Date:   Wed Sep 4 22:32:24 2013 -0500
+
+    Squashed commit of the following:
     
-    Uglify d3.js (the smaller the better)
-    Fix premature socket close on http reply with a hack
-
-commit e22ac507ea9ab9894d3f65cea327b49ecf60e0b9
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Dec 10 01:52:11 2012 +0100
-
-    New cfg.minstr config var, add agcj command and d3 demo for r2wui
-
-commit 58371d6e2f6d681fffbc8ffd97c9dcc917e5f51a
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Dec 9 01:39:27 2012 +0100
-
-    Add rabin2 -N flag to set minimum string length
+    commit 7800f979cc84c48395581b7106627f7f23563ee2
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Wed Sep 4 21:58:35 2013 -0500
     
-    By default is 2, but PE which is 4
-    Sort rabin2 -h flags alphabetically
-    Add r_bin plugin-specific minimum string length
-    New r_list_newf() constructor which replaces the hacky R_LIST_NEW macro
-
-commit 5ebe3d20b882ac19ea8ceb1f359bbf3cb7e55183
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Dec 8 02:17:21 2012 +0100
-
-    Add ?P command, fix overflow in anal/cc and ctypes build
+        - Added visibility field to structures RBinField, RBinMethod, RBinBind, RBinReloc, and RBinImport
+        - Added handling for listing java classes
     
-    Added ctypes/test.py example
-
-commit a14f48918f13f6ee1237bcdd8cd33b0749dbd0af
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Dec 7 16:00:36 2012 +0100
-
-    Fix build and pdj on invalid opcodes
-
-commit bc638497954c48f985d245b13ea5c1211f22837f
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Dec 7 15:44:36 2012 +0100
-
-    Initial implementation of memory watchers (cw)
-
-commit 4d50d27dc29ffc2a87d5aace92a108340e93218f
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Dec 7 12:20:08 2012 +0100
-
-    Fix build
-
-commit 55bb8dc95e60cb429a49fd801ec7fe4647bfdceb
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Dec 7 12:03:53 2012 +0100
-
-    Fix udis86 trailing spaces, add 'dw' command
-
-commit 70b037e1543d9b0e1a7a3c0001501238c7c62939
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Dec 7 03:12:25 2012 +0100
-
-    Show refs in disasm, better analysis for ARM and x86-16
+    commit 1e7014342d16094fe21ddcb9b6b1991c5e3908b1
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Wed Sep 4 18:41:00 2013 -0500
     
-    Fix status line bug in visual debugger
-
-commit 83da070d4476b088a08ade0699e6b096c38a5ddf
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Dec 6 03:11:40 2012 +0100
-
-    Fix fcn lines in disasm, minor fix in meta
+        -- Added mappings for access flags
     
-    Initial work to fix linux32 debugger on linux64
-
-commit 475372ec2c795e5baa7b83c7c698d2dd4e1b3ba6
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Dec 6 00:55:22 2012 +0100
-
-    Fix archbits in overlap mem, fixes for ad, pd and segmented addressing
+    commit cb8e4f0af99fc77f04263ddf292442835e128cff
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Wed Sep 4 17:53:04 2013 -0500
     
-    Fix invalid wide string identification in 'ad' command
-    Temporal blocksize syntax ':' has changed to '!'
-      - x @ 1024!33
-    Fix overlapped IO sections handling
-    Add support for segmented address in temporal seek
-    Fix disassemlby to print more lines than blocksize
+        -- Updated the get sections command.
 
-commit 1f2a643013c3a6bf246393b7016b7841b9039045
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Dec 3 04:36:00 2012 +0100
+commit 38420cb91f3150c23ef45b0acdea27d3a8f41ba5
+Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+Date:   Wed Sep 4 15:57:41 2013 -0500
 
-    Fix segfault in http server
-
-commit 2134da8d08aae3cf0d40a798a72696224e3a13c0
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Dec 3 04:28:05 2012 +0100
-
-    Fix http.sandbox, Fix segfault in rnum, update lungo
-
-commit 2c9b45dfef044777c5c9e72729d2eb6359747d22
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Dec 3 04:06:02 2012 +0100
-
-    Fix build
-
-commit 84002a421fdaf85db81950e18d0010d830c97ca2
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Dec 3 04:01:55 2012 +0100
-
-    Better new WebUI, fix pdf,pD, implement http.timeout and more
+    - Updated the symbols and strings retrieval. Now methods and fields
+    that were parsed will be retrieved and added to the symbols list, and
+    all UTF8 strings from the constant-pool items will be retrieved as strings.
     
-    Enhacements in the new webui
-    Fix r_socket_block_time()
-    Implement assembler for the 1bit arch RAR (wip)
-    Fix pdf, pdb and pD (print_disasm)
-    Implement http.timeout and http.sandbox
+    - I did not attempt to retrieve strings from the byte code.
 
-commit 23022c596b81052e85684ff5e01cad199a5e0868
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Dec 1 03:56:54 2012 +0100
+commit 31e47f1c4731136734c37f395e66f282f1395b1a
+Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+Date:   Wed Sep 4 10:04:36 2013 -0500
 
-    More datalove to the new webui, favicon, more menus, console,
-
-commit b9584ac74ebe7c099e918eb00de8d24704c41dcb
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Dec 1 02:35:12 2012 +0100
-
-    Do 302 when requested directory not ending in /$
+    Squashed commit of the following:
     
-    Implement two column new ui for testing
-
-commit 0b5d2ef737081e029de75a5b99b8c63ce10e5b6c
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Dec 1 00:15:19 2012 +0100
-
-    Fix comparison commands ??, ?!, ?+ and ?-
-
-commit e367b93e9314e79ea766f1f67a1ace4cb865970d
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Nov 30 16:12:54 2012 +0100
-
-    Fix visual mode flickering issue
-
-commit 7a0da18725ad4b4f6299ed0d3b362f73887d2b0b
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Nov 30 01:06:30 2012 +0100
-
-    Add r_bin.rar plugin, per-section arch/bits, fix in S=
+    commit 109915c7812305b9a442d3a0febd9bc43f7104b5
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Wed Sep 4 09:50:08 2013 -0500
     
-    Add Sa to set/get per-section arch and bits configuration
-    Cache io->section and core->io->section to speed up the Sa
-    Update r_sys_arch*
-    Add dummy plugin in asm/rar
-    Fix lines of S=
-
-commit a4b6835bcf168b9ba19ecddfd03f6d1290ad491a
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Nov 29 04:17:23 2012 +0100
-
-    Use backlog=32 in socket.listen. Fixes chrome issues
-
-commit df879389cbda597b971f18566016d10a9fe93b64
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Nov 29 04:12:15 2012 +0100
-
-    Initial import of the rarvm asm/dis and bin (wip, not integrated)
-
-commit 6e27dc0d76a307ee5fbdefd7f298d1391047af5e
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Nov 29 04:10:12 2012 +0100
-
-    Initial import of the /new lungo.js based web ui
-
-commit 07d27512ee85ec8951ac81d76c3cbf3ba8ac53b4
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Nov 29 04:07:59 2012 +0100
-
-    Append fatmach0 index in extracted filename
+        - Added author rewrite tag
     
-    Fix the segmentation address in ? command
-    Fixes for the r2bot
-
-commit 04140210d14b5dc7507cbd62f7d0f5194b99a46b
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Nov 27 19:03:09 2012 +0100
-
-    Fix build?
-
-commit b1e30e731b4ee6a0227ca66aafbcaff8a66defb3
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Nov 27 14:09:53 2012 +0100
-
-    Fixes for the r2irc.js bot and various consistency in core
-
-commit f44dbb1d1e2fad1747b69bbcd33921b9cee6987b
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Nov 22 18:21:44 2012 +0100
-
-    Honor DEBUGGER userconf var in r2 -d
-
-commit 514dd145dcf9a26cf8210304644572f18874643e
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Nov 22 18:06:02 2012 +0100
-
-    Use anal.x86.udis86 when asm.bits=16 from anal.x86
+    commit 5fe0d07f3a318f871bc5d6a8499afd9ceab26e33
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Wed Sep 4 09:37:57 2013 -0500
     
-    Fixes in the anal.x86.udis86 analysis
-    Add pcj command to show bytes of current block in json
-
-commit 70af2490cc9e75c482f94f1ddad85d8b66e54f20
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Nov 20 18:43:28 2012 +0100
-
-    Remove useless debug message
-
-commit 3aeee274bf411bca0ff6be1203722e3356112660
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Nov 20 18:42:23 2012 +0100
-
-    Workarounds for x86-16 and prepare bitmap
-
-commit 3a93f8bbbdcea6fea49a70689fec96028c2e8eaf
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Nov 20 12:32:19 2012 +0100
-
-    Fix prompt history issues reported in #34
-
-commit 83ea1201e9e1e3adf969ad440de9566eac3f0ab6
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Nov 20 12:17:46 2012 +0100
-
-    Working refactoring of RAnalData API
-
-commit b6c5e7dc72d5d52922eee2efc413441735c56fb9
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Nov 20 04:22:16 2012 +0100
-
-    Honor meta item length in core disasm
-
-commit e4954217822d86e9ef63eee143f67fc3e331ff04
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Nov 20 03:59:00 2012 +0100
-
-    Initial implementation of 'ad' (analyze data)
+        - Added a print statement for the number of attributes in the Code Attribute
+        - Added a default stack frame creation
     
-    Force tid=pid when tid=-1 in r_debug_select()
-    Add support for 16bit mov in x86.nz assembler
-
-commit a069c72fb5a727bf564359bb26ed7cd8883b4bcb
-Author: Eduard Burtescu <edy.burt@gmail.com>
-Date:   Sun Nov 18 11:44:14 2012 +0200
-
-    Updated node-ffi bindings for the latest versions of ref and ref-struct.
-
-commit 6853f3a5936bcdb1a2f86d13a97e299216008b91
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Nov 16 02:41:01 2012 +0100
-
-    Fix build
-
-commit 8f6459977d54d9333c1e8b4af22fefdd764210e2
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Nov 16 02:29:30 2012 +0100
-
-    Refactor of {bin|asm}/java into shlr/java
-
-commit 8ea25c4a46db8d347a68981b7da9978f45f5491b
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Nov 16 01:34:26 2012 +0100
-
-    Use RNum in RAsm, fixes for segoff and better disasm
+    commit 4b1bca0d79c53421c1d7a9c59da070a5463ba05b
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Wed Sep 4 08:58:55 2013 -0500
     
-    Reference of RNum in RAsm (use flags in 'wa/pa'!)
-    Use RNum in x86.nz plugin
-    Rename scr.segoff to asm.segoff
-    Fixes for segmented addressing resolution
-    Honor lineswidth in disasm
-    Remove rabin2 -p flag in help and manpage
-    Fix disasm.c loop for small blocksizes and invalid ops
-
-commit 05d78f3fc6fff42a61bd951379cf8e8db813d620
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Nov 15 15:37:25 2012 +0100
-
-    Fix x86-16 disasm issue and add ctypes (wip)
-
-commit 7ee7f936dbe9a8f305a2d4f4850f6081e9d41585
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Nov 14 04:57:56 2012 +0100
-
-    Fixes parsing bug in java class and and rbinelfFixes in java class and and rbinelf))
-
-commit 6dadd63c4bde4dd98c9f7c324878a00127b439e3
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Nov 14 03:25:32 2012 +0100
-
-    Ad od scr.col and cjange more settings
+        - Added the R_API prefix to all function declarations and definitions
+        - Removed the offset<=size from loops.  Not sure why this check is failing, but it needs to be added in the future (probably add it to the list of defects.)
+        - Code appears to parse the classfile correctly
     
-    Fix parsing of segmented addresses
-    Move hud to shlr/hud
-    Add r_cons_print_clear () for delayed 'clearscreens'
-    Add blankline option to RCons
-    Add scr.segoff to show prompt as segmented or not
-    Add scr.colpos to choose the position of cmd.cprompt
-    Deprecate old flags code
-
-commit e09cf7621ee1845e542de08cc0bc9c134148e759
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Nov 13 11:42:21 2012 +0100
-
-    Add scr.pipecolor config variable (false by default)
-
-commit 56b442fb7071dbc3f2b8e6b37b6fec471b55f4d7
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Nov 13 04:38:26 2012 +0100
-
-    Fixes in RCore's disassembler
-
-commit 23bd67ce59710a18f12a7794635473c20193464c
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Nov 13 04:09:59 2012 +0100
-
-    Fix 'invalid' instructions in disassembly (reported by xvilka)
-
-commit 674c732f534ede2c33da9e01a186bd2a0c7d2c29
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Nov 13 03:25:07 2012 +0100
-
-    Implement 'fb' command and enforce 'fr' rules
-
-commit 25df4aef1c2573dd7fa8379873d7df52fba2b337
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Nov 13 02:00:00 2012 +0100
-
-    Fixed io ports flagspace usage and multiple asm filters
+    commit 5f5a28302da8c605800946df739c67a0f4f80b0d
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Tue Sep 3 23:11:00 2013 -0500
     
-    Handle negated flagspace in RParse
-    Support pseudo+decode+disasm
-
-commit 8e1dbb443a4f40760f68a903bd32f50cf9640150
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Nov 13 00:53:52 2012 +0100
-
-    Better support for IO ports on asm.pseudo and analysis
+        - still minor bug in the parsing code on the Type Verification
+         or somewhere in the StackMapAttr.  The right number of bytes are
+         being read, but not all the bytes are being consumed
     
-    * Analyze IO opcodes on x86
-    * Fix 0x0x in olly disasm
-    * Fix segfault in objc mangling
-    * Support for writing nibbles with 'wx'
-    * If optype is IO, use 'ports' flagspace
-    * Add support for flagspaces in RParse
-    * Use RList in RParse instead of list.h
-    * asm.pseudo handles for in/out x86 opcodes
-    * Random code cleanup
-    * Fix udis86 64bit disasm bug
-
-commit 1cd860aab62fc7769139cf8bf4ef922384a6c3e1
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Nov 12 17:36:29 2012 +0100
-
-    Update udis86 from official git repo.
+    commit 1c9d8b490c8d7d8592f898e019aed3b56f9406c8
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Tue Sep 3 20:59:08 2013 -0500
     
-    git pull  git://udis86.git.sourceforge.net/gitroot/udis86/udis86
-
-commit b252b34358e60a96084d488c854896f581db14a7
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Nov 12 17:06:28 2012 +0100
-
-    Some initial work to support emscripten
-
-commit 1a6d3155e5d1bcdb47e1b326cade4aab4166dcb7
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Nov 8 09:49:27 2012 +0100
-
-    Enhace r2wui and implement 'pdj' command (disasm to json)
-
-commit 6956fe003a469eeaac0e3becaff0f9915c679b66
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Nov 7 18:18:52 2012 +0100
-
-    Add PIE (ASLR) field in RBinInfo for ELF, MACH0 and PE
-
-commit 08e93418f590e13cbe049d3c831d5df9720c5bbe
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Nov 7 10:41:12 2012 +0100
-
-    Some better support for classes in rabin2
-
-commit ea8dc25221811864f8076a539169c391f780f0be
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Nov 7 04:25:42 2012 +0100
-
-    Initial objc support, visual 'i' with cursor and 'wow'
+        - fixed some compiler warnings in class.c
     
-    Some more fortunes
-    Initial support for Objective-C
-    New command 'wow' to fill block with cyclic hex value
-    Visual 'i' when cursor enabled uses 'wow'
-
-commit 2ac70dd5e82a958504811658bab84e0246ab3fd1
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Nov 6 09:47:52 2012 +0100
-
-    Fix stack exhaustion bug when repeating null commands. add strpool api
-
-commit 519c07a2adacf7b47e8507d4314871267bad832c
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Nov 5 14:52:32 2012 +0100
-
-    Minor r2awk fixes
-
-commit c8d2b28cd555dc459df5288db1d2e247cfeeabb9
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Nov 5 14:04:29 2012 +0100
-
-    Add r2awk command. More portable awk bindings
-
-commit 21c4d1c5f54bda9fc73a1c593d22569bf9c253e9
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Nov 5 06:01:55 2012 +0100
-
-    Enhace ARM disassembly and code analysis
-
-commit 7c1e0c85d969fece80da34294b450d780697e89a
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Nov 5 02:00:34 2012 +0100
-
-    Support for remote raw commands (client/server)
+    commit c185248aa478c6c78f6dbe14cf65ee3396287302
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Tue Sep 3 20:58:21 2013 -0500
     
-    See the '.:' command
-    Full integration with awk bindings
-    Add install make target for the awk bindings
-    Handle as debug mode if io->file->debug
-    Fix typo quite/quiet in rabin2
-    Resolve $pc,$bp,$sp,$a0.. in r_core_num
-    Minor random fixups
-
-commit 07929b169d3d6e653ef2c58eea3f58c1fc9edcc1
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Nov 2 03:35:50 2012 +0100
-
-    Add Quiet and JSON in RCoreBin, more awk, fix rafind2
+        - Propogated the change to code.c from changes from classes.
     
-    Use rabin2 -j flag to get JSON output
-    You can also get those jsons using the i?j command
-    Better awk bindings and added some examples
-    rabin2 -v (without any other arg) shows version
-    Fix some segfaults in rafind2 and use RList
-    Add quite output mode for rabin2 (activated with -q)
-
-commit a0d099bff1bbe24030dcc11ff37fd3cae2dc8705
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Oct 31 21:32:33 2012 +0100
-
-    Honor iomaps in search ranges and add basic awk bindings
+    commit 927542a0672f37b41b23345533bc7e6f2d1a5369
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Tue Sep 3 17:10:40 2013 -0500
     
-    Honor iomaps on search.to
-    Initial import of the 'awk bindings'
-    Honor search.{from|to}
-
-commit 8270c60a1656d4a5a8fa4ea384fe61bef65490c4
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Oct 31 16:37:19 2012 +0100
-
-    flex no longer mandatory, fix ios debugger
+        Fixed some minor parsing bugs:
     
-    Flex is no longer mandatory for configure
-    Fix overflow in r_core_cmd0
-    vm_protect works again on iOS (using VM_PROT_COPY)
-    ptrace-cont is just a detach
-    fix build with latest ios sdk
-
-commit 8431655bf8a083eab8191061cd4402fe84462953
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Oct 31 10:42:49 2012 +0100
-
-    Some fixes in the file interpret command and the www
+        code_attr offet was not updated correctly after reading the length of the attribute
+        attr_buf was not initialized correctly before use
     
-    Fix loading of omap3830 script (support longer calc expressions)
-    Fix some glitches and TODOs in the www ui
+    commit b43a7189e9934369d1fdbd96de020edcab907430
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Tue Sep 3 16:33:36 2013 -0500
+    
+        - Code compiles.  Time to test.
+    
+    commit ea7b332d84b88baca1abc466d02b00b2b8739bca
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Mon Sep 2 23:55:44 2013 -0500
+    
+        - Added in size calculations for the CP Objects.
+        - Need to add method or field references calculations for size after compiling
+    
+    commit ba55375dc0e835fb46550d0063758e419ec0ed7b
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Mon Sep 2 22:56:56 2013 -0500
+    
+        - Revamped all of the attribute parsing.  The parsers will handle buffers rather than simply
+          parsing straight from the file.
+    
+        - added a size calculator for each of the attributes, which opens up the way for creating
+          writers for the attributes and such.
+    
+    commit be6f2e038f01beeb56ace7d4daaf4d90ad3fdad7
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Sat Aug 31 12:19:18 2013 -0500
+    
+        - Cleaned up code and removed some of the compiler warnings.
+    
+    commit 4c81812f2609e4a80c7036053d122306039dd6ef
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Fri Aug 30 15:24:15 2013 -0500
+    
+        - Compiler and linker errors have been resolved.
+        - Need to work on testing
+    
+    commit 429ed30621d9abff1eec99ef50a35c57bbed76ad
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Fri Aug 30 13:35:39 2013 -0500
+    
+        Added the RunTime Annotations and Parameter annotations.
+        Time to start compiling and testing.
+    
+    commit b6044e1c74cc10874902bd34da7c8fcbdb5713cc
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Fri Aug 30 12:34:14 2013 -0500
+    
+        Added BootstrapMethodsAttr Parsing code along with supporting stuff, like creating
+          the method and argument structures and mapping the REF_types to strings
+    
+        More should be done to map the REF_types to specific resolutions.
+    
+        Added in the MethodType, MethodHandle, and InvokeDynamic ConstantPool Objects
+    
+    commit 2c9317be5d2be0608131fb9aa10f713885c89471
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Fri Aug 30 00:21:34 2013 -0500
+    
+        Finished drafting the code for annotation, element values, element value pairs,
+           and annotation default attribute.
+    
+        TODO: RTI, RTV, and then Bootstrap attributes.
+    
+    commit cbee3a10c18342f6a8fb941245568de885fe5666
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Thu Aug 29 15:42:00 2013 -0500
+    
+        Fixed the r_bin_java_element_value_new function definition.
+    
+    commit ab98a76fabf2bd7764a51f3363d821c5a4cf1200
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Thu Aug 29 15:39:28 2013 -0500
+    
+        - worked out some of the initial compile errors.
+        - worked out an outline for parsing the element_values
+        - need to work through parsing the element value, freeing the element value, and then printing a summary.
+    
+    commit b543d904f2aebd0d1f9c0ac8ec8401b6ab698f36
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Thu Aug 29 08:21:33 2013 -0500
+    
+        Most of the heavy lifting is done for attributes.  Need to implement a few of the methods,
+        and then compiling should be able to happen.
+    
+        Added in all attribute values to the enums, the function call tables, and then the Metas information.
+    
+        Need implement an ElementValue parser bleh.
+    
+        Need to implement RuntimeAnnotations, Annotations, ElementValue parsing and make sure that
+        the attribute unions are all updated.
+    
+    commit 81f9ca2da2ed7e007a97a20ecb8eb260dfd55e7e
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Wed Aug 28 22:33:43 2013 -0500
+    
+        Finished adding some logic to handle the StackMapFrame types.
+    
+    commit 9a0965cc06021ad56d2127d279b918eef613bec9
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Wed Aug 28 17:54:52 2013 -0500
+    
+        Got some of the StackMapTable Atrribute parsing working.  Right now,
+        only the FullStackFrame will correctly parse.
+    
+    commit ea12bd6a8ae9969fa05cbcab622651c8b426917a
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Fri Aug 23 17:51:33 2013 -0500
+    
+        Added some debugging code while trying to figure out how to parse the StackMapTable.
+    
+    commit 6141b57ee94c7bd0569d0ea76725fdce1ac50edf
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Fri Aug 23 17:00:12 2013 -0500
+    
+        Code compiles.
+    
+    commit a7ad14050eb6184a1171620c4dcdba71b2f791aa
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Fri Aug 23 10:29:17 2013 -0500
+    
+        - Added a basic Signature element
+        - Added declarations for the new functions to handle the parsing of the
+          StackMapTable related structures.
+    
+    commit 54cca3d9af60463dbfa77e23ef1d562ae82d6e5a
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Fri Aug 23 10:18:50 2013 -0500
+    
+        Finished an initial coding implementation of the StackMapTable.
+        -- Will perform testing later in the day.
+        -- Need to look-up the Signature Attribute
+    
+    commit a14238eece865f4d1c5f2d6b1f482b000d10d94e
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Thu Aug 22 20:23:45 2013 -0500
+    
+        StackMap stuff is wip.
+    
+    commit f011a5d948d31cc6197eed1bbea497a4dde362aa
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Thu Aug 22 18:44:23 2013 -0500
+    
+        Made the globals match the R_* standard.  Also tried to clean up naming stuff.
+    
+    commit 6e61e15572744c2ed722ac3df8d988cc02f1316c
+    Author: Adam Pridgen <adam.pridgen@thecoverofnight.com>
+    Date:   Thu Aug 22 16:40:08 2013 -0500
+    
+        Plugging progress into the repo.  Adding fixes to handle the Java
+        Class file appropriately.  This modification is mostly a re-write
+        of the Class File parser, and it "tries" to do a better job of
+        creating better objects for each of the Classfile elements.
+    
+        Currently this code is experimental, and current TODOs are:
+        1) Testing
+        2) StackMapTable
+        3) LocalVariableTypeTable
 
-commit c72d2043c2618fe623ca85151af0c6a7d1d446b2
+commit 65fed9b9a0cdd4d6cf375ba6548b4f9512401878
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Sep 4 02:31:14 2013 +0200
+
+    Handle '-' in 'w' commands, support comments in wF, Fixes in wp
+
+commit f61fa0565e45adc3d48544c0e530d2c45b43cff2
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Sep 4 02:01:42 2013 +0200
+
+    More work for cparse, Show type links in disasm. Fix some warns
+
+commit 5f91da3ab6a0c2c58fd36c07f9cd6d6d6fa7e3f6
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Sep 4 01:14:35 2013 +0200
+
+    Fix .-, add '-' alias and add help message for -?
+
+commit 11689987434a414c5bce98c8785c6f49b01a88e4
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Aug 29 05:42:50 2013 +0200
+
+    Add scr.heightfix
+
+commit e25567cb0995ef97d6dcad7e8ddb1a10c828d8e1
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Sep 4 00:35:48 2013 +0200
+
+    Implement .-. Fixes for cfg.editor and handle RCons.editor()
+
+commit e5e441f3184dac12f59cfc3018873715b8ec47d9
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Sep 3 23:47:18 2013 +0200
+
+    Implement '. file.{c|h|cparse}' extension handler
+
+commit ef53587e89f2d1447388aff0be667e665472cee2
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Sep 3 22:56:03 2013 +0200
+
+    Fix 'last' symlink
+
+commit 302328a76c11ebfc111fc01cda2317f9b7a8e9e7
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Sep 3 22:45:43 2013 +0200
+
+    Fix #203 - Call to a section + some more work on utf8
+
+commit 3ff36c3965d8ebb68f668d37c802d59c9ae77df3
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Sep 3 19:29:33 2013 +0200
+
+    Fix #205 - rax2: fix misuse of read on stdin
+
+commit 48e83bef385427ea5a58cbc26aea559c4170b3f9
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Sep 3 18:57:41 2013 +0200
+
+    Fix #206 - Implement more 'lea' variants in x86.nz assembler
+
+commit f4aa5ab6f361d9c90f6876edb9b5974c7773f408
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Sep 2 23:16:33 2013 +0200
+
+    Minor utf8 changes
+
+commit 38a3d0fa3f79066f95cdfbcaa2ca32e69b43e965
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Sep 2 01:20:12 2013 +0200
+
+    Renamed some 't' commands and more work on supporting sdb types everywhere
+
+commit 479ab5d216e82c26c8907039bcd16942df80739a
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Sep 2 01:19:43 2013 +0200
+
+    Fix #202 - No help available in "visual code analysis menu"
+
+commit 555f234cb20ad575925c47e12ecb093e28214478
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Sep 1 23:26:33 2013 +0200
+
+    Add parse support for enums in cparse
+
+commit fd76cb6c0be190d4ae5e5e8ad4b1550af167d7ec
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Sep 1 00:09:18 2013 +0200
+
+    Fix asm.lineswidth
+
+commit 148e448ca6eec1a4b730d3d5386ff2a77c812074
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Aug 31 12:39:39 2013 +0200
+
+    Fix #200 radare.rb path
+
+commit 0e4db840714c18c02d0c6dd03bba7e579bb4cd16
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Aug 30 02:59:20 2013 +0200
+
+    Fixes for blob build
+
+commit 9c409a3c6a4651f46173774fb946144ac840b95c
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Aug 30 02:50:19 2013 +0200
+
+    Update pkgconfig files
+
+commit 7c07e1af75463c82d7bd27642107d39ea66870c7
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Aug 30 02:45:27 2013 +0200
+
+    Fix libsdb.a linkage of blob
+
+commit 53428f374c5972d31d22bb6c2a2cf9335a3efae0
+Merge: edeb53d 35d7b94
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Aug 30 00:39:38 2013 +0200
+
+    Merge ../radare2-xvilka
+    
+    Conflicts:
+    	libr/include/r_cons.h
+
+commit 35d7b940cbb6de6e8983f8c9d0279133ecd5fb6c
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Aug 30 00:38:31 2013 +0200
+
+    Fix utf8 issue in r_str_prefix and optimize reflines
+
+commit edeb53d855e498d0a2dd86af0314c038ba850c2e
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Aug 29 04:47:27 2013 +0200
+
+    Fix help messages for 'g'
+
+commit 0c108154b5f31185bdad1df60ca166eae0bfb43f
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Aug 29 04:44:18 2013 +0200
+
+    Add 'gs' to assemble syscall eggs and 'dis' to inject them
+
+commit eabb791936b8a5709bfc864b25ea6a83de33de3e
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Aug 29 03:19:16 2013 +0200
+
+    Add r_flag_relocate() and 'fR' command
+
+commit 45d8bebe2eed69c73c9e3792dc8fbb6017087577
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Aug 28 21:36:11 2013 +0200
+
+    Add initial support for signal handling on linux debugger
+
+commit a46eb958e78e9aaaa0827e951f6b8b802a530f76
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Aug 28 03:06:10 2013 +0200
+
+    Initial implementation of the wip multiline text editor
+
+commit ebf277f6828edcf49ddd0429171b660c98ce7a06
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 27 23:55:33 2013 +0200
+
+    Damn typo
+
+commit 92c37c3ffe19be4c5a63781a39e7320cf25ac049
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 27 23:54:06 2013 +0200
+
+    Honor env in android-shell
+
+commit 2d3297e26d6cf06f63fe4e1e35e1b32f90d0eaac
 Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Wed Oct 31 00:54:54 2012 +0400
+Date:   Fri Jul 19 00:20:23 2013 +0400
 
-    Added OMAP3430 MMIO reisters
+    UTF8 arrows initial support
 
-commit 78ce28b980b68c36e11fdc880f6bb52d8d16dd16
+commit ec01a727d246bff327d1119ec40384d1fcffe88f
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Wed Jul 17 03:44:36 2013 +0400
+
+    ARC analysis fixes
+
+commit c56b8db665afb07f2f3bf561a747a41e0fb26ff5
+Author: Riccardo Schirone <sirmy15@gmail.com>
+Date:   Mon Aug 26 22:39:23 2013 +0200
+
+    Fix issue 195.
+
+commit fb80381eb703f74fb1e33756b502312d86056a8d
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Oct 30 18:20:51 2012 +0100
+Date:   Tue Aug 27 02:00:21 2013 +0200
 
-    Fix build on iOS (without debugger)
+    Fix mingw32 build
 
-commit ea33e9af8a39661de69139b8301218325a8da709
+commit b685457e848e0c3ffc3d6c91df532824d45b7cd4
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Oct 30 17:19:53 2012 +0100
+Date:   Tue Aug 27 01:45:30 2013 +0200
+
+    Fix #180 -- Add system-wide radare2rc
+
+commit 91390dd1fd5537da8477e5f9a77f8e0b1c812d37
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 27 01:36:55 2013 +0200
+
+    Fix clean of shlr/sdb
+
+commit 63805ecbde8e4b855e6fb666dd0e3e743a2ed687
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 27 01:32:51 2013 +0200
+
+    Damn comments
+
+commit dce5e84d95ed5f75fc4ddc295d84d83ce69faf2b
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 27 01:26:54 2013 +0200
+
+    Fixes for r_db linkage
+
+commit 602bb70a301f9078b1955483665a9947b046f1d0
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 27 01:18:42 2013 +0200
+
+    Simplify shlr build and some w32 fixes
+
+commit 566ecb98b038466128090fa3d9dc53f244e54375
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 27 01:12:58 2013 +0200
+
+    Fix Vc conflict with colors
+
+commit 4b4db03fcdad226bd43b8754fc4d64699d947f6e
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 27 01:02:41 2013 +0200
+
+    mrproper on sys/mingw
+
+commit 1dc50d359b97e82736ab7724a778b25520ccbe72
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 27 00:52:04 2013 +0200
+
+    Fix shlr/sdb build for sys/android
+
+commit 46ca68bfc3d7a72821dbea07859c61fe8c2dcc52
+Author: Riccardo Schirone <sirmy15@gmail.com>
+Date:   Mon Aug 26 22:34:42 2013 +0200
+
+    Fix autocompletion issue.
+    
+    The issue will prompt wrong autocompletion prompt.
+    Fix prompt only the minimum common string from available
+    autocompletion strings.
+
+commit 472a9014fd2ca5d2c8f112d462d49463b7ba0d11
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 26 03:17:29 2013 +0200
+
+    Disable utf8 on w32 console, refix visual 'C' toggle-color key
+    
+    - Update sdb and make rules.mk less strict
+
+commit fb610cdc625eda1252c3ae8a7ea8491f7fbf7a9b
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 26 02:43:15 2013 +0200
+
+    Update sdb and fix android build
+
+commit 9850c0a3c3d403fe602401bec7d4a62de775d971
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 26 01:07:21 2013 +0200
+
+    Fix some warns and enhace GIT_TAP in makefiles
+
+commit c27838a59c207df2745c9c141811da928f2448b3
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 26 00:57:56 2013 +0200
+
+    Do not show ; -- after rets in disasm
+
+commit d636d730a1b6d85f3fd114b42a06d84239b93885
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 26 00:51:36 2013 +0200
+
+    Add r_cons_canvas api and fix #192(pK output)
+
+commit b20f4028a9fa20f8e0cbd86182ccdad50b1432bb
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 25 23:27:57 2013 +0200
+
+    Fix #190 - Ctrl+L doesn't work well
+
+commit d37e71c26fa230c109d95cb04402ff01c4b65c4d
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 25 23:10:15 2013 +0200
+
+    Show dec in ?? and fix return value reset
+
+commit 8f158f6d0e9c56ca12fafa80dabfe781dda7c7d3
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 25 22:58:43 2013 +0200
+
+    Do not try to open empty project files
+
+commit b51c28285210156893cb9ec385118f060f7c5247
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 25 22:52:47 2013 +0200
+
+    Show error when trying to interpret an unexistent file
+
+commit 6aa591029eb9ba44fc27656b0328f774534d268c
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 25 22:51:00 2013 +0200
+
+    Fix colors issue
+
+commit 5612ed43cbbf3eec236ef8ab309aefbde9dfb295
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 25 22:40:35 2013 +0200
+
+    Draw pK one line above as a workaround for #192
+
+commit 7d12a1a2ce0906a350635644cf0fee5675b5f500
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 25 01:22:46 2013 +0200
+
+    Fix #177 - Tab-completion chomps previous text
+    
+    - Optimize autocompletion by not using the heap
+
+commit beeb0cd7f8e0b3d362681fb807b1647874cbc8fd
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Aug 24 23:45:10 2013 +0200
+
+    Fix #183 - pif doesn't stop at function's end
+
+commit 89f3266e878fb361c9c6981905786c8662933d12
+Author: jvoisin <julien.voisin@dustri.org>
+Date:   Sat Aug 24 22:13:50 2013 +0200
+
+    Documents asm.lineswidth and fix a typo
+
+commit 3b64d2fa1052d2535e4bd67a47c32d5728dd0f0e
+Author: Judge Dredd <the.guard@mail.ru>
+Date:   Sat Aug 24 20:30:14 2013 +0400
+
+    fixed a bug in r_str_replace
+
+commit 9915108a47e6a51f6ff928bbdb82ba18f2ed664b
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Aug 23 17:39:34 2013 +0200
+
+    Only show flags when differs from function name
+
+commit c311ec7c209b29da4c8c044639ad59565afb65fb
+Author: jvoisin <julien.voisin@dustri.org>
+Date:   Fri Aug 23 15:13:57 2013 +0200
+
+    Fix a typo in "c?"
+
+commit fd50d0071edf87d8447dd73c91ea280603b6e1a3
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Aug 22 00:30:43 2013 +0200
+
+    Enhace help message for e??asm.filter
+
+commit e0f6f41e68247a06af3ef40d5d26c120b91a4855
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Aug 22 00:15:05 2013 +0200
+
+    Fix w32 build
+
+commit e4d6be85ff97e9581fab448f18503cf175648057
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Aug 22 00:11:43 2013 +0200
+
+    Fix #174 - 'aa' will do 'af' when no entrypoints found
+
+commit c6eaf9cba3ffef41f95fd3f1c2ee12494e851fe0
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Aug 22 00:08:08 2013 +0200
+
+    Fix scr.color issues in visual if manually changed
+
+commit cc72328f862a891afd40e6ae440d7f3083968277
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Mon Aug 19 17:55:56 2013 +0400
+
+    Fix error in handling non-bios images as bios images
+    
+    Just added size check
+
+commit e6ce20dabefdb3d82355b3f99a32f5a2a645f2b8
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 19 00:41:44 2013 +0200
+
+    Fix w32 build
+
+commit b6ae1b64f29b6be6aeb193a56faee526ca20f842
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 19 00:36:17 2013 +0200
+
+    Add 'dpe' command to discover the path of executable from given pid
+
+commit e588adadc4351a192112e8722d5ed2a6c175e34e
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 19 00:25:12 2013 +0200
+
+    Fix swig build
+
+commit 3bb2fb809fd7beda8c84159eb6d41509f2019364
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 19 00:15:34 2013 +0200
+
+    Fix RCore ctypes bindings removing unsupported methods
+
+commit 42d687c6957660afe98023bf2fd8a23d65d10fb6
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 18 19:45:54 2013 +0200
+
+    Add .thumb and .arm directives
+
+commit 19a8cce3b57a9051d8e63d07be3001c94b418f1b
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 18 02:44:50 2013 +0200
+
+    Fix #172
+
+commit 707b8b4e400c61e53c7649a6ea9ecfc42d10e6cc
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 18 01:30:03 2013 +0200
+
+    Try to fix #168 rlang's python plugin not properly linked
+
+commit 91ca18843e9525ab406aa8b0c6cc534b5427231e
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Aug 17 19:57:33 2013 +0200
+
+    Fix #165 libr_tcc build is broken on some GCC versions
+
+commit e1bdd9e64f2a29f06615634bcd00b9e8f92dc13e
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Aug 17 19:53:04 2013 +0200
+
+    Fix #171 autodetect script by extension, Initial work on 'ts'
+
+commit 03e3b81a7d0e9934b90c3f7354f6dbdbbce978a7
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Aug 17 16:43:27 2013 +0200
+
+    Fix off-by-one read in r_cons_memcat
+
+commit daddfcc7b6f6ac36ab1f318fc5c5bea43da84372
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Aug 15 17:33:41 2013 +0200
+
+    Fix warnings and mdisassemble signature
+
+commit a34df5561144aab2618656e5f122dc0f470634f1
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Aug 15 17:23:26 2013 +0200
+
+    Fix use of uninitialized memory in ARM disassembler
+    
+    - Thanks fallout for reporting!
+
+commit 05df20f4113b840cdb6f7cac26fc274b9ec94af1
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 13 03:23:39 2013 +0200
+
+    Update sdb, more work on types 't'
+
+commit c94a4c8d94821b3f2163b731579e60aa74797a5a
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 13 02:28:17 2013 +0200
+
+    Fix interpret with filtering .~
+
+commit c13284cd711d32eb17c7d92abe9fe30c6e3f795e
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 11 15:38:42 2013 +0200
+
+    Minor refline hacky fixes in disasm
+
+commit 59820d6b14525f365b1e62965ab613f9d9ff0b45
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 11 14:23:51 2013 +0200
+
+    Implement pointer arithmetics in 'pf', 't?' and 'td'.
+
+commit 6e1a87b2744c08677065a22fef687ebcf2bcf532
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Aug 2 01:02:04 2013 +0200
+
+    Update sdb and some minor fixes for 'tf' and 't'
+
+commit 8d8c9f4ee53fe9c093f23b992769345894923faa
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Aug 1 00:39:19 2013 +0200
+
+    Initial import of the new cparse engine using sdb and tcc
+    
+    * There's still lot of work to do, this is just the base
+
+commit 18b0268443f36caa416acd53dc5c546951f2fc1b
+Author: Eduardo de la Arada <eduardo.arada@gmail.com>
+Date:   Fri Jul 26 12:19:17 2013 +0200
+
+    Fix asm.pseudo
+
+commit dd5421a5f90e45da75ad2b7af7423489d7fc52d8
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jul 25 15:18:34 2013 +0200
+
+    Enhace @earada's patch to fix double free in 'dm' api
+
+commit 9101835c5854fbc05677cad7d44e1919bc32c02f
+Author: Juan RP <xtraeme@gmail.com>
+Date:   Tue Jul 23 17:11:51 2013 +0200
+
+    Accept @xtraeme's massive warning cleanup
+
+commit 2bfd8792e4f9af1b8ffa9387fda3393612e7fef8
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Jul 24 09:00:10 2013 +0200
+
+    Fix cons_raw state after yesno()
+
+commit 529730406709a4474896be9c0d1b4bee8eda74b2
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Jul 24 08:58:10 2013 +0200
+
+    Fix gdb 100% cpu and connect timeout bug in socket api
+
+commit 0851810e54fe1c1c608178b5ed741b32c9dff3a0
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Jul 24 08:57:20 2013 +0200
+
+    Move hud from shlr to doc/
+
+commit 90b9215f6c93821fbd37df5cc118cfcf5f32714c
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jul 23 18:11:09 2013 +0200
+
+    Port thumb2 patch aiming to fix #156
+
+commit 756bd5645ee0dd5aa1854bdb4c3118fcab0cbdde
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jul 23 17:58:13 2013 +0200
+
+    Fix #145 (trash in opcodes)
+
+commit 5fafc517315bce49b47a1d3c2eb0e3cf505c5b31
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jul 23 02:13:14 2013 +0200
+
+    Fix connect when host resolves to more than one IP
+
+commit 702af47ed5ca82d37d870eda2e9b9a580c73c7c7
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Jul 22 17:02:00 2013 +0200
+
+    Fix bindings
+
+commit 7187adb5e81edc99a105239933f30f58e9766c22
+Author: Eduardo de la Arada <eduardo.arada@gmail.com>
+Date:   Sun Jul 21 03:05:56 2013 +0200
+
+    Add alloc/dealloc memory
+    
+    * Allow memory alloc and dealloc on debug (APPLE ONLY)
+
+commit 05d52bc589a98653bd36605f9c3e3e4d42d822f8
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jul 19 11:51:51 2013 +0200
+
+    Add r_anal_op_hexstr and enhave test-asm example
+
+commit a3685ae4d2f90b7e18559267787b4b72fb269c46
+Author: Eduard Burtescu <edy.burt@gmail.com>
+Date:   Fri Jul 19 12:06:28 2013 +0300
+
+    r_bin/mach0: also process lazy_bind opcodes for relocs.
+
+commit dfdee4e6c79f08d2e2a882c3b75e1e1ca094fbde
+Author: Eduard Burtescu <edy.burt@gmail.com>
+Date:   Fri Jul 19 10:21:06 2013 +0300
+
+    r_bin: improved JSON output and VAPI for the new relocs.
+
+commit 96ca1d38152a50a3812ae9f94fc1ffe642955297
+Author: Eduard Burtescu <edy.burt@gmail.com>
+Date:   Fri Jul 19 09:53:43 2013 +0300
+
+    r_bin/mach0: new relocs using dyld_info bind opcodes.
+
+commit 6408bf4b9af7d8af38c0eb11f24b5871d6ff95c1
+Author: Eduard Burtescu <edy.burt@gmail.com>
+Date:   Thu Jul 18 21:51:54 2013 +0300
+
+    r_bin/mach0: updated mach0_specs.h using original Apple headers where possible.
+
+commit 4a30d17266a4db59739943a5890125f1e47cca05
+Author: Eduard Burtescu <edy.burt@gmail.com>
+Date:   Thu Jul 18 21:49:14 2013 +0300
+
+    Mach-O: new relocs implementation and complementary fixes for imports.
+
+commit 88030d6f38eb5b2f4f9e1eae6ca7f66679f755c2
+Author: Eduard Burtescu <edy.burt@gmail.com>
+Date:   Wed Jul 17 22:22:42 2013 +0300
+
+    r_bin/PE: implement new relocs.
+
+commit 5e096a4fd76f4975b4a792de34f3a0d726b8f06c
+Author: Eduard Burtescu <edy.burt@gmail.com>
+Date:   Wed Jul 17 22:18:21 2013 +0300
+
+    r_bin: new generalized relocs, with only arch-independent types.
+    
+    Basic implementation for ELF relocs (x86, x64 and ARM).
+
+commit 4c90534f842f0790e6ecbc024dcd0571fae8c10c
+Author: Eduard Burtescu <edy.burt@gmail.com>
+Date:   Wed Jul 17 20:34:32 2013 +0300
+
+    r_bin/ELF: don't ignore the r_addend field from Elf_Rela relocs.
+
+commit b8e031d91cd2dd144f1efa0e09ecd034675ec04c
+Author: Eduard Burtescu <edy.burt@gmail.com>
+Date:   Wed Jul 17 15:01:25 2013 +0300
+
+    r_bin: removed hint from RBinImport, as it's only used in PE and even there it's doubtfully relevant.
+
+commit 8403699f2e29bda3bf9f7677b084742b94e64065
+Author: Eduard Burtescu <edy.burt@gmail.com>
+Date:   Wed Jul 17 11:25:25 2013 +0300
+
+    r_bin: removed rva, offset and size from imports.
+    
+    PLT-like lazy import wrappers are now part of symbols, where applicable.
+    The "imp." prefix is a temporary solution, it should be a flag.
+
+commit a597b0e41420d2d91321159852754dfad3e8996b
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jul 19 03:35:45 2013 +0200
+
+    Bring back code|data xrefs to life. Use 'ar' command
+    
+    'ax' and 'ar' are in conflict. must resolve
+    Uses sdb to store code and references
+    Ugly code that needs a huge cleanup
+    Update to latest sdb
+
+commit 19314bc27f5f62c69a86144d7ba3d17911c871c1
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jul 18 23:00:38 2013 +0200
+
+    Better comments in disasm, fix io->size = 0 regression
+
+commit 5922cfe5303c334d406611197d62cbf58e9d30e0
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jul 18 12:10:52 2013 +0200
+
+    Fix #150 IO issue.
+
+commit 670bb111d8ccdcd422dfa15e6d204813febf01be
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Jul 17 23:06:06 2013 +0200
+
+    Add 'floc' and 'invalid' color palettes, Vdr renames locals
+    
+    Vdr now support renaming local function labels
+    Do not colorize lines when scr.color=0
+
+commit fd075de90ad1ff67cdab3d6b26d0a6629895479f
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Jul 17 22:12:14 2013 +0200
+
+    Add 16bit dithering for 256/16M rgb console + fixes
+    
+    Add scr.rgbcolor to disable 16bit ansi escapes
+    Disabled by default on windows
+    Implement ansi to rgb and rgb to ansi conversors
+    Implement 256 color to rgb bruteforcer
+    ec: renamed to ecr
+    Fixes for the VE menu
+    Drop --enable-devel flag from r2-bindings/README
+
+commit e5af04856f4410cd3296c66a52e3200764b75141
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Jul 17 20:23:24 2013 +0200
+
+    Fix #133
+
+commit 11ca51269f206819ffdee472a5264edae7ef138d
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Jul 17 20:03:41 2013 +0200
+
+    Initial import of the nodejs build system (far from complete)
+
+commit be46b9da31c7d2b6ac30ea3c62a32016f9482177
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Jul 17 19:34:27 2013 +0200
+
+    Initial support for truecolor (xterm only)
+    
+    Add e scr.truecolor variable
+    Add !! command to save history
+    Add ec: command to randomize palette
+    Minor rgb trash fix,
+
+commit a1123b6a695c4a9e2fc2989703931a657f84fbdf
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Jul 17 03:51:53 2013 +0200
+
+    Added default color paletes for rcons
+    
+    Added 'ecf':load colorschemes
+    Added VE visual menu to configure colors
+    r_cons_rgb_parse() needs a rewrite
+
+commit e81d4e900d0fac5c631c58e50320e582ed71bbb6
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Wed Jul 17 01:54:05 2013 +0400
+
+    Fixed "cmp" opcode colorization
+
+commit 8e2f68fbda22f0b0ae913295c42db553a9c72536
+Author: Aitor P. Iturri <aitor.iturri@gmail.com>
+Date:   Tue Jul 16 20:40:54 2013 +0200
+
+    Added Java JNI install support
+
+commit 2f7224f64d53d16afbce305b7a2d08a3b4d9e798
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Wed Jul 17 01:18:16 2013 +0400
+
+    Added colorization for flows
+
+commit 00c3c70f3b1a8e2ad42b0d8c81cfb880f4e7ab24
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Tue Jul 16 23:16:43 2013 +0400
+
+    Implement functions flow lines colorization
+
+commit ea742aee77dfc2df27c57525c24aa6071fab7402
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jul 16 19:08:24 2013 +0200
+
+    Implement analysis for x86-64 LEA reg+delta references
+
+commit 77e2c0c34ac5bfc22bc348e2e5f2ce9f0acb88b6
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Sat Jul 13 12:07:23 2013 +0400
+
+    Fix ARCompact ELFs loading
+
+commit 8c9af7758140a3b7eaadc6fcac5b14e5076cd2be
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Sat Jul 13 04:06:17 2013 +0400
+
+    Added ARCompact analysis
+
+commit d69401414697d321845e84e3bdeccb98cdf35335
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jul 16 17:48:26 2013 +0200
+
+    Minor fix for sdb sync
+
+commit 94f9e4e8de15ec1b4fdc1ba4d1505b9301937c3e
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jul 16 17:43:07 2013 +0200
+
+    Fix sdb version and lua-install message
+
+commit 6205dc349a85ae66d9a2db2f7aa6d7cc7ba3247c
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jul 16 08:20:58 2013 +0200
+
+    Fix lua bindings build
+
+commit e236f0cf5a2aa648bb29484009c155f0a9070d9a
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Jul 15 18:07:42 2013 +0200
+
+    Fix ELF regression issue
+
+commit 8dcce510a37a73b32be00b9107b9052376945558
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Jul 15 03:13:01 2013 +0200
+
+    Fix bindings
+
+commit dc8e37f420eae841bae061a0112d685aceb74611
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Jul 15 02:51:55 2013 +0200
+
+    Update sdb, simplify some makefiles
+
+commit 209ac5696c7ba58c313f11fe7433e6a050cef28e
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Jul 13 01:13:23 2013 +0200
+
+    Fix '$' alias command (thanks alxchk for reporting)
+
+commit cec9c39ce83dff3fd6a5c7c29fbc91c14f3b5d7c
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Sat Jul 13 00:38:19 2013 +0400
+
+    ARCtangent A4 analysis fixes [2]
+
+commit eda345219ff504543244440be08becfd1389ef59
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jul 12 01:04:05 2013 +0200
+
+    Swap pb/pB
+
+commit e2537b9484efc709e42e5a4df80d57323dd9f6c2
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jul 12 00:29:27 2013 +0200
+
+    New command: 'pB', the px-like pb (xvilka idea)
+
+commit d04dbde9fcd4542d479e04bc89bf007c98afbf5b
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Fri Jul 12 01:46:29 2013 +0400
+
+    ARCtangent A4 analysis fixes
+
+commit cec6d5aa75e695f03ff542e6e8d0776bdc62845d
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Thu Jul 11 03:23:58 2013 +0400
+
+    Fix for ARCtangent A4 relative address calculation
+
+commit eaa0e66fbe29e0a9a10647fb6f588e49db749417
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Thu Jul 11 01:27:09 2013 +0400
+
+    More ARCtangent A4 analysis
+
+commit 253b3f136dc25f8e5dbba20d09985e8c01537ba1
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Thu Jul 11 00:04:23 2013 +0400
+
+    Fix for local labels
+
+commit 21ed69419620caa2bf1d35c3e4ed54f336cf6ad4
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Jul 10 09:40:42 2013 +0200
+
+    Fix and update ARM Thumb2 disassembler
+
+commit 5cc7466191ca7375ce4d34890171cc47887a21a9
+Author: pancake <pancake@pancakes-MacBook-Air.local>
+Date:   Mon Jul 8 03:38:44 2013 +0200
+
+    Enhace rasm2 -D output
+
+commit 8ba04fa98549a94101c5da8173e5e77913071bb4
+Author: pancake <pancake@pancakes-MacBook-Air.local>
+Date:   Sun Jul 7 23:03:10 2013 +0200
+
+    Fix 'make dist'
+
+commit c39e6aee82997d9174252ca963c5ad7ecf3e3cb4
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Sun Jul 7 01:03:47 2013 +0400
+
+    Added local labels reference display
+
+commit ad882d1ba392e60a5e431cc67144f6b098fbc4df
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Sun Jul 7 00:35:49 2013 +0400
+
+    Fixed indentation
+
+commit 90ffe4582676e371522a28e70b2fc0023edcb166
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Sat Jul 6 12:06:08 2013 +0400
+
+    Fixed colorization for ROR and ROL
+
+commit 17c6c6bfab31691c4c4bcca10832f304c135e46e
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jul 5 09:36:25 2013 +0200
+
+    Implement flagspace selection
+
+commit 6cadbbcd407fb323a3b2e1db01f3bc951133eb3d
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jul 5 01:45:45 2013 +0200
+
+    Allow to force screen size, more work on r2wui
+    
+    Add scr.columns, scr.rows eval vars to force screen size
+    Fix rightpanel menu glitch in r2wui
+    Add calculator in assembler panel
+    Fix open-rightpanel button in main panel
+
+commit d8d5bab78d6610b19cc6dc423e7cb0c850da77ea
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jul 5 00:41:02 2013 +0200
+
+    Use static libgcc for mingw32 builds
+
+commit 7c242550f60a7000d62f717820681a181c8b9074
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jul 4 23:49:53 2013 +0200
+
+    Use $r instead of $h in visual print modes
+
+commit 11e00e438edc5ea342f3e0ea0b1350c566906400
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jul 4 14:08:58 2013 +0200
+
+    Fix Java class crash, better opcode colors and use $c/$r for screensize
+    
+    Fix segfault in java class parser
+    Fixes in the opcode reg|num colors
+    $r renamed to $m (memref)
+    Use $c and $r for columns and rows instead of $h (height)
+
+commit 6fa47bb40f01b807164625e23e6133b1dc84277b
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jul 4 03:47:19 2013 +0200
+
+    Only colorize ops when scr.color is set
+
+commit 4815f5c9bf47215db1697da31e6a96d6a314f8ec
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jul 4 03:43:27 2013 +0200
+
+    Fix segfault when no file is given
+
+commit b8f7138092624bd041a21f7688aab71e19bd5f83
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jul 4 03:34:28 2013 +0200
+
+    New palette in disasm, fixed 'fs*', better scr.colorops
+    
+    Fix 'make w32'
+    Some more enhacements on the webui
+    New palette. im open to suggestions
+    Fixes in the scr.colorops parsing
+    Fix 'fs*' command
+    Analop now sets Type.ILL if invalid
+
+commit 2992f7c9516144ae9c053485898513318698f4f6
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Jul 3 17:43:20 2013 +0200
+
+    Add cfg.colorops and 'reg'+'num' palete elements in r_cons
+
+commit 63c57a1c99dd1be915ff5274c873ff4e460b6ae0
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Jul 3 16:09:50 2013 +0200
+
+    Remove debugger program arguments limit in -22LOC
+
+commit 7cb31941a6fc18721817d7ff648099505e88de85
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Jul 3 11:57:37 2013 +0200
+
+    Fix double free when loading malformed PE file
+    
+    FMI: https://corkami.googlecode.com/svn/trunk/src/PE/lfanew_relocW7.asm
+
+commit e8b35ce98d689f2ede34190c2a85fdf4436c153f
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Jul 3 10:31:21 2013 +0200
+
+    Minor enhacements for the r2wui
+
+commit 92b50950e4356c3c1d574d3c3bc5dc4ab4bfca18
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Jul 3 01:38:03 2013 +0200
+
+    Fix 'r2 -d ls /' launching program with arguments
+
+commit 9ab1e0405061e773f1b45d92fb7030f140ce804c
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jul 2 18:59:56 2013 +0200
+
+    Lock config var when sandbox state is locked
+
+commit 8a93b6a83d72ff28e2f70045f59037ba8b540305
+Author: Eduardo de la Arada <eduardo.arada@gmail.com>
+Date:   Mon Jul 1 17:05:15 2013 +0200
+
+    * Add relocs json output
+    * Fix rabins's homeplugdir
+
+commit f6173bdaf096c5ead0f38f3bca7ee58526ba4e48
+Author: Eduardo de la Arada <eduardo.arada@gmail.com>
+Date:   Mon Jul 1 16:29:47 2013 +0200
+
+    * Fix json output for undefined flags
+    * Add json output to bin_fields
+    * Fix typo at visual_mounts
+
+commit b963192a3136975938391043e736c9354394fe21
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Jun 30 02:45:33 2013 +0200
+
+    Redefine local flags commands and minor fixes in disasm.c
+    
+    Use Color_RESET after fcn, label and flags in disasm.c
+    RCore.anal_fcn_local_list() now takes RCore* as 'self'
+    Redesign commands to add/list/remove local flags (f.)
+    f.a@3: set local flag 'a' at offset 3
+    f.   : list locals in current function
+    f.*  : as above using radare commands output
+    f.** : list all locals from all functions
+
+commit 71850add419b3a67477398fb835925aa614e2f6c
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Jun 30 00:31:26 2013 +0200
+
+    Fix install/symstall of radare.lua
+
+commit 4c0095550c177e1d0a443bd332cd6f5a6f470eac
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Sat Jun 29 08:40:19 2013 +0400
+
+    build workaround
+
+commit 0711e606672fd21f0663a0e14415b7986e164d0b
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Wed Jun 26 01:44:21 2013 +0400
+
+    local labels inside functions - initial support
+
+commit ac4cedae53cf68277df4cfca086084a4e97abbb9
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jun 28 17:21:25 2013 +0200
+
+    Install radare.lua for libr/r_lagn/p/lua
+
+commit 438e90a06911f0bea33ece9306935b6ff241715a
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jun 28 13:12:46 2013 +0200
+
+    Fix minor indent issue in disasm
+
+commit 4c634933202b6dda8d38c07bfdefbe0d52e5f7c5
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jun 28 11:58:30 2013 +0200
+
+    Fix Vdd
+
+commit dbd6cc896b399a5b9e37b646893f3d52427031d9
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jun 28 09:31:11 2013 +0200
+
+    Initial support for D language bindings
+
+commit 0fb4c674d4eaab8ecc06df9a3ef1a0166e921904
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jun 27 19:21:25 2013 +0200
+
+    Create xdg directory before trying to use it
+
+commit 8377c98458aaee7bd6d0167f245d7a1403e24f56
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jun 27 19:15:59 2013 +0200
+
+    Use xdg configuration path ~/.config/radare2/
+
+commit 4aa286748635d808ae12403ca89b03bc99395938
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jun 27 19:12:14 2013 +0200
+
+    Workaround to fix ELF object symbol offsets
+
+commit 79f8200899e3441d668a579fba157d77034e9c65
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jun 27 19:05:25 2013 +0200
+
+    Clear runtime warn for arm64
+
+commit 1d24a954adbab1055314e0e368463287a833c2cf
+Author: Jaume Delclòs Coll <cosa.rara97@gmail.com>
+Date:   Thu Jun 27 13:46:23 2013 +0200
+
+    Added bits and size to RAnalFunction vapi bind
+
+commit 9779611911cdafe170567820162bf5758539cca0
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jun 27 03:08:15 2013 +0200
+
+    Update the arm64 disassembler and fix output of arc
+
+commit aa58db6b28133ecb29c2d649898760e3fac7c9db
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jun 27 03:07:59 2013 +0200
+
+    Fix 'fs/d' sdb build
+
+commit 9e18ba2b7ee05c60492d98eb512ec00ef4c0d54b
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jun 27 02:19:40 2013 +0200
+
+    Various fixes in cons/rgb
+
+commit d959ecae53efb617208c5175fb47799d8742c13d
+Author: Jaume Delclòs (cosarara) <cosa.rara97@gmail.com>
+Date:   Wed Jun 26 14:24:20 2013 +0200
+
+    Added optional argument size to 'aha' and 'ahb' commands
+
+commit 16740f0367b3945706e02c3c5f17b96d9385955a
+Author: Jaume Delclòs (cosarara) <cosa.rara97@gmail.com>
+Date:   Wed Jun 26 13:34:17 2013 +0200
+
+    Add size argument to ah-
+
+commit 8e2e8bad3c193544486fa328eb55b3c757962859
+Author: Jaume Delclòs (cosarara) <cosa.rara97@gmail.com>
+Date:   Wed Jun 26 09:52:32 2013 +0200
+
+    Made Sa command match the description in Sa?
+
+commit 6cf0973ce175cfe019e97426281853196c681ada
+Author: Jaume Delclòs (cosarara) <cosa.rara97@gmail.com>
+Date:   Wed Jun 26 09:56:39 2013 +0200
+
+    Indented a block
+
+commit cc102cbd6a6d4bbe47b0c0512e612db25589bc11
+Author: Jaume Delclòs (cosarara) <cosa.rara97@gmail.com>
+Date:   Wed Jun 26 10:11:51 2013 +0200
+
+    Stop function analysis at jump
+
+commit 0f1079af9cea3967e01df111ad6d8ffd9c7920c6
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Jun 26 22:51:37 2013 +0200
+
+    Fix internal python bindings
+
+commit a9b438afae3f5ffbac27c5c3b9829e31c241a2c2
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jun 25 17:35:36 2013 +0200
+
+    Fix build order issue, r2agent -s (sandbox mode), update rasm2.1 manpage
+
+commit f0e78090c5f4b9c06e03ef9c9479583b4c183eaf
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jun 25 02:57:57 2013 +0200
+
+    Handle '!' and '.' commands in #! prompt
+    
+    '!' : used to run system commands
+    '.' : used to interpret a file
+
+commit 72581dd93e3dd130a7755673f3b14c325332bcf2
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jun 25 02:45:12 2013 +0200
+
+    Many enhacements for the lua bindings
+    
+    Load module and cast core instance at startup
+    Requires latest valabind.
+    Add RCore::ncast api
+    Use pkg-config everywhere to fix lua plugin build
+    Fix install path for lua bindings
+    Export RCore instance to #!lua shell
+    Example:
+      #!lua
+      print(c.assembler.bits)
+
+commit f360e2bf861cb5f5ec84aa79be36349672f027f4
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jun 25 00:10:05 2013 +0200
+
+    Minor visual fix for 'e io' issue reported by idwer on irc
+
+commit ebcd368a1d7d0dac97eb5de9cec7b401652b218d
+Author: Jaume Delclòs (cosarara) <cosa.rara97@gmail.com>
+Date:   Mon Jun 24 23:33:40 2013 +0200
+
+    Correct pointer calculation in arm ldr opcode
+
+commit ac986b304b5027971d9ea5aa679aed3dc90057e8
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Jun 24 23:57:19 2013 +0200
+
+    Update ARC disassembler and add support for compact arc
+    
+    Source from https://github.com/foss-for-synopsys-dwc-arc-processors
+    $ r2 -a arc -b 16 thumb.arc
+
+commit 7407bc4f07cb11a76b6cff130dc36bf55cb69ee0
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Jun 24 23:06:32 2013 +0200
+
+    Handle ~ in '.' command. Fix #120
+
+commit d3620c50f9844d7bf043015a4ba3ccf6d85bcbfd
+Author: Jaume Delclòs (cosarara) <cosa.rara97@gmail.com>
+Date:   Mon Jun 24 18:43:58 2013 +0200
+
+    Fixed issue 118
+
+commit af6f3385deb4c8bedbf9a76213ef6bde96c45271
+Author: Jaume Delclòs (cosarara) <cosa.rara97@gmail.com>
+Date:   Mon Jun 24 13:21:45 2013 +0200
+
+    Remove obsolete conditional in libr/lang/p/Makefile
+
+commit 478d38ce87c26508e02b4b5a7500fd6e8009f8ea
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Jun 23 20:17:54 2013 +0200
+
+    Enable thumb byte swapping. Fixes #117 #116
+
+commit 3be06f30c0dcffe7023a6f75160ec0d0f0c51402
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Fri Jun 21 22:13:43 2013 +0400
+
+    Fixing function colorization
+
+commit d2af5ae7abc26c5125473eff8939f623ad9437bc
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jun 21 03:43:19 2013 +0200
+
+    Minor cleanup of ctypes test-bin example
+
+commit 047d8160a62985cf690a046b179f128c7e2d34fc
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jun 21 03:28:07 2013 +0200
+
+    Simplify r_bin ctypes binding test example with latest valabind
+
+commit b30a148be6443b7ee5aac36a37be0ae5bbe74101
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Fri Jun 21 00:34:03 2013 +0400
+
+    Colorize function names: step 2
+
+commit de5889565c0ca07015fbd53f497b1c129bf7a0c0
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jun 20 16:20:18 2013 +0200
+
+    Fixes for ELF imports/symbols listing
+
+commit c38a5a3232bddf6462da82fddf3f5e182a689a02
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jun 20 09:54:42 2013 +0200
+
+    Fix 'db -' command parsing
+
+commit 826020c2854cc07e7f2d6b6486f91ab74a521041
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jun 20 02:53:34 2013 +0200
+
+    Remove debug printfs
+
+commit 04cfefb9d827a08d78dc9ff76bd548b61d60f157
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jun 20 02:49:39 2013 +0200
+
+    Fixes on dyldcache list and x86 branch analysis
+    
+    Fix some branch analysis issues for x86
+    Add new simpler r_reg api r_reg_getv()
+    Store library offset in dyldcache xtract info
+    Accessible via rabin2 -A or r2 <file>
+    Looks like dyldcache is too slow and buggy for latest caches
+    Fix indentation in branch comments
+
+commit ef180f1e1bc33a2d6c9467f9b1cca9725a9f7444
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jun 20 01:38:31 2013 +0200
+
+    Dummy load when no program loads in elf
+
+commit caded0de14c7155fc92d253983f8f4b06e9c617a
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Jun 20 01:25:40 2013 +0200
+
+    Honor load program headers when no sections found in ELF
+
+commit 8912bda99586a9e73c4c054886b3a9c969faa317
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jun 18 12:19:46 2013 +0200
+
+    Fix typo
+
+commit edc6d4086b33d88657cf84aa86d9741509070c34
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jun 18 12:15:11 2013 +0200
+
+    Fix uninitialized use of project file buffer
+    
+    And fix some minor typos
+
+commit 2cbce80f2fa94a610c7b6c5a0f00bdba2d04f09b
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jun 18 12:09:23 2013 +0200
+
+    Add __cplusplus extern "C" boilerplate everywhere
+
+commit 0d0bd223745c19f7256975599ade36d00a8e889e
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jun 18 02:14:57 2013 +0200
+
+    Fix rva offset when no scnrva in r_bin
+
+commit 7e5f1f5851ea41f615bf956c54d4f48abfcf46ad
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Jun 17 11:41:00 2013 +0200
+
+    No ldconfig if /usr installs and fix segfault using RCore api
+
+commit 9adaefef8e825dee97fa014df4526f075390524f
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Mon Jun 17 09:56:27 2013 +0400
 
     Fix build
 
-commit c9aed523f997834ce3a70ab7b7efa5adf17bb432
+commit 83b40a7b4e6a10af050b3d9e579601fe417a0b4e
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Mon Jun 17 09:42:46 2013 +0400
+
+    Added cjmp, fname and flow color categories
+
+commit ef781cbadd65de686bc500cc3b1ce9cba1dc2cd0
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Oct 30 17:05:51 2012 +0100
+Date:   Mon Jun 17 03:26:48 2013 +0200
 
-    Update GNU arm disassembler. Needs more work
-
-commit ca69c55dc48e9c5ff67040fdb3252d12d7095508
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Oct 30 14:32:13 2012 +0100
-
-    Fix r_cmd_alias_del and help message for '-' cmd
-
-commit ece5d5b61d49f0c4c638a83b4a6b3a320c838693
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Oct 30 10:08:06 2012 +0100
-
-    Analyze LEA re-references on x86-64 style code
-
-commit 256c0e0bd91af8aa47af8d2e336bac6b725ca82e
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Oct 30 03:22:30 2012 +0100
-
-    dded r_cmd_alias_del to remove aliases and honor DEBUG=1
-
-commit fe6cb8c378f6b665e9640dd6eef22f66d20a52c8
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Oct 30 02:49:05 2012 +0100
-
-    Added '-' to create command aliases and lowercase i8080
+    New flag rasm2 -c CPU. pointer hints, fix analysis of x86-16 jmps
     
-    Lowercase i8080 disassembler (use e asm.ucase=true)
-    Add Alexander in AUTHORS
-    Extend r_cmd api to support aliases
-    Add new '-' command to register and call command aliases
-    Use RList in RCmd instead of kernel's list.h
-    Autocomplete aliases with <tab>
-    Add 'make DEBUG=1' to compile with -g
-    Do not strip symbols when compiling in debug mode
+    Add ahp (pointer hints)
+    Add rasm2 -c flag to select cpu (wip for arm)
+    rasm2 -e toggles instead of setting
+    Fix analysis of absolute jumps in x86-16
+    Push and pops are now magenta \o/
 
-commit ff03d423fdb7470ae96e33e78e87a5cc51cfd5ee
-Author: Alexander <alexander@demin.ws>
-Date:   Mon Oct 29 23:02:10 2012 +0000
-
-    i8080 disassembler license is changed to MIT.
-
-commit 7bf8917fdf75fceea5eba6a67a1520dbe0150568
-Author: Alexander <alexander@demin.ws>
-Date:   Mon Oct 29 22:04:26 2012 +0000
-
-    Added copyright information for i8080 disassembler.
-
-commit 2c5cd9b32d2b44ddd445b0fabf7bc96936c05f32
-Author: Alexander <alexander@demin.ws>
-Date:   Mon Oct 29 20:43:08 2012 +0000
-
-    Initial implementation of i8080 analyser.
-
-commit 278a24126e728c584a323838e97d993cb9a74e6d
-Author: Alexander <alexander@demin.ws>
-Date:   Mon Oct 29 20:19:49 2012 +0000
-
-    Initial implementation of i8080 disassembler.
-
-commit 6e14bc672513a6660e13ea10a5602b8f1a77dd43
+commit 6efdfd0e7af884c916569393f9c8bb1f2aa959cb
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Oct 29 13:15:18 2012 +0100
+Date:   Mon Jun 17 03:15:02 2013 +0200
 
-    Fix --with-rpath
+    Check write perms in sys/ldconfig.sh
 
-commit 52d4eff43f815e8947a1657dd05cfbd5d0c1578a
+commit def3e433bd1ff746a41218176f78c04a15142449
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Oct 29 00:47:20 2012 +0100
+Date:   Mon Jun 17 01:42:32 2013 +0200
 
-    Fix DEX method offsets and help message for @@?
+    Fix segmentation fault in 'pf' command
 
-commit 5ae58499924729cc9b17d5a80d353a8c5521d81f
+commit febace80333e1d21e13056c95a5954d2184fafac
 Author: pancake <pancake@nopcode.org>
-Date:   Fri Oct 26 10:00:22 2012 +0200
+Date:   Mon Jun 17 01:39:49 2013 +0200
 
-    Implement support to associate comments to flags
-
-commit f0a56711521b50de51e8cbffde8fb199c6578a67
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Oct 26 04:33:16 2012 +0200
-
-    Enhace web ui with notepad, menubar and more!
-
-commit 31b5036071be95b6797c4440f7cfea4f59233e51
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Oct 26 02:49:33 2012 +0200
-
-    add 'io' command and s/--without-ssl/--with-openssl/
-
-commit 465696ba17493c469af16be5240785d7c708d3a5
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Oct 26 01:58:18 2012 +0200
-
-    Fix pi and honor asm.decode on pi and pdi
-
-commit 94b001265acdbcafbe75259f351c8f5892f3926a
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Oct 26 01:33:57 2012 +0200
-
-    Fix mach0 ehdr header, new $S and $SS vars, Vdr
+    Run ldconfig stage after install and symstall
     
-    Show xrefs before comments
-    cmtright is false by default
-    Fix ehdr virtual section on mach0 files
-    Addr 'Vdr' command to rename functions in visual
-    Add $S and $SS variables (section offset, section size)
+    - Fixes non-standard path installs on GNU/Linux
 
-commit 61b0f8e78a11434671fa74da83fe26a6159bb15a
+commit d04ddbb3099d84145c2fa6dafd6dec5faf2485d0
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Oct 25 21:56:42 2012 +0200
+Date:   Sun Jun 16 23:40:20 2013 +0200
+
+    Add missing "push" and "pop" instruction types for udis86 analysis
+
+commit e76cbfb50d1375c363144923189377252802d5bc
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Jun 16 23:27:37 2013 +0200
 
     Fix build
 
-commit 1f15df18c426006d5b6045da1739236a7e052867
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Oct 25 21:40:11 2012 +0200
+commit 5341081d1d0cbafe973d9ba4abe9fe894397b062
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Sun Jun 16 17:54:50 2013 +0400
 
-    Fix build and http shutdown, WebUI (afr, pdi), add socket timeout
+    Added binary arithmetics operations in color 'bin'
+
+commit 7067327f791cc33c1eea20ca7e2bf1b4cb9a7bee
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Sun Jun 16 18:05:00 2013 +0400
+
+    Added more opcodes for type analysis
+
+commit 823b179308d4875896d9c0ad71bdd534f8cb1fb2
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Sun Jun 16 18:12:21 2013 +0400
+
+    Added ROL and ROR opcodes types
+
+commit d6de30eba4cd13e73e836b492088045316554e41
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Jun 15 02:56:25 2013 +0200
+
+    More R_LIB_VERSION and initial r_asm_set_cpu() dummy api
+
+commit d47a0176cfe46943fbb95d876a35176f7d43b345
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jun 14 03:57:47 2013 +0200
+
+    Update arm-dis from git
+
+commit 6eacc1284af3833924b47b95c4438e1884d50281
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jun 14 03:05:52 2013 +0200
+
+    Fix build
+
+commit bc0104563b75beeb53c90c474d7d0b2599eec145
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jun 14 02:51:33 2013 +0200
+
+    Initial support for runtime versioned libraries
     
-    Fix http server shutdown issue
-    Add timeout on socket connect
-    Enhace web ui with 'afr' and 'pdi' commands
-    Fix segfault in 'afr'
-    Fix build (thanks @egeektronic)
+    - This check will ensure you are running the latest r2 version.
 
-commit 5de2e221b26624b69e4c0c2b80695d311630bb10
+commit 460ee3983f59983cc4b344bfee5da453731e4471
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Oct 25 15:21:47 2012 +0200
+Date:   Tue Jun 11 12:25:56 2013 +0200
 
-    Fix om for rbin-friendly files, add 'dss'
+    Use acr 0.9.5
+
+commit ec51d2881f122ad80882523cf7d557ca138eace1
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Jun 11 11:49:15 2013 +0200
+
+    Fix infinite loop in r_core_cmd() (thx udishamir)
+
+commit b7f7054dcca85adb61e1ece1fd40fb0ed817ddad
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Mon Jun 10 03:08:26 2013 +0400
+
+    More supported bios firmware images in r_bin_bios
+
+commit c53ae2712abd83a4e51415db188b4516568c8811
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Mon Jun 10 02:33:33 2013 +0400
+
+    Fixed wrong entrypoint offset in check() function for r_bin_bios
+
+commit 5e0871485c630e5b1e6fba3c8c250906d798adc8
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Jun 10 00:28:55 2013 +0200
+
+    Update udis86 from git. Fix #97
+
+commit dd8d2c9df302749863692666ace2ed75d7070785
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Mon Jun 10 01:30:40 2013 +0400
+
+    Fixes in BIOS image checking
     
-    Implement dss command to skip steps
-    omr works with just a single argument too
-    Fix open maps for RBin files
-    Merge r_th into r_util
+    Fixed entrypoint address
+    Added checks for valid entrypoint opcodes (jmp opcode)
 
-commit ded886e371882f3a08e9dc9f5808454f032823bf
+commit 60dd038a16599601eaf55edb95153aea5838f876
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Oct 25 13:10:33 2012 +0200
+Date:   Sun Jun 9 22:54:42 2013 +0200
 
-    Add dkreuter's fix for ARM's gnu disassembler
+    Fix bindings
 
-commit 1e52015eee72882042f2095181e30422a3814bf5
+commit 082fccc1b26f28654f228f65b0c4fc3a979d62aa
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Oct 25 12:55:28 2012 +0200
+Date:   Sun Jun 9 03:25:32 2013 +0200
 
-    Add px[QW], fix segmented io and handle `!` pipes
+    Change r_anal ABI to fix bindings +to_esil_string()
+
+commit cdea34616df136f872f45c3fa52c8b35618318d3
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Jun 9 02:55:03 2013 +0200
+
+    Fix some warnings
+
+commit 4d32b6b8e475c93d9bbd8ab4431671c7786fce2a
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Jun 9 02:11:17 2013 +0200
+
+    Initial import of r_bin_bios plugin
+
+commit eb2a17f1c12704b06f2da67cebff34c91040b781
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Jun 9 01:21:06 2013 +0200
+
+    Set asm.segoff=true if arch=x86 and bits=16
+
+commit ced24c443dd9d1d4ea0d8f710a403be387bad6a6
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Jun 9 01:09:47 2013 +0200
+
+    Load <file>.r2 if exists, last 3 args of 'S' are now optional
+
+commit f52a2ac4b5208df5225a2433e15c8dee65b30384
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Jun 9 00:34:58 2013 +0200
+
+    Minor visual fixes for asm.segoff=true in hexdump and disasm
+
+commit 433c1ce26cc64c4f5a4dedbda7835551eb25059a
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Jun 9 00:10:16 2013 +0200
+
+    Fix build
+
+commit e68f3999ac70fa85d82c1dbf53895aaa52868a18
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Jun 8 18:08:17 2013 -0400
+
+    Fix #101 r_io_redirect was wrong and causing 'r2 -d ls' to fail
+
+commit d0f0975d69a53a86d45d4544713c41237f1b3e51
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jun 7 13:21:51 2013 +0200
+
+    Add doc/haiku, r2 -V = -v, fixes for emscripten build
+
+commit d18d098f141130b3188dd06ecf06d53a63a57426
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jun 7 12:15:02 2013 +0200
+
+    Added sys/lua.sh to build the lua bindings easily
+
+commit 3f1d3ba146da63530416e0fc1405adbe56d68cb7
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Jun 7 10:26:37 2013 +0200
+
+    Better r_str_hash(), Fixes in CCa, Added ?h, Better rbin for BEOS bins
     
-    Handle `!` with r_core_cmd_str_pipe
-    Fix 'afl' output
-    Add help for 'px' command
-    Add pxQ and pxW to show one word per line
-    Fix segmented io with maps and sections
-    Some test cases got fixed
-    Add test-r_anal.py
+    Identify Haiku binaries as 'beos' with noodle()
+    Fix CCa for non numeric offsets
+    Use sdb's r_str_hash() instead of old one (much less collisions)
+    Added ?h command to hash strings
+    CCa now appends instead of replacing comments
+    Do not mark as static if bin links to libs
 
-commit 73a7b77306a7d74950634ef7b782b50db3b0ab0d
+commit c9eb90adbcc5df2e5a990a1fb384ba5569467571
+Author: capi_x <capi_x@haibane.org>
+Date:   Wed Jun 5 21:58:31 2013 +0000
+
+    Add initial Haiku support
+
+commit 9f02ab38f8576faa3f0d287da3fffdddf28374a3
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Oct 25 09:48:45 2012 +0200
+Date:   Thu Jun 6 00:12:36 2013 +0200
 
-    Add 'omr' to relocate maps and rm libr/README
+    Use git describe --tags in version info
 
-commit 082adc171df08dcff3021d9b18ed9df28740b2f3
+commit d9b825d309e1016b940ccdabdd30b5ef7acb3891
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Oct 24 09:51:56 2012 +0200
+Date:   Wed Jun 5 16:15:39 2013 +0200
 
-    Minor fixups
+    Fix symstall for shlr/tcc
 
-commit f473a4d02bab8de4d7e2c2a19cdc2a35ab05efcc
+commit 802824bd31f8f48b042cceeea547b997c739f065
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Oct 23 18:44:32 2012 +0200
+Date:   Wed Jun 5 16:10:00 2013 +0200
 
-    Load bin info in debugger and some doc/sys cleanup
+    Fix build
 
-commit 2c6de61a58267f42e11533e6230dacb4d500f2d7
+commit a21afe405322a3b1ffcecf754ee75cccbb27286e
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Oct 23 09:40:13 2012 +0200
+Date:   Wed Jun 5 09:29:27 2013 +0200
 
-    TODO cleanup
+    More work to deprecate old cparse and use libr_tcc
 
-commit e3eb5488ac95408c8098541ec20e6154a3a58ce1
+commit 537cbefdbffe150a1595a3d63ce0bbeb56d30ebf
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Oct 23 01:06:38 2012 +0200
+Date:   Wed Jun 5 01:13:05 2013 +0200
 
-    Remove macports
+    Initial import of libr_tcc (make -C shlr tcc-sync)
 
-commit f4fdfb47ef24dede6681f529b6afda7989cef53b
+commit 74731aa7b106a9d0e41b2ee065da6883e267f170
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Oct 23 01:03:26 2012 +0200
+Date:   Tue Jun 4 23:49:28 2013 +0200
 
-    Use markdown README and TODO
+    Minor code cleanup in io
 
-commit 10f2c7f4f30d2a90d5159cc76976db9b16b18eb7
+commit 96accbd14bf6d6c1961df6e2568645d0065e8f63
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Oct 22 11:16:47 2012 +0200
+Date:   Fri May 31 02:09:45 2013 +0200
 
-    Force specific versions of node-ffi dependencies
-
-commit a876acb60edd92470fb7f4ea655dfef92e9a7b35
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Oct 22 11:06:03 2012 +0200
-
-    Fixes for sha384 and crc16/32 in RHash. thx bus1ng
-
-commit 858c65f2390b1152918671378275d499f76454e4
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Oct 22 10:43:10 2012 +0200
-
-    Add sandbox-kill and disable reopen in sandbox mode
-
-commit 16e0c555e568663428adfe4dab85eb38639db48b
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Oct 22 10:12:13 2012 +0200
-
-    Add 'oo+' and 'o+' commands to reopen in read-write
-
-commit 7f5a84b57afbbb98cc77b5e2c6be91fde959292a
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Oct 22 02:28:42 2012 +0200
-
-    Add new code analysis vars and update manpages
+    Begin r_io review. Fix r_socket_http query for xpcshell's httpd.js
     
-    rasm2 defaults -o to 0 instead of 0x8048000
-    fixes in rarun2 to make it more userfriendly
-    update some manpages with examples
-    enhace output of 'afi' command
-    fix 'pi' bug setting blocksize
-    fix 'pdi' bug ignoring user defined len
-    add $C $J $X and $F $I code analysis variables
-    run r2irc.js in sandbox mode
+    - Added libr/io/README in order to documentate the api
+    - Some minor refactoring and code cleanup in libr/io
+    - Fix hexdump title
 
-commit e48b9b2f3034998a3290f52d3e40ecfb740e2669
+commit fcf279ed1c80ae9c3c34e1111be56447d2bd3025
 Author: pancake <pancake@nopcode.org>
-Date:   Sat Oct 20 00:31:18 2012 +0200
+Date:   Mon May 27 00:11:42 2013 +0200
 
-    Add cfg.sandbox functionality
+    Fix npm's package.json
+
+commit b927be45709ed089507223843e25544057b2b787
+Author: pancake <pancake@nopcode.org>
+Date:   Sun May 26 23:27:44 2013 +0200
+
+    Fix #94 (anal only, no proper disasm)
+
+commit 29066085dee2e9f2d8282f8479dda9df3b35a655
+Author: pancake <pancake@nopcode.org>
+Date:   Fri May 24 02:53:15 2013 +0200
+
+    New 'afb <bits>' per-function asm.bits, Renamed 'afb' to 'afbb'
+
+commit cb45329212eeb1fd7e54b65543bab8afc1c9a4ce
+Author: pancake <pancake@nopcode.org>
+Date:   Fri May 24 02:51:19 2013 +0200
+
+    Fix analysis of 'add xx, pc, yy, zz' opcode (#94)
+
+commit 3ba48ac9ad3da9d50a8303e16a86cbd4fb194d13
+Author: pancake <pancake@nopcode.org>
+Date:   Thu May 23 12:37:40 2013 +0200
+
+    More color theme fixes and categories (math, bin, other)
+
+commit 04bcbfd29082d0700e186ec10c68b9e21214e531
+Author: pancake <pancake@nopcode.org>
+Date:   Thu May 23 10:33:21 2013 +0200
+
+    Fix off-by-one issues in anal comments (fixes #95 and probably #96)
+
+commit a5ab4aca9bd03d45fbcac15a48dc27d929ff6c49
+Author: pancake <pancake@nopcode.org>
+Date:   Thu May 23 03:47:57 2013 +0200
+
+    Dynamic string range detection. Fix ELF strings when no sections
+
+commit ecc45d8d53eb464e85994d48db411228d8bb4135
+Author: pancake <pancake@nopcode.org>
+Date:   Thu May 23 03:03:40 2013 +0200
+
+    More fixes in 'ec' and 'ecs' commands for color palette
+
+commit e5cdab6d20ac64f0f7fbb255bd4afc90bac5a048
+Author: pancake <pancake@nopcode.org>
+Date:   Thu May 23 02:26:48 2013 +0200
+
+    Fully configurable console palette for disassembly, hexdump and prompt
     
-    f.example: $ r2 -c=H -e cfg.sandbox=true -
+    - Fix overflow in r_cons
 
-commit 38628b4e17636960e3a47ecd5b05b52911605e70
+commit d31a0333d4f7980d8dc55151eec75999f1953ea4
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Oct 17 12:13:23 2012 +0200
+Date:   Wed May 22 16:15:56 2013 +0200
 
-    Fix ELF loader and segfault in disasm->hexdump
+    Remove unnecessary r_db dependency for r_cons
 
-commit 9f35d5608514dcfb0cfc483dbe8bdcc17021814b
+commit a42ab6898d0ad244c13f19911f82140815aac5b5
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Oct 11 13:32:00 2012 +0200
+Date:   Wed May 22 04:30:46 2013 +0200
 
-    Fix pkgcfg
+    Extend the fix of #92 to handle func name refs on nonlinear addressings
 
-commit e817148a846e2693bc8c3b99ae7f56a8020da806
+commit 9d65bfe70c6b58a05f39d0999ab4eb58f5d764ec
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Oct 11 13:15:50 2012 +0200
+Date:   Wed May 22 04:22:49 2013 +0200
 
-    Fix build of bindings
+    Initial r_cons palette support. See 'ec' command
 
-commit 7222f83152f7b5c6ebe3635bdc36d488cb681278
+commit 074e92646e6f352fcc728e15a32a54e863ee1c6a
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Oct 11 13:11:25 2012 +0200
+Date:   Wed May 22 02:01:30 2013 +0200
 
-    Remove all r2-bindings references to r_line
+    Refix build
 
-commit 9440560f923e9d2fc27565edb11a4a8f3aa2d1b5
+commit 90813575499a5910074693847bbbe6c8bb85504d
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Oct 11 13:09:33 2012 +0200
+Date:   Wed May 22 01:54:50 2013 +0200
 
-    More build fixes
+    Fix build
 
-commit 710c91ff18a13c98312520a1f0b066f2c95c02c9
+commit 8c5a6d68ff1ab5ea413638320b85cee72714db73
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Oct 11 10:44:22 2012 +0200
+Date:   Wed May 22 01:49:18 2013 +0200
 
-    Oops. Install of libr/include/sdb
+    Handle fcn in r_parse, unify filter() and add locdiff utility
 
-commit c18764e3f8f6e87aae93562e947d86919be4a519
+commit 95fd9628f857741242c3e4e7df6800611409dae3
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Oct 4 17:05:43 2012 +0200
+Date:   Tue May 21 17:10:58 2013 +0200
 
-    Oops. Fix build
+    Fix support for latest android ndk
 
-commit 3fbfa2d21cca241f3bf3f017433c79622a956ae2
+commit e3129f246ec883afe0e9c094614f12465f005b16
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Oct 4 15:05:51 2012 +0200
+Date:   Tue May 21 08:59:08 2013 +0200
 
-    Add doc/vim with configuration for my indentation
+    Show flag comment in branch references (fixes #92)
 
-commit 792e8b8bdf09cac1721a785e57bbe1b752631e0c
+commit ca8b6846376d6f3480a72a0cae1fbf0b06c22929
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Oct 4 01:49:04 2012 +0200
+Date:   Mon May 20 23:00:11 2013 +0200
 
-    Fix parallel build
+    Add CCa and CCa- commands (comments without seek)
 
-commit 3540924f4010d42f5decd59e20f9eb2faea4a605
+commit 16ddff4eb9911f39fb66bd11c82537f6b97b1dfa
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Oct 4 01:20:00 2012 +0200
+Date:   Mon May 20 03:00:49 2013 +0200
 
-    Better paralelization of build system
+    More work on ESIL, and implement r2 -Desil ..
 
-commit e8a601fe538583b558c45fd0d789eaf40cd5ad8b
+commit 0b0feba28e6901e5626dc01a5eacc3547dc9dcd7
+Author: Eduard Burtescu <edy.burt@gmail.com>
+Date:   Sun May 19 10:46:18 2013 +0300
+
+    PE: fix buffer overflow regression caused by the fix for #64 (fcbe3ca).
+
+commit 9f309aea25f3c705952830b1756feef71e276574
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Oct 3 16:32:32 2012 +0200
+Date:   Fri May 17 01:50:49 2013 +0200
 
-    More makefile simplifications (-56LOC)
+    Rename RAnalOp->code to RAnalOp->esil (Evaluable String Intermediate Language)
 
-commit 69a12884ed28ed1a2d736b98fd310a58bb08a2a4
+commit 356640967b3978194a8b3c2025e0a227bef1ddd0
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Oct 3 14:31:35 2012 +0200
+Date:   Fri May 17 01:42:24 2013 +0200
 
-    Simplify the build system
+    Fix double warning for -zz and add support for openSUSE in mingw32.sh
     
-    doc.sw has been moved to radare2-extras
+    - Fix mingw32 build
+    - Fix double warn for -zz
+    - Some code indentation in c55plus code
+    - mingw32.sh now supports openSUSE
 
-commit 0aa55a4e01a444799ffce368ebafa9d96837d4f3
+commit 774e6b750f86083734bf1ce4c905443d7b204ecd
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Oct 3 12:10:18 2012 +0200
+Date:   Thu May 16 13:48:45 2013 +0200
 
-    Add support for http response headers
+    Check 'malloc' return values in r2agent (netbeisser)
+
+commit a42e5749541dceb7e5677f6332ff4de35e0b4ad4
+Author: th0rpe <josediazfer@yahoo.es>
+Date:   Tue Apr 23 12:53:21 2013 +0200
+
+    Initial import of the c55+ disassembler (by th0rpe)
+
+commit da0c52203bbb1c3a4d6806ac35eabcd02c4baeaf
+Author: pancake <pancake@nopcode.org>
+Date:   Tue May 14 03:13:49 2013 +0200
+
+    Fix null deref in demangle loop for java classes (thanks l0gic!)
+
+commit 167dd447344b4a0b1f9e72791184a88b5f4d0b24
+Author: schrotthaufen <dont@contact.me>
+Date:   Tue May 14 02:16:24 2013 +0200
+
+    Fixed a NULLptr deref in java loader
+
+commit 32391e5f794e638fee82c81dc1f158e74054ac46
+Author: pancake <pancake@nopcode.org>
+Date:   Tue May 14 02:26:43 2013 +0200
+
+    Update sdb and fix Linux build (-fPIC)
+
+commit 2b12d1f9cd51f5689712b487ce344023c7752a62
+Author: pancake <pancake@nopcode.org>
+Date:   Tue May 14 02:12:54 2013 +0200
+
+    Add missing file
+
+commit ed3edeb7158762cbef3c627b5423704d4468b50c
+Author: pancake <pancake@nopcode.org>
+Date:   Tue May 14 02:06:43 2013 +0200
+
+    Fix native build
+
+commit 9c8692ab065dd6f7d3208f6126d1ba752aee32a5
+Author: pancake <pancake@nopcode.org>
+Date:   Tue May 14 01:53:52 2013 +0200
+
+    Some udis86 anal fixes, update sdb and fix mingw32 build
+
+commit 5ba586da9d5172792cb785fdf1b0a313b54d62d8
+Author: pancake <pancake@nopcode.org>
+Date:   Sun May 12 23:37:31 2013 +0200
+
+    Honor DESTDIR in sys/python.sh
+
+commit f0bce391b85f4e07a54268018ced1310b64704f7
+Author: pancake <pancake@nopcode.org>
+Date:   Sun May 12 23:24:26 2013 +0200
+
+    Fix thumb arm assembler for push/pop (TuXeD patch)
+
+commit f6a8d7b3b80104cb33756bd1957e80a62adffe78
+Author: pancake <pancake@nopcode.org>
+Date:   Sat May 11 01:58:05 2013 +0200
+
+    Initial import of binr/r2agent
+
+commit 09f6cc9973b7c04b627639614edf86dd89b89b1e
+Author: pancake <pancake@nopcode.org>
+Date:   Tue May 7 00:48:08 2013 +0200
+
+    Fix segfault in udis86 analysis
+
+commit 4d78e5ee3039cb532848c2adc2777ad7021f04ee
+Author: pancake <pancake@nopcode.org>
+Date:   Mon May 6 01:55:09 2013 +0200
+
+    Make unix fork behave like w32 (r2 -d a.out == r2 -d ./a.out)
+
+commit 3c62d1905ae3291bce2e5ae165284d43482d0623
+Author: pancake <pancake@nopcode.org>
+Date:   Sun May 5 19:39:01 2013 +0200
+
+    Fix rarun2 stdout and stderr pipes
     
-    Fix some issues in the www ui
+    dcu requires argument to work
+    Enhace rarun2 manpage
+    Fix rax2 -B for negative values
 
-commit f74b74ab6c006bfce564336d2570ff2d3507c88e
+commit 735bcc2fb94b93a3d9050740e0f02534249702a4
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Oct 2 11:33:09 2012 +0200
+Date:   Sun May 5 18:35:14 2013 +0200
 
-    Do not build libr/*/t by default
+    Use r_file_abspath() and add dir.projects eval config var
 
-commit 1416aff48e3d37a2ed436be9f635496b3e80d644
+commit f2c8e597d84d8a862cb28791b5fb1570d5e6ab2c
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Oct 2 11:26:32 2012 +0200
+Date:   Sat May 4 02:57:19 2013 +0200
 
-    Bump 0.9.3git after release
+    Add 'pcw' and 'pcd' to print C code for 32 and 64 bits
+
+commit be02d4fc9dfe37258de4e99f1d7a3d9057b56ca8
+Author: pancake <pancake@nopcode.org>
+Date:   Sat May 4 02:35:52 2013 +0200
+
+    Initial work on the evaluable opcode analysis strings
+    
+    - New command 'ae' to evaluate those expressions
+    - Use 'ao~code' to see the generated eval strings
+    - Rerefix udis86 16bit issue
+
+commit afacfbeda4bd2a918d18cd2fdcf89169712389e4
+Author: pancake <pancake@nopcode.org>
+Date:   Fri May 3 14:52:02 2013 +0200
+
+    Fix unitialized pointer in elf
+
+commit 46a4d176fd28ab0ddfecac8ebbcebcc5fa18f491
+Author: pancake <pancake@nopcode.org>
+Date:   Fri May 3 00:59:02 2013 +0200
+
+    sed -e s/sudo/${SUDO}/ -i sys/python.sh
+
+commit 7517099976824f9067fd0557ee1b2e5deddc10b7
+Author: pancake <pancake@nopcode.org>
+Date:   Thu May 2 23:49:58 2013 +0200
+
+    Implement 'woe' command and honor NOSUDO and PREFIX in sys/*.sh
+
+commit 24ccb7aabb4e7752c2e46d0d719484ab823d558a
+Author: Shane Peelar <lookatyouhacker@gmail.com>
+Date:   Tue Apr 30 19:34:54 2013 -0400
+
+    Fixed compilation problems on Windows with MinGW-w64 4.8
+
+commit 4c6bc1d28bd4a220c2d1ac87cafeafd52c056998
+Author: pancake <pancake@nopcode.org>
+Date:   Wed May 1 23:03:52 2013 +0200
+
+    Fix build
+
+commit b9a9b14a60b62ab9e637e0ef8f308a38ddf34a48
+Author: pancake <pancake@nopcode.org>
+Date:   Wed May 1 01:50:37 2013 +0200
+
+    shlr/java is now PIC
+
+commit e40734630037c6121b63b2644324e25e8c26cd9a
+Author: pancake <pancake@nopcode.org>
+Date:   Wed May 1 01:43:35 2013 +0200
+
+    Fix shlr/ sdb-sync
+
+commit 781e62bedb0a14bc71ab1f4d2761f2e8b6bb0cef
+Author: pancake <pancake@nopcode.org>
+Date:   Wed May 1 01:29:06 2013 +0200
+
+    Move libr/db/sdb to shlr/sdb (fix build?)
+
+commit 98a1fac0174aa570de358e74d324adee49681b52
+Author: pancake <pancake@nopcode.org>
+Date:   Wed May 1 01:01:43 2013 +0200
+
+    Autocomplete wf, wF, wt, wp
+
+commit 8eb68dda7b404da3dbadbb3158abba11aa0e7b97
+Author: pancake <pancake@nopcode.org>
+Date:   Wed May 1 00:40:26 2013 +0200
+
+    'pdi' is now the same as 'pid'
+
+commit 3a551239700e02a78de9fbbd2d19d0f6021382eb
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 30 04:01:06 2013 +0200
+
+    More enhacements for the webui
+    
+    - Get version using r2 api in about panel
+    - Align all buttons of the topbar
+    - Bigger font size for disasm
+
+commit 1e6aeb655ce7d9a21e15f5121c9a63fcd0e8ec23
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 30 03:36:38 2013 +0200
+
+    Minor fixes on the webui
+
+commit b244a31cefebe27ccbd77d2c69b575f5fc23d711
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 30 03:25:32 2013 +0200
+
+    Upgrade enyo and enhace webui (add scripting tab)
+    
+    - Honor pvj length
+    - Refix udis86 16/32bit disasm
+    - Fix many glitches in the webui
+
+commit eeceed230b094efdfa3b0ffddb99b04474f8ca4f
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Apr 29 18:49:26 2013 +0200
+
+    Fix sizeof() operand mismatch warning (thanks fam)
+
+commit 1e325fc5b0389f89575859d3b2721c8d28ecb2c3
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Apr 29 09:20:16 2013 +0200
+
+    Fix 16bit disasm bug using udis86. Fixes #25 #83
+
+commit ee7244616008cf40980955e711e9dbcc1c0de33d
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Apr 28 23:58:11 2013 +0200
+
+    Fix bindings
+
+commit 3ea0b1761dec24aea2b42ccc274cb8d54bc7bc83
+Author: Eduard Burtescu <edy.burt@gmail.com>
+Date:   Sun Apr 28 16:53:07 2013 +0300
+
+    VAPI/r_bin: updated to match changed static string size.
+
+commit 02259615a39225c780daa565725f09c26dab56ac
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Apr 27 01:50:46 2013 +0200
+
+    Fix issue in r_cons_grep()
+
+commit 0aaa61f7d2c20f34e63ee12d6f6634cf0d66a363
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Apr 26 03:15:39 2013 +0200
+
+    Store CFLAGS in configure, fix build race condition and rabin2 -zz
+    
+    - Try to fix the race condition in build
+    - Fixes for rabin2 -zz (show strings when opening an unknown file type)
+    - Store CFLAGS and LDFLAGS at configure stage
+
+commit 2a0b1707cb9c2b80425477749e1a033691f53e15
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Apr 26 01:41:31 2013 +0200
+
+    Update doc/iphone and fix build on iOS
+
+commit c22aaf16d25c405657522c9eb249401ce1a4b3f2
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Apr 26 00:04:05 2013 +0200
+
+    Fix bindings, loading strings of unknown filetype
+
+commit 26a7854dd6e9164e2d20b5cc95dd37d5ca1eeb64
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Apr 25 03:42:17 2013 +0200
+
+    Rewrite DEX parser
+
+commit 870696bbde31e16cdabdf433a0e529352100e905
+Author: Eduardo de la Arada <eduardo.arada@gmail.com>
+Date:   Wed Apr 24 17:13:52 2013 +0200
+
+    Add "show mountpoints" option to fs vmenu
+
+commit 9e0d7b777bf03ca7ef5d99aa63240b9760a5bf8b
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Apr 24 13:09:06 2013 +0200
+
+    Fix corner case when loading huge files with strings
+
+commit fb19a8cdd4ed94124169a14635a7b0a948bc6d4d
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Apr 24 09:46:57 2013 +0200
+
+    Fix debug of 32bit programs on 64bit boxes
+
+commit f04dbd3ab471872d9d826724ec466efc03466386
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Apr 24 09:14:08 2013 +0200
+
+    Use '$$' instead of '$pc' in r_asm_assemble()
+
+commit e20b2ed6d0b230617916a2762893bd5ad82fb600
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Apr 24 00:38:49 2013 +0200
+
+    Accelerate visual disasm mode
+
+commit 439c3bb3de1e8ed90f76a39be24e659e547db7c4
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Apr 24 00:16:35 2013 +0200
+
+    Fix infinite loop in VT and minor tweaks in '?' help
+
+commit 86f6f6b8c64153360d994d0647873430e54abd74
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 23 19:24:41 2013 +0200
+
+    Fix stack analysis on 64bits
+
+commit d1459f5665d0f74aa533cd896deaf69f4889f2e7
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 23 03:38:39 2013 +0200
+
+    Add r2 -A and -k, implement stackptr for udis86, update manpage
+
+commit b77cdf33d7418938af8ef567c9556443a774e410
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Apr 22 01:34:25 2013 +0200
+
+    Fix loading of MACH0 object files and fix build
+
+commit 79b23a35d4aba1a7d4fcba826a2510e5735e99ca
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Apr 22 01:18:21 2013 +0200
+
+    Fix .string and .ascii directives
+
+commit f52fdf762fede527c03faab351c6cc921cfd7f45
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Apr 22 01:09:27 2013 +0200
+
+    Fix armthumb disasm, 64bit inc/dec on x86, syscall in r_asm
+    
+    - rasm2 -k to select kernel like ragg2 does
+    - rasm2 -k linux -b32 'mov eax, $sys.write'
+    - Implement x86-64bit INC and DEC
+    - Add x86-8 and x86-64 bit calling conventions in r_syscall
+
+commit 68ae2c4463e0ebbd09f124bb7abeb6f59e618399
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Apr 22 00:05:35 2013 +0200
+
+    Fix rasm2 -d - (without -f)
+
+commit 6ad7ed7925e80e00e01d0b9eb8a90afceb25ab8d
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Apr 22 00:01:41 2013 +0200
+
+    Lot of bugfixes in r_asm, x86 assembler and ragg2 -x
+    
+    - Thanks Ripe for reporting
+    - Handle $pc in r_asm assemble
+    - New ops for x86.nz: sar, shl, shr, shl, rcr, rcl, ror, rol
+    - Fix disassembler indentation for functions
+    - Fix memory align issue in r_sys_run()
+
+commit 5ef42734abadbfb961d9af6a96a50d3b98f026c2
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Apr 21 22:11:33 2013 +0200
+
+    Add 'sar' opcode for 32 and 64bits in x86.nz
+
+commit 23a291b0855148082bc3b9ca738479dd58081914
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Apr 19 00:02:23 2013 +0200
+
+    Add more fortunes and minor refactoring in core.c
+
+commit 30a75dc71c56eb4afb2b269b23196f57e7bf4cde
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Apr 18 23:11:12 2013 +0200
+
+    move www to $pfx/share/radare2/$ver/www (thanks debian)
+
+commit 11db8e1c50b7d70ca0bd943631635f43bed267f1
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Apr 18 10:06:28 2013 +0200
+
+    Fix build (dirent->d_namlen is not portable)
+
+commit 8afdf330ae03d98adf44a3d4167bbe0528ca3901
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Apr 18 09:39:37 2013 +0200
+
+    List and remove projects using '-p' and '-p -$prj'
+
+commit 59670523e2a08047a6cffaa3dd59b6e6324bf301
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Apr 18 03:58:44 2013 +0200
+
+    Initial transition to sdb: anal.xrefs
+    
+    - Cascade core_project_save > anal_project_save > anal_xrefs_save
+    - Database is stored into ~/.radare2/rdb/$prj.d/xrefs
+    - Build libsdb properly to get access to all the api
+    - Use sdb from r_anal_xrefs() - needs cleanup
+    - Update sdb to the latest version from git
+    - Fix some warnings
+
+commit 5e47ba3a7e1fd9e97b21ce4bbaded3ea899fe054
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 16 19:54:26 2013 +0200
+
+    Fixes in manpages
+
+commit 5c40488acc55eb67cdabe30db897c914106f4764
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 16 19:48:59 2013 +0200
+
+    Fix .ia* issues when demangling c++, Fix visual hexa
+    
+    Fix recent regression with scr.cols -> hex.cols
+    Minor fix that was causing some nasty r_num parsing
+    Show demangled symbol/imports names as comments
+
+commit e71bb8d701ea4c81e7fbf3951f5f24e4671ed34a
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 16 04:11:32 2013 +0200
+
+    Rename and fix scr.{stride,cols} as hex.{stride,cols}
+
+commit 0d993c8cbd563632e85d43049256b3b1c83e0510
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 16 04:01:39 2013 +0200
+
+    Initial working code injection with r_debug_execute()
+
+commit 4cf83c6a63624cbffc95f3622da6d7c0f575ca69
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 16 03:24:47 2013 +0200
+
+    Detect more c++ bins, demangle symbols and fixes in udis86
+    
+    Better detection of c++ bins
+    Handle symbol/import name mangling as code comments
+    Fix visual menu 'VT'
+    Fix udis86 call analysis
+
+commit 96d1a1141b80d6f0e138768ddd2a5b5a99561855
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 16 01:48:03 2013 +0200
+
+    Fix invalid flag name filtering issue and add rax2 -t (timestamp)
+
+commit b612d2a6b14f2214228ad94bc4d1f2bcfd8bb2de
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Apr 12 02:39:46 2013 +0200
+
+    Fix static build (+android)
+
+commit 426873d911a3501d9ce0cc8352fd66ad64312394
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Apr 12 01:15:00 2013 +0200
+
+    Better support for macros and fix dex checksum hint
+    
+    - .(fix-dex) macro defined when loading a dex
+
+commit 750c4f19a97d3aae913f1c67bd2243a99443a06b
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Apr 12 01:14:33 2013 +0200
+
+    Fix manpages for BSD troff
+
+commit e0e2bbb443da385577a25154c98a9759df4f1c11
+Author: oblique <psyberbits@gmail.com>
+Date:   Thu Apr 11 22:13:41 2013 +0300
+
+    refix issue #59 (thanks eddyb)
+
+commit e21b70ab859c6b8b5eb8fd2d9b716f0924d4ea0b
+Author: oblique <psyberbits@gmail.com>
+Date:   Thu Apr 11 22:10:03 2013 +0300
+
+    radiff2: fix show count
+
+commit 9894b0075e09de2066feab74fd2d5895cd396fbd
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Apr 11 01:30:46 2013 +0200
+
+    Add 'rax2 -u' to get aproximated units measure for given value
+
+commit 032860782d1044deb288e642f76614bf860d34e2
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Apr 11 01:25:25 2013 +0200
+
+    Add checksum correction hints for DEX
+
+commit 469db755bf6f2607ef82a45add0fdb61dca71668
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Apr 10 02:04:50 2013 +0200
+
+    Enhace 8085 disasm and add basic code analysis support
+
+commit 5285d1bdea8e12e5e1afd5790afda237229be25d
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 9 22:54:04 2013 +0200
+
+    Break ABI. r_asm_disassemble's length is now 'int'
+
+commit 189e5553cca13a4d559364c976a1b408b0dcde9f
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 9 20:05:36 2013 +0200
+
+    Initial 8051 disasm and ihex:// io plugin
+
+commit 93f9d519cf302bfbaa57c8f21e7854bbba2ab3fb
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Apr 8 09:58:12 2013 +0200
+
+    Fix build
+
+commit ad0f93e8c95b714a161d1ce4b01e6bbcb7f5b631
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Apr 8 09:38:23 2013 +0200
+
+    Add r_num_units and hash list is no longer hardcoded
+    
+    Added ?o (octal) and ?u (units) new commands
+    Minor random code cleanups
+
+commit efb02c8a9530b86fd081d770ad3e2b26e8665ff7
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Apr 5 12:37:28 2013 +0200
+
+    Fix optimization that was invalidating all C* commands
+
+commit 99430303e42d7f89bac32a3f3ad19dc0df1dc93d
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Apr 5 03:16:42 2013 +0200
+
+    Deprecate rabin2 -V.. use rabin2 -v everywhere!
+
+commit 076a2837c9b43aede62aee7423e3a998c5ba47c1
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Apr 5 03:09:54 2013 +0200
+
+    Update sdb and fix build
+
+commit 542de1b426a4bb5ad5c64101d351c344e72ac4da
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Apr 5 02:55:47 2013 +0200
+
+    Avoid dup load of DEX, reduce calls to r_meta_cleanup
+    
+    - Nicer output for command 'fd'
+    - Cache methods to avoi dup loading
+    - Fix delimiter in internal grep (allow '/')
+    - Faster r_meta processing (reduce calls to meta_cleanup
+
+commit dd301cd6a7dbde81b4c08d7f98284821d236e62e
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Apr 5 01:53:21 2013 +0200
+
+    Add adler32 checksum, fixes in dex, add 'ws' command
+    
+    - Handle ^C in searches
+    - Safer progerssbar for small terminals
+    - Add 'ws' command to write pascal/dalvik/java strings
+    - Fix visual refresh on terminal resize
+    - Partially fix dex negative section issue
+
+commit 128097572ac3158e7af8fe5e81b2e37330dbdca1
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Apr 4 23:19:19 2013 +0200
+
+    Optimize DEX header parsing. Fix 'psp' command
+    
+    Added r_buf_get_at() method to avoid copies
+
+commit 863323101248d3ba7dfa60971413331f41b89027
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Apr 4 12:22:27 2013 +0200
+
+    Add UJMP opcode in udis86 anal plugin
+
+commit 3aa549ecb05d1b81e363b4fd78d2b7c99a673934
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Apr 4 02:32:13 2013 +0200
+
+    Share version function between all commands. Fix #76
+
+commit 5c1cd1f0ef683a926414b0f0ce336a7b825105bc
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Apr 4 01:42:12 2013 +0200
+
+    Initial support for UTF8 in r_cons and r_util
+
+commit c88c1ce13efd7d709c88bbdfd8841b6890df7f71
+Author: chous <chous@acm-sl.org>
+Date:   Wed Apr 3 01:10:55 2013 +0200
+
+    Added some Valadoc documentation to RAsm Vala bindings and restore copyright
+
+commit 240ff7da71c37010d3f2a4b5a080ef33bad00e7f
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 2 22:36:07 2013 +0200
+
+    Fix Ve menu boundaries and Vt navigation
+
+commit 359c1f7225283dd9d6752edd7006140478dbcca5
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 2 14:59:38 2013 +0200
+
+    Update to udis86-git(cd shlr/udis86 ; make sync)
+    
+    Source taken from git://github.com/vmt/udis86.git
+
+commit 7e4d92c6fbe059810e46efb8084fa9683feb3e3d
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 2 12:45:16 2013 +0200
+
+    Fix some warnings
+
+commit 735a4f7a4af1b3221e3341d1018a10e0830c696c
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Apr 2 12:11:20 2013 +0200
+
+    Fix -h and manpages. Kill rsc2 and rasc2 from binr/
+
+commit 3917cbe019c9b83e481baab7a6be1494b91b11a4
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Apr 1 06:04:07 2013 +0200
+
+    Update sdb again and hopefully fix jenkins build
+
+commit d39af2028ddfcf94e7290aa559d412fd7ae0a485
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Apr 1 05:52:21 2013 +0200
+
+    Update sdb and fix configure
+
+commit ba7c3b88968f8c03592c9e936a947b09c8cdb40f
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Apr 1 05:28:34 2013 +0200
+
+    Various fixes in visual tracks and handle window resize
+    
+    Make Ve run callbacks when values are modified
+    Visual refresh on window resize
+    Use r_cons_visual_flush() in vmenus
+    Add workaround for Prompt iOS client (scr.widthfix)
+
+commit 99040c9ad766536e62c26b3babe05c25b5c131b7
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Apr 1 04:42:14 2013 +0200
+
+    Initial import of r_cons_rgb API (ansi 256 color)
+
+commit d5f3ddaaf0d7a3847818a813f15b9e65f178d528
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Apr 1 01:45:28 2013 +0200
+
+    Refix #72
+
+commit 7ff12dfeee6b294e7c26564f53d66fb860132e3c
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Mar 31 04:34:46 2013 +0200
+
+    Fix #72 : Honor per-section arch/bits in io+core
+
+commit bcae77fb903109aa94f0750c7692ef371cacbbcb
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Mar 30 00:54:05 2013 +0100
+
+    Honor FSF filename license rules (LICENSE->COPYING)
+
+commit e62e837b7ad8058f8a8c43738bd9cdda5054cf7e
+Author: Anton Kochkov <anton.kochkov@gmail.com>
+Date:   Wed Mar 27 23:33:53 2013 +0400
+
+    TE: 16 bit for _TEXT_RE and fixes for virtual addresses calculations
+
+commit 0f807f1bdb6fa62de3e966aa6bd7efc861be3ad1
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Mar 28 09:27:15 2013 +0100
+
+    Honor RASM2_{ARCH|BITS} environment in rasm2
+    
+    Alphabetically sort the options in rasm2 -h
+    Globally defined nibble definitions
+
+commit 89008c734c97d5ce3e2a9677e1c18f07def656f8
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Mar 27 12:30:32 2013 +0100
+
+    Fix crossbuild
+
+commit 85a9fe184ffa820838cb1540977e00575d3dfad7
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Mar 27 00:40:01 2013 +0100
+
+    thumb ARM assembler supports 'push {}' and 'pop {}'
+
+commit ff36a72088a8eeeff5849f7119f6c4e7ced5b0f1
+Author: pancake <pancake@nopcode.org>
+Date:   Wed Mar 27 00:17:32 2013 +0100
+
+    Update sdb, not found warn in r_config_get
+    
+    Fix core_config_init ciclic dependency issue
+    Add support for 0b... expression as well as ...b
+    Update to sdb 0.6
+
+commit 6fbbb3dea070f7bee68bfb4a5f7111d195c78d07
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Mar 26 23:37:19 2013 +0100
+
+    Add arch/bits fields in RBinSection (breaks abi)
+
+commit 1be6f3ded5ff9fa12c371884af88402a5f08daff
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Mar 26 13:50:05 2013 +0100
+
+    Fix openssl detect
+
+commit 3b31026bbc9c0bcc9071dffd8093d41ea993ea73
+Author: pancake <pancake@nopcode.org>
+Date:   Fri Mar 22 14:42:07 2013 +0100
+
+    After-release bump for 0.9.5git

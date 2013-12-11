@@ -1,10 +1,14 @@
 BINDEPS=foo
-#include ../../../config-user.mk
 include ../../config.mk
 
 CFLAGS+=-I../../include -Wall -DPREFIX=\"${PREFIX}\"
 ifeq ($(OSTYPE),darwin)
 CFLAGS+=-undefined dynamic_lookup
+endif
+LUAPKG=$(shell pkg-config --list-all|awk '/lua-/{print $$1;}')
+ifneq (${LUAPKG},)
+CFLAGS+=$(shell pkg-config --cflags ${LUAPKG})
+LUA_LDFLAGS+=$(shell pkg-config --libs ${LUAPKG})
 endif
 
 BINDEPS=
@@ -34,8 +38,8 @@ PYCFLAGS=$(shell ${PYCFG} --cflags)
 PYLDFLAGS=$(shell ${PYCFG} --libs) -L$(shell ${PYCFG} --prefix)/lib
 
 lang_python.${EXT_SO}:
-	${CC} ${CFLAGS} ${PYCFLAGS} ${PYLDFLAGS} \
-	${LDFLAGS} ${LDFLAGS_LIB} -fPIC -o lang_python.${EXT_SO} python.c
+	${CC} python.c ${CFLAGS} ${PYCFLAGS} ${PYLDFLAGS} \
+	${LDFLAGS} ${LDFLAGS_LIB} -fPIC -o lang_python.${EXT_SO}
 endif
 
 ifeq ($(HAVE_LIB_TCC),1)
@@ -43,10 +47,8 @@ lang_tcc.${EXT_SO}: tcc.o
 	-${CC} ${CFLAGS} -fPIC ${LDFLAGS_LIB} -o lang_tcc.${EXT_SO} tcc.c ${LDFLAGS_LINKPATH}.. -ldl -ltcc
 endif
 
-ifeq ($(HAVE_LIB_LUA5_1),1)
 lang_lua.${EXT_SO}: lua.o
-	-${CC} ${CFLAGS} -fPIC ${LDFLAGS_LIB} -o lang_lua.${EXT_SO} lua.c ${LDFLAGS_LINKPATH}.. -llua5.1
-endif
+	-${CC} ${CFLAGS} -fPIC ${LDFLAGS_LIB} -o lang_lua.${EXT_SO} lua.c ${LDFLAGS_LINKPATH}.. ${LUA_LDFLAGS}
 
 lang_ruby.${EXT_SO}:
 	-env CFLAGS="${CFLAGS}" ruby mkruby.rb
@@ -57,6 +59,6 @@ lang_perl.${EXT_SO}:
 		`perl -MExtUtils::Embed -e ccopts | sed -e 's/-arch [^\s]* //g'` \
 		`perl -MExtUtils::Embed -e ldopts | sed -e 's/-arch [^\s]* //g'` -lncurses
 
-clean:
+mrproper clean:
 	-rm -f *.${EXT_SO} *.${EXT_AR} *.o
 	-rm -rf *.dSYM

@@ -14,7 +14,7 @@ ut64 PE_(r_bin_pe_get_main_offset)(struct PE_(r_bin_pe_obj_t) *bin) {
 
 	// option2: /x 8bff558bec83ec20         
 	if (r_buf_read_at (bin->b, entry->offset, buf, sizeof (buf)) == -1) {
-		eprintf ("Error: read (entry)\n");
+		eprintf ("Error: Cannot read entry at 0x%08"PFMT64x"\n", entry->offset);
 	} else {
 		if (buf[367] == 0xe8) {
 			int delta = (buf[368] | buf[369]<<8 | buf[370]<<16 | buf[371]<<24);
@@ -72,8 +72,8 @@ static int PE_(r_bin_pe_get_delay_import_dirs_count)(struct PE_(r_bin_pe_obj_t) 
 
 static int PE_(r_bin_pe_parse_imports)(struct PE_(r_bin_pe_obj_t)* bin, struct r_bin_pe_import_t** importp, int* nimp, char* dll_name, PE_DWord OriginalFirstThunk, PE_DWord FirstThunk)
 {
-	char import_name[PE_NAME_LENGTH], name[PE_NAME_LENGTH];
-	PE_Word import_hint, import_ordinal;
+	char import_name[PE_NAME_LENGTH + 1], name[PE_NAME_LENGTH + 1];
+	PE_Word import_hint, import_ordinal = 0;
 	PE_DWord import_table = 0, off = 0;
 	int i = 0;
 
@@ -92,10 +92,11 @@ static int PE_(r_bin_pe_parse_imports)(struct PE_(r_bin_pe_obj_t)* bin, struct r
 				import_hint = 0;
 				snprintf(import_name, PE_NAME_LENGTH, "%s_Ordinal_%i", dll_name, import_ordinal);
 			} else {
-				import_ordinal = 0;
-				if (r_buf_read_at(bin->b, PE_(r_bin_pe_rva_to_offset)(bin, import_table),
+				import_ordinal ++;
+				ut64 off = PE_(r_bin_pe_rva_to_offset)(bin, import_table);
+				if (r_buf_read_at(bin->b, off,
 							(ut8*)&import_hint, sizeof(PE_Word)) == -1) {
-					eprintf("Error: read (import hint)\n");
+					eprintf("Error: read import hint at 0x%08"PFMT64x"\n", off);
 					return 0;
 				}
 				if (r_buf_read_at(bin->b, PE_(r_bin_pe_rva_to_offset)(bin, import_table) + sizeof(PE_Word),
@@ -183,6 +184,10 @@ static int PE_(r_bin_pe_init_imports)(struct PE_(r_bin_pe_obj_t) *bin) {
 	if (import_dir_offset == 0 && delay_import_dir_offset == 0)
 		return R_FALSE;
 	if (import_dir_offset != 0) {
+		if (import_dir_size>0xffff) {
+			eprintf ("Warning: Invalid import directory size: 0x%x\n", import_dir_size);
+			import_dir_size = 0xffff;
+		}
 		if (!(bin->import_directory = malloc(import_dir_size))) {
 			perror("malloc (import directory)");
 			return R_FALSE;
@@ -244,6 +249,7 @@ static int PE_(r_bin_pe_init)(struct PE_(r_bin_pe_obj_t)* bin) {
 	}
 	PE_(r_bin_pe_init_imports)(bin);
 	PE_(r_bin_pe_init_exports)(bin);
+	bin->relocs = NULL;
 	return R_TRUE;
 }
 
@@ -295,8 +301,8 @@ struct r_bin_pe_export_t* PE_(r_bin_pe_get_exports)(struct PE_(r_bin_pe_obj_t)* 
 	struct r_bin_pe_export_t *exports = NULL;
 	PE_VWord functions_offset, names_offset, ordinals_offset, function_rva, name_rva, name_offset;
 	PE_Word function_ordinal;
-	char function_name[PE_NAME_LENGTH], forwarder_name[PE_NAME_LENGTH];
-	char dll_name[PE_NAME_LENGTH], export_name[PE_NAME_LENGTH];
+	char function_name[PE_NAME_LENGTH + 1], forwarder_name[PE_NAME_LENGTH + 1];
+	char dll_name[PE_NAME_LENGTH + 1], export_name[PE_NAME_LENGTH + 1];
 	int i;
 	PE_(image_data_directory) *data_dir_export = \
 		&bin->nt_headers->optional_header.DataDirectory[PE_IMAGE_DIRECTORY_ENTRY_EXPORT];
@@ -372,7 +378,7 @@ ut64 PE_(r_bin_pe_get_image_base)(struct PE_(r_bin_pe_obj_t)* bin)
 struct r_bin_pe_import_t* PE_(r_bin_pe_get_imports)(struct PE_(r_bin_pe_obj_t) *bin)
 {
 	struct r_bin_pe_import_t *imps, *imports = NULL;
-	char dll_name[PE_NAME_LENGTH];
+	char dll_name[PE_NAME_LENGTH + 1];
 	int import_dirs_count = PE_(r_bin_pe_get_import_dirs_count)(bin);
 	int delay_import_dirs_count = PE_(r_bin_pe_get_delay_import_dirs_count)(bin);
 	int i, nimp = 0;
@@ -436,7 +442,9 @@ struct r_bin_pe_lib_t* PE_(r_bin_pe_get_libs)(struct PE_(r_bin_pe_obj_t) *bin) {
 				break;
 		}
 		for (i = 0; i < delay_import_dirs_count; i++, j++) {
-			if (r_buf_read_at(bin->b, PE_(r_bin_pe_rva_to_offset)(bin, bin->delay_import_directory[i].Name),
+			if (!bin->delay_import_directory)
+				break;
+			if (r_buf_read_at (bin->b, PE_(r_bin_pe_rva_to_offset)(bin, bin->delay_import_directory[i].Name),
 					(ut8*)libs[j].name, PE_STRING_LENGTH) == -1) {
 				eprintf("Error: read (libs - delay import dirs)\n");
 				return NULL;
@@ -727,6 +735,7 @@ void* PE_(r_bin_pe_free)(struct PE_(r_bin_pe_obj_t)* bin) {
 	free (bin->import_directory);
 	free (bin->delay_import_directory);
 	r_buf_free (bin->b);
+	bin->b = NULL;
 	free (bin);
 	return NULL;
 }

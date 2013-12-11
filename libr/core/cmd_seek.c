@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 static int cmd_seek(void *data, const char *input) {
 	RCore *core = (RCore *)data;
@@ -19,7 +19,7 @@ static int cmd_seek(void *data, const char *input) {
 		int sign = 1;
 		inputnum = inputnum? inputnum+1: input+1;
 		off = r_num_math (core->num, inputnum);
-		if ((st64)off<0) off = -off; // hack to fix s-2;s -2
+		if (*inputnum== '-') off = -off;
 		if (input[0]!='/' && inputnum && isalpha (inputnum[0]) && off == 0) {
 			if (!r_flag_get (core->flags, inputnum)) {
 				eprintf ("Cannot find address for '%s'\n", inputnum);
@@ -99,6 +99,10 @@ static int cmd_seek(void *data, const char *input) {
 			}
 			}
 			break;
+		case '.':
+			for (input++;*input=='.';input++);
+			r_core_seek_base (core, input);
+			break;
 		case '*':
 			r_io_sundo_list (core->io);
 			break;
@@ -128,7 +132,7 @@ static int cmd_seek(void *data, const char *input) {
 			r_io_sundo_push (core->io, core->offset);
 			r_core_seek_next (core, r_config_get (core->config, "scr.nkey"));
 			break;
-		case 'N':
+		case 'p':
 			r_io_sundo_push (core->io, core->offset);
 			r_core_seek_previous (core, r_config_get (core->config, "scr.nkey"));
 			break;
@@ -155,6 +159,13 @@ static int cmd_seek(void *data, const char *input) {
 			r_io_sundo_push (core->io, core->offset);
 			r_core_anal_bb_seek (core, off);
 			break;
+		case 'f':
+			{
+			RAnalFunction *fcn = r_anal_fcn_find (core->anal, core->offset, 0);
+			if (fcn)
+				r_core_seek (core, fcn->addr+fcn->size, 1);
+			}
+			break;
 		case 'o':
 			{
 			RAnalOp op;
@@ -174,13 +185,15 @@ static int cmd_seek(void *data, const char *input) {
 			" s--        ; seek blocksize bytes backward\n"
 			" s+ 512     ; seek 512 bytes forward\n"
 			" s- 512     ; seek 512 bytes backward\n"
+			" s.hexoff   ; Seek honoring a base from core->offset\n"
 			" sa [[+-]a] [asz] ; seek asz (or bsize) aligned to addr\n"
-			" sn|sN      ; seek next/prev scr.nkey\n"
+			" sn/sp      ; seek next/prev scr.nkey\n"
 			" s/ DATA    ; search for next occurrence of 'DATA'\n"
 			" s/x 9091   ; search for next occurrence of \\x90\\x91\n"
 			" sb         ; seek aligned to bb start\n"
 			//" sp [page]  ; seek page N (page = block)\n"
 			" so         ; seek to next opcode\n"
+			" sf         ; seek to next function (f->addr+f->size)\n"
 			" sC str     ; seek to comment matching given string\n"
 			" sr pc      ; seek to register\n");
 			break;

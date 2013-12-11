@@ -60,7 +60,8 @@ R_API void r_core_sysenv_help() {
 	"Usage: !<cmd>\n"
 	"  !                       list all historic commands\n"
 	"  !ls                     execute 'ls' in shell\n"
-	"  !!ls~txt                printo utput of 'ls' and grep for 'txt'\n"
+	"  !!                      save command history to hist file\n"
+	"  !!ls~txt                print output of 'ls' and grep for 'txt'\n"
 	"  .!rabin2 -rvi ${FILE}   run each output line as a r2 cmd\n"
 	"  !echo $SIZE             display file size\n"
 	"Environment:\n"
@@ -136,20 +137,26 @@ R_API char *r_core_sysenv_begin(RCore *core, const char *cmd) {
 	return ret;
 }
 
-R_API int r_core_bin_load(RCore *r, const char *file) {
+R_API int r_core_bin_load(RCore *r, const char *file, ut64 baddr) {
 	int i, va = r->io->va || r->io->debug;
 	RListIter *iter;
+	const char *p;
 	ut64 offset;
 	RIOMap *im;
 
-	if (file == NULL || !r->file || !*file) {
-		if (!r->file || !r->file->filename)
-			return R_FALSE;
-		file = r->file->filename;
+	if (file == NULL || !*file)
+		if (r->file)
+			file = r->file->filename;
+	if (!file) {
+		eprintf ("r_core_bin_load: no file specified\n");
+		return R_FALSE;
 	}
+	p = strstr (file, "://");
+	if (p) file = p+3;
 	while (*file==' ') file++;
 	/* TODO: fat bins are loaded multiple times, this is a problem that must be fixed . see '-->' marks. */
 	/* r_bin_select, r_bin_select_idx and r_bin_load end up loading the bin */
+        r->bin->cur.rawstr = r_config_get_i (r->config, "bin.rawstr");
 	if (r_bin_load (r->bin, file, R_FALSE)) { // --->
 		if (r->bin->narch>1 && r_config_get_i (r->config, "scr.prompt")) {
 			RBinObject *o = r->bin->cur.o;
@@ -175,14 +182,27 @@ R_API int r_core_bin_load(RCore *r, const char *file) {
 				im->to = im->from + r->bin->cur.size;
 			}
 		}
-	} else if (!r_bin_load (r->bin, file, R_TRUE))
+	} else if (!r_bin_load (r->bin, file, R_TRUE)) {
 		return R_FALSE;
+	}
+	if (!r->file) {
+		RBinObject *obj = r_bin_get_object (r->bin);
+		if (obj && obj->info && obj->info->bits) {
+			r_config_set_i (r->config, "asm.bits", obj->info->bits);
+		}
+		return R_TRUE;
+	}
 	r->file->obj = r_bin_get_object (r->bin);
+	if (baddr)
+		r->file->obj->baddr = baddr;
 
 	r_config_set_i (r->config, "io.va", 
 		(r->file->obj->info)? r->file->obj->info->has_va: 0);
 	offset = r_bin_get_offset (r->bin);
 	r_core_bin_info (r, R_CORE_BIN_ACC_ALL, R_CORE_BIN_SET, va, NULL, offset);
+	if (!strcmp (r->bin->cur.curplugin->name, "dex")) {
+		r_core_cmd0 (r, "\"(fix-dex,wx `#sha1 $s-32 @32` @12 ; wx `#adler32 $s-12 @12` @8)\"\n");
+	}
 	if (r_config_get_i (r->config, "file.analyze"))
 		r_core_cmd0 (r, "aa");
 	return R_TRUE;
@@ -215,11 +235,11 @@ R_API RCoreFile *r_core_file_open(RCore *r, const char *file, int mode, ut64 loa
 	fh = R_NEW (RCoreFile);
 	fh->fd = fd;
 	fh->map = NULL;
-	fh->uri = strdup (fd->name);
+	fh->uri = strdup (file); //fd->name);
 	fh->size = r_file_size (fh->uri);
 	if (!fh->size)
 		fh->size = r_io_size (r->io);
-	fh->filename = strdup (fh->uri);
+	fh->filename = strdup (fd->name);
 	p = strstr (fh->filename, "://");
 	if (p != NULL) {
 		char *s = strdup (p+3);

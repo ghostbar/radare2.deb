@@ -4,6 +4,12 @@
 #include <r_types.h>
 #include <r_list.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+R_LIB_VERSION_HEADER(r_lang);
+
 typedef struct r_lang_t {
 	struct r_lang_plugin_t *cur;
 	void *user;
@@ -15,6 +21,7 @@ typedef struct r_lang_plugin_t {
 	const char *name;
 	const char *desc;
 	const char **help;
+	const char *ext;
 	int (*init)(RLang *user);
 	int (*setup)(RLang *user);
 	int (*fini)(RLang *user);
@@ -46,11 +53,18 @@ R_API int r_lang_run(RLang *lang, const char *code, int len);
 R_API int r_lang_run_file(RLang *lang, const char *file);
 R_API int r_lang_prompt(RLang *lang);
 R_API void r_lang_plugin_free(RLangPlugin *p); // XXX
-R_API RLangPlugin *r_lang_get(RLang *lang, const char *name);
+R_API RLangPlugin *r_lang_get_by_name(RLang *lang, const char *name);
+R_API RLangPlugin *r_lang_get_by_extension(RLang *lang, const char *ext);
 // TODO: rename r_Lang_add for r_lang_plugin_add
 
 R_API int r_lang_define(RLang *lang, const char *type, const char *name, void *value);
 R_API void r_lang_undef(RLang *lang, const char *name);
 R_API void r_lang_def_free(RLangDef *def);
+
 #endif
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

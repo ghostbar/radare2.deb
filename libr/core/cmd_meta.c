@@ -88,12 +88,37 @@ static int cmd_meta(void *data, const char *input) {
 	case 'z': /* string */
 		{
 			r_core_read_at (core, addr, (ut8*)name, sizeof (name));
-			name[sizeof(name)] = 0;
+			name[sizeof(name)-1] = 0;
 			n = strlen (name);
 			eprintf ("%d\n", n);
 		}
-	case 'h': /* comment */
 	case 'C': /* comment */
+		if (input[1] == 'a') {
+			char *s = strdup (input+3);
+			char *p = strchr (s, ' ');
+			if (p) *p++ = 0;
+			ut64 addr;
+			if (input[2]=='-') {
+				if (input[3]) {
+					addr = r_num_math (core->num, input+3);
+					r_meta_del (core->anal->meta,
+						R_META_TYPE_COMMENT,
+						addr, 1, NULL);
+				} else eprintf ("Usage: CCa-[address]\n");
+				free (s);
+				return R_TRUE;
+			}
+			addr = r_num_math (core->num, s);
+			// Comment at
+			if (p) {
+				r_meta_add (core->anal->meta,
+					R_META_TYPE_COMMENT,
+					addr, addr+1, p);
+			} else eprintf ("Usage: CCa [address] [comment]\n");
+			free (s);
+			return R_TRUE;
+		}
+	case 'h': /* comment */
 	case 's': /* string */
 	case 'd': /* data */
 	case 'm': /* magic */
@@ -139,41 +164,37 @@ static int cmd_meta(void *data, const char *input) {
 				break;
 			}
 			t = strdup (input+2);
-			n = r_num_math (core->num, t);
-			if (!*t || n>0) { //atoi (t)>0) {
-				RFlagItem *fi;
-				p = strchr (t, ' ');
-				if (p) {
-					*p = '\0';
-					strncpy (name, p+1, sizeof (name)-1);
-				} else
-				switch (type) {
-				case 'z':
-					type='s';
-				case 's':
-					// TODO: filter \n and so on :)
-					strncpy (name, t, sizeof (name)-1);
-					r_core_read_at (core, addr, (ut8*)name, sizeof (name));
-					break;
-				default:
-					fi = r_flag_get_i (core->flags, addr);
-					if (fi) {
-						strncpy (name, fi->name, sizeof (name)-1);
-					//else sprintf (name, "ptr_%08"PFMT64x"", addr);
-					//} else {
-					//	eprintf ("meta: Invalid arguments (%s)\n", input);
-					//	return 1;
+			p = NULL;
+			n = 0;
+			strncpy (name, t, sizeof (name)-1);
+			if (*input != 'C') {
+				n = r_num_math (core->num, t);
+				if (!*t || n>0) {
+					RFlagItem *fi;
+					p = strchr (t, ' ');
+					if (p) {
+						*p = '\0';
+						strncpy (name, p+1, sizeof (name)-1);
+					} else
+					switch (type) {
+					case 'z':
+						type='s';
+					case 's':
+						// TODO: filter \n and so on :)
+						strncpy (name, t, sizeof (name)-1);
+						r_core_read_at (core, addr, (ut8*)name, sizeof (name));
+						break;
+					default:
+						fi = r_flag_get_i (core->flags, addr);
+						if (fi) strncpy (name, fi->name, sizeof (name)-1);
 					}
 				}
-				//if (!n) n = atoi (input+1);
-			} else {
-				p = NULL;
-				strncpy (name, t, sizeof (name)-1);
 			}
 			if (!n) n++;
 			addr_end = addr + n;
 			if (!r_meta_add (core->anal->meta, type, addr, addr_end, name))
 				free (t);
+			//r_meta_cleanup (core->anal->meta, 0LL, UT64_MAX);
 			}
 			break;
 		}
@@ -241,13 +262,14 @@ static int cmd_meta(void *data, const char *input) {
 		break;
 	case '\0':
 	case '?':
-		eprintf (
+		r_cons_strcat (
 		"Usage: C[-LCvsdfm?] [...]\n"
 		" C*                     # List meta info in r2 commands\n"
 		" C- [len] [@][ addr]    # delete metadata at given address range\n"
 		" CL[-] [addr]           # show 'code line' information (bininfo)\n"
 		" Cl  file:line [addr]   # add comment with line information\n"
-		" CC[-] [size] [string]  # add/remove comment. Use CC! to edit with $EDITOR\n"
+		" CC[-] [comment-text]   # add/remove comment. Use CC! to edit with $EDITOR\n"
+		" CCa[-at]|[at] [text]   # add/remove comment at given address\n"
 		" Cv[-] offset reg name  # add var substitution\n"
 		" Cs[-] [size] [[addr]]  # add string\n"
 		" Ch[-] [size]           # hide data\n"

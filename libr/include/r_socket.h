@@ -3,6 +3,12 @@
 
 #include "r_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+R_LIB_VERSION_HEADER(r_socket);
+
 #if __UNIX__
 #include <netinet/in.h>
 #endif
@@ -15,6 +21,7 @@ typedef struct r_socket_t {
 	int fd;
 	int is_ssl;
 	int local; // TODO: merge ssl with local -> flags/options
+	int port;
 	struct sockaddr_in sa;
 #if HAVE_LIB_SSL
 	SSL_CTX *ctx;
@@ -37,6 +44,7 @@ R_API int r_socket_connect (RSocket *s, const char *host, const char *port, int 
 #define r_socket_connect_unix(a,b) r_socket_connect(a,b,NULL,R_SOCKET_PROTO_UNIX)
 R_API int r_socket_unix_listen (RSocket *s, const char *file);
 #endif
+R_API int r_socket_port_by_name(const char *name);
 R_API int r_socket_close (RSocket *s);
 R_API int r_socket_free (RSocket *s);
 R_API int r_socket_listen (RSocket *s, const char *port, const char *certfile);
@@ -51,6 +59,7 @@ R_API void r_socket_printf (RSocket *s, const char *fmt, ...);
 R_API int r_socket_read (RSocket *s, ut8 *read, int len);
 R_API int r_socket_read_block (RSocket *s, unsigned char *buf, int len);
 R_API int r_socket_gets (RSocket *s, char *buf, int size);
+R_API int r_socket_is_connected (RSocket *);
 
 /* process */
 typedef struct r_socket_proc_t {
@@ -86,4 +95,9 @@ R_API void r_socket_http_response (RSocketHTTPRequest *rs, int code, const char 
 R_API void r_socket_http_close (RSocketHTTPRequest *rs);
 R_API ut8 *r_socket_http_handle_upload(const ut8 *str, int len, int *olen);
 #endif
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

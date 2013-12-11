@@ -6,6 +6,7 @@ COMPILER?=gcc
 
 TOP:=$(dir $(lastword $(MAKEFILE_LIST)))
 LTOP:=$(TOP)/libr
+STOP:=$(TOP)/shlr
 BTOP:=$(TOP)/binr
 
 ifeq ($(MAKEFLAGS),s)
@@ -28,7 +29,7 @@ PFX=${DESTDIR}${PREFIX}
 MDR=${DESTDIR}${MANDIR}
 
 LIBDIR=${PREFIX}/lib
-WWWROOT=${LIBDIR}/radare2/${VERSION}/www
+WWWROOT=${DATADIR}/radare2/${VERSION}/www
 
 .c:
 ifneq ($(SILENT),)

@@ -9,12 +9,12 @@ R_API RAnalOp *r_anal_op_new() {
 	if (op) {
 		memset (op, 0, sizeof (RAnalOp));
 		op->mnemonic = NULL;
-		op->evalstr = NULL;
 		op->addr = -1;
 		op->jump = -1;
 		op->fail = -1;
-		op->ref = -1;
-		op->value = -1;
+		op->ptr = -1;
+		op->val = -1;
+		op->esil[0] = 0;
 		op->next = NULL;
 	}
 	return op;
@@ -44,9 +44,12 @@ R_API void r_anal_op_free(void *_op) {
 }
 
 R_API int r_anal_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len) {
-	if (len>0 && anal && op && anal->cur && anal->cur->op)
-		return anal->cur->op (anal, op, addr, data, len);
-	return R_FALSE;
+	int ret = R_FALSE;
+	if (len>0 && anal && op && anal->cur && anal->cur->op) {
+		ret = anal->cur->op (anal, op, addr, data, len);
+		if (ret<1) op->type = R_ANAL_OP_TYPE_ILL;
+	}
+	return ret;
 }
 
 R_API RAnalOp *r_anal_op_copy (RAnalOp *op) {
@@ -166,6 +169,11 @@ R_API char *r_anal_optype_to_string(int t) {
 	return "undefined";
 }
 
+R_API const char *r_anal_op_to_esil_string(RAnal *anal, RAnalOp *op) {
+	return op->esil;
+}
+
+// TODO: use esil here?
 R_API char *r_anal_op_to_string(RAnal *anal, RAnalOp *op) {
 	RAnalFunction *f;
 	char ret[128];

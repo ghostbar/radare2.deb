@@ -27,41 +27,90 @@
 #define UD_INPUT_H
 
 #include "types.h"
+#include "udint.h"
 
-uint8_t inp_next(struct ud*);
-uint8_t inp_peek(struct ud*);
-uint8_t inp_uint8(struct ud*);
-uint16_t inp_uint16(struct ud*);
-uint32_t inp_uint32(struct ud*);
-uint64_t inp_uint64(struct ud*);
-void inp_move(struct ud*, size_t);
-void inp_back(struct ud*);
+uint8_t ud_inp_next(struct ud* u);
 
-/* inp_init() - Initializes the input system. */
-#define inp_init(u) \
-do { \
-  u->inp_curr = 0; \
-  u->inp_fill = 0; \
-  u->inp_ctr  = 0; \
-  u->inp_end  = 0; \
-} while (0)
-
-/* inp_start() - Should be called before each de-code operation. */
-#define inp_start(u) u->inp_ctr = 0
-
-/* inp_back() - Resets the current pointer to its position before the current
- * instruction disassembly was started.
+/* 
+ * inp_start
+ *    Should be called before each de-code operation.
  */
-#define inp_reset(u) \
-do { \
-  u->inp_curr -= u->inp_ctr; \
-  u->inp_ctr = 0; \
-} while (0)
+static inline void
+inp_start(struct ud *u)
+{
+  u->inp_ctr = 0;
+}
 
-/* inp_sess() - Returns the pointer to current session. */
-#define inp_sess(u) (u->inp_sess)
+/* inp_reset
+ *    Resets the current pointer to its position before the current
+ *    instruction disassembly was started.
+ */
+static inline void
+inp_reset(struct ud *u)
+{
+  u->inp_curr -= u->inp_ctr;
+  u->inp_ctr   = 0;
+}
 
-/* inp_cur() - Returns the current input byte. */
-#define inp_curr(u) ((u)->inp_cache[(u)->inp_curr])
+/* inp_sess
+ *    Returns the pointer to current session.
+ */
+static inline uint8_t*
+inp_sess(struct ud *u)
+{
+  return u->inp_sess;
+}
 
-#endif
+/* 
+ * inp_curr 
+ *    Returns the current input byte.
+ */
+static inline uint8_t
+inp_curr(const struct ud *u)
+{
+  return u->inp_cache[u->inp_curr];
+}
+
+/*
+ * inp_back
+ *    Move back a single byte in the stream.
+ */
+static inline void
+inp_back(struct ud* u) 
+{
+  if (u->inp_ctr > 0) {
+    --u->inp_curr;
+    --u->inp_ctr;
+  }
+}
+
+/* 
+ * inp_peek
+ *    Peek next byte in input. 
+ */
+static inline uint8_t
+inp_peek(struct ud* u) 
+{
+  uint8_t r = ud_inp_next(u);
+  if (!u->error) {
+      inp_back(u); /* Don't backup if there was an error */
+  }
+  return r;
+}
+
+
+/*
+ * inp_len
+ *    Returns the number of bytes input in the current
+ *    session.
+ */
+static inline size_t
+inp_len(const struct ud *u)
+{
+  return u->inp_ctr;
+}
+
+#endif /* UD_INPUT_H */
+/*
+vim: set ts=2 sw=2 expandtab
+*/

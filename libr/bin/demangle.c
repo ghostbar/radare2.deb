@@ -65,6 +65,7 @@ R_API char *r_bin_demangle_java(const char *str) {
 			}
 		}
 		w = NULL;
+		if (!str) break;
 		str++;
 	}
 	ret = r_buf_to_string (buf);
@@ -74,7 +75,10 @@ R_API char *r_bin_demangle_java(const char *str) {
 
 R_API char *r_bin_demangle_cxx(const char *str) {
 	char *out;
-	int flags = DMGL_PARAMS | DMGL_ANSI | DMGL_VERBOSE; // | DMGL_RET_POSTFIX | DMGL_TYPES;
+	int flags = DMGL_TYPES | DMGL_PARAMS | DMGL_ANSI | DMGL_VERBOSE; // | DMGL_RET_POSTFIX | DMGL_TYPES;
+	if (*str==str[1] && *str=='_') str++;
+	else if (!strncmp (str, "__symbol_stub1_", 15))
+		str += 15;
 	out = cplus_demangle_v3 (str, flags);
 	return out;
 }

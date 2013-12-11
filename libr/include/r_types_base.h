@@ -1,6 +1,8 @@
 #ifndef _INCLUDE_R_TYPES_BASE_H_
 #define _INCLUDE_R_TYPES_BASE_H_
 
+#include <ctype.h>
+
 #define ut64 unsigned long long
 #define st64 long long
 #define ut32 unsigned int
@@ -52,5 +54,22 @@
 #define B_ODD(x)         (!B_EVEN((x)))
 #define B_UNSET(x, n)    ((x) &= ~(1<<(n)))
 #define B_TOGGLE(x, n)   ((x) ^= (1<<(n)))
+
+#define B1111 15
+#define B1110 14
+#define B1101 13
+#define B1100 12
+#define B1011 11
+#define B1010 10
+#define B1001 9
+#define B1000 8
+#define B0111 7
+#define B0110 6
+#define B0101 5
+#define B0100 4
+#define B0011 3
+#define B0010 2
+#undef B
+#define B4(a,b,c,d) ((a<<12)|(b<<8)|(c<<4)|(d))
 
 #endif

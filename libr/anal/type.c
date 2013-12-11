@@ -1,9 +1,13 @@
 /* radare - LGPL - Copyright 2012 - Anton Kochkov */
+#if 0
+// DEPRECATED
 
 #include <r_anal.h>
+#if 0
 #include "cparse/lexglb.h"
 #include "cparse/cdata.h"
 #include "cparse/pp.h"
+#endif
 
 // TOTHINK: Right now we are loading types in RList
 // but may be better to add argument RAnal *a, to
@@ -320,3 +324,4 @@ R_API void r_anal_type_define (RAnal *anal, const char *key, const char *value) 
 
 R_API void r_anal_type_header (RAnal *anal, const char *hdr) {
 }
+#endif

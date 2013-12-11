@@ -12,6 +12,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+R_LIB_VERSION(r_socket);
+
 #if EMSCRIPTEN
 /* no network */
 R_API RSocket *r_socket_new (int is_ssl) { return NULL; }
@@ -23,7 +25,10 @@ R_API RSocket *r_socket_new (int is_ssl) { return NULL; }
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <sys/socket.h>
-//#include <sys/fcntl.h>
+#endif
+
+#ifdef __WINDOWS__
+#include <ws2tcpip.h>
 #endif
 
 #define BUFFER_SIZE 4096
@@ -48,6 +53,12 @@ static int r_socket_unix_connect(RSocket *s, const char *file) {
 	s->fd = sock;
 	s->is_ssl = R_FALSE;
 	return R_TRUE;
+}
+
+R_API int r_socket_is_connected (RSocket *s) {
+	char buf[2];
+	int ret = recv (s->fd, &buf, 1, MSG_PEEK | MSG_DONTWAIT);
+	return ret? R_TRUE: R_FALSE;
 }
 
 R_API int r_socket_unix_listen (RSocket *s, const char *file) {
@@ -85,6 +96,7 @@ R_API int r_socket_unix_listen (RSocket *s, const char *file) {
 R_API RSocket *r_socket_new (int is_ssl) {
 	RSocket *s = R_NEW (RSocket);
 	s->is_ssl = is_ssl;
+	s->port = 0;
 #if __UNIX_
 	signal (SIGPIPE, SIG_IGN);
 #endif
@@ -127,7 +139,9 @@ R_API int r_socket_connect (RSocket *s, const char *host, const char *port, int 
 	}
 
 	sa.sin_addr = *((struct in_addr *)he->h_addr);
-	sa.sin_port = htons (atoi (port));
+
+	s->port = r_socket_port_by_name (port);
+	sa.sin_port = htons (s->port);
 #warning TODO: implement connect timeout on w32
 	if (connect (s->fd, (const struct sockaddr*)&sa, sizeof (struct sockaddr))) {
 		close (s->fd);
@@ -135,7 +149,7 @@ R_API int r_socket_connect (RSocket *s, const char *host, const char *port, int 
 	}
 	return R_TRUE;
 #elif __UNIX__
-	if (proto==0) proto= R_SOCKET_PROTO_TCP;
+	if (!proto) proto = R_SOCKET_PROTO_TCP;
 	int gai, ret;
 	struct addrinfo hints, *res, *rp;
 	signal (SIGPIPE, SIG_IGN);
@@ -159,21 +173,30 @@ R_API int r_socket_connect (RSocket *s, const char *host, const char *port, int 
 				r_socket_block_time (s, 1, timeout);
 				//fcntl (s->fd, F_SETFL, O_NONBLOCK, 1);
 			ret = connect (s->fd, rp->ai_addr, rp->ai_addrlen);
+			if (ret<0) {
+				close (s->fd);
+				s->fd = -1;
+				continue;
+			}
 			if (timeout<1) {
 				if (ret == -1) {
 					close (s->fd);
+					s->fd = -1;
 					return R_FALSE;
 				}
 				return R_TRUE;
 			}
 			if (timeout>0) {
 				struct timeval tv;
-				fd_set fdset;
+				fd_set fdset, errset;
 				FD_ZERO (&fdset);
 				FD_SET (s->fd, &fdset);
-				tv.tv_sec = timeout;
+				tv.tv_sec = 1; //timeout;
 				tv.tv_usec = 0;
-				if (select (s->fd + 1, NULL, &fdset, NULL, &tv) == 1) {
+
+				if (r_socket_is_connected (s))
+					return R_TRUE;
+				if (select (s->fd + 1, NULL, NULL, &errset, &tv) == 1) {
 					int so_error;
 					socklen_t len = sizeof so_error;
 					ret = getsockopt (s->fd, SOL_SOCKET,
@@ -183,9 +206,11 @@ R_API int r_socket_connect (RSocket *s, const char *host, const char *port, int 
 					freeaddrinfo (res);
 					return R_TRUE;
 				} else {
-					freeaddrinfo (res);
+	//				freeaddrinfo (res);
 					close (s->fd);
-					return R_FALSE;
+					s->fd = -1;
+					continue;
+	//				return R_FALSE;
 				}
 			}
 			close (s->fd);
@@ -251,10 +276,24 @@ R_API int r_socket_free (RSocket *s) {
 	return res;
 }
 
+R_API int r_socket_port_by_name(const char *name) {
+	struct servent *p = getservbyname (name, "tcp");
+	if (p && p->s_port)
+		return ntohs (p->s_port);
+	return atoi (name);
+}
+
 R_API int r_socket_listen (RSocket *s, const char *port, const char *certfile) {
 	int optval = 1;
 	struct linger linger = { 0 };
 
+#if __WINDOWS__
+	WSADATA wsadata;
+	if (WSAStartup (MAKEWORD (1, 1), &wsadata) == SOCKET_ERROR) {
+		eprintf ("Error creating socket.");
+		return R_FALSE;
+	}
+#endif
 	if ((s->fd = socket (AF_INET, SOCK_STREAM, IPPROTO_TCP))<0)
 		return R_FALSE;
 	linger.l_onoff = 1;
@@ -268,7 +307,10 @@ R_API int r_socket_listen (RSocket *s, const char *port, const char *certfile) {
 	memset (&s->sa, 0, sizeof (s->sa));
 	s->sa.sin_family = AF_INET;
 	s->sa.sin_addr.s_addr = htonl (s->local? INADDR_LOOPBACK: INADDR_ANY);
-	s->sa.sin_port = htons (atoi (port)); // WTF we should honor etc/services
+	s->port = r_socket_port_by_name (port);
+	if (s->port <1)
+		return R_FALSE;
+	s->sa.sin_port = htons (s->port); // TODO honor etc/services
 
 	if (bind (s->fd, (struct sockaddr *)&s->sa, sizeof(s->sa)) < 0) {
 		close (s->fd);
@@ -351,7 +393,7 @@ R_API int r_socket_block_time (RSocket *s, int block, int sec) {
 	ioctlsocket (s->fd, FIONBIO, (u_long FAR*)&block);
 #endif
 	if (sec > 0) {
-		struct timeval tv;
+		struct timeval tv = {0};
 		tv.tv_sec = sec;
 		tv.tv_usec = 0;
 		if (setsockopt (s->fd, SOL_SOCKET, SO_RCVTIMEO,

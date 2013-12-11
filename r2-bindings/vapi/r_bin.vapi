@@ -110,7 +110,7 @@ namespace Radare {
 
 		[CCode (cname="RBinSection", free_function="", ref_function="", unref_function="")]
 		public class Section {
-			public char name[256]; // FIXME proper static strings w/o hardcoded size
+			public char name[512]; // FIXME proper static strings w/o hardcoded size
 			public uint64 size;
 			public uint64 vsize;
 			public uint64 rva;
@@ -120,10 +120,10 @@ namespace Radare {
 
 		[CCode (cname="RBinSymbol", free_function="", ref_function="", unref_function="")]
 		public class Symbol {
-			public char name[256]; // FIXME proper static strings w/o hardcoded size
-			public char forwarder[256]; // FIXME proper static strings w/o hardcoded size
-			public char bind[256]; // FIXME proper static strings w/o hardcoded size
-			public char type[256]; // FIXME proper static strings w/o hardcoded size
+			public char name[512]; // FIXME proper static strings w/o hardcoded size
+			public char forwarder[512]; // FIXME proper static strings w/o hardcoded size
+			public char bind[512]; // FIXME proper static strings w/o hardcoded size
+			public char type[512]; // FIXME proper static strings w/o hardcoded size
 			public unowned string classname;
 			public uint64 rva;
 			public uint64 offset;
@@ -133,36 +133,41 @@ namespace Radare {
 
 		[CCode (cname="RBinImport", free_function="", ref_function="", unref_function="")]
 		public class Import {
-			public char name[256]; // FIXME proper static strings w/o hardcoded size
-			public char bind[256]; // FIXME proper static strings w/o hardcoded size
-			public char type[256]; // FIXME proper static strings w/o hardcoded size
-			public uint64 rva;
-			public uint64 offset;
-			public uint64 size;
+			public char name[512]; // FIXME proper static strings w/o hardcoded size
+			public char bind[512]; // FIXME proper static strings w/o hardcoded size
+			public char type[512]; // FIXME proper static strings w/o hardcoded size
 			public uint64 ordinal;
-			public uint64 hint;
 		}
 
+
+		[CCode (cprefix="R_BIN_RELOC")]
+		public enum RelocType {
+			_8,
+			_16,
+			_32,
+			_64
+		}
 		[CCode (cname="RBinReloc", free_function="", ref_function="", unref_function="")]
 		public class Reloc {
-			public char name[256]; // FIXME proper static strings w/o hardcoded size
+			public uint8 type;
+			public uint8 additive;
+			public RBin.Import import;
+			public int64 addend;
 			public uint64 rva;
 			public uint64 offset;
-			public uint32 sym;
-			public uint32 type;
 		}
 
 		[CCode (cname="RBinInfo", free_function="", ref_function="", unref_function="")]
 		public class Info {
-			public char file[256]; // FIXME proper static strings w/o hardcoded size
-			public char type[256]; // FIXME proper static strings w/o hardcoded size
-			public char bclass[256]; // FIXME proper static strings w/o hardcoded size
-			public char rclass[256]; // FIXME proper static strings w/o hardcoded size
-			public char arch[256]; // FIXME proper static strings w/o hardcoded size
-			public char machine[256]; // FIXME proper static strings w/o hardcoded size
-			public char os[256]; // FIXME proper static strings w/o hardcoded size
-			public char subsystem[256]; // FIXME proper static strings w/o hardcoded size
-			public char rpath[256]; // FIXME proper static strings w/o hardcoded size
+			public char file[512]; // FIXME proper static strings w/o hardcoded size
+			public char type[512]; // FIXME proper static strings w/o hardcoded size
+			public char bclass[512]; // FIXME proper static strings w/o hardcoded size
+			public char rclass[512]; // FIXME proper static strings w/o hardcoded size
+			public char arch[512]; // FIXME proper static strings w/o hardcoded size
+			public char machine[512]; // FIXME proper static strings w/o hardcoded size
+			public char os[512]; // FIXME proper static strings w/o hardcoded size
+			public char subsystem[512]; // FIXME proper static strings w/o hardcoded size
+			public char rpath[512]; // FIXME proper static strings w/o hardcoded size
 			public unowned string lang;
 			public int bits;
 			public bool has_va;
@@ -173,7 +178,7 @@ namespace Radare {
 
 		[CCode (cname="RBinString", free_function="", ref_function="", unref_function="")]
 		public class String {
-			public char @string[256]; // FIXME proper static strings w/o hardcoded size
+			public char @string[512]; // FIXME proper static strings w/o hardcoded size
 			public uint64 rva;
 			public uint64 offset;
 			public uint64 ordinal;
@@ -182,7 +187,7 @@ namespace Radare {
 
 		[CCode (cname="RBinField", free_function="", ref_function="", unref_function="")]
 		public class Field {
-			public char name[256]; // FIXME proper static strings w/o hardcoded size
+			public char name[512]; // FIXME proper static strings w/o hardcoded size
 			public uint64 rva;
 			public uint64 offset;
 		}

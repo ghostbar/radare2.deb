@@ -5,6 +5,8 @@
 #include <r_cons.h>
 #include <stdio.h>
 
+R_LIB_VERSION(r_flag);
+
 R_API RFlag * r_flag_new() {
 	int i;
 	RFlag *f = R_NEW (RFlag);
@@ -76,7 +78,7 @@ R_API void r_flag_list(RFlag *f, int rad) {
 			r_cons_printf ("f %s %"PFMT64d" 0x%08"PFMT64x" %s\n",
 				flag->name, flag->size, flag->offset,
 				flag->comment? flag->comment:"");
-		} else r_cons_printf("0x%08"PFMT64x" %"PFMT64d" %s\n",
+		} else r_cons_printf ("0x%08"PFMT64x" %"PFMT64d" %s\n",
 				flag->offset, flag->size, flag->name);
 	}
 }
@@ -90,8 +92,28 @@ R_API RFlagItem *r_flag_get(RFlag *f, const char *name) {
 	return NULL;
 }
 
-#define R_FLAG_TEST 0
 
+R_API RFlagItem *r_flag_get_i2(RFlag *f, ut64 off) {
+	RFlagItem *oitem = NULL;
+	RFlagItem *item = NULL;
+	RList *list = r_hashtable64_lookup (f->ht_off, off);
+	if (list) {
+		RListIter *iter;
+		r_list_foreach (list, iter, item) {
+			// XXX: hack, because some times the hashtable is poluted by ghost values
+			if (item->offset != off)
+				continue;
+			if (!strchr (item->name, '.'))
+				oitem = item;
+			if (strlen (item->name) < 5 || item->name[3]!='.')
+				continue;
+			oitem = item;
+		}
+	}
+	return oitem;
+}
+
+#define R_FLAG_TEST 0
 R_API RFlagItem *r_flag_get_i(RFlag *f, ut64 off) {
 	RList *list = r_hashtable64_lookup (f->ht_off, off);
 	if (list) {
@@ -108,19 +130,24 @@ R_API RFlagItem *r_flag_get_i(RFlag *f, ut64 off) {
 }
 
 R_API int r_flag_set(RFlag *f, const char *name, ut64 off, ut32 size, int dup) {
+	RFlagItem *item;
 	RList *list2, *list;
 	dup = 0; // XXX: force nondup
 
-	if (!name || !*name) {
-		/* contract fail */
+	/* contract fail */
+	if (!name || !*name)
 		return R_FALSE;
-	}
 	if (dup) {
-		RFlagItem *item = R_NEW0 (RFlagItem);
+// XXX: doesnt works well 
+		item = R_NEW0 (RFlagItem);
+		if (!r_flag_item_set_name (item, name)) {
+			eprintf ("Invalid flag name '%s'.\n", name);
+			free (item);
+			return R_FALSE;
+		}
 		item->space = f->space_idx;
 		r_list_append (f->flags, item);
 
-		r_flag_item_set_name (item, name);
 		item->offset = off + f->base;
 		item->size = size;
 
@@ -176,10 +203,13 @@ R_API int r_flag_set(RFlag *f, const char *name, ut64 off, ut32 size, int dup) {
 			item->size = size;
 		} else {
 			item = R_NEW0 (RFlagItem);
+			if (!r_flag_item_set_name (item, name)) {
+				eprintf ("Invalid flag name '%s'.\n", name);
+				free (item);
+				return R_FALSE;
+			}
 			item->space = f->space_idx;
 			r_list_append (f->flags, item);
-
-			r_flag_item_set_name (item, name);
 			item->offset = off + f->base;
 			item->size = size;
 
@@ -341,6 +371,25 @@ R_API RFlagItem *r_flag_get_at(RFlag *f, ut64 off) {
 		}
 	}
 	return nice;
+}
+
+R_API int r_flag_relocate (RFlag *f, ut64 off, ut64 off_mask, ut64 to) {
+	ut64 neg_mask = ~(off_mask);
+	RFlagItem *item;
+	RListIter *iter;
+	int n = 0;
+
+	r_list_foreach (f->flags, iter, item) {
+		ut64 fn = item->offset & neg_mask;
+		ut64 on = off & neg_mask;
+		if (fn == on) {
+			ut64 fm = item->offset & off_mask;
+			ut64 om = to & off_mask;
+			item->offset = (to&neg_mask) + fm + om;
+			n++;
+		}
+	}
+	return n;
 }
 
 #ifdef MYTEST

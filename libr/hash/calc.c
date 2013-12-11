@@ -51,7 +51,7 @@ R_API int r_hash_calculate(RHash *ctx, int algobit, const ut8 *buf, ut32 len) {
 		memcpy (ctx->digest, &res, R_HASH_SIZE_CRC32);
 #else
 		/* little endian here */
-		pres = &res;
+		pres = (ut8 *) &res;
 		ctx->digest[0] = pres[3];
 		ctx->digest[1] = pres[2];
 		ctx->digest[2] = pres[1];
@@ -63,6 +63,11 @@ R_API int r_hash_calculate(RHash *ctx, int algobit, const ut8 *buf, ut32 len) {
 		ut32 res = r_hash_xxhash (buf, len);
 		memcpy (ctx->digest, &res, R_HASH_SIZE_XXHASH);
 		return R_HASH_SIZE_XXHASH;
+	}
+	if (algobit & R_HASH_ADLER32) {
+		ut32 res = r_hash_adler32 (buf, len);
+		memcpy (ctx->digest, &res, R_HASH_SIZE_ADLER32);
+		return R_HASH_SIZE_ADLER32;
 	}
 	if (algobit & R_HASH_HAMDIST) {
 		*ctx->digest = r_hash_hamdist (buf, len);

@@ -1,8 +1,10 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake */
+/* radare - LGPL - Copyright 2009-2013 - pancake */
 
 #include <r_debug.h>
 #include <r_anal.h>
 #include <signal.h>
+
+R_LIB_VERSION(r_debug);
 
 /* restore program counter after breakpoint hit */
 static int r_debug_recoil(RDebug *dbg) {
@@ -15,11 +17,11 @@ static int r_debug_recoil(RDebug *dbg) {
 	if (ri) {
 		ut64 addr = r_reg_get_value (dbg->reg, ri);
 		recoil = r_bp_recoil (dbg->bp, addr);
-		eprintf ("[R2] Breakpoint recoil at 0x%"PFMT64x" = %d\n", addr, recoil);
+		//eprintf ("[R2] Breakpoint recoil at 0x%"PFMT64x" = %d\n", addr, recoil);
 #if __arm__
 		if (recoil<1) recoil = 0; // XXX Hack :D
 #else
-		if (recoil<1) recoil = 1; // XXX Hack :D (x86 only?)
+		if (recoil<1) recoil = 0; //1; // XXX Hack :D (x86 only?)
 #endif
 		if (recoil) {
 			dbg->reason = R_DBG_REASON_BP;
@@ -44,6 +46,7 @@ R_API RDebug *r_debug_new(int hard) {
 		dbg->graph = r_graph_new ();
 		dbg->swstep = 0;
 		dbg->newstate = 0;
+		dbg->signum = 0;
 		dbg->reason = R_DBG_REASON_UNKNOWN;
 		dbg->stop_all_threads = R_FALSE;
 		dbg->trace = r_debug_trace_new ();
@@ -53,6 +56,7 @@ R_API RDebug *r_debug_new(int hard) {
 		/* TODO: needs a redesign? */
 		dbg->maps = r_debug_map_list_new ();
 		dbg->maps_user = r_debug_map_list_new ();
+		r_debug_signal_init (dbg);
 		if (hard) {
 			dbg->bp = r_bp_new ();
 			r_debug_plugin_init (dbg);
@@ -125,8 +129,9 @@ R_API int r_debug_set_arch(RDebug *dbg, int arch, int bits) {
 /* 
  * Save 4096 bytes from %esp
  * TODO: Add support for reverse stack architectures
+ * Also known as r_debug_inject()
  */
-R_API ut64 r_debug_execute(struct r_debug_t *dbg, ut8 *buf, int len) {
+R_API ut64 r_debug_execute(RDebug *dbg, const ut8 *buf, int len, int restore) {
 	int orig_sz;
 	ut8 stackbackup[4096];
 	ut8 *backup, *orig = NULL;
@@ -135,7 +140,7 @@ R_API ut64 r_debug_execute(struct r_debug_t *dbg, ut8 *buf, int len) {
 	if (r_debug_is_dead (dbg))
 		return R_FALSE;
 	ripc = r_reg_get (dbg->reg, dbg->reg->name[R_REG_NAME_PC], R_REG_TYPE_GPR);
-	risp = r_reg_get (dbg->reg, dbg->reg->name[R_REG_NAME_PC], R_REG_TYPE_GPR);
+	risp = r_reg_get (dbg->reg, dbg->reg->name[R_REG_NAME_SP], R_REG_TYPE_GPR);
 	if (ripc) {
 		r_debug_reg_sync (dbg, R_REG_TYPE_GPR, R_FALSE);
 		orig = r_reg_get_bytes (dbg->reg, -1, &orig_sz);
@@ -156,19 +161,26 @@ R_API ut64 r_debug_execute(struct r_debug_t *dbg, ut8 *buf, int len) {
 
 		/* execute code here */
 		dbg->iob.write_at (dbg->iob.io, rpc, buf, len);
+	//r_bp_add_sw (dbg->bp, rpc+len, 4, R_BP_PROT_EXEC);
 		r_debug_continue (dbg);
+	//r_bp_del (dbg->bp, rpc+len);
 		/* TODO: check if stopped in breakpoint or not */
 
 		r_bp_del (dbg->bp, rpc+len);
 		dbg->iob.write_at (dbg->iob.io, rpc, backup, len);
-		dbg->iob.write_at (dbg->iob.io, rsp, stackbackup, len);
+		if (restore) {
+			dbg->iob.write_at (dbg->iob.io, rsp, stackbackup, len);
+		}
 
 		r_debug_reg_sync (dbg, R_REG_TYPE_GPR, R_FALSE);
 		ri = r_reg_get (dbg->reg, dbg->reg->name[R_REG_NAME_A0], R_REG_TYPE_GPR);
 		ra0 = r_reg_get_value (dbg->reg, ri);
-		r_reg_set_bytes (dbg->reg, -1, orig, orig_sz);
+		if (restore) {
+			r_reg_set_bytes (dbg->reg, -1, orig, orig_sz);
+		} else {
+			r_reg_set_value (dbg->reg, ripc, rpc);
+		}
 		r_debug_reg_sync (dbg, R_REG_TYPE_GPR, R_TRUE);
-
 		free (backup);
 		free (orig);
 		eprintf ("ra0=0x%08"PFMT64x"\n", ra0);
@@ -194,6 +206,7 @@ R_API int r_debug_detach(struct r_debug_t *dbg, int pid) {
 }
 
 R_API int r_debug_select(RDebug *dbg, int pid, int tid) {
+	if (!tid) tid = pid;
 	if (pid != dbg->pid || tid != dbg->tid)
 		eprintf ("r_debug_select: %d %d\n", pid, tid);
 	dbg->pid = pid;
@@ -225,11 +238,27 @@ R_API int r_debug_wait(RDebug *dbg) {
 		dbg->newstate = 1;
 		if (ret == -1) {
 			eprintf ("\n==> Process finished\n\n");
-			r_debug_select (dbg, -1, -1); //dbg->pid = -1;
+			r_debug_select (dbg, -1, -1);
 		}
 		//eprintf ("wait = %d\n", ret);
 		if (dbg->trace->enabled)
 			r_debug_trace_pc (dbg);
+		if (ret == R_DBG_REASON_SIGNAL && dbg->signum != -1) {
+			/* handle signal on continuations here */
+			int what = r_debug_signal_what (dbg, dbg->signum);
+			const char *name = r_debug_signal_resolve_i (dbg, dbg->signum);
+			if (strcmp ("SIGTRAP", name))
+				r_cons_printf ("[+] signal %d aka %s received\n",
+					dbg->signum, name);
+			if (what & R_DBG_SIGNAL_SKIP) {
+				dbg->signum = 0;
+				// TODO: use ptrace-setsiginfo to ignore signal
+			}
+			if (what & R_DBG_SIGNAL_CONT) {
+				// XXX: support step, steptrace, continue_until_foo, etc..
+				r_debug_continue (dbg);
+			}
+		}
 	}
 	return ret;
 }
@@ -328,11 +357,6 @@ R_API int r_debug_step_over(RDebug *dbg, int steps) {
 	return ret;
 }
 
-R_API int r_debug_kill_setup(RDebug *dbg, int sig, int action) {
-	// TODO: implement r_debug_kill_setup
-	return R_FALSE;
-}
-
 R_API int r_debug_continue_kill(RDebug *dbg, int sig) {
 	int ret = R_FALSE;
 	if (r_debug_is_dead (dbg))
@@ -340,6 +364,7 @@ R_API int r_debug_continue_kill(RDebug *dbg, int sig) {
 	if (dbg && dbg->h && dbg->h->cont) {
 		r_bp_restore (dbg->bp, R_FALSE); // set sw breakpoints
 		ret = dbg->h->cont (dbg, dbg->pid, dbg->tid, sig);
+		dbg->signum = 0;
 		r_debug_wait (dbg);
 		r_bp_restore (dbg->bp, R_TRUE); // unset sw breakpoints
 		r_debug_recoil (dbg);
@@ -356,7 +381,7 @@ R_API int r_debug_continue_kill(RDebug *dbg, int sig) {
 }
 
 R_API int r_debug_continue(RDebug *dbg) {
-	return r_debug_continue_kill (dbg, -1);
+	return r_debug_continue_kill (dbg, 0); //dbg->signum);
 }
 
 R_API int r_debug_continue_until_nontraced(RDebug *dbg) {
@@ -471,13 +496,13 @@ R_API RList *r_debug_frames (RDebug *dbg, ut64 at) {
 }
 
 /* TODO: Implement fork and clone */
-R_API int r_debug_fork (RDebug *dbg) {
+R_API int r_debug_child_fork (RDebug *dbg) {
 	//if (dbg && dbg->h && dbg->h->frames)
 		//return dbg->h->frames (dbg);
 	return 0;
 }
 
-R_API int r_debug_clone (RDebug *dbg) {
+R_API int r_debug_child_clone (RDebug *dbg) {
 	//if (dbg && dbg->h && dbg->h->frames)
 		//return dbg->h->frames (dbg);
 	return 0;

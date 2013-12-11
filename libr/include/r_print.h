@@ -3,7 +3,12 @@
 
 #include "r_types.h"
 #include "r_util.h"
+#include "r_cons.h"
 #include "r_io.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define R_PRINT_FLAGS_COLOR   0x00000001
 #define R_PRINT_FLAGS_ADDRMOD 0x00000002
@@ -36,6 +41,7 @@ typedef struct r_print_t {
 	int big_endian;
 	int width;
 	int limit;
+	int bits;
 	int cur_enabled;
 	int cur;
 	int cols;
@@ -47,6 +53,7 @@ typedef struct r_print_t {
 	RPrintZoom *zoom;
 	RPrintNameCallback offname;
 	RStrHT *formats;
+	RCons *cons;
 } RPrint;
 
 #ifdef R_API
@@ -71,6 +78,7 @@ R_API void r_print_set_cursor(RPrint *p, int curset, int ocursor, int cursor);
 R_API void r_print_code(RPrint *p, ut64 addr, ut8 *buf, int len, char lang);
 R_API int r_print_format(RPrint *p, ut64 seek, const ut8* buf, int len, const char *fmt, int idx, const char *setval);
 R_API int r_print_format_length (const char *fmt);
+R_API void r_print_offset(RPrint *p, ut64 off, int invert, int opt);
 #define R_PRINT_STRING_WIDE 1
 #define R_PRINT_STRING_ZEROEND 2
 #define R_PRINT_STRING_URLENCODE 4
@@ -84,6 +92,10 @@ R_API char * r_print_randomart(const ut8 *dgst_raw, ut32 dgst_raw_len, ut64 addr
 // WIP
 R_API int r_print_unpack7bit(const char *src, char *dest);
 R_API int r_print_pack7bit(const char *src, char *dest);
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif

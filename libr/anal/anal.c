@@ -6,6 +6,8 @@
 #include <r_io.h>
 #include "../config.h"
 
+R_LIB_VERSION(r_anal);
+
 static RAnalPlugin *anal_static_plugins[] =
 	{ R_ANAL_STATIC_PLUGINS };
 
@@ -21,18 +23,42 @@ static RAnalVarType anal_default_vartypes[] =
 	 { NULL,    NULL, 0 }};
 */
 
+static void r_anal_type_init(RAnal *anal) {
+	Sdb *D = anal->sdb_types;
+	sdb_set (D, "unsigned int", "type", 0);
+	sdb_set (D, "int", "type", 0);
+	sdb_set (D, "long", "type", 0);
+	sdb_set (D, "void *", "type", 0);
+	sdb_set (D, "char", "type", 0);
+	sdb_set (D, "char*", "type", 0);
+	sdb_set (D, "const char*", "type", 0);
+	sdb_set (D, "type.unsigned int", "i", 0);
+	sdb_set (D, "type.int", "d", 0);
+	sdb_set (D, "type.long", "x", 0);
+	sdb_set (D, "type.void *", "p", 0);
+	sdb_set (D, "type.char", "x", 0);
+	sdb_set (D, "type.char*", "*z", 0);
+	sdb_set (D, "type.const char*", "*z", 0);
+}
+
 R_API RAnal *r_anal_new() {
 	int i;
 	RAnalPlugin *static_plugin;
-	RAnal *anal = R_NEW (RAnal);
+	RAnal *anal = R_NEW0 (RAnal);
 	if (!anal) return NULL;
 	memset (anal, 0, sizeof (RAnal));
+	anal->decode = R_TRUE; // slow slow if not used
+	anal->sdb_xrefs = NULL;
+	anal->sdb_types = sdb_new (NULL, 0);
+	anal->meta = r_meta_new ();
+	anal->meta->printf = anal->printf = (PrintfCallback) printf;
+	r_anal_type_init (anal);
+	r_anal_xrefs_init (anal);
 	anal->diff_ops = 0;
 	anal->diff_thbb = R_ANAL_THRESHOLDBB;
 	anal->diff_thfcn = R_ANAL_THRESHOLDFCN;
 	anal->split = R_TRUE; // used from core
 	anal->queued = NULL;
-	anal->meta = r_meta_new ();
 	anal->syscall = r_syscall_new ();
 	r_io_bind_init (anal->iob);
 	anal->reg = r_reg_new ();
@@ -92,7 +118,7 @@ R_API int r_anal_list(RAnal *anal) {
 	struct list_head *pos;
 	list_for_each_prev(pos, &anal->anals) {
 		RAnalPlugin *h = list_entry(pos, RAnalPlugin, list);
-		printf ("anal %-10s %s\n", h->name, h->desc);
+		anal->printf ("anal %-10s %s\n", h->name, h->desc);
 	}
 	return R_FALSE;
 }
@@ -185,3 +211,27 @@ R_API void r_anal_trace_bb(RAnal *anal, ut64 addr) {
 }
 
 R_API RList* r_anal_get_fcns (RAnal *anal) { return anal->fcns; }
+
+R_API int r_anal_project_load(RAnal *anal, const char *prjfile) {
+	if (!prjfile || !*prjfile)
+		return R_FALSE;
+	r_anal_xrefs_load (anal, prjfile);
+	return R_TRUE;
+}
+
+R_API int r_anal_project_save(RAnal *anal, const char *prjfile) {
+	if (!prjfile || !*prjfile)
+		return R_FALSE;
+	r_anal_xrefs_save (anal, prjfile);
+	return R_TRUE;
+}
+
+R_API RAnalOp *r_anal_op_hexstr(RAnal *anal, ut64 addr, const char *str) {
+	int len;
+	ut8 *buf;
+	RAnalOp *op = R_NEW0 (RAnalOp);
+	buf = malloc (strlen (str));
+	len = r_hex_str2bin (str, buf);
+	r_anal_op (anal, op, addr, buf, len);
+	return op;
+}

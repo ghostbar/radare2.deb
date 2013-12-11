@@ -4,6 +4,8 @@
 #include "r_util.h"
 #include <stdio.h>
 
+R_LIB_VERSION(r_io);
+
 // TODO: R_API int r_io_fetch(struct r_io_t *io, ut8 *buf, int len)
 //  --- check for EXEC perms in section (use cached read to accelerate)
 
@@ -66,13 +68,13 @@ R_API RIO *r_io_free(RIO *io) {
 }
 
 /* used by uri handler plugins */
-R_API int r_io_redirect(struct r_io_t *io, const char *file) {
+R_API int r_io_redirect(RIO *io, const char *file) {
 	free (io->redirect);
 	io->redirect = file? strdup (file): NULL;
 	return 0;
 }
 
-R_API RIODesc *r_io_open_as(struct r_io_t *io, const char *urihandler, const char *file, int flags, int mode) {
+R_API RIODesc *r_io_open_as(RIO *io, const char *urihandler, const char *file, int flags, int mode) {
 	RIODesc *ret;
 	char *uri;
 	int urilen, hlen = strlen (urihandler);
@@ -87,57 +89,68 @@ R_API RIODesc *r_io_open_as(struct r_io_t *io, const char *urihandler, const cha
 	return ret;
 }
 
-R_API RIODesc *r_io_open(RIO *io, const char *file, int flags, int mode) {
-	struct r_io_plugin_t *plugin = NULL;
+static inline RIODesc *__getioplugin(RIO *io, const char *_uri, int flags, int mode) {
+	RIOPlugin *plugin, *iop = NULL;
 	RIODesc *desc = NULL;
-	int fd = -2;
-	char *uri;
-	if (!io) return NULL;
-	io->plugin = NULL;
-	uri = strdup (file);
+	char *uri = strdup (_uri);
 	for (;;) {
 		plugin = r_io_plugin_resolve (io, uri);
 		if (plugin && plugin->open) {
 			desc = plugin->open (io, uri, flags, mode);
 			if (io->redirect) {
-				// TODO: free desc if not null
-				free ((void *)uri);
+				free (uri);
 				uri = strdup (io->redirect);
 				r_io_redirect (io, NULL);
 				continue;
 			}
 			if (desc != NULL) {
 				r_io_desc_add (io, desc);
-				fd = desc->fd;
-				if (fd != -1)
-					r_io_plugin_open (io, fd, plugin);
+				if (desc->fd != -1)
+					r_io_plugin_open (io, desc->fd, plugin);
 				if (desc != io->fd)
-					io->plugin = plugin;
+					iop = plugin;
 			}
 		}
 		break;
 	}
-	if (fd == -2) {
+	io->plugin = iop;
+	free (uri);
+	return desc;
+}
+
+static int __io_posix_open (RIO *io, const char *file, int flags, int mode) {
+	int fd;
 #if __WINDOWS__
-		if (flags & R_IO_WRITE) {
-			fd = r_sandbox_open (uri, O_BINARY | 1, 0);
-			if (fd == -1)
-				r_sandbox_creat (uri, O_BINARY);
-			fd = r_sandbox_open (uri, O_BINARY | 1, 0);
-		} else fd = r_sandbox_open (uri, O_BINARY, 0);
+	if (flags & R_IO_WRITE) {
+		fd = r_sandbox_open (file, O_BINARY | 1, 0);
+		if (fd == -1)
+			r_sandbox_creat (file, O_BINARY);
+		fd = r_sandbox_open (file, O_BINARY | 1, 0);
+	} else fd = r_sandbox_open (file, O_BINARY, 0);
 #else
-		fd = r_sandbox_open (uri, (flags&R_IO_WRITE)?
-			O_RDWR: O_RDONLY, mode);
+	fd = r_sandbox_open (file, (flags&R_IO_WRITE)?
+			(O_RDWR|O_CREAT): O_RDONLY, mode);
 #endif
+	return fd;
+}
+
+R_API RIODesc *r_io_open(RIO *io, const char *file, int flags, int mode) {
+	RIODesc *desc = __getioplugin (io, file, flags, mode);
+	int fd;
+	if (io->redirect) 
+		return NULL;
+	if (desc) {
+		fd = desc->fd;
+	} else {
+		fd = __io_posix_open (io, file, flags, mode);
+		if (fd>=0)
+			desc = r_io_desc_new (io->plugin,
+				fd, file, flags, mode, NULL);
 	}
 	if (fd >= 0) {
-		if (desc == NULL)
-			desc = r_io_desc_new (io->plugin,
-				fd, uri, flags, mode, NULL);
 		r_io_desc_add (io, desc);
 		r_io_set_fd (io, desc);
 	}
-	free ((void *)uri);
 	return desc;
 }
 
@@ -153,7 +166,8 @@ R_API int r_io_set_fd(RIO *io, RIODesc *fd) {
 R_API int r_io_set_fdn(RIO *io, int fd) {
 	if (fd != -1 && io->fd != NULL && fd != io->fd->fd) {
 		RIODesc *desc = r_io_desc_get (io, fd);
-		if (!desc) return R_FALSE;
+		if (!desc)
+			return R_FALSE;
 		io->fd = desc;
 		io->plugin = desc->plugin;
 		return R_TRUE;
@@ -170,13 +184,16 @@ static inline int r_io_read_internal(RIO *io, ut8 *buf, int len) {
 }
 
 R_API int r_io_read(RIO *io, ut8 *buf, int len) {
+	int ret;
 	if (io==NULL || io->fd == NULL)
 		return -1;
 	/* IGNORE check section permissions 
 	if (io->enforce_rwx && !(r_io_section_get_rwx (io, io->off) & R_IO_READ))
 		return -1;
 	 */
-	return r_io_read_at (io, io->off, buf, len);
+	ret = r_io_read_at (io, io->off, buf, len);
+	if (ret>0) io->off += ret;
+	return ret;
 }
 
 // XXX: this is buggy. must use seek+read
@@ -198,7 +215,9 @@ R_API int r_io_read_at(RIO *io, ut64 addr, ut8 *buf, int len) {
 		l = (len > (last-addr+w))? (last-addr+w): len;
 		if (l<1) l = len;
 		{
-paddr = w? r_io_section_vaddr_to_offset (io, addr+w): addr;
+			paddr = r_io_map_select (io, addr); // XXX
+			paddr = w? r_io_section_vaddr_to_offset (io, addr+w): addr;
+			r_io_map_select (io, addr); // XXX
 			if (len>0 && l>len) l = len;
 			addr = paddr-w;
 			if (r_io_seek (io, paddr, R_IO_SEEK_SET)==UT64_MAX) {
@@ -218,7 +237,6 @@ eprintf ("RETRERET\n");
 		// XXX is this necessary?
 		ms = r_io_map_select (io, addr+w);
 		ret = r_io_read_internal (io, buf+w, l);
-//eprintf ("READ %d = %02x %02x %02x\n", ret, buf[w], buf[w+1], buf[w+2]);
 		if (ret<1) {
 			memset (buf+w, 0xff, l); // reading out of file
 			ret = 1;
@@ -227,7 +245,7 @@ eprintf ("RETRERET\n");
 		}
 #if USE_CACHE
 		if (io->cached) {
-			r_io_cache_read (io, addr+w, buf+w, len-w);
+			r_io_cache_read (io, addr+w, buf+w, len); //-w);
 		} else if (r_list_length (io->maps) >1) {
 			if (!io->debug && ms>0) {
 				//eprintf ("FAIL MS=%d l=%d d=%d\n", ms, l, d);
@@ -250,14 +268,11 @@ eprintf ("RETRERET\n");
 
 R_API ut64 r_io_read_i(RIO *io, ut64 addr, int sz, int endian) {
 	ut64 ret = 0LL;
-	int err;
 	ut8 buf[8];
-	if (sz > 8) sz = 8;
-	if (sz < 0) sz = 1;
-	err = r_io_read_at (io, addr, buf, sz);
-	if (err == sz) r_mem_copyendian ((ut8*)&ret, buf, sz, endian);
-	else return -1;
-	//else perror("Cannot read");
+	sz = R_DIM (sz, 1, 8);
+	if (sz != r_io_read_at (io, addr, buf, sz))
+		return UT64_MAX;
+	r_mem_copyendian ((ut8*)&ret, buf, sz, endian);
 	return ret;
 }
 
@@ -270,7 +285,7 @@ R_API int r_io_resize(RIO *io, ut64 newsize) {
 
 R_API int r_io_set_write_mask(RIO *io, const ut8 *buf, int len) {
 	int ret = R_FALSE;
-	if (len) {
+	if (len>0) {
 		io->write_mask_fd = io->fd->fd;
 		io->write_mask_buf = (ut8 *)malloc (len);
 		memcpy (io->write_mask_buf, buf, len);
@@ -329,7 +344,7 @@ R_API int r_io_write(struct r_io_t *io, const ut8 *buf, int len) {
 }
 
 R_API int r_io_write_at(RIO *io, ut64 addr, const ut8 *buf, int len) {
-	if (r_io_seek (io, addr, R_IO_SEEK_SET)<0)
+	if (r_io_seek (io, addr, R_IO_SEEK_SET) == UT64_MAX)
 		return -1;
 	return r_io_write (io, buf, len);
 }
@@ -376,7 +391,9 @@ R_API ut64 r_io_seek(RIO *io, ut64 offset, int whence) {
 		// XXX can be problematic on w32..so no 64 bit offset?
 		else ret = (ut64)lseek (io->fd->fd, offset, posix_whence);
 		if (ret != UT64_MAX) {
-			io->off = ret;
+			if (whence == R_IO_SEEK_SET) 
+				io->off = offset; // FIX linux-arm-32-bs at 0x10000
+			else io->off = ret;
 			// XXX this can be tricky.. better not to use this .. must be deprecated
 			// r_io_sundo_push (io);
 			ret = (!io->debug && io->va && !r_list_empty (io->sections))?

@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake, nibble */
+/* radare - LGPL - Copyright 2009-2013 - pancake, nibble */
 
 #ifndef _INCLUDE_R_PARSE_H_
 #define _INCLUDE_R_PARSE_H_
@@ -8,14 +8,21 @@
 #include <r_anal.h>
 #include <list.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // XXX : remove this define???
 #define R_PARSE_STRLEN 256
+
+R_LIB_VERSION_HEADER(r_parse);
 
 typedef struct r_parse_t {
 	void *user;
 	int flagspace;
 	int notin_flagspace;
 	struct r_parse_plugin_t *cur;
+	RAnal *anal; // weak anal ref
 	RList *parsers;
 } RParse;
 
@@ -42,6 +49,9 @@ R_API int r_parse_parse(RParse *p, const char *data, char *str);
 R_API int r_parse_assemble(RParse *p, char *data, char *str);
 R_API int r_parse_filter(RParse *p, RFlag *f, char *data, char *str, int len);
 R_API int r_parse_varsub(RParse *p, RAnalFunction *f, char *data, char *str, int len);
+R_API char *r_parse_c_string(const char *code);
+R_API char *r_parse_c_file(const char *path);
+R_API int r_parse_is_c_file (const char *file);
 
 /* plugin pointers */
 extern struct r_parse_plugin_t r_parse_plugin_dummy;
@@ -50,6 +60,10 @@ extern struct r_parse_plugin_t r_parse_plugin_x86_pseudo;
 extern struct r_parse_plugin_t r_parse_plugin_mips_pseudo;
 extern struct r_parse_plugin_t r_parse_plugin_dalvik_pseudo;
 extern struct r_parse_plugin_t r_parse_plugin_mreplace;
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif

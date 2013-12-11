@@ -4,11 +4,12 @@
 #include <signal.h>
 
 static int enabled = 0;
+static int disabled = 0;
 
 R_API int r_sandbox_check_path (const char *path) {
 	char ch;
 	/* XXX: the sandbox can be bypassed if a directory is symlink */
-	if (!memcmp (path, WWWROOT, strlen (WWWROOT)))
+	if (!memcmp (path, R2_WWWROOT, strlen (R2_WWWROOT)))
 		return R_TRUE;
 	if (strstr (path, "../")) return 0;
 	if (*path == '/') return 0;
@@ -16,6 +17,16 @@ R_API int r_sandbox_check_path (const char *path) {
 	if (readlink (path, &ch, 1) != -1) return 0;
 #endif
 	return R_TRUE;
+}
+
+R_API int r_sandbox_disable (int e) {
+	if (e) {
+		disabled = enabled;
+		enabled = 0;
+	} else {
+		enabled = disabled;
+	}
+	return enabled;
 }
 
 R_API int r_sandbox_enable (int e) {
@@ -82,8 +93,14 @@ R_API int r_sandbox_kill(int pid, int sig) {
 	// XXX: fine-tune. maybe we want to enable kill for child?
 	if (enabled) return -1;
 #if __UNIX__
-	if (pid>=0) return kill (pid, sig);
-	eprintf ("r_sandbox_kill: Better not to kill negative pids.\n");
+	if (pid>0) return kill (pid, sig);
+	eprintf ("r_sandbox_kill: Better not to kill pids <= 0.\n");
 #endif
 	return -1;
+}
+
+R_API DIR* r_sandbox_opendir (const char *path) {
+	if (!path || (r_sandbox_enable (0) && !r_sandbox_check_path (path)))
+		return NULL;
+	return opendir (path);
 }

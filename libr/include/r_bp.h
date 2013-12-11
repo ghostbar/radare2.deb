@@ -5,6 +5,12 @@
 #include <r_io.h>
 #include <r_list.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+R_LIB_VERSION_HEADER(r_bp);
+
 #define R_BP_MAXPIDS 10
 #define R_BP_CONT_NORMAL 0
 #define R_BP_CONT_NORMAL 0
@@ -132,8 +138,8 @@ extern RBreakpointPlugin r_bp_plugin_ppc;
 extern RBreakpointPlugin r_bp_plugin_sh;
 extern RBreakpointPlugin r_bp_plugin_bf;
 #endif
-#if 0
-extern RBreakpointPlugin r_bp_plugin_sparc;
+#ifdef __cplusplus
+}
 #endif
 
 #endif

@@ -134,18 +134,13 @@ enyo.kind ({
     {kind: "onyx.Toolbar", components: [
     //{kind: "onyx.MoreToolbar", components: [
       {kind: "onyx.Button", content: "[", ontap: "openSidebar", classes: "top" },
-    {name: "title", tag: "h2", content: "Assembler", classes: "topbox", style: "visibility:hidden" },
+      {kind: "onyx.Button", content: "]", ontap: "openSidebar2", classes: "top" },
+    {name: "title", tag: "h2", content: "Assembler", classes: "topbox", style: "visibility:hidden;" },
     {name: "extra", tag: "div", classes: "topbox", components: [
 //style: "position:absolute;top:0px;left:48px;scroll:overflow;visibility:visible", components: [
 /*
           {kind: "onyx.Button", content: "]", ontap: "openSidebar2", style: "padding:4px"},
 */
-        {kind: "onyx.Button", content: "<", ontap: "prevSeek", classes: "top" },
-        {kind: "onyx.Button", content: ">", ontap: "nextSeek", classes: "top" },
-        {kind: "onyx.InputDecorator", style: "width: 200px;", components: [
-          {kind: "onyx.Input", name:"input", value: 'entry0', onchange: "gotoSeek", onkeydown:"inputKey"}
-        ]},
-          //{kind: "onyx.Button", content: "Go", ontap: "gotoSeek"},
         {kind: "onyx.PickerDecorator", classes: "top", components: [
           {kind: "onyx.Button", content: "Actions"},
           {kind: "onyx.Picker", components: [
@@ -158,7 +153,12 @@ enyo.kind ({
             {content: "Paste", ontap: "goPaste"}
           ]}
         ]},
-          {kind: "onyx.PickerDecorator", style: "display:inline", components: [
+        {kind: "onyx.Button", content: "<", ontap: "prevSeek", classes: "top", style: "top:10px" },
+        {kind: "onyx.Button", content: ">", ontap: "nextSeek", classes: "top", style: "top:10px" },
+        {kind: "onyx.InputDecorator", style: "width: 200px;top:10px", classes: "top", components: [
+          {kind: "onyx.Input", name:"input", value: 'entry0', onchange: "gotoSeek", onkeydown:"inputKey" }
+        ]},
+          {kind: "onyx.PickerDecorator", classes: "top", components: [
             {kind: "onyx.Button", content: "Convert"},
             {kind: "onyx.Picker", components: [
               {content: "Data", ontap: 'coData'},
@@ -166,7 +166,7 @@ enyo.kind ({
               {content: "String", ontap: 'coString'},
             ]}
           ]},
-          {kind: "onyx.PickerDecorator", style: "display:inline", components: [
+          {kind: "onyx.PickerDecorator", classes: "top", components: [
             {kind: "onyx.Button", content: "Write"},
             {kind: "onyx.Picker", components: [
               {content: "File", ontap: 'wrFile'},
@@ -189,6 +189,7 @@ enyo.kind ({
       {kind:"Graph", name: "pageGraph"},
       {kind:"Search", name: "pageSearch"},
       {kind:"Console", name: "pageConsole"},
+      {kind:"Debugger", name: "pageDebugger"},
       {kind:"Logs", name: "pageLogs"},
       {kind:"Script", name: "pageScript"},
       {kind:"Settings", name:"pageSettings"},
@@ -223,18 +224,19 @@ enyo.kind ({
 	case "Graph": r = 3; break;
 	case "Search": r = 4; break;
 	case "Console": r = 5; break;
-	case "Logs": r = 6; break;
-	case "Script": r = 7; break;
-	case "Settings": r = 8; break;
-	case "About": r = 9; break;
-      }
-      if (r==-1) {
+	case "Debugger": r = 6; break;
+	case "Logs": r = 7; break;
+	case "Script": r = 8; break;
+	case "Settings": r = 9; break;
+	case "About": r = 10; break;
+    }
+    if (r==-1) {
         // alert ("Unknown page");
         sp.setIndex (idx);
         return;
-      }
-      eval ("var x = this.$.page"+idx);
-      switch (r) {
+    }
+    eval ("var x = this.$.page"+idx);
+    switch (r) {
       case 0:
       case 2:
         this.setTitle ();
@@ -242,9 +244,9 @@ enyo.kind ({
       default:
         this.setTitle (idx);
         break;
-      }
+    }
       //x.setContent (str);
-      sp.setIndex (r);
+    sp.setIndex (r);
   },
   seekStack: [],
   nextSeek: function() {

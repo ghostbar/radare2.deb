@@ -4,16 +4,21 @@
 cd `dirname $PWD/$0` ; cd ..
 
 . ./sys/CONFIG
+echo =============
 cat sys/CONFIG
+echo =============
 
+[ -z "${PREFIX}" ] && PREFIX=/usr
 ID=`id -u` 
 if [ "$ID" = 0 ]; then
 	SUDO=
 else
 	SUDO=sudo
 fi
+[ -n "${NOSUDO}" ] && SUDO=
 
 export PYTHON
+export DESTDIR
 export PYTHON_VERSION
 export PYTHON_CONFIG
 echo "Using PYTHON_VERSION ${PYTHON_VERSION}"
@@ -22,10 +27,11 @@ echo "Using PYTHON_CONFIG ${PYTHON_CONFIG}"
 echo
 
 cd r2-bindings
-./configure --prefix=/usr --enable=python || exit 1
-${SUDO} make install-vapi || exit 1
+./configure --prefix=${PREFIX} --enable=python || exit 1
+${SUDO} make install-vapi DESTDIR=${DESTDIR} || exit 1
 cd python
 make clean
 make PYTHON=${PYTHON}
-[ ! "$1" = --no-install ] && \
-	sudo make install PYTHON=${PYTHON} PYTHON_VERSION=${PYTHON_VERSION}
+[ "$1" != '--no-install' ] && \
+	${SUDO} make install PYTHON=${PYTHON} \
+	PYTHON_VERSION=${PYTHON_VERSION} DESTDIR=${DESTDIR}

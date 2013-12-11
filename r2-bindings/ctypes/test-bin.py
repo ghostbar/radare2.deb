@@ -2,7 +2,7 @@
 from r_bin import *
 import ctypes
 
-a=RBin()
+a = RBin()
 if not a.load("/bin/ls", False):
 	print "Fuck. cannot load /bin/ls"
 	exit(1)
@@ -20,34 +20,11 @@ print ("------")
 o = a.get_object ()
 print ("object: "+str(o))
 
-baddr= a.get_baddr ()
+baddr = a.get_baddr()
 print ("base address: "+str(baddr))
+print ("------")
 
-sect = a.get_sections ()
-sect.__init_methods__()
-#sect._o = addressof (sect)
-print(dir(sect))
-
-it = sect.iterator ()
-#it.__init_methods__()
-print(dir(it))
-while True:
-	it.__init_methods__()
-	data = it.get_data ()
-	print ("+++++",sect._o)
-	ds = cast (data, POINTER(RBinSection)).contents
-	print ("Section: ", ds.name)
-	if it.n == None:
-		print ("GO BREAK")
-		break
-	it = it.get_next ()
+for s in a.get_sections():
+	print (s.name,s.rva)
 
 exit(0)
-sect._o = addressof (sect)
-sect.__init_methods__()
-print ("_________________O ",a._o)
-
-print ("sections: "+str(sect))
-print dir(sect)
-#sectlist = cast(a, ctypes.c_void_p)
-#print ("iter "+str(iter))

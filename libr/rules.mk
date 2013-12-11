@@ -1,7 +1,8 @@
 ifeq ($(_INCLUDE_RULES_MK_),)
 _INCLUDE_RULES_MK_=
 
-include $(LTOP)/config.mk
+-include $(LTOP)/config.mk
+-include $(LTOP)/../mk/compiler.mk
 
 ifeq ($(DEBUG),1)
 export NOSTRIP=1
@@ -11,6 +12,7 @@ endif
 
 ALL?=
 CFLAGS+=-I$(LIBR)/include
+CFLAGS+=-DGIT_TAP=\"${GIT_TAP}\"
 LDFLAGS+=$(addprefix -L../,$(subst r_,,$(BINDEPS)))
 LDFLAGS+=$(addprefix -l,$(BINDEPS))
 SRC=$(subst .o,.c,$(OBJ))
@@ -27,6 +29,10 @@ ifeq (${OSTYPE},gnulinux)
 LIBNAME=${LDFLAGS_SONAME}${LIBSO}.${LIBVERSION}
 else
 LIBNAME=${LDFLAGS_SONAME}${LIBSO}
+endif
+
+ifeq (${OSTYPE},haiku)
+LDFLAGS+=-lnetwork
 endif
 
 all: ${LIBSO} ${LIBAR} ${EXTRA_TARGETS}

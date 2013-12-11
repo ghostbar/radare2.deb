@@ -1,13 +1,12 @@
-.Dd Mar 12, 2013
-.Dt RAX2 1
-.Os
-.Sh NAME
-.Nm rax2
-.Nd radare base converter
+.Em
+.TH RAX2 1
+.SH NAME
+rax2 \- radare base converter
+.Dd Apr 11, 2013
 .Sh SYNOPSIS
 .Nm rax2
 .Op Fl ebBsSvxkh
-.Op [value] ...
+.Op [expr] ...
 .Sh DESCRIPTION
 This command is part of the radare project.
 .Pp
@@ -26,6 +25,8 @@ Show randomart key asciiart for values or hexpairs
 Convert from hex string to caracter (rax2 \-s 43 4a 50)
 .It Fl S
 Convert from hex string to caracter (rax2 \-S C J P)
+.It Fl u
+Convert given value to human readable units format
 .It Fl v
 Show program version
 .It Fl x
@@ -37,18 +38,18 @@ Show usage help message
 .Pp
 Available variable types are:
 .Pp
-  int   ->  hex    rax2 10
-  hex   ->  int    rax2 0xa
-  \-int  ->  hex    rax2 \-77
-  \-hex  ->  int    rax2 0xffffffb3
-  int   ->  bin    rax2 b30
-  bin   ->  int    rax2 1010d
-  float ->  hex    rax2 3.33f
-  hex   ->  float  rax2 Fx40551ed8
-  oct   ->  hex    rax2 35o
-  hex   ->  oct    rax2 Ox12 (O is a letter)
-  bin   ->  hex    rax2 1100011b
-  hex   ->  bin    rax2 Bx63
+  int   \->  hex    rax2 10
+  hex   \->  int    rax2 0xa
+  \-int  \->  hex    rax2 \-77
+  \-hex  \->  int    rax2 0xffffffb3
+  int   \->  bin    rax2 b30
+  bin   \->  int    rax2 1010d
+  float \->  hex    rax2 3.33f
+  hex   \->  float  rax2 Fx40551ed8
+  oct   \->  hex    rax2 35o
+  hex   \->  oct    rax2 Ox12 (O is a letter)
+  bin   \->  hex    rax2 1100011b
+  hex   \->  bin    rax2 Bx63
 .Pp
 With no arguments, rax2 reads values from stdin. You can pass one or more values
 as arguments.

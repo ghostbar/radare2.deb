@@ -26,6 +26,17 @@ R_API boolt r_file_is_directory(const char *str) {
 	return ((S_IFDIR &buf.st_mode))? R_TRUE: R_FALSE;
 }
 
+R_API boolt r_file_fexists(const char *fmt, ...) {
+	int ret;
+	char string[1024];
+	va_list ap;
+	va_start (ap, fmt);
+	vsnprintf (string, sizeof (string), fmt, ap);
+	ret = r_file_exists (string);
+	va_end (ap);
+	return ret;
+}
+
 R_API boolt r_file_exists(const char *str) {
 	struct stat buf = {0};
 	if (str && *str && stat (str, &buf)==-1)
@@ -43,6 +54,8 @@ R_API int r_file_size(const char *str) {
 R_API char *r_file_abspath(const char *file) {
 	char *ret = NULL;
 	char *cwd = r_sys_getdir ();
+	if (!memcmp (file, "~/", 2))
+		return r_str_home (file+2);
 #if __UNIX__
 	if (cwd && *file != '/')
 		ret = r_str_dup_printf ("%s/%s", cwd, file);
@@ -231,19 +244,22 @@ R_API char *r_file_root(const char *root, const char *path) {
 
 R_API boolt r_file_dump(const char *file, const ut8 *buf, int len) {
 	int ret;
-	FILE *fd = r_sandbox_fopen (file, "wb");
+	FILE *fd;
+	if (!file || !*file || !buf)
+		return R_FALSE;
+	fd = r_sandbox_fopen (file, "wb");
 	if (fd == NULL) {
 		eprintf ("Cannot open '%s' for writing\n", file);
 		return R_FALSE;
 	}
 	ret = fwrite (buf, 1, len, fd) == len;
-	if (!ret)
-		eprintf ("r_file_dump: fwrite: error\n");
+	if (!ret) eprintf ("r_file_dump: fwrite: error\n");
 	fclose (fd);
 	return ret;
 }
 
 R_API boolt r_file_rm(const char *file) {
+	if (r_sandbox_enable (0)) return R_FALSE;
 #if __WINDOWS__
 	return (DeleteFile (file)==0)? R_TRUE: R_FALSE;
 #else
@@ -251,32 +267,48 @@ R_API boolt r_file_rm(const char *file) {
 #endif
 }
 
+R_API boolt r_file_rmrf(const char *file) {
+	if (r_sandbox_enable (0))
+        return R_FALSE;
+    else {
+        char *nfile = strdup (file);
+        nfile[ strlen (nfile)-1 ] = '_';
+        nfile[ strlen (nfile)-2 ] = '_';
+        rename (file, nfile);
+        eprintf ("mv %s %s\n", file, nfile);
+        free (nfile);
+        return R_TRUE;
+    }
+}
+
 R_API int r_file_mmap_write(const char *file, ut64 addr, const ut8 *buf, int len) {
 #if __WINDOWS__
 	HANDLE fm, fh;
 	if (r_sandbox_enable (0)) return -1;
-	fh = CreateFile (file, rw?GENERIC_WRITE:GENERIC_READ,
+	fh = CreateFile (file, GENERIC_WRITE,
 		FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, 0);
 	if (fh == INVALID_HANDLE_VALUE) {
 		r_sys_perror ("CreateFile");
-		free (m);
 		return -1;
 	}
-	fm = CreateFileMapping (m->fh, NULL,
-		rw? PAGE_READWRITE:PAGE_READONLY, 0, 0, NULL);
+
+	fm = CreateFileMapping (fh, NULL,
+		PAGE_READWRITE, 0, 0, NULL);
 	if (fm == NULL) {
 		CloseHandle (fh);
 		return -1;
 	}
+
 	if (fm != INVALID_HANDLE_VALUE) {
-		ut8 *obuf = MapViewOfFile (m->fm, rw?
-			(FILE_MAP_READ|FILE_MAP_WRITE):FILE_MAP_READ,
-			UT32_HI (base), UT32_LO (base), 0);
+		ut8 *obuf = MapViewOfFile (fm,
+			FILE_MAP_READ|FILE_MAP_WRITE,
+			0, 0, len);
 		memcpy (obuf, buf, len);
 		UnmapViewOfFile (obuf);
 	}
 	CloseHandle (fh);
 	CloseHandle (fm);
+	return len;
 #elif __UNIX__
 	int fd = r_sandbox_open (file, O_RDWR|O_SYNC, 0644);
 	const int pagesize = 4096;
@@ -300,24 +332,27 @@ R_API int r_file_mmap_write(const char *file, ut64 addr, const ut8 *buf, int len
 R_API int r_file_mmap_read (const char *file, ut64 addr, ut8 *buf, int len) {
 #if __WINDOWS__
 	HANDLE fm, fh;
+
 	if (r_sandbox_enable (0)) return -1;
-	fh = CreateFile (file, rw?GENERIC_WRITE:GENERIC_READ,
+	fh = CreateFile (file, GENERIC_READ,
 		FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, 0);
+
 	if (fh == INVALID_HANDLE_VALUE) {
 		r_sys_perror ("CreateFile");
-		free (m);
 		return -1;
 	}
-	fm = CreateFileMapping (m->fh, NULL,
-		rw? PAGE_READWRITE:PAGE_READONLY, 0, 0, NULL);
+
+	fm = CreateFileMapping (fh, NULL,
+		PAGE_READONLY, 0, 0, NULL);
 	if (fm == NULL) {
 		CloseHandle (fh);
 		return -1;
 	}
+
 	if (fm != INVALID_HANDLE_VALUE) {
-		ut8 *obuf = MapViewOfFile (m->fm, rw?
-			(FILE_MAP_READ|FILE_MAP_WRITE):FILE_MAP_READ,
-			UT32_HI (base), UT32_LO (base), 0);
+		ut8 *obuf = MapViewOfFile (fm,
+		    FILE_MAP_READ,
+			0, 0, len);
 		memcpy (obuf, buf, len);
 		UnmapViewOfFile (obuf);
 	}
@@ -436,9 +471,9 @@ R_API int r_file_mkstemp (const char *prefix, char **oname) {
 	else h = -1;
 #else
 	snprintf (name, sizeof (name), "%s/%sXXXXXX", path, prefix);
-	h = mkstemp (name)!=-1? R_TRUE: R_FALSE;
+	h = mkstemp (name);
 #endif
-	if (oname) *oname = h? strdup (name): NULL;
+	if (oname) *oname = (h!=-1)? strdup (name): NULL;
 	free (path);
 	return h;
 }

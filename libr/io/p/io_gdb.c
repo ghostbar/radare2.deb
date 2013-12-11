@@ -5,7 +5,7 @@
 #include <r_socket.h>
 #include <r_util.h>
 ////#include "../../debug/p/libgdbwrap/include/gdbwrapper.h"
-#define IRAPI static
+#define IRAPI static inline
 #include <gdbwrapper.h>
 #include "../../debug/p/libgdbwrap/gdbwrapper.c"
 //#include "../../debug/p/libgdbwrap/interface.c"
@@ -45,7 +45,7 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 		return NULL;
 	}
 	_fd = r_socket_new (R_FALSE);
-	if (_fd && r_socket_connect_tcp (_fd, host, port, 30)) {
+	if (_fd && r_socket_connect_tcp (_fd, host, port, 3)) {
 		riog = R_NEW (RIOGdb);
 		riog->fd = _fd;
 		riog->desc = gdbwrap_init (_fd->fd, NUM_REGS, 4);

@@ -18,6 +18,9 @@
    Free Software Foundation, 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
+#include <string.h>
+#define abort(x) if(0) {x}
+
 /* The following bitmasks control CPU extensions:  */
 #define ARM_EXT_V1	 0x00000001	/* All processors (core set).  */
 #define ARM_EXT_V2	 0x00000002	/* Multiply instructions.  */
@@ -62,6 +65,7 @@
 #define ARM_CEXT_MAVERICK 0x00000002	/* Use Cirrus/DSP coprocessor.  */
 #define ARM_CEXT_IWMMXT   0x00000004    /* Intel Wireless MMX technology coprocessor.   */
 #define ARM_CEXT_IWMMXT2  0x00000008    /* Intel Wireless MMX technology coprocessor version 2.   */
+#define ARM_CEXT_IWMMXt2  0x00000008    /* Intel Wireless MMX technology coprocessor version 2.   */
 
 #define FPU_ENDIAN_PURE	 0x80000000	/* Pure-endian doubles.	      */
 #define FPU_ENDIAN_BIG	 0		/* Double words-big-endian.   */
@@ -81,6 +85,7 @@
 #define FPU_VFP_EXT_ARMV8 0x00020000	/* FP for ARMv8.  */
 #define FPU_NEON_EXT_ARMV8 0x00010000	/* Neon for ARMv8.  */
 #define FPU_CRYPTO_EXT_ARMV8 0x00008000	/* Crypto for ARMv8.  */
+#define CRC_EXT_ARMV8	 0x00004000	/* CRC32 for ARMv8.  */
 
 /* Architectures are the sum of the base and extensions.  The ARM ARM (rev E)
    defines the following: ARMv3, ARMv3M, ARMv4xM, ARMv4, ARMv4TxM, ARMv4T,
@@ -189,6 +194,7 @@
 #define FPU_ARCH_NEON_VFP_ARMV8 ARM_FEATURE(0, FPU_NEON_ARMV8 | FPU_VFP_ARMV8)
 #define FPU_ARCH_CRYPTO_NEON_VFP_ARMV8 \
   ARM_FEATURE(0, FPU_CRYPTO_ARMV8 | FPU_NEON_ARMV8 | FPU_VFP_ARMV8)
+#define ARCH_CRC_ARMV8 ARM_FEATURE(0, CRC_EXT_ARMV8)
 
 #define FPU_ARCH_ENDIAN_PURE ARM_FEATURE (0, FPU_ENDIAN_PURE)
 
@@ -286,7 +292,4 @@ typedef struct
 
 #define ARM_FEATURE(core, coproc) {(core), (coproc)}
 
-#define CONST_STRNEQ(STR1,STR2) (strncmp ((STR1), (STR2), sizeof (STR2) - 1) == 0)
-#define ISASCII(x) ((x)>10&&(x)<127)
-#define ISSPACE(c) (ISASCII (c) && c==' ')
-#define abort(x) //
+#define STT_GNU_IFUNC 10

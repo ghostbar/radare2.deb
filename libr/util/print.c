@@ -31,6 +31,7 @@ R_API RPrint *r_print_new() {
 	p->disasm = NULL;
 	p->printf = printf;
 	p->oprintf = nullprinter;
+	p->bits = 32;
 	p->stride = 0;
 	p->interrupt = 0;
 	p->big_endian = CPU_ENDIAN;
@@ -92,6 +93,7 @@ R_API void r_print_cursor(RPrint *p, int cur, int set) {
 		p->printf ("%s", R_CONS_INVERT (set, 1)); //r_cons_invert (set, 1); //p->flags&R_PRINT_FLAGS_COLOR);
 }
 
+#define P(x) (p->cons &&p->cons->pal.x)?p->cons->pal.x
 R_API void r_print_addr(RPrint *p, ut64 addr) {
 	int mod = p->flags & R_PRINT_FLAGS_ADDRMOD;
 	char ch = (p->addrmod&&mod)?((addr%p->addrmod)?' ':','):' ';
@@ -99,15 +101,18 @@ R_API void r_print_addr(RPrint *p, ut64 addr) {
 		ut32 s, a;
 		a = addr & 0xffff;
 		s = (addr-a)>>4;
-		p->printf ("%04x:%04x", s, a);
-	} else
-	if (p->flags & R_PRINT_FLAGS_COLOR) {
-#if 0
-		p->printf("%s0x%08"PFMT64x""Color_RESET"%c ",
-			r_cons_singleton ()->palette[PAL_ADDRESS], addr, ch);
-#endif
-		p->printf ("0x%08"PFMT64x"%c", addr, ch);
-	} else p->printf ("0x%08"PFMT64x"%c", addr, ch);
+		if (p->flags & R_PRINT_FLAGS_COLOR) {
+			const char *pre = P(offset): Color_GREEN;
+			const char *fin = Color_RESET;
+			p->printf ("%s%04x:%04x%c%s", pre, s & 0xffff, a & 0xffff, ch, fin);
+		} else p->printf ("%04x:%04x%c", s & 0xffff, a & 0xffff, ch);
+	} else {
+		if (p->flags & R_PRINT_FLAGS_COLOR) {
+			const char *pre = P(offset): Color_GREEN;
+			const char *fin = Color_RESET;
+			p->printf ("%s0x%08"PFMT64x"%c%s", pre, addr, ch, fin);
+		} else p->printf ("0x%08"PFMT64x"%c", addr, ch);
+	}
 }
 
 #define CURDBG 0
@@ -116,18 +121,27 @@ R_API char *r_print_hexpair(RPrint *p, const char *str, int n) {
 	const char *s, *lastcol = Color_WHITE;
 	char *d, *dst = (char *)malloc ((strlen (str)+2)*32);
 	int colors = p->flags & R_PRINT_FLAGS_COLOR;
+	const char *color_0x00, *color_0x7f, *color_0xff, *color_text, *color_other;
 	/* XXX That's hacky as shit.. but partially works O:) */
 	/* TODO: Use r_print_set_cursor for win support */
 	int cur = R_MIN (p->cur, p->ocur);
 	int ocur = R_MAX (p->cur, p->ocur);
 	int ch, i;
 
+	if (colors) {
+#define P(x) (p->cons &&p->cons->pal.x)?p->cons->pal.x
+		color_0x00 = P(b0x00): Color_GREEN;
+		color_0x7f = P(b0x7f): Color_YELLOW;
+		color_0xff = P(b0xff): Color_RED;
+		color_text = P(btext): Color_MAGENTA;
+		color_other = P(other): "";
+	}
 	if (p->cur_enabled && cur==-1)
 		cur = ocur;
 	ocur++;
 #if CURDBG
 	sprintf (dst, "(%d/%d/%d/%d)", p->cur_enabled, cur, ocur, n);
-	d = dst+ strlen(dst);
+	d = dst + strlen (dst);
 #else
 	d = dst;
 #endif
@@ -146,14 +160,15 @@ R_API char *r_print_hexpair(RPrint *p, const char *str, int n) {
 				memcat (d, "\x1b[7m");
 		}
 		if (colors) {
-			if (s[0]=='0' && s[1]=='0') lastcol = Color_GREEN;
-			else if (s[0]=='7' && s[1]=='f') lastcol = Color_YELLOW;
-			else if (s[0]=='f' && s[1]=='f') lastcol = Color_RED;
+			if (s[0]=='0' && s[1]=='0') lastcol = color_0x00;
+			else if (s[0]=='7' && s[1]=='f') lastcol = color_0x7f;
+			else if (s[0]=='f' && s[1]=='f') lastcol = color_0xff;
 			else {
-				ch = r_hex_pair2bin(s);
+				ch = r_hex_pair2bin (s);
 				//sscanf (s, "%02x", &ch); // XXX can be optimized
 				if (IS_PRINTABLE (ch))
-					lastcol = Color_MAGENTA;
+					lastcol = color_text;
+				else lastcol = color_other;
 			}
 			memcat (d, lastcol);
 		}
@@ -172,14 +187,21 @@ R_API void r_print_byte(RPrint *p, const char *fmt, int idx, ut8 ch) {
 	r_print_cursor (p, idx, 1);
 	//if (p->flags & R_PRINT_FLAGS_CURSOR && idx == p->cur) {
 	if (p->flags & R_PRINT_FLAGS_COLOR) {
+#define P(x) (p->cons &&p->cons->pal.x)?p->cons->pal.x
+		char *color_0x00 = P(b0x00): Color_GREEN;
+		char *color_0x7f = P(b0x7f): Color_YELLOW;
+		char *color_0xff = P(b0xff): Color_RED;
+		char *color_text = P(btext): Color_MAGENTA;
+		char *color_other = P(other): Color_WHITE;
 		char *pre = NULL;
 		switch (ch) {
-		case 0x00: pre = Color_GREEN; break;
-		case 0x7F: pre = Color_YELLOW; break;
-		case 0xFF: pre = Color_RED; break;
+		case 0x00: pre = color_0x00; break;
+		case 0x7F: pre = color_0x7f; break;
+		case 0xFF: pre = color_0xff; break;
 		default:
 			if (IS_PRINTABLE (ch))
-				pre = Color_MAGENTA;
+				pre = color_text;
+			else pre = color_other;
 		}
 		if (pre) p->printf (pre);
 		p->printf (fmt, rch);
@@ -189,10 +211,17 @@ R_API void r_print_byte(RPrint *p, const char *fmt, int idx, ut8 ch) {
 }
 
 R_API void r_print_code(RPrint *p, ut64 addr, ut8 *buf, int len, char lang) {
-	int i, w = p->cols*0.7;
+	int ws, i, w = p->cols*0.7;
 	switch (lang) {
 	case '?':
-		eprintf ("Valid print code formats are: JSON, C, Python, Cstring (pcj, pc, pcp, pcs) \n");
+		eprintf ("Valid print code formats are: JSON, C, Python, Cstring (pcj, pc, pcp, pcs) \n"
+		"  pc     C\n"
+		"  pcs    string\n"
+		"  pcj    json\n"
+		"  pcJ    javascript\n"
+		"  pcp    python\n"
+		"  pcw    words (4 byte)\n"
+		"  pcd    dwords (8 byte)\n");
 		break;
 	case 's':
 		p->printf ("\"");
@@ -200,6 +229,17 @@ R_API void r_print_code(RPrint *p, ut64 addr, ut8 *buf, int len, char lang) {
 			p->printf ("\\x%02x", buf[i]);
 		}
 		p->printf ("\"\n");
+		break;
+	case 'J':
+		{
+		       ut8 *out = malloc (len*3);
+		       p->printf ("var buffer = new Buffer(\"");
+		       out[0] = 0;
+		       r_base64_encode (out, buf, len);
+		       p->printf ("%s", out);
+		       p->printf ("\", 'base64').toString('binary');\n");
+		       free (out);
+		}
 		break;
 	case 'j':
 		p->printf ("[");
@@ -214,13 +254,48 @@ R_API void r_print_code(RPrint *p, ut64 addr, ut8 *buf, int len, char lang) {
 	case 'p':
 		p->printf ("import struct\nbuf = struct.pack (\"%dB\", ", len);
 		for (i=0; !p->interrupt && i<len; i++) {
-			if (!(i%w))
-				p->printf ("\n");
+			if (!(i%w)) p->printf ("\n");
 			r_print_cursor (p, i, 1);
 			p->printf ("0x%02x%c", buf[i], (i+1<len)?',':')');
 			r_print_cursor (p, i, 0);
 		}
 		p->printf ("\n");
+		break;
+	case 'w':
+		{
+		ut32 *pbuf = (ut32*)buf;
+		w = 5;
+		ws = 4;
+		len /= ws;
+		p->printf ("#define _BUFFER_SIZE %d\n", len);
+		p->printf ("unsigned int buffer[%d] = {", len);
+		p->interrupt = 0;
+		for (i=0; !p->interrupt && i<len; i++) {
+			if (!(i%w)) p->printf ("\n  ");
+			r_print_cursor (p, i, 1);
+			p->printf ("0x%08x, ", pbuf[i]);
+			r_print_cursor (p, i, 0);
+		}
+		p->printf ("};\n");
+		}
+		break;
+	case 'd':
+		{
+		ut64 *pbuf = (ut64*)buf;
+		w = 3;
+		ws = 8;
+		len /= ws;
+		p->printf ("#define _BUFFER_SIZE %d\n", len);
+		p->printf ("unsigned long long buffer[%d] = {", len);
+		p->interrupt = 0;
+		for (i=0; !p->interrupt && i<len; i++) {
+			if (!(i%w)) p->printf ("\n  ");
+			r_print_cursor (p, i, 1);
+			p->printf ("0x%016"PFMT64x", ", pbuf[i]);
+			r_print_cursor (p, i, 0);
+		}
+		p->printf ("};\n");
+		}
 		break;
 	default:
 		p->printf ("#define _BUFFER_SIZE %d\n", len);
@@ -308,32 +383,28 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 	}
 
 	inc = p->cols;
-	//if (base==64) inc = p->cols/1.2;
 		
-	if (base<32)
-	if (p->flags & R_PRINT_FLAGS_HEADER) {
+	if ((base<32) && (p->flags & R_PRINT_FLAGS_HEADER)) {
 		ut32 opad = (ut32)(addr >> 32);
-		//p->printf ("   offset  ");
-		p->printf ("-- offset -");
-		{ // XXX: use r_print_addr
+		{ // XXX: use r_print_addr_header
 			int i, delta;
 			char soff[32];
 			if (p->flags & R_PRINT_FLAGS_SEGOFF) {
 				ut32 s, a;
 				a = addr & 0xffff;
-				s = (addr-a)>>4;
-				snprintf (soff, sizeof (soff), "%04x:%04x", s, a);
+				s = ((addr-a)>>4 ) &0xffff;
+				snprintf (soff, sizeof (soff), "%04x:%04x ", s, a);
+				p->printf ("- offset -");
 			} else {
+				p->printf ("- offset - ");
 				snprintf (soff, sizeof (soff), "0x%08"PFMT64x, addr);
 			}
 			delta = strlen (soff) - 10;
 			for (i=0; i<delta; i++)
-				p->printf (i+1==delta?" ":"-");
+				p->printf (i+1==delta?" ":" ");
 		}
-		//while (opad>0) {
-			p->printf (p->col==1?"|":" ");
-			opad >>= 4;
-		//}
+		p->printf (p->col==1?"|":" ");
+		opad >>= 4;
 		k = 0; // TODO: ??? SURE??? config.seek & 0xF;
 		/* extra padding for offsets > 8 digits */
 		for (i=0; i<inc; i++) {
@@ -349,7 +420,7 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 	}
 
 	p->interrupt = 0;
-	for (i=j=0; !p->interrupt && i<len; i+=(p->stride?p->stride:inc)) {
+	for (i=j=0; !p->interrupt && i<len; i+=(p->stride?p->stride:inc), j+=(p->stride?p->stride:0)) {
 		if (use_sparse) {
 			if (check_sparse (buf+i, inc, sparse_char)) {
 				if (i+inc>=len || check_sparse (buf+i+inc, inc, sparse_char)) {
@@ -370,7 +441,6 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 		p->printf ((p->col==1)? "|": " ");
 		for (j=i; j<i+inc; j++) {
 			if (j>=len) {
-				//p->printf (j%2?"   ":"  ");
 				if (p->col==1) {
 					if (j+1>=inc+i)
 						p->printf (j%2?"  |":"| ");
@@ -394,7 +464,7 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 				memcpy (&a, buf+j, 4);
 				memcpy (&b, buf+j+4, 4);
 				r_print_cursor (p, j, 1);
-				p->printf ("0x%08x%08x ", b, a); //n<<32, n&0xffffff);
+				p->printf ("0x%08x%08x  ", b, a); //n<<32, n&0xffffff);
 				r_print_cursor (p, j, 0);
 				j += 7;
 			} else {
@@ -414,7 +484,6 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 			else r_print_byte (p, "%c", j, buf[j]);
 		}
 		p->printf (p->col==2?"|\n":"\n");
-		//addr+=inc;
 	}
 }
 
@@ -433,8 +502,8 @@ static const char *getchardiff (char *fmt, ut8 a, ut8 b) {
 	return fmt;
 }
 
-#define B(a,b) getbytediff(fmt, a[i+j], b[i+j])
-#define C(a,b) getchardiff(fmt, a[i+j], b[i+j])
+#define BD(a,b) getbytediff(fmt, a[i+j], b[i+j])
+#define CD(a,b) getchardiff(fmt, a[i+j], b[i+j])
 
 static ut8 *M(const ut8 *b, int len) {
 	ut8 *r = malloc (len+16);
@@ -459,26 +528,26 @@ R_API void r_print_hexdiff(RPrint *p, ut64 aa, const ut8* _a, ut64 ba, const ut8
 		p->printf ("0x%08"PFMT64x" ", aa+i);
 		for (j=0;j<16;j++) {
 			r_print_cursor (p, i+j, 1);
-			p->printf (B (a,b));
+			p->printf (BD (a,b));
 			r_print_cursor (p, i+j, 0);
 		}
 		p->printf (" ");
 		for (j=0;j<16;j++) {
 			r_print_cursor (p, i+j, 1);
-			p->printf ("%s", C (a, b));
+			p->printf ("%s", CD (a, b));
 			r_print_cursor (p, i+j, 0);
 		}
 		if (scndcol) {
 			p->printf (" %c 0x%08"PFMT64x" ", linediff, ba+i);
 			for (j=0;j<16;j++) {
 				r_print_cursor (p, i+j, 1);
-				p->printf (B (b, a));
+				p->printf (BD (b, a));
 				r_print_cursor (p, i+j, 0);
 			}
 			p->printf (" ");
 			for (j=0;j<16;j++) {
 				r_print_cursor (p, i+j, 1);
-				p->printf ("%s", C (b, a));
+				p->printf ("%s", CD (b, a));
 				r_print_cursor (p, i+j, 0);
 			}
 			p->printf ("\n");

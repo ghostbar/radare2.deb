@@ -13,12 +13,13 @@ enum {
 };
 
 static ut32 count = 0;
+static int showcount = 0;
 static int useva = R_TRUE;
 static int delta = 0;
 
 static int cb(RDiff *d, void *user, RDiffOp *op) {
 	int i, rad = (int)(size_t)user;
-	if (count) {
+	if (showcount) {
 		count++;
 		return 1;
 	}
@@ -55,6 +56,7 @@ static int cb(RDiff *d, void *user, RDiffOp *op) {
 }
 
 static RCore* opencore(const char *f) {
+	const ut64 baddr = 0;
 	RCore *c = r_core_new ();
 	r_config_set_i (c->config, "io.va", useva);
 	r_config_set_i (c->config, "anal.split", R_TRUE);
@@ -62,28 +64,24 @@ static RCore* opencore(const char *f) {
 		r_core_free (c);
 		return NULL;
 	}
-	r_core_bin_load (c, NULL);
+	r_core_bin_load (c, NULL, baddr);
 	// TODO: must enable io.va here if wanted .. r_config_set_i (c->config, "io.va", va);
 	return c;
 }
 
-static void diff_graph(RCore *c, RCore *c2, const char *arg) {
-	r_core_cmdf (c, "agd %s", arg);
-}
-
-static int show_help(int line) {
-	printf ("Usage: radiff2 [-cCdrspOv] [-g sym] [file] [file]\n");
-	if (!line) printf (
+static int show_help(int v) {
+	printf ("Usage: radiff2 [-cCdrspOv] [-g sym] [-t %%] [file] [file]\n");
+	if (v) printf (
 //		"  -l        diff lines of text\n"
 		"  -c         count of changes\n"
 		"  -C         graphdiff code\n"
-		"  -O         code diffing with opcode bytes only\n"
-		"  -t [0-100] set threshold for code diff (default is 70%%)\n"
 		"  -d         use delta diffing\n"
 		"  -g [sym]   graph diff of given symbol\n"
+		"  -O         code diffing with opcode bytes only\n"
+		"  -p         use physical addressing (io.va=0)\n"
 		"  -r         output in radare commands\n"
 		"  -s         compute text distance\n"
-		"  -p         use physical addressing (io.va=0)\n"
+		"  -t [0-100] set threshold for code diff (default is 70%%)\n"
 		"  -v         show version information\n");
 	return 1;
 }
@@ -119,7 +117,7 @@ int main(int argc, char **argv) {
 	char *file, *file2;
 	ut8 *bufa, *bufb;
 	int o, sza, szb, rad = 0, delta = 0;
-	int showcount = 0, mode = MODE_DIFF;
+	int mode = MODE_DIFF;
 	int diffops = 0;
 	int threshold = -1;
 	double sim;
@@ -152,9 +150,7 @@ int main(int argc, char **argv) {
 			delta = 1;
 			break;
 		case 'h':
-			argc = 0;
-			mode = MODE_DIST;
-			break;
+			return show_help (1);
 		case 's':
 			mode = MODE_DIST;
 			break;
@@ -168,12 +164,12 @@ int main(int argc, char **argv) {
 			printf ("radiff2 v"R2_VERSION"\n");
 			return 0;
 		default:
-			return show_help (R_TRUE);
+			return show_help (0);
 		}
 	}
 	
 	if (argc<3 || optind+2>argc)
-		return show_help (R_FALSE);
+		return show_help (0);
 
 	file = argv[optind];
 	file2 = argv[optind+1];
@@ -191,9 +187,10 @@ int main(int argc, char **argv) {
 		r_anal_diff_setup_i (c->anal, diffops, threshold, threshold);
 		r_anal_diff_setup_i (c2->anal, diffops, threshold, threshold);
 		r_core_gdiff (c, c2);
-		if (mode == MODE_GRAPH)
-			diff_graph (c, c2, addr);
-		else r_core_diff_show (c, c2);
+		if (mode == MODE_GRAPH) {
+			/* show only ->diff info from main core */
+			r_core_cmdf (c, "agd %s", addr);
+		} else r_core_diff_show (c, c2);
 		return 0;
 	}
 
