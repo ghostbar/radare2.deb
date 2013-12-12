@@ -30,16 +30,12 @@ override_dh_makeshlibs:
 
 override_dh_strip:
 	dh_strip -pradare2 #--dbg-package=radare2-dbg
-	dh_strip -plibradare2-0.9.4 --dbg-package=libradare2-0.9.4-dbg
+	dh_strip -plibradare2-0.9.6 --dbg-package=libradare2-0.9.6-dbg
 
 override_dh_auto_install:
 	dh_auto_install
 	# remove "last" symlink
 	rm debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/radare2/last
-	# move arch independent www-data to /usr/share
-	mkdir -p debian/tmp/usr/share/radare2
-	mv debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/radare2/0.9.4/www debian/tmp/usr/share/radare2
-	ln -sf ../../../../share/radare2/www debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/radare2/0.9.4/www
 
 override_dh_auto_clean:
 	touch config-user.mk libr/config.mk
