@@ -26,6 +26,7 @@ radare2 (0.9.6-1) UNRELEASED; urgency=low
       hardened build.
     - 04_remove_non-installable_library: New, to fix an extraneous t.0.9.6
       that was appearing in the builds.
+    - 05_typos: Some typos and wrong man macros.
   * debian/control:
     - Build-Depends on valabind (>> 0.7.4).
   * debian/rules:

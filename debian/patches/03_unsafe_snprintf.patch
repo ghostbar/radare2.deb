@@ -6,6 +6,7 @@ Author: David Martínez Moreno <ender@debian.org>
 Forwarded: not-needed
 Last-Update: <2013-12-11>
 
+--- a/shlr/java/code.c
 +++ b/shlr/java/code.c
 @@ -132,13 +132,13 @@
  		if(!string_str)

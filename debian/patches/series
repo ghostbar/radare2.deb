@@ -2,3 +2,4 @@
 02_link-needed-libmagic.patch
 03_unsafe_snprintf.patch
 04_remove_non-installable_library.patch
+05_typos.patch

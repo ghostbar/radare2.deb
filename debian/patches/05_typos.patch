@@ -1,0 +1,153 @@
+Description: Fix a round of typos and incorrect man macros.
+ The macro Em. was present in all the manpages and it's incorrect, plus
+ there's some typos here and there, some of them spotted by lintian.
+Author: David Martínez Moreno <ender@debian.org>
+Forwarded: no
+Last-Update: 2013-12-18
+
+--- radare2-0.9.6.orig/libr/bin/format/mach0/mach-o/fat.h
++++ radare2-0.9.6/libr/bin/format/mach0/mach-o/fat.h
+@@ -24,7 +24,7 @@
+ #define _MACH_O_FAT_H_
+ /*
+  * This header file describes the structures of the file format for "fat"
+- * architecture specific file (wrapper design).  At the begining of the file
++ * architecture specific file (wrapper design).  At the beginning of the file
+  * there is one fat_header structure followed by a number of fat_arch
+  * structures.  For each architecture in the file, specified by a pair of
+  * cputype and cpusubtype, the fat_header describes the file offset, file
+--- radare2-0.9.6.orig/libr/cons/grep.c
++++ radare2-0.9.6/libr/cons/grep.c
+@@ -8,7 +8,7 @@ R_API void r_cons_grep_help() {
+ "Usage: [command]~[modifier][word,word][[column][:line]\n"
+ " modifiers\n"
+ "   &  all words must match to grep the line\n"
+-"   ^  words must be placed at the begining of line\n"
++"   ^  words must be placed at the beginning of line\n"
+ "   !  negate grep\n"
+ "   ?  count number of matching lines\n"
+ " examples:\n"
+--- radare2-0.9.6.orig/man/rabin2.1
++++ radare2-0.9.6/man/rabin2.1
+@@ -1,4 +1,3 @@
+-.Em
+ .TH RABIN2 1
+ .SH NAME
+ rabin2 \- Binary program info extractor
+--- radare2-0.9.6.orig/man/radiff2.1
++++ radare2-0.9.6/man/radiff2.1
+@@ -1,4 +1,3 @@
+-.Em
+ .TH RADIFF2 1
+ .SH NAME
+ radiff2 \- unified binary diffing utility
+--- radare2-0.9.6.orig/man/rafind2.1
++++ radare2-0.9.6/man/rafind2.1
+@@ -1,4 +1,3 @@
+-.Em
+ .TH RAFIND2 1
+ .SH NAME
+ rafind2 \- Advanced commandline hexadecimal editor
+--- radare2-0.9.6.orig/man/ragg2.1
++++ radare2-0.9.6/man/ragg2.1
+@@ -1,4 +1,3 @@
+-.Em
+ .TH RAGG2 1
+ .SH NAME
+ ragg2 \- radare2 utility to run programs in exotic environments
+@@ -80,7 +79,7 @@ execute (just-in-time)
+   /* hello world in r_egg */
+   write@syscall(4);
+   exit@syscall(1);
+-.Pp  
++.Pp
+   main@global(128) {
+     .var0 = "hi!\\n";
+     write(1,.var0, 4);
+--- radare2-0.9.6.orig/man/ragg2-cc.1
++++ radare2-0.9.6/man/ragg2-cc.1
+@@ -1,4 +1,3 @@
+-.Em
+ .TH RAGG2-CC 1
+ .SH NAME
+ ragg2-cc \- CC frontend for compiling shellcodes
+@@ -49,7 +48,7 @@ show hexpair bytes
+     write (1, "Hello World\\n", 12);
+     exit (0);
+   }
+-.Pp  
++.Pp
+   $ ragg2-cc hi.c
+   hi.c.bin
+ .Pp
+--- radare2-0.9.6.orig/man/rahash2.1
++++ radare2-0.9.6/man/rahash2.1
+@@ -1,4 +1,3 @@
+-.Em
+ .TH RAHASH2 1
+ .SH NAME
+ hasher2 \- block based hashing utility
+--- radare2-0.9.6.orig/man/rarun2.1
++++ radare2-0.9.6/man/rarun2.1
+@@ -1,4 +1,3 @@
+-.Em
+ .TH RARUN2 1
+ .SH NAME
+ rarun2 \- radare2 utility to run programs in exotic environments
+--- radare2-0.9.6.orig/man/rax2.1
++++ radare2-0.9.6/man/rax2.1
+@@ -1,4 +1,3 @@
+-.Em
+ .TH RAX2 1
+ .SH NAME
+ rax2 \- radare base converter
+@@ -70,7 +69,7 @@ And it supports some math operations.
+   0x5*101b+5
+   30
+ .Pp
+-It is very useful tool for scripting, so you can read floating point values, or get the integer offset of a jump or a stack delta when analyzing programs.
++It is a very useful tool for scripting, so you can read floating point values, or get the integer offset of a jump or a stack delta when analyzing programs.
+ .Pp
+ .Sh SEE ALSO
+ .Pp
+--- radare2-0.9.6.orig/man/radare2.1
++++ radare2-0.9.6/man/radare2.1
+@@ -1,4 +1,3 @@
+-.Em
+ .TH RADARE2 1
+ .SH NAME
+ radare2 \- Advanced commandline hexadecimal editor, disassembler and debugger
+@@ -86,7 +85,7 @@ In r2 the debugger commands are implemen
+ .Sh ENVIRONMENT
+ These values can be used from scripts launched from inside radare ('!' command)
+ .Ar FILE
+-path to the current working file 
++path to the current working file.
+ .Sh SEE ALSO
+ .Pp
+ .Xr rahash2(1) ,
+--- radare2-0.9.6.orig/man/rasm2.1
++++ radare2-0.9.6/man/rasm2.1
+@@ -1,4 +1,3 @@
+-.Em
+ .TH "RASM2" "1" "" ""
+ .SH "NAME"
+ rasm2 \- radare2 assembler and disassembler tool
+@@ -44,7 +43,7 @@ Show usage help message.
+ .It Fl l Ar int
+ Input/Output length
+ .It Fl i Ar int
+-Ignore/skip N bytes from the begining of the input buffer
++Ignore/skip N bytes from the beginning of the input buffer
+ .It Fl L
+ List supported asm plugins
+ .It Fl o Ar offset
+@@ -60,7 +59,7 @@ Assemble opcode:
+ .Pp
+   $ rasm2 \-a x86 \-b 32 'mov eax, 33'
+ .Pp
+-Disassemble opcode: 
++Disassemble opcode:
+ .Pp
+   $ rasm2 \-d 90
+ .Sh SEE ALSO
