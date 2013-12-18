@@ -1,0 +1,18 @@
+Description: A test library is being installed and breaks the build.
+ This solves the problem of creating and installing parse/t/lib.so
+ as debian/tmp//usr/lib/x86_64-linux-gnu/t.0.9.6.
+Author: David Martínez Moreno <ender@debian.org>
+Forwarded: no
+Last-Update: 2013-12-18
+
+--- a/libr/Makefile
++++ b/libr/Makefile
+@@ -108,7 +108,7 @@
+ 	# TODO :Use INSTALL_DATA_DIR instead of mkdir
+ 	# libraries
+ 	@${INSTALL_DIR} ${LFX}
+-	@for a in `find * -type f | grep -e '\.${EXT_SO}$$' | grep -v lib/t | grep lib | grep -v /p/` ; do \
++	@for a in `find * -type f | grep -e '\.${EXT_SO}$$' | grep -Ev '(lib|parse)/t/' | grep lib | grep -v /p/` ; do \
+ 	  b=`echo $$a|cut -d / -f 2`; \
+ 	  echo " ${LFX}/$$b.${LIBVERSION}"; \
+ 	  ${INSTALL_LIB} $$a ${LFX}/$$b.${LIBVERSION} ; \

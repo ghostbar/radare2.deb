@@ -19,11 +19,13 @@ radare2 (0.9.6-1) UNRELEASED; urgency=low
       handcrafted binaries can now be loaded without segfaults, crashes or
       lack of info.
   * debian/patches:
-    - fix-kfreebsd-compilation: Refreshed.
-    - link-needed-libmagic: Fixed.
-    - unsafe_snprintf: New, partly taken from upstream commit
+    - 01_fix-kfreebsd-compilation: Refreshed.
+    - 02_link-needed-libmagic: Fixed.
+    - 03_unsafe_snprintf: New, partly taken from upstream commit
       1289476120c4... to fix an incomplete snprintf that was breaking the
       hardened build.
+    - 04_remove_non-installable_library: New, to fix an extraneous t.0.9.6
+      that was appearing in the builds.
   * debian/rules:
     - Build-Depends on valabind (>> 0.7.4).
 

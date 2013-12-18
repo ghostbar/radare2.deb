@@ -1,3 +1,4 @@
-fix-kfreebsd-compilation.patch
-link-needed-libmagic.patch
-unsafe_snprintf
+01_fix-kfreebsd-compilation.patch
+02_link-needed-libmagic.patch
+03_unsafe_snprintf.patch
+04_remove_non-installable_library.patch
