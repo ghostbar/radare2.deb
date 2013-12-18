@@ -22,7 +22,10 @@ radare2 (0.9.6-1) UNRELEASED; urgency=low
     - fix-kfreebsd-compilation: Refreshed.
     - link-needed-libmagic: Fixed.
     - unsafe_snprintf: New, partly taken from upstream commit
-      1289476120c4... to fix incomplete snprintf.
+      1289476120c4... to fix an incomplete snprintf that was breaking the
+      hardened build.
+  * debian/rules:
+    - Build-Depends on valabind (>> 0.7.4).
 
  -- David Martínez Moreno <ender@debian.org>  Wed, 11 Dec 2013 01:38:00 -0800
 
