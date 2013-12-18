@@ -1,2 +1,3 @@
 usr/lib/*/*.so.0.*
 usr/lib/*/radare2/0.9.6
+usr/lib/libr_tcc*

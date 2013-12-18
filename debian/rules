@@ -16,7 +16,7 @@ DEBUG_SUPPORT=1
 endif
 
 ifeq (0,$(DEBUG_SUPPORT))
-EXTRA_FLAGS+=--without-debugger
+EXTRA_FLAGS+=--disable-debugger
 endif
 
 %:
@@ -36,6 +36,9 @@ override_dh_auto_install:
 	dh_auto_install
 	# remove "last" symlink
 	rm debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/radare2/last
+
+override_dh_install:
+	dh_install --fail-missing
 
 override_dh_auto_clean:
 	touch config-user.mk libr/config.mk
