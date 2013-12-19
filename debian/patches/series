@@ -3,3 +3,5 @@
 03_unsafe_snprintf.patch
 04_remove_non-installable_library.patch
 05_typos.patch
+06_no_forced_rpath.patch
+07_propagate_ldflags.patch

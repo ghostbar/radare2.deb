@@ -1,0 +1,57 @@
+Description: Honor --with-rpath, and disable it when not specified.
+ Lintian noticed that rpath was being added to every binary object.  The
+ problem is that when the --with-rpath option is not specified to configure,
+ disabling of rpath is not really enforced.
+ I altered the logic to honor any previous options, and then decide whether
+ to use rpath or not.
+ This configure has been generated with acr, so it's very possible that this
+ change will need to go there.
+Author: David Martínez Moreno <ender@debian.org>
+Forwarded: no
+Last-Update: 2013-12-18
+
+--- radare2-0.9.6.orig/configure
++++ radare2-0.9.6/configure
+@@ -201,12 +201,6 @@ flag=`echo $1| cut -d = -f 1`
+ value=`echo $1| awk 'BEGIN{FS="=";}{print $2}'`
+ flag2=`echo $flag|cut -f2- -d -| sed -e 's,-,_,g' -e 's,^_,,g'|tr '[a-z]' '[A-Z]'`
+ 
+-if [ "${TARGET_OS}" = "darwin" ]; then
+-	LIBPATH=-Wl,-install_name,
+-else
+-	LIBPATH=-Wl,-R
+-fi
+-
+ case $flag in
+ "-h"|"--help"|"--hel"|"--h"|"--he"|"-help")
+ 	show_usage ; ;;
+@@ -253,7 +247,7 @@ echo "FLAGS:     --enable-cparse --disab
+ "--localstatedir")
+ 	LOCALSTATEDIR="$value"; ;;
+ "--libdir")
+-	LIBDIR="$value"; LDFLAGS="${LDFLAGS} -L$value ${LIBPATH}$value"; ;;
++	LIBDIR="$value"; ;;
+ "--includedir")
+ 	INCLUDEDIR="$value"; CFLAGS="${CFLAGS} -I$value"; ;;
+ "--infodir")
+@@ -291,6 +285,20 @@ parse_options $1
+ shift
+ done
+ 
++if [ "${TARGET_OS}" = "darwin" ]; then
++	LIBPATH=-Wl,-install_name,
++elif [ "${USE_RPATH}" -eq 1 ]; then
++	LIBPATH=-Wl,-R
++else
++	LIBPATH=''
++fi
++
++if [ "${USE_RPATH}" -eq 0 ]; then
++	LDFLAGS="${LDFLAGS} -L${LIBDIR}"
++else
++	LDFLAGS="${LDFLAGS} -L${LIBDIR} ${LIBPATH}$value"
++fi
++
+ ENVWORDS="MANDIR INFODIR LIBDIR INCLUDEDIR LOCALSTATEDIR SYSCONFDIR DATADIR LIBEXECDIR SBINDIR BINDIR EPREFIX PREFIX SPREFIX TARGET HOST BUILD INSTALL INSTALL_LIB INSTALL_MAN INSTALL_PROGRAM INSTALL_PROGRAM_STRIP INSTALL_DIR INSTALL_SCRIPT INSTALL_DATA HOST_OS HOST_CPU BUILD_OS BUILD_CPU TARGET_OS TARGET_CPU PKGNAME VPATH VERSION CONTACT CONTACT_NAME CONTACT_MAIL CC CFLAGS CPPFLAGS LDFLAGS HAVE_LANG_C CPARSE DEBUGGER HAVE_LIB_DL DL_LIBS LIL_ENDIAN BIG_ENDIAN BYTEORDER HAVE_LIB_MAGIC USE_MAGIC USE_LIB_MAGIC LIBMAGIC HAVE_LIB_EWF EWF_CFLAGS EWF_LDFLAGS HAVE_PKGCFG_LIBEWF HAVE_EWF HAVE_LIB_GMP HAVE_GMP HAVE_LIB_SSL SSL_CFLAGS SSL_LDFLAGS HAVE_PKGCFG_OPENSSL HAVE_OPENSSL WANT_OPENSSL USE_RPATH HAVE_LILEND HAVE_BIGEND HAVE_LIB_LUA5_1 USERCC USEROSTYPE WITHPIC WITHNONPIC LIBVERSION"
+ 
+ create_environ
