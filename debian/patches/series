@@ -5,3 +5,5 @@
 05_typos.patch
 06_no_forced_rpath.patch
 07_propagate_ldflags.patch
+08_proper_tcc_suffix.patch
+09_fix_internal_plugins.patch

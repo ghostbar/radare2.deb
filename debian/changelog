@@ -31,8 +31,14 @@ radare2 (0.9.6-1) UNRELEASED; urgency=low
       present.
     - 07_propagate_ldflags: New, propagate LDFLAGS from environment into
       compilation.
+    - 08_proper_tcc_suffix: Add .so as the suffix of libr_tcc.
+    - 09_fix_internal_plugins: New, fixed a bunch of problems with the
+      internal bindings: made the lua check support Debian's lua, fixed
+      library prefix, and removed ncurses bogus linking.
   * debian/control:
-    - Build-Depends on valabind (>> 0.7.4).
+    - Build-Depends on valabind (>> 0.7.4) and swig to generate internal
+      bindings, plus libperl-dev, python-dev and liblua5.2-dev.
+    - Updated descriptions.
   * debian/rules:
     - Fix a broken flag for configure (--without-debugger ->
       --disable-debugger).
@@ -41,9 +47,9 @@ radare2 (0.9.6-1) UNRELEASED; urgency=low
   * Removed the libradare2's symbols file because radare2 doesn't really try
     to have any sort of backwards compatibility.  It's futile to dump it from
     scratch in every release.
-  * debian/libradare2-0.9.6.install: Added the libr_tcc* files.
+  * debian/libradare2-{0.9.6,dev}.install: Added the libr_tcc* files.
 
- -- David Martínez Moreno <ender@debian.org>  Wed, 11 Dec 2013 01:38:00 -0800
+ -- David Martínez Moreno <ender@debian.org>  Fri, 27 Dec 2013 03:13:00 -0800
 
 radare2 (0.9.4-2) unstable; urgency=low
 
