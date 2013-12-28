@@ -27,3 +27,13 @@ Last-Update: 2013-12-18
  SOEXT?=dylib
  LIBNAME=libr_tcc.${SOEXT}
  
+--- a/libr/util/Makefile
++++ b/libr/util/Makefile
+@@ -24,6 +24,6 @@
+ endif
+ 
+ LDFLAGS+=${BN_LIBS}
+-LDFLAGS=${TH_LIBS}
++LDFLAGS+=${TH_LIBS}
+ 
+ include ../rules.mk

@@ -1,7 +1,10 @@
 Description: Fix check for lua libs.
- The internal pluglins Makefile is too strict on the pkgconfig check for
+ The internal plugins Makefile is too strict on the pkgconfig check for
  lua config, so I made the hyphen optional and added a number to make
  a possible mismatch more unlikely.
+ Also the lua plugin is not looking at the same directory for radare.lua
+ as the installation says.
+ The Perl plugin links to libncurses for no good reason.
 Author: David Martínez Moreno <ender@debian.org>
 Forwarded: no
 Last-Update: 2013-12-27
@@ -13,7 +16,7 @@ Last-Update: 2013-12-27
  include ../../config.mk
  
 -CFLAGS+=-I../../include -Wall -DPREFIX=\"${PREFIX}\"
-+CFLAGS+=-I../../include -Wall -DPREFIX=\"${LIBDIR}\"
++CFLAGS+=-I../../include -Wall -DLIBDIR=\"${LIBDIR}\"
  ifeq ($(OSTYPE),darwin)
  CFLAGS+=-undefined dynamic_lookup
  endif
@@ -31,3 +34,14 @@ Last-Update: 2013-12-27
  
  mrproper clean:
  	-rm -f *.${EXT_SO} *.${EXT_AR} *.o
+--- a/libr/lang/p/lua.c
++++ b/libr/lang/p/lua.c
+@@ -7,8 +7,6 @@
+ #include <lualib.h>
+ #include <lauxlib.h>
+ 
+-#define LIBDIR PREFIX"/lib"
+-
+ static lua_State *L;
+ static RCore* core = NULL;
+ static int lua_run(RLang *lang, const char *code, int len);
