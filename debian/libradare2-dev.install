@@ -1,5 +1,4 @@
 usr/include
 usr/lib/*/pkgconfig
 usr/lib/*/*.so
-usr/lib/libr_tcc*h /usr/include/libr/
-usr/lib/libr_tcc*a
+usr/lib/*/*.a

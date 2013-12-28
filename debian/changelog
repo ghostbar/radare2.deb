@@ -17,7 +17,7 @@ radare2 (0.9.6-1) UNRELEASED; urgency=low
     - First release with an extensive test suite.
     - Lots of bugs has been fixed, overflows, memory leaks, and many
       handcrafted binaries can now be loaded without segfaults, crashes or
-      lack of info.
+      lack of info (closes: #716192).
   * debian/patches:
     - 01_fix-kfreebsd-compilation: Refreshed.
     - 02_link-needed-libmagic: Fixed.
@@ -31,7 +31,8 @@ radare2 (0.9.6-1) UNRELEASED; urgency=low
       present.
     - 07_propagate_ldflags: New, propagate LDFLAGS from environment into
       compilation.
-    - 08_proper_tcc_suffix: Add .so as the suffix of libr_tcc.
+    - 08_proper_tcc_build: Add .so as the default suffix of libr_tcc, soname,
+      and .so symbolic link.
     - 09_fix_internal_plugins: New, fixed a bunch of problems with the
       internal bindings: made the lua check support Debian's lua, fixed
       library prefix, and removed ncurses bogus linking.
@@ -39,6 +40,7 @@ radare2 (0.9.6-1) UNRELEASED; urgency=low
     - Build-Depends on valabind (>> 0.7.4) and swig to generate internal
       bindings, plus libperl-dev, python-dev and liblua5.2-dev.
     - Updated descriptions.
+    - Bumped Standards-Version to 3.9.5 (no changes).
   * debian/rules:
     - Fix a broken flag for configure (--without-debugger ->
       --disable-debugger).
@@ -47,7 +49,7 @@ radare2 (0.9.6-1) UNRELEASED; urgency=low
   * Removed the libradare2's symbols file because radare2 doesn't really try
     to have any sort of backwards compatibility.  It's futile to dump it from
     scratch in every release.
-  * debian/libradare2-{0.9.6,dev}.install: Added the libr_tcc* files.
+  * debian/libradare2-dev.install: Added the libr_tcc.h file.
 
  -- David Martínez Moreno <ender@debian.org>  Fri, 27 Dec 2013 03:13:00 -0800
 
