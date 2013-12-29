@@ -3,66 +3,19 @@ Description: Add .so as a suffix for libtcc on Linux.
  right thing and use .so as the default.
 Author: David Martínez Moreno <ender@debian.org>
 Forwarded: no
-Last-Update: 2013-12-26
+Last-Update: 2013-12-28
 
 --- a/shlr/tcc/Makefile
 +++ b/shlr/tcc/Makefile
-@@ -3,18 +3,24 @@
- OFILES=libtcc.o tccgen.o tccpp.o
+@@ -4,7 +4,11 @@
  
  CFLAGS+=-fPIC -Wall
--LDFLAGS+=-shared
+ LDFLAGS+=-shared
 +ifeq ($(OSNAME), 'darwin')
  SOEXT?=dylib
 +else
 +SOEXT?=so
 +endif
  LIBNAME=libr_tcc.${SOEXT}
-+FULLLIBNAME=libr_tcc.${SOEXT}.$(VERSION)
-+LDFLAGS+=-shared -Wl,-soname,$(FULLLIBNAME)
  
  all: ${LIBNAME} libr_tcc.a
- 
- ${LIBNAME}: ${OFILES}
--	${CC} -o ${LIBNAME} ${LDFLAGS} ${OFILES}
-+	${CC} -o ${FULLLIBNAME} ${LDFLAGS} ${OFILES}
-+	ln -sfn $(FULLLIBNAME) $(LIBNAME)
- 
- libr_tcc.a: ${OFILES}
- 	${AR} q libr_tcc.a ${OFILES}
- 	${RANLIB} libr_tcc.a
- 
- clean:
--	rm -f ${LIBNAME} *.o *.a
-+	rm -f *.$(SOEXT) *.o *.a
---- a/shlr/Makefile
-+++ b/shlr/Makefile
-@@ -82,15 +82,22 @@
- 	git add tcc
- 	rm -rf _
- 
--D=${DESTDIR}/${PREFIX}
-+D=${DESTDIR}/${LIBDIR}
-+ifeq ($(OSNAME), 'darwin')
-+	SOEXT?=dylib
-+else
-+	SOEXT?=so
-+endif
-+
- install:
--	mkdir -p ${D}/lib
--	cp -f tcc/libr_tcc* ${D}/lib
-+	mkdir -p $(D)
-+	cp -af tcc/libr_tcc.$(SOEXT)* tcc/libr_tcc.a $(D)
-+	cp -af tcc/libr_tcc.h $(DESTDIR)/$(INCLUDEDIR)/libr
- 
- install-symlink symstall:
--	mkdir -p ${D}/lib
-+	mkdir -p $(D)
- 	cd tcc ; for a in libr_tcc* ; do \
--		ln -fs `pwd`/$$a ${D}/lib/$$a ; done
-+		ln -fs `pwd`/$$a ${D}/$$a ; done
- 
- uninstall deinstall:
--	rm -f ${D}/lib/libr_tcc*
-+	rm -f ${D}/libr_tcc* $(DESTDIR)/$(INCLUDEDIR)/libr/libr_tcc*

@@ -31,8 +31,7 @@ radare2 (0.9.6-1) UNRELEASED; urgency=low
       present.
     - 07_propagate_ldflags: New, propagate LDFLAGS from environment into
       compilation.
-    - 08_proper_tcc_build: Add .so as the default suffix of libr_tcc, soname,
-      and .so symbolic link.
+    - 08_proper_tcc_build: Add .so as the default suffix of libr_tcc.
     - 09_fix_internal_plugins: New, fixed a bunch of problems with the
       internal bindings: made the lua check support Debian's lua, fixed
       library prefix, and removed ncurses bogus linking.
