@@ -7,3 +7,4 @@
 07_propagate_ldflags.patch
 08_proper_tcc_build.patch
 09_fix_internal_plugins.patch
+10_fix_rafind2_segfault.patch

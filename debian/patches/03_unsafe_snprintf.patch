@@ -4,7 +4,7 @@ Description: Fix incomplete snprintf declaration.
  It's partially taken from upstream's 1289476120c4...
 Author: David Martínez Moreno <ender@debian.org>
 Forwarded: not-needed
-Last-Update: <2013-12-11>
+Last-Update: 2013-12-11
 
 --- a/shlr/java/code.c
 +++ b/shlr/java/code.c
