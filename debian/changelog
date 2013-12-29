@@ -37,7 +37,7 @@ radare2 (0.9.6-1) UNRELEASED; urgency=low
       library prefix, and removed ncurses bogus linking.
   * debian/control:
     - Build-Depends on valabind (>> 0.7.4) and swig to generate internal
-      bindings, plus libperl-dev, python-dev and liblua5.2-dev.
+      bindings, plus python-dev and liblua5.2-dev.
     - Updated descriptions.
     - Bumped Standards-Version to 3.9.5 (no changes).
   * debian/rules:

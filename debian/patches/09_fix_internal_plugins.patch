@@ -4,10 +4,9 @@ Description: Fix check for lua libs.
  a possible mismatch more unlikely.
  Also the lua plugin is not looking at the same directory for radare.lua
  as the installation says.
- The Perl plugin links to libncurses for no good reason.
 Author: David Martínez Moreno <ender@debian.org>
 Forwarded: no
-Last-Update: 2013-12-27
+Last-Update: 2013-12-28
 
 --- a/libr/lang/p/Makefile
 +++ b/libr/lang/p/Makefile
@@ -25,15 +24,6 @@ Last-Update: 2013-12-27
  ifneq (${LUAPKG},)
  CFLAGS+=$(shell pkg-config --cflags ${LUAPKG})
  LUA_LDFLAGS+=$(shell pkg-config --libs ${LUAPKG})
-@@ -57,7 +57,7 @@
- 	-${CC} ${CFLAGS} -I/usr/lib/perl/5.10/CORE/ \
- 		-fPIC ${LDFLAGS_LIB} -o lang_perl.${EXT_SO} perl.c ${LDFLAGS_LINKPATH}.. \
- 		`perl -MExtUtils::Embed -e ccopts | sed -e 's/-arch [^\s]* //g'` \
--		`perl -MExtUtils::Embed -e ldopts | sed -e 's/-arch [^\s]* //g'` -lncurses
-+		`perl -MExtUtils::Embed -e ldopts | sed -e 's/-arch [^\s]* //g'`
- 
- mrproper clean:
- 	-rm -f *.${EXT_SO} *.${EXT_AR} *.o
 --- a/libr/lang/p/lua.c
 +++ b/libr/lang/p/lua.c
 @@ -7,8 +7,6 @@
