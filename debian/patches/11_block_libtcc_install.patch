@@ -1,0 +1,29 @@
+Description: Stop installing libtcc files.
+ As per pancake, we shouldn't install any of the libtcc files in the final
+ package.  Based on commit 1531e96.
+Author: David Martínez Moreno <ender@debian.org>
+Origin: upstream, https://github.com/radare/radare2/commit/1531e965b3394056c0b68da85cb717f06139bb0a
+Forwarded: not-needed
+Last-Update: 2013-12-30
+
+--- radare2-0.9.6.orig/shlr/Makefile
++++ radare2-0.9.6/shlr/Makefile
+@@ -84,13 +84,13 @@ tcc-sync sync-tcc:
+ 
+ D=${DESTDIR}/${PREFIX}
+ install:
+-	mkdir -p ${D}/lib
+-	cp -f tcc/libr_tcc* ${D}/lib
++	#mkdir -p ${D}/lib
++	#cp -f tcc/libr_tcc* ${D}/lib
+ 
+ install-symlink symstall:
+-	mkdir -p ${D}/lib
+-	cd tcc ; for a in libr_tcc* ; do \
++	#mkdir -p ${D}/lib
++	#cd tcc ; for a in libr_tcc* ; do \
+ 		ln -fs `pwd`/$$a ${D}/lib/$$a ; done
+ 
+ uninstall deinstall:
+-	rm -f ${D}/lib/libr_tcc*
++	#rm -f ${D}/lib/libr_tcc*

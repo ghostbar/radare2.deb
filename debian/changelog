@@ -36,6 +36,8 @@ radare2 (0.9.6-1) UNRELEASED; urgency=low
       library prefix, and removed ncurses bogus linking.
     - 10_fix_rafind2_segfault: New, backported from e0f4364 to fix a segfault
       reported by the Mayhem team (closes: #716503).
+    - 11_block_libtcc_install: New, backported from upstream 1531e96 to stop
+      installing libtcc files.
   * debian/control:
     - Build-Depends on valabind (>> 0.7.4) and swig to generate internal
       plugins, plus python-dev and liblua5.2-dev.
