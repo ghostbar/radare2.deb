@@ -38,11 +38,18 @@ radare2 (0.9.6-1) UNRELEASED; urgency=low
       reported by the Mayhem team (closes: #716503).
     - 11_block_libtcc_install: New, backported from upstream 1531e96 to stop
       installing libtcc files.
+    - 101_split_plugins_installation: New, Debian-only, to ease packaging of
+      the plugins.  Otherwise they ended up in libradare2.
   * debian/control:
     - Build-Depends on valabind (>> 0.7.4) and swig to generate internal
-      plugins, plus python-dev and liblua5.2-dev.
+      plugins, plus python-dev and liblua5.2-dev for the corresponding
+      extensions, and dh-exec to help with the packaging of radare2-plugins.
     - Updated descriptions.
     - Bumped Standards-Version to 3.9.5 (no changes).
+    - Created another package (radare2-plugins) with the Python and Lua
+      extensions (plus the dependency on Vala).
+    - Make radare-plugins depend on valac; otherwise the vala extension is not
+      functional.
   * debian/rules:
     - Fix a broken flag for configure (--without-debugger ->
       --disable-debugger) that was causing the debugger to be enabled back in

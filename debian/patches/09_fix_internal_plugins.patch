@@ -2,11 +2,13 @@ Description: Fix check for lua libs.
  The internal plugins Makefile is too strict on the pkgconfig check for
  lua config, so I made the hyphen optional and added a number to make
  a possible mismatch more unlikely.
+ There's a leftover in the main Makefile, possibly from radare1, for
+ installing radare.lua.
  Also the lua plugin is not looking at the same directory for radare.lua
  as the installation says.
 Author: David Martínez Moreno <ender@debian.org>
 Forwarded: no
-Last-Update: 2013-12-28
+Last-Update: 2013-12-30
 
 --- a/libr/lang/p/Makefile
 +++ b/libr/lang/p/Makefile
@@ -35,3 +37,21 @@ Last-Update: 2013-12-28
  static lua_State *L;
  static RCore* core = NULL;
  static int lua_run(RLang *lang, const char *code, int len);
+--- a/Makefile
++++ b/Makefile
+@@ -101,7 +101,6 @@
+ 	done
+ 	mkdir -p ${DLIBDIR}/radare2/${VERSION}/hud
+ 	cp -f doc/hud ${DLIBDIR}/radare2/${VERSION}/hud/main
+-	cp ${PWD}/libr/lang/p/radare.lua ${DLIBDIR}/radare2/${VERSION}/radare.lua
+ 	sys/ldconfig.sh
+ 
+ install-www:
+@@ -132,7 +131,6 @@
+ 	done
+ 	mkdir -p ${DLIBDIR}/radare2/${VERSION}/hud
+ 	ln -fs ${PWD}/doc/hud ${DLIBDIR}/radare2/${VERSION}/hud/main
+-	ln -fs ${PWD}/libr/lang/p/radare.lua ${DLIBDIR}/radare2/${VERSION}/radare.lua
+ 	sys/ldconfig.sh
+ 
+ deinstall uninstall:
