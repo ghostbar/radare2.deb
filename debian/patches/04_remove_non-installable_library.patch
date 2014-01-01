@@ -2,8 +2,8 @@ Description: A test library is being installed and breaks the build.
  This solves the problem of creating and installing parse/t/lib.so
  as debian/tmp//usr/lib/x86_64-linux-gnu/t.0.9.6.
 Author: David Martínez Moreno <ender@debian.org>
-Forwarded: no
-Last-Update: 2013-12-18
+Forwarded: https://github.com/radare/radare2/pull/504
+Last-Update: 2013-12-31
 
 --- a/libr/Makefile
 +++ b/libr/Makefile

@@ -2,8 +2,8 @@ Description: Properly propagate LDFLAGS in libraries.
  Debian fills up LDFLAGS with hardening flgs but for some libraries this
  parameter is not read from the environment variable but hardcoded.
 Author: David Martínez Moreno <ender@debian.org>
-Forwarded: no
-Last-Update: 2013-12-18
+Forwarded: https://github.com/radare/radare2/pull/504
+Last-Update: 2013-12-31
 
 --- a/mk/gcc.mk
 +++ b/mk/gcc.mk

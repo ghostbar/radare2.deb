@@ -1,5 +1,6 @@
-radare2 (0.9.6-1) UNRELEASED; urgency=low
+radare2 (0.9.6-1) unstable; urgency=low
 
+  * New Year's release.  Just in time!
   * New upstream release.  Main changes are:
     - r2 now supports UTF-8, RGB and TrueColor ansi codes.
     - More platforms supported: ARM aarch64, TI c55x+, 8051, Javascript
@@ -61,7 +62,7 @@ radare2 (0.9.6-1) UNRELEASED; urgency=low
     to have any sort of backwards compatibility.  It's futile to dump it from
     scratch in every release.
 
- -- David Martínez Moreno <ender@debian.org>  Fri, 27 Dec 2013 03:13:00 -0800
+ -- David Martínez Moreno <ender@debian.org>  Tue, 31 Dec 2013 23:57:03 -0800
 
 radare2 (0.9.4-2) unstable; urgency=low
 

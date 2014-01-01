@@ -2,8 +2,8 @@ Description: Add .so as a suffix for libtcc on Linux.
  It's an oversight that libtcc is being built as .dylib (OS X).  Do the
  right thing and use .so as the default.
 Author: David Martínez Moreno <ender@debian.org>
-Forwarded: no
-Last-Update: 2013-12-28
+Forwarded: https://github.com/radare/radare2/pull/504
+Last-Update: 2013-12-31
 
 --- a/shlr/tcc/Makefile
 +++ b/shlr/tcc/Makefile

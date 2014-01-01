@@ -2,8 +2,8 @@ Description: Fix a round of typos and incorrect man macros.
  The macro Em. was present in all the manpages and it's incorrect, plus
  there's some typos here and there, some of them spotted by lintian.
 Author: David Martínez Moreno <ender@debian.org>
-Forwarded: no
-Last-Update: 2013-12-18
+Forwarded: https://github.com/radare/radare2/pull/504
+Last-Update: 2013-12-31
 
 --- a/libr/bin/format/mach0/mach-o/fat.h
 +++ b/libr/bin/format/mach0/mach-o/fat.h
