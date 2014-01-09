@@ -1,3 +1,11 @@
+radare2 (0.9.6-2) UNRELEASED; urgency=low
+
+  * debian/control: Switched Sebastian and myself as Maintainer/Uploader.
+  * debian/patches/08_proper_tcc_build: Updated to fix a wrong ifeq in the
+    Makefile.
+
+ -- David Martínez Moreno <ender@debian.org>  Fri, 03 Jan 2014 22:50:19 -0800
+
 radare2 (0.9.6-1) unstable; urgency=low
 
   * New Year's release.  Just in time!
