@@ -1,4 +1,4 @@
-radare2 (0.9.6-2) UNRELEASED; urgency=low
+radare2 (0.9.6-2) unstable; urgency=low
 
   * debian/control: Switched Sebastian and myself as Maintainer/Uploader.
   * debian/patches/08_proper_tcc_build: Updated to fix a wrong ifeq in the
@@ -9,7 +9,7 @@ radare2 (0.9.6-2) UNRELEASED; urgency=low
   * Added a lintian override for spelling-error-in-binary in libradare2-0.9.6,
     as it's invalid.
 
- -- David Martínez Moreno <ender@debian.org>  Fri, 03 Jan 2014 22:50:19 -0800
+ -- David Martínez Moreno <ender@debian.org>  Fri, 17 Jan 2014 07:48:47 -0800
 
 radare2 (0.9.6-1) unstable; urgency=low
 
