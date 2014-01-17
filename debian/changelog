@@ -4,6 +4,8 @@ radare2 (0.9.6-2) UNRELEASED; urgency=low
   * debian/patches/08_proper_tcc_build: Updated to fix a wrong ifeq in the
     Makefile.
   * debian/watch: Updated as it seems that pancake is releasing .tar.xz now.
+  * debian/patches/01_fix-kfreebsd-compilation: Completely revamped from
+    upstream commit 1941efc, to (hopefully) fix builds on kFreeBSD.
 
  -- David Martínez Moreno <ender@debian.org>  Fri, 03 Jan 2014 22:50:19 -0800
 
