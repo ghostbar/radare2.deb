@@ -1,3 +1,10 @@
+radare2 (0.9.6-3) unstable; urgency=medium
+
+  * debian/patches/12_fix_strcasestr_declaration: Fixed a missing include,
+    thanks to Matthias Klose for pointing it (closes: #735921).
+
+ -- David Martínez Moreno <ender@debian.org>  Tue, 28 Jan 2014 10:29:31 -0800
+
 radare2 (0.9.6-2) unstable; urgency=low
 
   * debian/control: Switched Sebastian and myself as Maintainer/Uploader.

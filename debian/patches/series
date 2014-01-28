@@ -10,3 +10,4 @@
 10_fix_rafind2_segfault.patch
 11_block_libtcc_install.patch
 101_split_plugins_installation
+12_fix_strcasestr_declaration.patch
