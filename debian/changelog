@@ -1,3 +1,29 @@
+radare2 (0.9.7-1) UNRELEASED; urgency=low
+
+  * New upstream version:
+    - Support for GameBoy added.
+    - Tons of bugs and segfaults fixed.
+  * debian/patches:
+    - Merged or just not applicable:
+      - 01_fix-kfreebsd-compilation.
+      - 03_unsafe_snprintf.
+      - 04_remove_non-installable_library.
+      - 05_typos.
+      - 07_propagate_ldflags.
+      - 08_proper_tcc_build.
+      - 10_fix_rafind2_segfault.
+      - 11_block_libtcc_install.
+      - 12_fix_strcasestr_declaration.
+    - Still there:
+      - 02_link-needed-libmagic: Refreshed.
+      - 06_no_forced_rpath: Commented for now.
+      - 09_fix_internal_plugins: Internal plugins moved to radare2-bindings, so
+        commented for now.
+      - 101_split_plugins_installation: Commented for the same reason as above.
+  * debian/control: Commented out the radare2-plugins package.
+
+ -- David Martínez Moreno <ender@debian.org>  Mon, 23 Jun 2014 12:02:18 +0200
+
 radare2 (0.9.6-3.1) unstable; urgency=medium
 
   * debian/patches/12_fix_strcasestr_declaration: Add #define _GNU_SOURCE

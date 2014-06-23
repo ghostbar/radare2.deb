@@ -1,4 +1,0 @@
-# One package is enough for all those libs
-libradare2-0.9.6: package-name-doesnt-match-sonames
-# This is really com+ment but it's too hard for lintian to notice.
-libradare2-0.9.6: spelling-error-in-binary usr/lib/x86_64-linux-gnu/libr_core.so.0.9.6 ment meant

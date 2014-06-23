@@ -1,0 +1,21 @@
+Description: Link with needed libmagic.
+ Required when building with ld --as-needed.
+Author: Julian Taylor <jtaylor@ubuntu.com>
+Reviewed-by: Sebastian Reichel <sre@debian.org>
+Debian-Bug: http://bugs.debian.org/653873
+Forwarded: yes
+Last-Update: 2014-06-23
+
+Index: radare2/libr/core/Makefile
+===================================================================
+--- radare2.orig/libr/core/Makefile
++++ radare2/libr/core/Makefile
+@@ -10,7 +10,7 @@ OBJS=core.o cmd.o file.o config.o visual
+ OBJS+=hack.o vasm.o patch.o bin.o log.o syscmd.o rtr.o
+ OBJS+=anal.o project.o gdiff.o asm.o vmenus.o disasm.o 
+ 
+-LDFLAGS+=${DL_LIBS}
++LDFLAGS+=${DL_LIBS} -lmagic
+ 
+ ifeq ($(shell uname),OpenBSD)
+ LDFLAGS+=-lpthread

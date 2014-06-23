@@ -1,13 +1,4 @@
-01_fix-kfreebsd-compilation.patch
-02_link-needed-libmagic.patch
-03_unsafe_snprintf.patch
-04_remove_non-installable_library.patch
-05_typos.patch
-06_no_forced_rpath.patch
-07_propagate_ldflags.patch
-08_proper_tcc_build.patch
-09_fix_internal_plugins.patch
-10_fix_rafind2_segfault.patch
-11_block_libtcc_install.patch
-101_split_plugins_installation
-12_fix_strcasestr_declaration.patch
+link-needed-libmagic.patch
+#06_no_forced_rpath.patch
+#09_fix_internal_plugins.patch
+#101_split_plugins_installation

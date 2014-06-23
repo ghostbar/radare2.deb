@@ -37,27 +37,27 @@ Description: free and advanced command line hexadecimal editor
  supporting PE, mach0, ELF, class, etc. named rabin, and a block-based
  hash utility called rahash.
 
-Package: radare2-plugins
-Section: libs
-Architecture: any
-Depends: valac, ${misc:Depends}, ${shlibs:Depends}
-Description: plugins for radare2
- The project aims to create a complete, portable, multi-architecture,
- unix-like toolchain for reverse engineering.
- .
- It is composed by an hexadecimal editor (radare) with a wrapped IO
- layer supporting multiple backends for local/remote files, debugger
- (OS X, BSD, Linux, W32), stream analyzer, assembler/disassembler (rasm)
- for x86, ARM, PPC, m68k, Java, MSIL, SPARC, code analysis modules and
- scripting facilities. A bindiffer named radiff, base converter (rax),
- shellcode development helper (rasc), a binary information extractor
- supporting PE, mach0, ELF, class, etc. named rabin, and a block-based
- hash utility called rahash.
- .
- This package provides the necessary libraries to run Python, Lua and Vala
- from within radare2.
-
-Package: libradare2-0.9.6
+#Package: radare2-plugins
+#Section: libs
+#Architecture: any
+#Depends: valac, ${misc:Depends}, ${shlibs:Depends}
+#Description: plugins for radare2
+# The project aims to create a complete, portable, multi-architecture,
+# unix-like toolchain for reverse engineering.
+# .
+# It is composed by an hexadecimal editor (radare) with a wrapped IO
+# layer supporting multiple backends for local/remote files, debugger
+# (OS X, BSD, Linux, W32), stream analyzer, assembler/disassembler (rasm)
+# for x86, ARM, PPC, m68k, Java, MSIL, SPARC, code analysis modules and
+# scripting facilities. A bindiffer named radiff, base converter (rax),
+# shellcode development helper (rasc), a binary information extractor
+# supporting PE, mach0, ELF, class, etc. named rabin, and a block-based
+# hash utility called rahash.
+# .
+# This package provides the necessary libraries to run Python, Lua and Vala
+# from within radare2.
+ 
+Package: libradare2-0.9.7
 Section: libs
 Architecture: any
 Pre-Depends: ${misc:Pre-Depends}
@@ -81,7 +81,7 @@ Description: libraries from the radare2 suite
 Package: libradare2-dev
 Section: libdevel
 Architecture: any
-Depends: ${misc:Depends}, libradare2-0.9.6 (= ${binary:Version}), libmagic-dev
+Depends: ${misc:Depends}, libradare2-0.9.7 (= ${binary:Version}), libmagic-dev
 Description: devel files from the radare2 suite
  The project aims to create a complete, portable, multi-architecture,
  unix-like toolchain for reverse engineering.
@@ -97,11 +97,11 @@ Description: devel files from the radare2 suite
  .
  This package provides the devel files from radare2.
 
-Package: libradare2-0.9.6-dbg
+Package: libradare2-0.9.7-dbg
 Multi-Arch: same
 Section: debug
 Architecture: any
-Depends: ${misc:Depends}, libradare2-0.9.6 (= ${binary:Version})
+Depends: ${misc:Depends}, libradare2-0.9.7 (= ${binary:Version})
 Description: debug symbols for libraries from radare suite
  The project aims to create a complete, portable, multi-architecture,
  unix-like toolchain for reverse engineering.
