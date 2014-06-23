@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2013 pancake */
+/* radare - LGPL - Copyright 2007-2014 pancake */
 
 #include "r_hash.h"
 #include "r_util.h"
@@ -115,7 +115,7 @@ R_API ut64 r_hash_name_to_bits(const char *name) {
 	const char* ptr = name_lowercase;
 	ut64 bits = R_HASH_NONE;
 
-	for (j=0;name[j] && j<sizeof (name_lowercase); j++)
+	for (j=0;name[j] && j<sizeof (name_lowercase)-1; j++)
 		name_lowercase[j] = tolower (name[j]);
 	name_lowercase[j] = 0;
 
@@ -145,7 +145,7 @@ R_API ut64 r_hash_name_to_bits(const char *name) {
 
 R_API void r_hash_do_spice(RHash *ctx, int algo, int loops, RHashSeed *seed) {
 	ut8 buf[1024];
-	int i, len, dlen, hlen = r_hash_size (algo);
+	int i, len, hlen = r_hash_size (algo);
 	for (i = 0; i< loops; i++) {
 		if (seed) {
 			if (seed->prefix) {
@@ -160,6 +160,6 @@ R_API void r_hash_do_spice(RHash *ctx, int algo, int loops, RHashSeed *seed) {
 			memcpy (buf, ctx->digest, hlen);
 			len = hlen;
 		}
-		dlen = r_hash_calculate (ctx, algo, buf, len);
+		(void)r_hash_calculate (ctx, algo, buf, len);
 	}
 }

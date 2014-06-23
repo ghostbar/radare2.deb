@@ -5,6 +5,8 @@
 #include <r_cmd.h>
 #include <r_util.h>
 
+static int value = 0;
+
 R_API void r_cmd_macro_init(RCmdMacro *mac) {
 	mac->counter = 0;
 	mac->_brk_value = 0;
@@ -21,12 +23,12 @@ R_API void r_cmd_macro_init(RCmdMacro *mac) {
 R_API int r_cmd_macro_add(RCmdMacro *mac, const char *oname) {
 	struct r_cmd_macro_item_t *macro;
 	char *name, *args = NULL;
-	char buf[R_CMD_MAXLEN];
+	//char buf[R_CMD_MAXLEN];
 	RCmdMacroItem *m;
 	int macro_update;
 	RListIter *iter;
 	char *pbody;
-	char *bufp;
+	// char *bufp;
 	char *ptr;
 	int lidx;
 
@@ -45,6 +47,10 @@ R_API int r_cmd_macro_add(RCmdMacro *mac, const char *oname) {
 	if (pbody) {
 		*pbody = '\0';
 		pbody++;
+	} else {
+		eprintf ("Invalid macro body\n");
+		free (name);
+		return R_FALSE;
 	}
 
 	if (name[strlen (name)-1]==')') {
@@ -87,7 +93,7 @@ R_API int r_cmd_macro_add(RCmdMacro *mac, const char *oname) {
 	macro->args = strdup (args);
 	ptr = strchr (macro->name, ' ');
 	if (ptr != NULL) {
-		*ptr='\0';
+		*ptr = '\0';
 		macro->nargs = r_str_word_set0 (ptr+1);
 	}
 
@@ -100,9 +106,12 @@ R_API int r_cmd_macro_add(RCmdMacro *mac, const char *oname) {
 				pbody[lidx]='\0';
 		}
 		strncpy (macro->code, pbody, macro->codelen);
+		macro->code[macro->codelen] = 0;
 		//strcat (macro->code, ",");
+#if 0
 	} else {
-		int lbufp, codelen = 0;
+		int lbufp, codelen = 0, nl = 0;
+		eprintf ("Reading macro from stdin:\n");
 		for (;codelen<R_CMD_MAXLEN;) { // XXX input from mac->fd
 #if 0
 			if (stdin == r_cons_stdin_fd) {
@@ -112,6 +121,9 @@ R_API int r_cmd_macro_add(RCmdMacro *mac, const char *oname) {
 			fgets(buf, 1023, r_cons_stdin_fd);
 #endif
 			fgets (buf, sizeof (buf)-1, stdin);
+			if (*buf=='\n' && nl)
+				break;
+			nl = (*buf == '\n')?1:0;
 			if (*buf==')')
 				break;
 			for (bufp=buf;*bufp==' '||*bufp=='\t';bufp++);
@@ -127,6 +139,7 @@ R_API int r_cmd_macro_add(RCmdMacro *mac, const char *oname) {
 				codelen += lbufp;
 			}
 		}
+#endif
 	}
 	if (macro_update == 0)
 		r_list_append (mac->macros, macro);
@@ -216,8 +229,8 @@ R_API int r_cmd_macro_cmd_args(RCmdMacro *mac, const char *ptr, const char *args
 				i += offlen-1;
 				j++;
 			} else {
-				cmd[i]=ptr[j];
-				cmd[i+1]='\0';
+				cmd[i] = ptr[j];
+				cmd[i+1] = '\0';
 			}
 		} else {
 			cmd[i] = ptr[j];
@@ -225,13 +238,16 @@ R_API int r_cmd_macro_cmd_args(RCmdMacro *mac, const char *ptr, const char *args
 		}
 	}
 	for (pcmd = cmd; *pcmd && (*pcmd==' ' || *pcmd == '\t'); pcmd++);
-	return (*pcmd==')')? 0: mac->cmd (mac->user, pcmd);
+	//eprintf ("-pre %d\n", (int)mac->num->value);
+	int xx = (*pcmd==')')? 0: mac->cmd (mac->user, pcmd);
+	//eprintf ("-pos %p %d\n", mac->num, (int)mac->num->value);
+	return xx;
 }
 
 R_API char *r_cmd_macro_label_process(RCmdMacro *mac, RCmdMacroLabel *labels, int *labels_n, char *ptr) {
 	int i;
 	for (; *ptr==' '; ptr++);
-	if (ptr[strlen (ptr)-1]==':') {
+	if (ptr[strlen (ptr)-1]==':' && !strchr (ptr, ' ')) {
 		/* label detected */
 		if (ptr[0]=='.') {
 		//	eprintf("---> GOTO '%s'\n", ptr+1);
@@ -337,7 +353,6 @@ R_API int r_cmd_macro_call(RCmdMacro *mac, const char *name) {
 	cons = r_cons_singleton ();
 	r_cons_break (NULL, NULL);
 	r_list_foreach (mac->macros, iter, m) {
-
 		if (!strcmp (str, m->name)) {
 			char *ptr = m->code;
 			char *end = strchr (ptr, '\n');
@@ -356,6 +371,7 @@ R_API int r_cmd_macro_call(RCmdMacro *mac, const char *name) {
 				if (cons->breaked) {
 					eprintf ("Interrupted at (%s)\n", ptr);
 					if (end) *end = '\n';
+					free (str);
 					return R_FALSE;
 				}
 				r_cons_flush ();
@@ -374,8 +390,13 @@ R_API int r_cmd_macro_call(RCmdMacro *mac, const char *name) {
 				}
 				/* Command execution */
 				if (*ptr) {
-
-					r_cmd_macro_cmd_args (mac, ptr, args, nargs);
+					mac->num->value = value;
+					int r = r_cmd_macro_cmd_args (mac, ptr, args, nargs);
+					// TODO: handle quit? r == 0??
+					// quit, exits the macro. like a break
+					value = mac->num->value;
+					if (r<0)
+						return r;
 				}
 				if (end) {
 					*end = '\n';

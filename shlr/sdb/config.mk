@@ -1,12 +1,32 @@
 DESTDIR?=
 PREFIX?=/usr
 
-SDBVER=0.6.6
+SDBVER=0.8.0.rc2
+
+INSTALL?=install
+
+ifeq ($(INSTALL),cp)
+INSTALL_DIR=mkdir -p
+INSTALL_DATA=cp -f
+INSTALL_PROGRAM=cp -f
+INSTALL_SCRIPT=cp -f
+INSTALL_MAN=cp -f
+INSTALL_LIB=cp -f
+else
+INSTALL_DIR=$(INSTALL) -d
+INSTALL_DATA=$(INSTALL) -m 644
+INSTALL_PROGRAM=$(INSTALL) -m 755
+INSTALL_SCRIPT=$(INSTALL) -m 755
+INSTALL_MAN=$(INSTALL) -m 444
+INSTALL_LIB=$(INSTALL) -c
+endif
 
 CFLAGS_STD?=-D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE=700
 #CFLAGS+=-Wno-initializer-overrides
 CFLAGS+=${CFLAGS_STD}
 
+# Hack to fix clang warnings
+CFLAGS+=$(shell gcc -v 2>&1 | grep -q LLVM && echo '-Wno-initializer-overrides')
 CFLAGS+=-Wall
 #CFLAGS+=-O3
 #CFLAGS+=-ggdb -g -Wall -O0
@@ -25,7 +45,9 @@ AR?=${WCP}-ar
 CFLAGS_SHARED?=-fPIC
 EXEXT=.exe
 else
-CFLAGS_SHARED?=-fPIC -fvisibility=hidden
+CFLAGS_SHARED?=-fPIC
+# -fvisibility=hidden
+AR?=ar
 CC?=gcc
 EXEXT=
 endif

@@ -1,63 +1,98 @@
-/* radare - LGPL - Copyright 2011-2013 - earada, pancake */
+/* radare - LGPL - Copyright 2011-2014 - earada, pancake */
 
 #include <r_core.h>
 
-static ut64 get_vaddr (ut64 baddr, ut64 paddr, ut64 vaddr) {
-	ut32 delta;
-	if (!baddr) return vaddr;
- 	delta = (paddr & 0xfffff000) | (vaddr & 0xfff);
-	return baddr + delta;
+R_API void r_core_bin_set_by_fd (RCore *core, ut64 bin_fd) {
+	RListIter *iter;
+	RBinFile *bf = NULL;
+
+	r_list_foreach (core->bin->binfiles, iter, bf) {
+		if (bf && bf->fd == bin_fd) {
+			core->bin->cur = bf;
+			break;
+		}
+		bf = NULL;
+	}
+	if (bf) r_core_bin_bind (core);
+}
+
+R_API void r_core_bin_bind (RCore *core) {
+	if (!core->bin) return;
+	r_bin_bind (core->bin, &(core->anal->binb));
+	r_bin_bind (core->bin, &(core->assembler->binb));
+	r_bin_bind (core->bin, &(core->file->binb));
+}
+
+R_API int r_core_bin_refresh_strings(RCore *r) {
+	return r_bin_reset_strings (r->bin) ? R_TRUE: R_FALSE;
 }
 
 static int bin_strings (RCore *r, int mode, ut64 baddr, int va) {
+#define MINSTR 4
 	char *p, *q, str[R_FLAG_NAME_SIZE];
 	RBinSection *section;
-	int hasstr, minstr;
+	int hasstr, minstr, rawstr;
 	RBinString *string;
 	RListIter *iter;
 	RList *list;
 	int i = 0;
+	minstr = r_config_get_i (r->config, "bin.minstr");
+	rawstr = r_config_get_i (r->config, "bin.rawstr");
+	r->bin->cur->rawstr = rawstr;
 
 	if (!(hasstr = r_config_get_i (r->config, "bin.strings")))
 		return 0;
-	if (!r->bin->cur.curplugin) return 0;
-	if (!r->bin->cur.curplugin->info) {
-		if (!r_config_get_i (r->config, "bin.rawstr")) {
+	if (!r->bin->cur->curplugin) return 0;
+	if (!r->bin->cur->curplugin->info) {
+		if (!rawstr) {
 			eprintf ("WARN: Use '-e bin.rawstr=true' or 'rabin2 -zz'"
 				" to find strings on unknown file types\n");
-			return 0;
+			return R_FALSE;
 		}
 	}
-	minstr = r_config_get_i (r->config, "bin.minstr");
-	if (minstr>0) r->bin->minstrlen = minstr;
-	else r_config_set_i (r->config, "bin.minstr", r->bin->minstrlen);
-	if (r->bin->minstrlen==0) return -1;
+	//if (r->bin->minstrlen == 0 && minstr>0) r->bin->minstrlen = minstr;
+	//else if (r->bin->minstrlen > 0) r_config_set_i (r->config, "bin.minstr", r->bin->minstrlen);
+	if (r->bin->minstrlen==0) {
+		r->bin->minstrlen = r->bin->cur->curplugin->minstrlen;
+		if (r->bin->minstrlen==0)
+			r->bin->minstrlen = MINSTR;
+	}
+	if (minstr>0 || r->bin->minstrlen <=0) {
+		r->bin->minstrlen = R_MIN (minstr, MINSTR);
+		//return R_FALSE;
+	}
 
 	/* code */
+	if (rawstr) {
+		// TODO: search in whole file, ignoring sections
+	}
 	if ((list = r_bin_get_strings (r->bin)) == NULL)
 		return R_FALSE;
 
 	if ((mode & R_CORE_BIN_JSON)) {
 		r_cons_printf ("[");
 		r_list_foreach (list, iter, string) {
-			ut64 addr = va? get_vaddr (baddr, string->rva,
+			ut64 addr = va? r_bin_get_vaddr (r->bin, baddr, string->rva,
 				string->offset): string->offset;
 			q = strdup (string->string);
 			//r_name_filter (str, 128);
-			for (p=q; *p; p++) if(*p=='"')*p='\'';
+			for (p=q; *p; p++) if (*p=='"') *p = '\'';
 			r_cons_printf ("%s{\"offset\":%"PFMT64d
-				",\"length\":%d,\"string\":\"%s\"}", 
-				iter->p? ",": "", addr, string->size, q);
+				",\"length\":%d,\"size\":%d,"
+				"\"type\":\"%s\",\"string\":\"%s\"}", 
+				iter->p? ",": "", addr,
+				string->length, string->size,
+				string->type=='W'?"wide":"ascii", q);
 			free (q);
 		}
 		r_cons_printf ("]");
 	} else
 	if ((mode & R_CORE_BIN_SIMPLE)) {
 		r_list_foreach (list, iter, string) {
-			ut64 addr = va? get_vaddr (baddr, string->rva,
+			ut64 addr = va? r_bin_get_vaddr (r->bin, baddr, string->rva,
 				string->offset): string->offset;
-			r_cons_printf ("%"PFMT64d" %d %s\n", 
-				addr, string->size, string->string);
+			r_cons_printf ("%"PFMT64d" %d %d %s\n", 
+				addr, string->size, string->length, string->string);
 		}
 	} else
 	if ((mode & R_CORE_BIN_SET)) {
@@ -65,38 +100,44 @@ static int bin_strings (RCore *r, int mode, ut64 baddr, int va) {
 			r_flag_space_set (r->flags, "strings");
 		r_cons_break (NULL, NULL);
 		r_list_foreach (list, iter, string) {
+			int size = (string->type == 'W')? string->size*2: string->size;
 			if (r_cons_singleton()->breaked) break;
 			/* Jump the withespaces before the string */
 			for (i=0; *(string->string+i)==' '; i++);
-			r_meta_add (r->anal->meta, R_META_TYPE_STRING,
+			r_meta_add (r->anal, R_META_TYPE_STRING,
 				va?baddr+string->rva:string->offset,
-				(va?baddr+string->rva:string->offset)+string->size, string->string+i);
+				(va?baddr+string->rva:string->offset)+string->size,
+				string->string+i);
 			r_name_filter (string->string, 128);
 			snprintf (str, R_FLAG_NAME_SIZE, "str.%s", string->string);
 			r_flag_set (r->flags, str,
 				va? baddr+string->rva:string->offset,
-				string->size, 0);
+				size, 0);
 		}
 		//r_meta_cleanup (r->anal->meta, 0LL, UT64_MAX);
 		r_cons_break_end ();
 	} else {
-		r_cons_printf (mode?"fs strings\n": "[strings]\n");
+		if (mode) r_cons_printf ("fs strings\n"); //: "[strings]\n");
 		r_list_foreach (list, iter, string) {
 			section = r_bin_get_section_at (r->bin, string->offset, 0);
+			int size = (string->type == 'W')? string->size*2: string->size;
+// XXX string ->size is length! not size!!
 			if (mode) {
 				r_name_filter (string->string, sizeof (string->string));
 				r_cons_printf ("f str.%s %"PFMT64d" @ 0x%08"PFMT64x"\n"
 					"Cs %"PFMT64d" @ 0x%08"PFMT64x"\n",
-					string->string, string->size, va?baddr+string->rva:string->offset,
+					string->string, size, va?baddr+string->rva:string->offset,
 					string->size, va?baddr+string->rva:string->offset);
-			} else r_cons_printf ("addr=0x%08"PFMT64x" off=0x%08"PFMT64x" ordinal=%03"PFMT64d" "
-				"sz=%"PFMT64d" section=%s string=%s\n",
+			} else r_cons_printf ("addr=0x%08"PFMT64x" off=0x%08"PFMT64x
+				" ordinal=%03"PFMT64d" "
+				"sz=%d len=%d section=%s type=%c string=%s\n",
 				baddr+string->rva, string->offset,
-				string->ordinal, string->size,
-				section?section->name:"unknown", string->string);
+				string->ordinal, string->size, string->length,
+				section?section->name:"unknown",
+				string->type, string->string);
 			i++;
 		}
-		if (!mode) r_cons_printf ("\n%i strings\n", i);
+		//if (!mode) r_cons_printf ("\n%i strings\n", i);
 	}
 	return R_TRUE;
 }
@@ -155,7 +196,7 @@ static int bin_info (RCore *r, int mode) {
 		} else {
 			r_config_set (r->config, "asm.os", info->os);
 			r_config_set (r->config, "asm.arch", info->arch);
-			r_config_set (r->config, "anal.plugin", info->arch);
+			r_config_set (r->config, "anal.arch", info->arch);
 			snprintf (str, R_FLAG_NAME_SIZE, "%i", info->bits);
 			r_config_set (r->config, "asm.bits", str);
 			r_config_set (r->config, "asm.dwarf",
@@ -177,7 +218,7 @@ static int bin_info (RCore *r, int mode) {
 					"e cfg.bigendian=%s\n"
 					"e asm.os=%s\n"
 					"e asm.arch=%s\n"
-					"e anal.plugin=%s\n"
+					"e anal.arch=%s\n"
 					"e asm.bits=%i\n"
 					"e asm.dwarf=%s\n",
 					info->rclass, r_str_bool (info->big_endian), info->os,
@@ -225,8 +266,8 @@ static int bin_info (RCore *r, int mode) {
 				ut64 hash = r_hash_name_to_bits (h->type);
 				RHash *rh = r_hash_new (R_TRUE, hash);
 				len = r_hash_calculate (rh, hash, (const ut8*)
-					r->bin->cur.buf->buf+h->from, h->to);
-				//ut8 *p = r->bin->cur.buf+h->addr;
+					r->bin->cur->buf->buf+h->from, h->to);
+				//ut8 *p = r->bin->cur->buf+h->addr;
 				if (len<1) eprintf ("Invaild wtf\n");
 				r_hash_free (rh);
 
@@ -245,13 +286,19 @@ static int bin_dwarf (RCore *core, int mode) {
         RListIter *iter;
         RList *list = NULL;
 
-	if (core->bin && core->bin->cur.curplugin && core->bin->cur.curplugin->lines) {
-		list = core->bin->cur.curplugin->lines (&core->bin->cur);
+	if (core->bin && core->bin->cur->curplugin && core->bin->cur->curplugin->lines) {
+		list = core->bin->cur->curplugin->lines (core->bin->cur);
 	} else {
 		// TODO: complete and speed-up support for dwarf
 		if (r_config_get_i (core->config, "bin.dwarf")) {
-			r_bin_dwarf_parse_info (core->bin);
+			RBinDwarfDebugAbbrev *da;
+			da = r_bin_dwarf_parse_abbrev (core->bin);
+			r_bin_dwarf_parse_info (da, core->bin);
+			r_bin_dwarf_parse_aranges (core->bin);
 			list = r_bin_dwarf_parse_line (core->bin);
+
+			r_bin_dwarf_free_debug_abbrev(da);
+			free(da);
 		}
 	}
 	if (!list) return R_FALSE;
@@ -323,7 +370,7 @@ static int bin_entry (RCore *r, int mode, ut64 baddr, int va) {
 		r_cons_printf ("[");
 		r_list_foreach (entries, iter, entry) {
 			ut64 paddr = entry->offset;
-			ut64 vaddr = get_vaddr (baddr, paddr, entry->rva);
+			ut64 vaddr = r_bin_get_vaddr (r->bin, baddr, paddr, entry->rva);
 			r_cons_printf ("%s%"PFMT64d,
 					iter->p?",":"",
 				va?vaddr: paddr);
@@ -333,14 +380,14 @@ static int bin_entry (RCore *r, int mode, ut64 baddr, int va) {
 	if (mode & R_CORE_BIN_SIMPLE) {
 		r_list_foreach (entries, iter, entry) {
 			ut64 paddr = entry->offset;
-			ut64 vaddr = get_vaddr (baddr, paddr, entry->rva);
+			ut64 vaddr = r_bin_get_vaddr (r->bin, baddr, paddr, entry->rva);
 			r_cons_printf ("0x%08"PFMT64x"\n", va?vaddr: paddr); 
 		}
 	} else
 	if ((mode & R_CORE_BIN_SET)) {
 		r_list_foreach (entries, iter, entry) {
 			ut64 paddr = entry->offset;
-			ut64 vaddr = get_vaddr (baddr, paddr, entry->rva);
+			ut64 vaddr = r_bin_get_vaddr (r->bin, baddr, paddr, entry->rva);
 			snprintf (str, R_FLAG_NAME_SIZE, "entry%i", i++);
 			r_flag_set (r->flags, str, va? vaddr: paddr, 
 				r->blocksize, 0);
@@ -354,7 +401,7 @@ static int bin_entry (RCore *r, int mode, ut64 baddr, int va) {
 
 		r_list_foreach (entries, iter, entry) {
 			ut64 paddr = entry->offset;
-			ut64 vaddr = get_vaddr (baddr, paddr, entry->rva);
+			ut64 vaddr = r_bin_get_vaddr (r->bin, baddr, paddr, entry->rva);
 			if (mode) {
 				r_cons_printf ("f entry%i @ 0x%08"PFMT64x"\n",
 					i, va?vaddr: paddr);
@@ -424,8 +471,10 @@ static int bin_relocs (RCore *r, int mode, ut64 baddr, int va) {
 		r_flag_space_set (r->flags, "relocs");
 		r_list_foreach (relocs, iter, reloc) {
 			if (reloc->import) {
-				snprintf (str, R_FLAG_NAME_SIZE, "reloc.%s", reloc->import->name);
-				r_str_replace_char (str, '$', '_');
+				snprintf (str, R_FLAG_NAME_SIZE,
+					"reloc.%s", reloc->import->name);
+				r_name_filter (str, 0);
+				//r_str_replace_char (str, '$', '_');
 				r_flag_set (r->flags, str, va?baddr+reloc->rva:reloc->offset,
 					bin_reloc_size (reloc), 0);
 			} else {
@@ -458,7 +507,7 @@ static int bin_relocs (RCore *r, int mode, ut64 baddr, int va) {
 			r_list_foreach (relocs, iter, reloc) {
 				r_cons_printf ("addr=0x%08"PFMT64x" off=0x%08"PFMT64x" type=%s",
 					baddr+reloc->rva, reloc->offset, bin_reloc_type_name (reloc));
-				if (reloc->import)
+				if (reloc->import && reloc->import->name[0])
 					r_cons_printf (" %s", reloc->import->name);
 				if (reloc->addend) {
 					if (reloc->import && reloc->addend > 0)
@@ -490,7 +539,7 @@ static ut64 impaddr(RBin *bin, int va, ut64 baddr, const char *name) {
 		if (strncmp (symbol->name, "imp.", 4))
 			continue;
 		if (!strcmp (symbol->name+4, name))
-			return va? get_vaddr (baddr, symbol->offset,
+			return va? r_bin_get_vaddr (bin, baddr, symbol->offset,
 				symbol->rva): symbol->offset;
 	}
 	return 0;
@@ -589,7 +638,7 @@ static int bin_symbols (RCore *r, int mode, ut64 baddr, int va, ut64 at, const c
 	if (mode & R_CORE_BIN_JSON) {
 		r_cons_printf ("[");
 		r_list_foreach (symbols, iter, symbol) {
-			ut64 addr = va? get_vaddr (baddr, symbol->offset,
+			ut64 addr = va? r_bin_get_vaddr (r->bin, baddr, symbol->offset,
 				symbol->rva): symbol->offset;
 			r_cons_printf ("%s{\"name\":\"%s\","
 				"\"size\":%"PFMT64d","
@@ -600,7 +649,7 @@ static int bin_symbols (RCore *r, int mode, ut64 baddr, int va, ut64 at, const c
 	} else
 	if ((mode & R_CORE_BIN_SIMPLE)) {
 		r_list_foreach (symbols, iter, symbol) {
-			ut64 addr = va? get_vaddr (baddr, symbol->offset,
+			ut64 addr = va? r_bin_get_vaddr (r->bin, baddr, symbol->offset,
 				symbol->rva): symbol->offset;
 			char *name = strdup (symbol->name);
 			r_name_filter (name, 80);
@@ -610,25 +659,56 @@ static int bin_symbols (RCore *r, int mode, ut64 baddr, int va, ut64 at, const c
 		}
 	} else
 	if ((mode & R_CORE_BIN_SET)) {
-		char *name, *dname;
+		char *name, *dname, *cname;
+		//ut8 cname_greater_than_15;
 		r_flag_space_set (r->flags, "symbols");
 		r_list_foreach (symbols, iter, symbol) {
-			ut64 addr = va? get_vaddr (baddr, symbol->offset,
+			ut64 addr = va? r_bin_get_vaddr (r->bin, baddr, symbol->offset,
 				symbol->rva): symbol->offset;
 			name = strdup (symbol->name);
+			cname = symbol->classname ? strdup(symbol->classname) : NULL;
+			// XXX - may want a configuration variable here for class and name lengths.
+			// XXX - need something to handle overloaded symbols (e.g. methods)
+			// void add (int i, int j);
+			// void add (float i, int j);
 			r_name_filter (name, 80);
-			snprintf (str, R_FLAG_NAME_SIZE, "sym.%s", name);
-			if (!strncmp (symbol->type,"OBJECT", 6))
-				r_meta_add (r->anal->meta, R_META_TYPE_DATA, addr,
-						addr + symbol->size, name);
-			r_flag_set (r->flags, str, addr, symbol->size, 0);
+			if (cname) {
+				RFlagItem *flag_item = NULL;
+				char * comment = NULL;
+				r_name_filter (cname, 50);
+				snprintf (str, R_FLAG_NAME_SIZE, "sym.%s", name);
+				// check for a duplicate name sym.[name]
+				flag_item = r_flag_get (r->flags, str);
+				if (flag_item != NULL && (flag_item->offset - r->flags->base) == addr) {
+					comment = flag_item->comment ? strdup(flag_item->comment) : NULL;
+					r_flag_unset (r->flags, str, flag_item );
+					flag_item = NULL;
+				}
+				// set the new sym.[cname].[name] with comment
+				snprintf (str, R_FLAG_NAME_SIZE, "sym.%s.%s", cname, name);
+				r_flag_set (r->flags, str, addr, symbol->size, 0);
+				if (comment) {
+					flag_item = r_flag_get (r->flags, str);
+					if (flag_item) r_flag_item_set_comment (flag_item, comment);
+					free(comment);
+				}
+			} else {
+				snprintf (str, R_FLAG_NAME_SIZE, "sym.%s", name);
+				r_flag_set (r->flags, str, addr, symbol->size, 0);
+			}
+
+			if (!strncmp (symbol->type, "OBJECT", 6))
+					r_meta_add (r->anal, R_META_TYPE_DATA, addr,
+                                            addr + symbol->size, name);
+
 			dname = r_bin_demangle (r->bin, symbol->name);
 			if (dname) {
-				r_meta_add (r->anal->meta, R_META_TYPE_COMMENT,
+				r_meta_add (r->anal, R_META_TYPE_COMMENT,
 						addr, symbol->size, dname);
 				free (dname);
 			}
 			free (name);
+			free (cname);
 			//r_meta_cleanup (r->anal->meta, 0LL, UT64_MAX);
 		}
 	} else {
@@ -638,7 +718,7 @@ static int bin_symbols (RCore *r, int mode, ut64 baddr, int va, ut64 at, const c
 		}
 
 		r_list_foreach (symbols, iter, symbol) {
-			ut64 addr = va? get_vaddr (baddr, symbol->offset,
+			ut64 addr = va? r_bin_get_vaddr (r->bin, baddr, symbol->offset,
 				symbol->rva): symbol->offset;
 			if (name && strcmp (symbol->name, name))
 				continue;
@@ -655,9 +735,18 @@ static int bin_symbols (RCore *r, int mode, ut64 baddr, int va, ut64 at, const c
 						free (mn);
 					}
 					r_name_filter (symbol->name, sizeof (symbol->name));
-					if (!strncmp (symbol->type,"OBJECT", 6))
-						r_cons_printf ("Cd %"PFMT64d" @ 0x%08"PFMT64x"\n",
-								symbol->size, addr);
+					if (!strncmp (symbol->type,"OBJECT", 6)) {
+						if (symbol->size == 0) {
+							symbol->size = strlen (symbol->name);
+							r_cons_printf ("Cs %"PFMT64d" @ 0x%08"PFMT64x"\n",
+									symbol->size, addr);
+						} else
+						if (symbol->size>0) {
+							r_cons_printf ("Cd %"PFMT64d" @ 0x%08"PFMT64x"\n",
+									symbol->size, addr);
+						} else eprintf ("Wrong symbol '%s' have size %"PFMT64d"\n",
+								symbol->name, symbol->size);
+					}
 					r_cons_printf ("f sym.%s %"PFMT64d" 0x%08"PFMT64x"\n",
 							symbol->name, symbol->size, addr);
 				} else r_cons_printf ("addr=0x%08"PFMT64x" off=0x%08"PFMT64x" ord=%03"PFMT64d" "
@@ -688,7 +777,7 @@ static int bin_sections (RCore *r, int mode, ut64 baddr, int va, ut64 at, const 
 	if (mode & R_CORE_BIN_JSON) {
 		r_cons_printf ("[");
 		r_list_foreach (sections, iter, section) {
-			ut64 addr = va? get_vaddr (baddr, section->offset,
+			ut64 addr = va? r_bin_get_vaddr (r->bin, baddr, section->offset,
 				section->rva): section->offset;
 			r_cons_printf ("%s{\"name\":\"%s\","
 				"\"size\":%"PFMT64d","
@@ -703,7 +792,7 @@ static int bin_sections (RCore *r, int mode, ut64 baddr, int va, ut64 at, const 
 	} else
 	if ((mode & R_CORE_BIN_SIMPLE)) {
 		r_list_foreach (sections, iter, section) {
-			ut64 addr = va? get_vaddr (baddr, section->offset,
+			ut64 addr = va? r_bin_get_vaddr (r->bin, baddr, section->offset,
 				section->rva): section->offset;
 			r_cons_printf ("0x%"PFMT64x" 0x%"PFMT64x" %s %s\n",
 				addr, addr + section->size,
@@ -715,7 +804,7 @@ static int bin_sections (RCore *r, int mode, ut64 baddr, int va, ut64 at, const 
 		RBinInfo *info = r_bin_get_info (r->bin);
 		r_flag_space_set (r->flags, "sections");
 		r_list_foreach (sections, iter, section) {
-			ut64 addr = va? get_vaddr (baddr, section->offset,
+			ut64 addr = va? r_bin_get_vaddr (r->bin, baddr, section->offset,
 				section->rva): section->offset;
 			if (!secbase || (section->rva && section->rva <secbase)) // ??
 				secbase = section->rva;
@@ -741,7 +830,7 @@ static int bin_sections (RCore *r, int mode, ut64 baddr, int va, ut64 at, const 
 					R_BIN_SCN_WRITABLE (section->srwx)?'w':'-',
 					R_BIN_SCN_EXECUTABLE (section->srwx)?'x':'-',
 					section->name);
-			r_meta_add (r->anal->meta, R_META_TYPE_COMMENT, addr, addr, str);
+			r_meta_add (r->anal, R_META_TYPE_COMMENT, addr, addr, str);
 		}
 		// H -> Header fields
 		if (0) {
@@ -758,7 +847,7 @@ static int bin_sections (RCore *r, int mode, ut64 baddr, int va, ut64 at, const 
 		if (!at) r_cons_printf (mode? "fs sections\n": "[Sections]\n");
 
 		r_list_foreach (sections, iter, section) {
-			ut64 addr = va? get_vaddr (baddr, section->offset,
+			ut64 addr = va? r_bin_get_vaddr (r->bin, baddr, section->offset,
 				section->rva): section->offset;
 			if (name && strcmp (section->name, name))
 				continue;
@@ -823,7 +912,7 @@ static int bin_fields (RCore *r, int mode, ut64 baddr, int va) {
 	RListIter *iter;
 	RBinField *field;
 	int i = 0;
-	ut64 size = r->bin->cur.size;
+	ut64 size = r->bin->cur->size;
 
 	if ((fields = r_bin_get_fields (r->bin)) == NULL)
 		return R_FALSE;
@@ -831,7 +920,7 @@ static int bin_fields (RCore *r, int mode, ut64 baddr, int va) {
 	if (mode & R_CORE_BIN_JSON) {
 		r_cons_printf ("[");
 		r_list_foreach (fields, iter, field) {
-			ut64 addr = va? get_vaddr (baddr, field->offset,
+			ut64 addr = va? r_bin_get_vaddr (r->bin, baddr, field->offset,
 				field->rva): field->offset;
 			r_cons_printf ("%s{\"name\":\"%s\","
 				"\"offset\":%"PFMT64d"}",
@@ -848,7 +937,7 @@ static int bin_fields (RCore *r, int mode, ut64 baddr, int va) {
 		else r_cons_printf ("[Header fields]\n");
 
 		r_list_foreach (fields, iter, field) {
-			ut64 addr = va? get_vaddr (baddr, field->offset,
+			ut64 addr = va? r_bin_get_vaddr (r->bin, baddr, field->offset,
 				field->rva): field->offset;
 			if (mode) {
 				r_name_filter (field->name, sizeof (field->name));
@@ -967,36 +1056,35 @@ static int bin_libs (RCore *r, int mode) {
 	return R_TRUE;
 }
 
-R_API int r_core_bin_info (RCore *core, int action, int mode, int va, RCoreBinFilter *filter, ut64 offset) {
+R_API int r_core_bin_info (RCore *core, int action, int mode, int va, RCoreBinFilter *filter, ut64 baseaddr) {
 	int ret = R_TRUE;
 	const char *name = NULL;
 	ut64 at = 0;
-	ut64 baddr = r_bin_get_baddr (core->bin);
 
 	if (filter && filter->offset)
 		at = filter->offset;
 	if (filter && filter->name)
 		name = filter->name;
 	if ((action & R_CORE_BIN_ACC_STRINGS))
-		ret &= bin_strings (core, mode, baddr, va);
+		ret &= bin_strings (core, mode, baseaddr, va);
 	if ((action & R_CORE_BIN_ACC_INFO))
 		ret &= bin_info (core, mode);
 	if ((action & R_CORE_BIN_ACC_MAIN))
-		ret &= bin_main (core, mode, baddr, va);
+		ret &= bin_main (core, mode, baseaddr, va);
 	if ((action & R_CORE_BIN_ACC_DWARF))
 		ret &= bin_dwarf (core, mode);
 	if ((action & R_CORE_BIN_ACC_ENTRIES))
-		ret &= bin_entry (core, mode, baddr, va);
+		ret &= bin_entry (core, mode, baseaddr, va);
 	if ((action & R_CORE_BIN_ACC_RELOCS))
-		ret &= bin_relocs (core, mode, baddr, va);
+		ret &= bin_relocs (core, mode, baseaddr, va);
 	if ((action & R_CORE_BIN_ACC_IMPORTS))
-		ret &= bin_imports (core, mode, baddr, va, name);
+		ret &= bin_imports (core, mode, baseaddr, va, name);
 	if ((action & R_CORE_BIN_ACC_SYMBOLS))
-		ret &= bin_symbols (core, mode, baddr, va, at, name);
+		ret &= bin_symbols (core, mode, baseaddr, va, at, name);
 	if ((action & R_CORE_BIN_ACC_SECTIONS))
-		ret &= bin_sections (core, mode, baddr, va, at, name);
+		ret &= bin_sections (core, mode, baseaddr, va, at, name);
 	if ((action & R_CORE_BIN_ACC_FIELDS))
-		ret &= bin_fields (core, mode, baddr, va);
+		ret &= bin_fields (core, mode, baseaddr, va);
 	if ((action & R_CORE_BIN_ACC_LIBS))
 		ret &= bin_libs (core, mode);
 	if ((action & R_CORE_BIN_ACC_CLASSES))

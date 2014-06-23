@@ -59,8 +59,8 @@ static ut64 __lseek(struct r_io_t *io, RIODesc *fd, ut64 offset, int whence) {
 	return offset;
 }
 
-static int __plugin_open(struct r_io_t *io, const char *pathname) {
-	return (!memcmp (pathname, "http://", 7));
+static int __plugin_open(struct r_io_t *io, const char *pathname, ut8 many) {
+	return (!strncmp (pathname, "http://", 7));
 }
 
 static inline int getmalfd (RIOMalloc *mal) {
@@ -70,7 +70,7 @@ static inline int getmalfd (RIOMalloc *mal) {
 static RIODesc *__open(struct r_io_t *io, const char *pathname, int rw, int mode) {
 	char *out;
 	int rlen, code;
-	if (__plugin_open (io, pathname)) {
+	if (__plugin_open (io, pathname,0)) {
 		RIOMalloc *mal = R_NEW0 (RIOMalloc);
 		out = r_socket_http_get (pathname, &code, &rlen);
 		if (!out || rlen<1)
@@ -90,9 +90,10 @@ static RIODesc *__open(struct r_io_t *io, const char *pathname, int rw, int mode
 	return NULL;
 }
 
-struct r_io_plugin_t r_io_plugin_http = {
+RIOPlugin r_io_plugin_http = {
 	.name = "http",
         .desc = "http get (http://radare.org/)",
+	.license = "LGPL3",
         .open = __open,
         .close = __close,
 	.read = __read,

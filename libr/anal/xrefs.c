@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2013 - pancake, nibble */
+/* radare - LGPL - Copyright 2009-2014 - pancake, nibble */
 
 #include <r_anal.h>
 #include <sdb.h>
@@ -6,12 +6,12 @@
 #define DB anal->sdb_xrefs
 
 R_API void r_anal_xrefs_load(RAnal *anal, const char *prjfile) {
-        char *path, *db = r_str_dup_printf (R2_HOMEDIR"/rdb/%s.d/xrefs", prjfile);
+        char *path, *db = r_str_newf (R2_HOMEDIR"/projects/%s.d/xrefs", prjfile);
 	path = r_str_home (db);
 	//eprintf ("Open (%s)\n", path);
 	sdb_free (DB);
-	DB = sdb_new (path, 0);
-	sdb_aset (DB, "types", -1, "code"SDB_SS"data", 0);
+	DB = sdb_new (path, "xrefs", 0);
+	sdb_array_set (DB, "types", -1, "code,data", 0);
 	free (db);
 }
 
@@ -24,9 +24,9 @@ R_API void r_anal_xrefs_save(RAnal *anal, const char *prjfile) {
 R_API RList *r_anal_xrefs_set (RAnal *anal, const char *type, ut64 from, ut64 to) {
 	char key[32];
 	snprintf (key, sizeof (key), "ref.%s.0x%"PFMT64x, type, from);
-	sdb_aaddn (DB, key, -1, to, 0);
+	sdb_array_add_num (DB, key, -1, to, 0);
 	snprintf (key, sizeof (key), "xref.%s.0x%"PFMT64x, type, to);
-	sdb_aaddn (DB, key, -1, from, 0);
+	sdb_array_add_num (DB, key, -1, from, 0);
 	// (-1)funfor.%d=%d
 	return NULL;
 }
@@ -34,7 +34,7 @@ R_API RList *r_anal_xrefs_set (RAnal *anal, const char *type, ut64 from, ut64 to
 R_API RList *r_anal_xrefs_deln (RAnal *anal, const char *type, ut64 from, ut64 to) {
 	char key[32];
 	snprintf (key, sizeof (key), "%s.0x%"PFMT64x, type, from);
-	sdb_adeln (DB, key, to, 0);
+	sdb_array_del_num (DB, key, to, 0);
 	return NULL;
 }
 
@@ -45,8 +45,8 @@ R_API int r_anal_xrefs_from (RAnal *anal, RList *list, const char *kind, const c
 	snprintf (key, sizeof (key), "%s.%s.0x%"PFMT64x, kind, type, addr);
 	str = sdb_get (DB, key, 0);
 	if (!str) return R_FALSE;
-	for (ptr=str; hasnext; ptr = (char *)sdb_anext (s)) {
-		s = sdb_astring (ptr, &hasnext);
+	for (ptr=str; hasnext; ptr = (char *)sdb_array_next (s)) {
+		s = sdb_array_string (ptr, &hasnext);
 		if (!(ref = r_anal_ref_new ()))
 			return R_FALSE;
 		ref->addr = addr;
@@ -76,8 +76,8 @@ R_API RList *r_anal_xrefs_get (RAnal *anal, ut64 addr) {
 
 R_API void r_anal_xrefs_init (RAnal *anal) {
 	DB = NULL;
-	DB = sdb_new (NULL, 0); // TODO
-	sdb_aadd (DB, "types", -1, "code"SDB_SS"data", 0);
+	DB = sdb_new (NULL, "xrefs", 0); // TODO
+	sdb_array_set (DB, "types", -1, "code,data", 0);
 #if 0
 	//...
 	r_anal_xrefs_get (anal, "code", 0);
@@ -115,15 +115,15 @@ R_API void r_anal_xrefs_list(RAnal *anal, int rad) {
 	switch (rad) {
 	case 1:
 	case '*':
-		sdb_foreach (DB, xrefs_list_cb_rad, anal);
+		sdb_foreach (DB, (SdbForeachCallback)xrefs_list_cb_rad, anal);
 		break;
 	case 'j':
 		anal->printf ("{");
-		sdb_foreach (DB, xrefs_list_cb_json, anal);
+		sdb_foreach (DB, (SdbForeachCallback)xrefs_list_cb_json, anal);
 		anal->printf ("}\n");
 		break;
 	default:
-		sdb_foreach (DB, xrefs_list_cb_plain, anal);
+		sdb_foreach (DB, (SdbForeachCallback)xrefs_list_cb_plain, anal);
 		break;
 	}
 }

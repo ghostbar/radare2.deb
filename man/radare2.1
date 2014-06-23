@@ -1,8 +1,7 @@
-.Em
 .TH RADARE2 1
 .SH NAME
 radare2 \- Advanced commandline hexadecimal editor, disassembler and debugger
-.Dd Apr 2, 2013
+.Dd Feb 21, 2014
 .Pp
 .Sh SYNOPSIS
 .Nm radare2
@@ -65,6 +64,8 @@ Set project file
 Apply rapatch file and quit
 .It Fl s Ar addr
 Start seeking at this address
+.It Fl S
+Enable sandboxed mode (same as \-e cfg.sandbox=true)
 .It Fl t
 Get binary information using a thread
 .It Fl v
@@ -86,7 +87,7 @@ In r2 the debugger commands are implemented under the 'd' command. Type 'd?' for
 .Sh ENVIRONMENT
 These values can be used from scripts launched from inside radare ('!' command)
 .Ar FILE
-path to the current working file 
+path to the current working file.
 .Sh SEE ALSO
 .Pp
 .Xr rahash2(1) ,
@@ -99,5 +100,4 @@ path to the current working file
 .Xr rarun2(1) ,
 .Sh AUTHORS
 .Pp
-pancake <pancake@nopcode.org>,
-nibble <nibble@develsec.org>
+pancake <pancake@nopcode.org>

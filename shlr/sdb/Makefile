@@ -14,6 +14,10 @@ ifneq (${HAVE_VALA},)
 	cd ${VALADIR}/types && ${MAKE}
 endif
 
+.PHONY: test
+test:
+	${MAKE} -C test
+
 src/sdb-version.h:
 	echo '#define SDB_VERSION "${SDBVER}"' > src/sdb-version.h
 
@@ -42,32 +46,31 @@ dist:
 	rm -rf sdb-${SDBVER}
 
 install-dirs:
-	mkdir -p ${MANDIR} ${PFX}/lib/pkgconfig ${PFX}/bin 
-	mkdir -p ${PFX}/share/vala/vapi ${PFX}/include/sdb
+	$(INSTALL_DIR) ${MANDIR} ${PFX}/lib/pkgconfig ${PFX}/bin 
+	$(INSTALL_DIR) ${PFX}/share/vala/vapi ${PFX}/include/sdb
+
+INCFILES=src/sdb.h src/sdb-version.h src/cdb.h src/ht.h src/types.h
+INCFILES+=src/ls.h src/cdb_make.h src/buffer.h src/config.h
 
 install: install-dirs
-	cp -f src/sdb.1 ${MANDIR}
-	cp -f src/libsdb.${SOEXT} ${PFX}/lib
-	cp -f src/libsdb.${SOVER} ${PFX}/lib
-	cp -f src/sdb.h ${PFX}/include/sdb
-	cp -f src/sdb-version.h ${PFX}/include/sdb
-	cp -f src/cdb.h ${PFX}/include/sdb
-	cp -f src/ht.h ${PFX}/include/sdb
-	cp -f src/types.h ${PFX}/include/sdb
-	cp -f src/ls.h ${PFX}/include/sdb
-	cp -f src/cdb_make.h ${PFX}/include/sdb
-	cp -f src/buffer.h ${PFX}/include/sdb
-	cp -f src/config.h ${PFX}/include/sdb
-	cp -f src/sdb ${PFX}/bin
-	cp -f memcache/libmcsdb.a ${PFX}/lib
-	cp -f memcache/mcsdb.h ${PFX}/include/sdb
-	cp -f memcache/mcsdbd ${PFX}/bin
-	cp -f memcache/mcsdbc ${PFX}/bin
-	cp -f ${VALADIR}/sdb.pc ${PFX}/lib/pkgconfig
-	cp -f ${VALADIR}/mcsdb.pc ${PFX}/lib/pkgconfig
+	$(INSTALL_MAN) src/sdb.1 ${MANDIR}
+	$(INSTALL_LIB) src/libsdb.${SOEXT} ${PFX}/lib
+	-if [ "$(SOEXT)" != "$(SOVER)" ]; then \
+	cd $(PFX)/lib ; \
+	mv libsdb.$(SOEXT) libsdb.$(SOVER) ; \
+	ln -s libsdb.$(SOVER) libsdb.$(SOEXT) ; \
+fi
+	$(INSTALL_DATA) $(INCFILES) ${PFX}/include/sdb
+	$(INSTALL_PROGRAM) src/sdb ${PFX}/bin
+	$(INSTALL_DATA) memcache/libmcsdb.a ${PFX}/lib
+	$(INSTALL_DATA) memcache/mcsdb.h ${PFX}/include/sdb
+	$(INSTALL_PROGRAM) memcache/mcsdbd ${PFX}/bin
+	$(INSTALL_PROGRAM) memcache/mcsdbc ${PFX}/bin
+	$(INSTALL_DATA) ${VALADIR}/sdb.pc ${PFX}/lib/pkgconfig
+	$(INSTALL_DATA) ${VALADIR}/mcsdb.pc ${PFX}/lib/pkgconfig
 ifneq (${HAVE_VALA},)
-	cp -f ${VALADIR}/sdb.vapi ${PFX}/share/vala/vapi
-	cp -f ${VALADIR}/mcsdb.vapi ${PFX}/share/vala/vapi
+	$(INSTALL_DATA) ${VALADIR}/sdb.vapi ${PFX}/share/vala/vapi
+	$(INSTALL_DATA) ${VALADIR}/mcsdb.vapi ${PFX}/share/vala/vapi
 	cd ${VALADIR}/types && ${MAKE} install PFX=${PFX}
 endif
 

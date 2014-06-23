@@ -1,8 +1,9 @@
-/* radare - LGPL - Copyright 2007-2013 - pancake */
+/* radare - LGPL - Copyright 2007-2014 - pancake */
 
 #include "r_types.h"
 #include "r_util.h"
 #include <stdio.h>
+#include <string.h>
 #include <ctype.h>
 #include <stdarg.h>
 
@@ -238,11 +239,18 @@ R_API int r_str_split(char *str, char ch) {
 }
 
 R_API int r_str_word_set0(char *str) {
-	int quote = 0;
-	int i;
+	int i, quote = 0;
 	char *p;
-	if (!*str)
+	if (!str || !*str)
 		return 0;
+	for (i=0; str[i] && str[i+1]; i++) {
+		if (str[i]==' ' && str[i+1]==' ') {
+			int len = strlen (str+i+1)+1;
+			memmove (str+i, str+i+1, len);
+		}
+	}
+	if (str[i]==' ')
+		str[i] = 0;
 	for (i=1, p=str; *p; p++) {
 		if (*p=='\"') {
 			if (quote) {
@@ -377,16 +385,28 @@ R_API const char *r_str_chop_ro(const char *str) {
 }
 
 R_API char *r_str_new(char *str) {
+	if (!str) return NULL;
 	return strdup (str);
 }
 
 R_API char *r_str_newf(const char *fmt, ...) {
-//TODO: use asprintf ?
-	char string[1024];
-	va_list ap;
+	int ret, ret2;
+	char *p, string[1024];
+	va_list ap, ap2;
 	va_start (ap, fmt);
-	vsnprintf (string, sizeof (string), fmt, ap);
-	fmt = r_str_new (string);
+	va_start (ap2, fmt);
+	ret = vsnprintf (string, sizeof (string)-1, fmt, ap);
+	if (ret<1 || ret>=sizeof (string)) {
+		p = malloc (ret+2);
+		if (!p) return NULL;
+		ret2 = vsnprintf (p, ret+1, fmt, ap2);
+		if (ret2<1 || ret2>ret+1) {
+			free (p);
+			return NULL;
+		}
+		fmt = r_str_new (p);
+		free (p);
+	} else fmt = r_str_new (string);
 	va_end (ap);
 	return (char*)fmt;
 }
@@ -474,7 +494,7 @@ R_API int r_str_cmp(const char *a, const char *b, int len) {
 
 R_API int r_str_ccpy(char *dst, char *src, int ch) {
 	int i;
-	for (i=0;src[i] && src[i] != ch; i++)
+	for (i=0; src[i] && src[i] != ch; i++)
 		dst[i] = src[i];
 	dst[i] = '\0';
 	return i;
@@ -512,23 +532,15 @@ R_API char *r_str_ndup(const char *ptr, int len) {
 	return out;
 }
 
+// TODO: deprecate?
 R_API char *r_str_dup(char *ptr, const char *string) {
+	int len;
 	if (ptr) free (ptr);
 	if (!string) return NULL;
-	ptr = strdup (string);
+	len = strlen (string)+1;
+	ptr = malloc (len+1);
+	memcpy (ptr, string, len);
 	return ptr;
-}
-
-// TODO: rename to r_str_dupfmt
-R_API char *r_str_dup_printf(const char *fmt, ...) {
-	char *ret;
-	va_list ap;
-	va_start (ap, fmt);
-	if ((ret = malloc (1024)) == NULL)
-		return NULL;
-	vsnprintf (ret, 1024, fmt, ap);
-	va_end (ap);
-	return ret;
 }
 
 R_API void r_str_writef(int fd, const char *fmt, ...) {
@@ -580,11 +592,18 @@ R_API char *r_str_concat(char *ptr, const char *string) {
 }
 
 R_API char *r_str_concatf(char *ptr, const char *fmt, ...) {
+	int ret;
 	char string[4096];
 	va_list ap;
 	va_start (ap, fmt);
-	vsnprintf (string, sizeof (string), fmt, ap);
-	ptr = r_str_concat (ptr, string);
+	ret = vsnprintf (string, sizeof (string), fmt, ap);
+	if (ret>=sizeof (string)) {
+		char *p = malloc (ret+2);
+		if (!p) return NULL;
+		vsnprintf (p, ret+1, fmt, ap);
+		ptr = r_str_concat (ptr, p);
+		free (p);
+	} else ptr = r_str_concat (ptr, string);
 	va_end (ap);
 	return ptr;
 }
@@ -645,7 +664,7 @@ R_API char *r_str_clean(char *str) {
 	if (str != NULL) {
 		while (*str && iswhitechar (*str))
 			str++;
-		if ((len = strlen(str))>0)
+		if ((len = strlen (str)) > 0 )
 			for (ptr = str+len-1; ptr!=str; ptr = ptr - 1) {
 				if (iswhitechar (*ptr))
 					*ptr = '\0';
@@ -655,7 +674,7 @@ R_API char *r_str_clean(char *str) {
 	return str;
 }
 
-R_API int r_str_escape(char *buf) {
+R_API int r_str_unescape(char *buf) {
 	unsigned char ch = 0, ch2 = 0;
 	int err = 0;
 	int i;
@@ -681,14 +700,14 @@ R_API int r_str_escape(char *buf) {
 			err |= hex2int (&ch,  buf[i+2]);
 			err |= hex2int (&ch2, buf[i+3]);
 			if (err) {
-				eprintf ("Incorrect hexadecimal characters for conversion.\n");
-				return 0;
+				eprintf ("Error: Non-hexadecimal chars in input.\n");
+				return 0; // -1?
 			}
 			buf[i] = (ch<<4)+ch2;
 			memmove (buf+i+1, buf+i+4, strlen (buf+i+4)+1);
 		} else {
 			eprintf ("'\\x' expected.\n");
-			return 0;
+			return 0; // -1?
 		}
 	}
 	return i;
@@ -696,7 +715,7 @@ R_API int r_str_escape(char *buf) {
 
 R_API void r_str_sanitize(char *c) {
 	char *d = c;
-	if(d) for (; *d; c++, d++) {
+	if (d) for (; *d; c++, d++) {
 		switch (*d) {
 		case '`':
 		case '$':
@@ -716,7 +735,7 @@ R_API void r_str_sanitize(char *c) {
 	}
 }
 
-R_API char *r_str_unscape(char *buf) {
+R_API char *r_str_escape(const char *buf) {
 	char *ptr, *ret;
 	int len;
 	if (!buf) return NULL;
@@ -737,7 +756,12 @@ R_API char *r_str_unscape(char *buf) {
 		} else
 		if (IS_PRINTABLE (*buf)) {
 			*ptr = *buf;
-		} else break;
+		} else {
+			ut8 ch = *buf;
+			*ptr++ = '\\';
+			*ptr++ = '0'+(ch>>4);
+			*ptr = '0'+(ch&0xf);
+		}
 	}
 	*ptr = 0;
 	r_str_sanitize (ret);
@@ -746,7 +770,7 @@ R_API char *r_str_unscape(char *buf) {
 
 /* ansi helpers */
 R_API int r_str_ansi_len(const char *str) {
-	int ch, ch2, i=0, len = 0;
+	int ch, ch2, i=0, len = 0, sub = 0;
 	while (str[i]) {
 		ch = str[i];
 		ch2 = str[i+1];
@@ -759,10 +783,20 @@ R_API int r_str_ansi_len(const char *str) {
 			} else if (ch2 == '[') {
 				for (++i; str[i]&&str[i]!='J'&& str[i]!='m'&&str[i]!='H';i++);
 			}
-		} else len++;
+		} else {
+		len++;
+#if 0
+			int olen = strlen (str);
+			int ulen = r_str_len_utf8 (str);
+			if (olen != ulen) {
+				len += (olen-ulen);
+			} else len++;
+			//sub -= (r_str_len_utf8char (str+i, 4))-2;
+#endif
+		}//len++;
 		i++;
 	}
-	return len;
+	return len-sub;
 }
 
 // TODO: support wide char strings
@@ -961,21 +995,18 @@ R_API int r_str_len_utf8 (const char *s) {
 	return j;
 }
 
-// TODO: if unix.. move to .h? static inline
 R_API const char *r_str_casestr(const char *a, const char *b) {
-#if __WINDOWS__ || defined(__QNX__)
-	size_t hay_len = strlen(a);
-	size_t needle_len = strlen(b);
+	// That's a GNUism that works in many places.. but we dont want it
+	// return strcasestr (a, b);
+	size_t hay_len = strlen (a);
+	size_t needle_len = strlen (b);
 	while (hay_len >= needle_len) {
-		if (strncasecmp(a, b, needle_len) == 0)
+		if (strncasecmp (a, b, needle_len) == 0)
 			return (const char *) a;
 		a++;
 		hay_len--;
 	}
 	return NULL;
-#else
-	return strcasestr (a, b);
-#endif
 }
 
 R_API int r_str_write (int fd, const char *b) {
@@ -1141,7 +1172,7 @@ R_API int r_print_format_length (const char *fmt) {
 			case 'd': i += 4; break;
 			case 'x': i += 4; break;
 			case 'w':
-			case '1': i+=2; break;
+			case '1': i += 2; break;
 			case 'z': // XXX unsupported
 			case 'Z': // zero terminated wide string
 				break;
@@ -1180,4 +1211,54 @@ R_API char *r_str_prefix_all (char *s, const char *pfx) {
 	*p = 0;
 	free (os);
 	return o;
+}
+
+#define HASCH(x) strchr (input_value,x)
+#define CAST (void*)(size_t)
+R_API ut8 r_str_contains_macro(const char *input_value) {
+	char *has_tilde = input_value ? HASCH('~') : NULL,
+		 *has_bang = input_value ? HASCH('!') : NULL,
+		 *has_brace = input_value ? CAST(HASCH('[') || HASCH(']')) : NULL,
+		 *has_paren = input_value ? CAST(HASCH('(') || HASCH(')')) : NULL,
+		 *has_cbrace = input_value ? CAST(HASCH('{') || HASCH('}')) : NULL,
+		 *has_qmark = input_value ? HASCH('?') : NULL,
+		 *has_colon = input_value ? HASCH(':') : NULL,
+		 *has_at = input_value ? strchr (input_value, '@') : NULL;
+
+	return has_tilde || has_bang || has_brace || has_cbrace || has_qmark \
+		|| has_paren || has_colon || has_at;
+}
+
+R_API void r_str_truncate_cmd(char *string) {
+	ut32 pos = 0, done = 0;
+	if (string) {
+		ut32 sz = strlen (string);
+		for (pos = 0; pos < sz; pos++) {
+			switch (string[pos]) {
+				case '!':
+				case ':':
+				case ';':
+				case '@':
+				case '~':
+				case '(':
+				case '[':
+				case '{':
+				case '?':
+					string[pos] = '\0';
+					done = 1;
+			}
+			if (done) break;
+		}
+	}
+}
+
+R_API const char *r_str_closer_chr (const char *b, const char *s) {
+	const char *a;
+	while (*b) {
+		for (a=s;*a;a++)
+			if (*b==*a)
+				return b;
+		b++;
+	}
+	return NULL;
 }

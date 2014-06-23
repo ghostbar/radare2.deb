@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2010-2013 pancake */
+/* radare - LGPL - Copyright 2010-2014 pancake */
 
 #include <r_io.h>
 #include <r_lib.h>
@@ -19,15 +19,15 @@ typedef struct {
 #define RIOGDB_IS_VALID(x) (x && x->plugin==&r_io_plugin_gdb && x->data)
 #define NUM_REGS 28
 
-static int __plugin_open(RIO *io, const char *file) {
-	return (!memcmp (file, "gdb://", 6));
+static int __plugin_open(RIO *io, const char *file, ut8 many) {
+	return (!strncmp (file, "gdb://", 6));
 }
 
 static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 	char host[128], *port, *p;
 	RSocket *_fd;
 	RIOGdb *riog;
-	if (!__plugin_open (io, file))
+	if (!__plugin_open (io, file, 0))
 		return NULL;
 	strncpy (host, file+6, sizeof (host)-1);
 	port = strchr (host , ':');
@@ -54,7 +54,12 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 			free (riog);
 			return NULL;
 		}
+#if __WINDOWS__
+		// XXX: bypass lazylinking
+		RETURN_IO_DESC_NEW (&r_io_plugin_gdb, _fd->fd, file, rw, mode, riog);
+#else
 		return r_io_desc_new (&r_io_plugin_gdb, _fd->fd, file, rw, mode, riog);
+#endif
 	}
 	eprintf ("gdb.io.open: Cannot connect to host.\n");
 	return NULL;
@@ -110,10 +115,11 @@ static int __system(RIO *io, RIODesc *fd, const char *cmd) {
 	return -1;
 }
 
-struct r_io_plugin_t r_io_plugin_gdb = {
+RIOPlugin r_io_plugin_gdb = {
         //void *plugin;
 	.name = "gdb",
         .desc = "Attach to gdbserver, 'qemu -s', gdb://localhost:1234", 
+	.license = "GPL2",
         .open = __open,
         .close = __close,
 	.read = __read,

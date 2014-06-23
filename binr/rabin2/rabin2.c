@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2013 - nibble, pancake */
+/* radare - LGPL - Copyright 2009-2014 - nibble, pancake */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,7 +54,7 @@ static int rabin_show_help(int v) {
 		" -d              show debug/dwarf information\n"
 		" -e              entrypoint\n"
 		" -f [str]        select sub-bin named str\n"
-		" -g              same as -SMRevsiz (show all info)\n" 
+		" -g              same as -SMRevsiz (show all info)\n"
 		" -h              this help\n"
 		" -H              header fields\n"
 		" -i              imports (symbols imported from libraries)\n"
@@ -93,21 +93,21 @@ static int rabin_extract(int all) {
 			int bits;
 
 			r_bin_select_idx (bin, i);
-			if (bin->cur.o->info == NULL) {
+			if (bin->cur->o->info == NULL) {
 				arch = "unknown";
 				bits = 0;
 			//	eprintf ("No extract info found.\n");
 			//	continue;
 			} else {
-				arch = bin->cur.o->info->arch;
-				bits = bin->cur.o->info->bits;
+				arch = bin->cur->o->info->arch;
+				bits = bin->cur->o->info->bits;
 			}
-			path = strdup (bin->cur.file);
+			path = strdup (bin->cur->file);
 			// XXX: Wrong for w32 (/)
 			if ((ptr = strrchr (path, '/'))) {
 				*ptr = '\0';
 				ptr++;
-			} else ptr = bin->cur.file;
+			} else ptr = bin->cur->file;
 /*
 			if (output)
 				snprintf (outpath, sizeof (outpath), "%s/%s", output, path);
@@ -120,24 +120,24 @@ static int rabin_extract(int all) {
 			}
 			snprintf (outfile, sizeof (outfile), "%s/%s.%s_%i.%d",
 					outpath, ptr, arch, bits, i);
-			if (!r_file_dump (outfile, bin->cur.buf->buf, bin->cur.size)) {
+			if (!r_file_dump (outfile, bin->cur->buf->buf, bin->cur->size)) {
 				eprintf ("Error extracting %s\n", outfile);
 				return R_FALSE;
-			} else printf ("%s created (%i)\n", outfile, bin->cur.size);
+			} else printf ("%s created (%i)\n", outfile, bin->cur->size);
 		}
 	} else { /* XXX: Use 'output' for filename? */
-		if (bin->cur.o->info == NULL) {
+		if (bin->cur->o->info == NULL) {
 			eprintf ("No extract info found.\n");
 		} else {
-			if ((ptr = strrchr (bin->cur.file, '/')))
+			if ((ptr = strrchr (bin->cur->file, '/')))
 				ptr++;
-			else ptr = bin->cur.file;
+			else ptr = bin->cur->file;
 			snprintf (outfile, sizeof (outfile), "%s.%s_%i", ptr,
-					bin->cur.o->info->arch, bin->cur.o->info->bits);
-			if (!r_file_dump (outfile, bin->cur.buf->buf, bin->cur.size)) {
+					bin->cur->o->info->arch, bin->cur->o->info->bits);
+			if (!r_file_dump (outfile, bin->cur->buf->buf, bin->cur->size)) {
 				eprintf ("Error extracting %s\n", outfile);
 				return R_FALSE;
-			} else printf ("%s created (%i)\n", outfile, bin->cur.size);
+			} else printf ("%s created (%i)\n", outfile, bin->cur->size);
 		}
 	}
 	return R_TRUE;
@@ -160,10 +160,14 @@ static int rabin_dump_symbols(int len) {
 		else if (symbol->size == 0 && olen == 0)
 			len = 32;
 		else len = olen;
-
-		if (!(buf = malloc (len)) || !(ret = malloc (len*2+1)))
+		if (!(buf = malloc (len))) {
 			return R_FALSE;
-		r_buf_read_at (bin->cur.buf, symbol->offset, buf, len);
+		}
+		if (!(ret = malloc (len*2+1))) {
+			free (buf);
+			return R_FALSE;
+		}
+		r_buf_read_at (bin->cur->buf, symbol->offset, buf, len);
 		r_hex_bin2str (buf, len, ret);
 		printf ("%s %s\n", symbol->name, ret);
 		free (buf);
@@ -187,7 +191,7 @@ static int rabin_dump_sections(char *scnname) {
 			if (!(buf = malloc (section->size)) ||
 					!(ret = malloc (section->size*2+1)))
 				return R_FALSE;
-			r_buf_read_at (bin->cur.buf, section->offset, buf, section->size);
+			r_buf_read_at (bin->cur->buf, section->offset, buf, section->size);
 			if (output) {
 				r_file_dump (output, buf, section->size);
 			} else {
@@ -302,14 +306,14 @@ int main(int argc, char **argv) {
 	bin = core.bin;
 	l = r_lib_new ("radare_plugin");
 	r_lib_add_handler (l, R_LIB_TYPE_BIN, "bin plugins",
-					   &__lib_bin_cb, &__lib_bin_dt, NULL);
+			   &__lib_bin_cb, &__lib_bin_dt, NULL);
 	r_lib_add_handler (l, R_LIB_TYPE_BIN_XTR, "bin xtr plugins",
-					   &__lib_bin_xtr_cb, &__lib_bin_xtr_dt, NULL);
+			   &__lib_bin_xtr_cb, &__lib_bin_xtr_dt, NULL);
 
 	/* load plugins everywhere */
 	r_lib_opendir (l, getenv ("LIBR_PLUGINS"));
 	r_lib_opendir (l, homeplugindir);
-	r_lib_opendir (l, LIBDIR"/radare2/");
+	r_lib_opendir (l, LIBDIR"/radare2/"R2_VERSION);
 
 #define is_active(x) (action&x)
 #define set_action(x) actions++; action |=x
@@ -356,7 +360,7 @@ int main(int argc, char **argv) {
 		case 'z': 
 			if (is_active (ACTION_STRINGS)) {
 				r_config_set_i (core.config, "bin.rawstr", R_TRUE);
-				core.bin->cur.rawstr = R_TRUE;
+				core.bin->cur->rawstr = R_TRUE;
 			}
 			set_action (ACTION_STRINGS); 
 			break;
@@ -427,7 +431,7 @@ int main(int argc, char **argv) {
 		if (p2) {
 			// has data
 			*p2++ = 0;
-			data = malloc (strlen (p2));
+			data = malloc (strlen (p2)+1);
 			datalen = r_hex_str2bin (p2, data);
 		} else {
 			data = NULL;
@@ -454,8 +458,8 @@ int main(int argc, char **argv) {
 		return 0;
 	}
 
-	if (!r_bin_load (bin, file, R_FALSE) && \
-		!r_bin_load (bin, file, R_TRUE)) {
+	if (!r_bin_load (bin, file, 0, 0, R_FALSE) && \
+		!r_bin_load (bin, file, 0, 0, R_TRUE)) {
 		eprintf ("r_bin: Cannot open '%s'\n", file);
 		return 1;
 	}
@@ -468,11 +472,11 @@ int main(int argc, char **argv) {
 			printf ("[");
 			for (i = 0; i < bin->narch; i++) {
 				if (r_bin_select_idx (bin, i)) {
-					RBinInfo *info = bin->cur.o->info;
+					RBinInfo *info = bin->cur->o->info;
 					printf ("%s{\"arch\":\"%s\",\"bits\":%d,"
 						"\"offset\":%"PFMT64d",\"machine\":\"%s\"}",
 						i?",":"",info->arch, info->bits,
-						bin->cur.offset, info->machine);
+						bin->cur->offset, info->machine);
 				}
 			}
 			printf ("]");
@@ -481,7 +485,7 @@ int main(int argc, char **argv) {
 	}
 
 	if (baddr != 0LL)
-		bin->cur.o->baddr = baddr;
+		bin->cur->o->baddr = baddr;
 
 	core.bin = bin;
 	filter.offset = at;

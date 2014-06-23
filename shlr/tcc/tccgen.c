@@ -995,10 +995,10 @@ static void struct_decl(CType *type, int u)
 			char *varstr = get_tok_str (v, NULL);
 			type_to_str (b, sizeof(b), &type1, NULL);
 			tcc_appendf ("%s=struct\n", name);
-			tcc_appendf ("(+)struct.%s=%s\n",
+			tcc_appendf ("[+]struct.%s=%s\n",
 				name, varstr);
 			/* compact form */
-			tcc_appendf ("()struct.%s.%s=%s,%d,%d\n",
+			tcc_appendf ("struct.%s.%s=%s,%d,%d\n",
 				name,varstr,b,offset,arraysize);
 #if 0
 			printf ("struct.%s.%s.type=%s\n", name, varstr, b);
@@ -2259,7 +2259,8 @@ static void init_putz(CType *t, unsigned long c, int size)
 static void decl_initializer(CType *type, unsigned long c,
                              int first, int size_only)
 {
-    int index, array_length, n, no_oblock, nb, parlevel, parlevel1, i;
+    long long index;
+    int array_length, n, no_oblock, nb, parlevel, parlevel1, i;
     int size1, align1, expr_type;
     Sym *s, *f;
     CType *t1;

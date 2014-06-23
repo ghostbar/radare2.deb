@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2013 - nibble, pancake */
+/* radare - LGPL - Copyright 2009-2014 - nibble, pancake */
 
 #include <r_types.h>
 #include <r_util.h>
@@ -13,26 +13,27 @@ static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	//void *cp;
 	RBinJavaObj *obj = NULL;
 	RBin *b = a->binb.bin;
-	if (b->cur.curplugin) {
-		if (!strcmp (b->cur.curplugin->name, "java")) { // XXX slow
-			obj = b->cur.bin_obj; //o; 
-			if (obj) r_java_set_obj (obj);
+	if (b->cur->curplugin) {
+		if (!strcmp (b->cur->curplugin->name, "java")) { // XXX slow
+			obj = b->cur->o->bin_obj; //o;
+			//eprintf("Handling: %s disasm.\n", b->cur.file);
 		}
 	}
-	return op->inst_len = r_java_disasm (a->pc, buf,
+	return op->size = r_java_disasm (obj, a->pc, buf,
 		op->buf_asm, sizeof (op->buf_asm));
 }
 
 static int assemble(RAsm *a, RAsmOp *op, const char *buf) {
 	// TODO: get class info from bin if possible
-	return op->inst_len = r_java_assemble (op->buf, buf);
+	return op->size = r_java_assemble (op->buf, buf);
 }
 
 RAsmPlugin r_asm_plugin_java = {
 	.name = "java",
-	.desc = "Java CLASS assembler/disassembler",
+	.desc = "Java bytecode",
 	.arch = "java",
-	.bits = (int[]){ 8, 32, 0 },
+	.license = "Apache",
+	.bits = 32,
 	.init = NULL,
 	.fini = NULL,
 	.disassemble = &disassemble,

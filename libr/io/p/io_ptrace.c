@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2013 - pancake */
+/* radare - LGPL - Copyright 2008-2014 - pancake */
 
 #include <r_userconf.h>
 #include <r_io.h>
@@ -58,7 +58,7 @@ static int debug_os_read_at(int pid, ut32 *buf, int sz, ut64 addr) {
 }
 
 static int __read(RIO *io, RIODesc *desc, ut8 *buf, int len) {
-	int fd;
+	int ret, fd;
 	ut64 addr = io->off;
 	if (!desc || !desc->data)
 		return -1;
@@ -66,7 +66,9 @@ static int __read(RIO *io, RIODesc *desc, ut8 *buf, int len) {
 	fd = RIOPTRACE_FD (desc);
 	if (fd != -1) {
 		lseek (fd, addr, SEEK_SET);
-		return read (fd, buf, len);
+		ret = read (fd, buf, len);
+		// Workaround for the buggy Debian Wheeze's /proc/pid/mem
+		if (ret != -1) return ret;
 	}
 	return debug_os_read_at (RIOPTRACE_PID (desc), (ut32*)buf, len, addr);
 }
@@ -114,10 +116,10 @@ static void close_pidmem(RIOPtrace *iop) {
 	}
 }
 
-static int __plugin_open(struct r_io_t *io, const char *file) {
-	if (!memcmp (file, "ptrace://", 9))
+static int __plugin_open(RIO *io, const char *file, ut8 many) {
+	if (!strncmp (file, "ptrace://", 9))
 		return R_TRUE;
-	if (!memcmp (file, "attach://", 9))
+	if (!strncmp (file, "attach://", 9))
 		return R_TRUE;
 	return R_FALSE;
 }
@@ -125,7 +127,7 @@ static int __plugin_open(struct r_io_t *io, const char *file) {
 static RIODesc *__open(struct r_io_t *io, const char *file, int rw, int mode) {
 	char *pidpath;
 	int ret = -1;
-	if (__plugin_open (io, file)) {
+	if (__plugin_open (io, file,0)) {
 		int pid = atoi (file+9);
 		ret = ptrace (PTRACE_ATTACH, pid, 0, 0);
 		if (file[0]=='p')  //ptrace
@@ -209,10 +211,10 @@ static int __system(RIO *io, RIODesc *fd, const char *cmd) {
 }
 
 // TODO: rename ptrace to io_ptrace .. err io.ptrace ??
-struct r_io_plugin_t r_io_plugin_ptrace = {
-        //void *plugin;
+RIOPlugin r_io_plugin_ptrace = {
 	.name = "ptrace",
 	.desc = "ptrace and /proc/pid/mem (if available) io",
+	.license = "LGPL3",
 	.open = __open,
 	.close = __close,
 	.read = __read,

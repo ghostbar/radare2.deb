@@ -209,6 +209,7 @@ static int Elf_(r_bin_elf_init)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	bin->symbols_by_ord = NULL;
 
 	bin->baddr = Elf_(r_bin_elf_get_baddr) (bin);
+	bin->boffset = Elf_(r_bin_elf_get_boffset) (bin);
 
 	return R_TRUE;
 }
@@ -286,6 +287,7 @@ static ut64 Elf_(get_import_addr)(struct Elf_(r_bin_elf_obj_t) *bin, int sym) {
 				if (r_buf_read_at (bin->b, rel[k].r_offset-got_addr+got_offset,
 							(ut8*)&plt_sym_addr, sizeof (Elf_(Addr))) == -1) {
 					eprintf ("Warning: read (got)\n");
+                    free (rel);
 					return UT64_MAX;
 				}
 				free (rel);
@@ -307,8 +309,21 @@ ut64 Elf_(r_bin_elf_get_baddr)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	/* hopefully.. the first PT_LOAD is base */
 	for (i = 0; i < bin->ehdr.e_phnum; i++)
 		if (bin->phdr[i].p_type == PT_LOAD)
-			return (ut64)(bin->phdr[i].p_vaddr -
-				bin->phdr[i].p_offset);
+			return (ut64)bin->phdr[i].p_vaddr;
+		//eprintf ("oh fuck .. cant find any valid ptload?\n");
+	return 0;
+}
+
+ut64 Elf_(r_bin_elf_get_boffset)(struct Elf_(r_bin_elf_obj_t) *bin) {
+	int i;
+	if (!bin->phdr) {
+		//eprintf ("r_bin_elf: canot get_baddr() because no phdr found\n");
+		return 0;
+	}
+	/* hopefully.. the first PT_LOAD is base */
+	for (i = 0; i < bin->ehdr.e_phnum; i++)
+		if (bin->phdr[i].p_type == PT_LOAD)
+			return (ut64) bin->phdr[i].p_offset;
 		//eprintf ("oh fuck .. cant find any valid ptload?\n");
 	return 0;
 }
@@ -424,7 +439,7 @@ char* Elf_(r_bin_elf_get_data_encoding)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	case ELFDATANONE: return strdup ("none");
 	case ELFDATA2LSB: return strdup ("2's complement, little endian");
 	case ELFDATA2MSB: return strdup ("2's complement, big endian");
-	default: return r_str_dup_printf ("<unknown: %x>", bin->ehdr.e_ident[EI_DATA]);
+	default: return r_str_newf ("<unknown: %x>", bin->ehdr.e_ident[EI_DATA]);
 	}
 }
 
@@ -539,7 +554,7 @@ char* Elf_(r_bin_elf_get_machine_name)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	case EM_ARC_A5:      return strdup ("ARC Cores Tangent-A5");
 	case EM_XTENSA:      return strdup ("Tensilica Xtensa Architecture");
 	case EM_AARCH64:     return strdup ("ARM aarch64");
-	default:             return r_str_dup_printf ("<unknown>: 0x%x", bin->ehdr.e_machine);
+	default:             return r_str_newf ("<unknown>: 0x%x", bin->ehdr.e_machine);
 	}
 }
 
@@ -554,10 +569,10 @@ char* Elf_(r_bin_elf_get_file_type)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	}
 
 	if ((e_type >= ET_LOPROC) && (e_type <= ET_HIPROC))
-		return r_str_dup_printf ("Processor Specific: %x", e_type);
+		return r_str_newf ("Processor Specific: %x", e_type);
 	else if ((e_type >= ET_LOOS) && (e_type <= ET_HIOS))
-		return r_str_dup_printf ("OS Specific: %x", e_type);
-	else return r_str_dup_printf ("<unknown>: %x", e_type);
+		return r_str_newf ("OS Specific: %x", e_type);
+	else return r_str_newf ("<unknown>: %x", e_type);
 }
 
 char* Elf_(r_bin_elf_get_elf_class)(struct Elf_(r_bin_elf_obj_t) *bin) {
@@ -565,7 +580,7 @@ char* Elf_(r_bin_elf_get_elf_class)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	case ELFCLASSNONE: return strdup ("none");
 	case ELFCLASS32:   return strdup ("ELF32");
 	case ELFCLASS64:   return strdup ("ELF64");
-	default:           return r_str_dup_printf ("<unknown: %x>", bin->ehdr.e_ident[EI_CLASS]);
+	default:           return r_str_newf ("<unknown: %x>", bin->ehdr.e_ident[EI_CLASS]);
 	}
 }
 
@@ -625,7 +640,7 @@ char* Elf_(r_bin_elf_get_osabi_name)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	case ELFOSABI_MODESTO:    return strdup ("modesto");
 	case ELFOSABI_OPENBSD:    return strdup ("openbsd");
 	case ELFOSABI_STANDALONE: return strdup ("standalone");
-	default:                  return r_str_dup_printf ("<unknown: %x>", bin->ehdr.e_ident[EI_OSABI]);
+	default:                  return r_str_newf ("<unknown: %x>", bin->ehdr.e_ident[EI_OSABI]);
 	}
 #endif
 }
@@ -719,10 +734,12 @@ struct r_bin_elf_reloc_t* Elf_(r_bin_elf_get_relocs)(struct Elf_(r_bin_elf_obj_t
 			}
 			if (r_buf_read_at (bin->b, bin->strtab_section->sh_offset, (ut8*)strtab, bin->strtab_section->sh_size) == -1) {
 				eprintf ("Warning: read (syms strtab)\n");
+                free (strtab);
 				return NULL;
 			}
 			if ((sym = (Elf_(Sym) *)malloc (1+bin->shdr[i].sh_size)) == NULL) { // LEAKS
 				perror ("malloc (syms)");
+                free (strtab);
 				return NULL;
 			}
 			nsym = (int)(bin->shdr[i].sh_size/sizeof (Elf_(Sym)));
@@ -734,6 +751,8 @@ struct r_bin_elf_reloc_t* Elf_(r_bin_elf_get_relocs)(struct Elf_(r_bin_elf_obj_t
 #endif
 					nsym) == -1) {
 				eprintf ("Warning: read (sym)\n");
+                free (sym);
+                free (strtab);
 				return NULL;
 			}
 		}
@@ -764,12 +783,16 @@ struct r_bin_elf_reloc_t* Elf_(r_bin_elf_get_relocs)(struct Elf_(r_bin_elf_obj_t
 
 		if ((rel = (Elf_(Rela)*)malloc ((int)(bin->shdr[i].sh_size / tsize) * sizeof (Elf_(Rela)))) == NULL) {
 			perror ("malloc (rel)");
+            free (sym);
+            free (strtab);
 			return NULL;
 		}
 		for (j = nrel = 0; j < bin->shdr[i].sh_size; j += tsize, nrel++) {
 			if (r_buf_fread_at (bin->b, bin->shdr[i].sh_offset + j, (ut8*)&rel[nrel], rel_fmt, 1) == -1) {
 				eprintf ("Warning: read (rel)\n");
 				free(rel);
+                free (strtab);
+                free (sym);
 				return NULL;
 			}
 			if (tsize < sizeof (Elf_(Rela)))
@@ -778,6 +801,8 @@ struct r_bin_elf_reloc_t* Elf_(r_bin_elf_get_relocs)(struct Elf_(r_bin_elf_obj_t
 		if ((ret = (struct r_bin_elf_reloc_t *)malloc ((nrel+1) * sizeof (struct r_bin_elf_reloc_t))) == NULL) {
 			perror ("malloc (reloc)");
 			free(rel);
+            free (sym);
+            free (strtab);
 			return NULL;
 		}
 		j = 0;
@@ -794,6 +819,8 @@ struct r_bin_elf_reloc_t* Elf_(r_bin_elf_get_relocs)(struct Elf_(r_bin_elf_obj_t
 		break;
 	}
 	free(rel);
+    free (strtab);
+    free (sym);
 	return ret;
 }
 
@@ -999,6 +1026,7 @@ if (
 				ret[ret_ctr].size = tsize;
 				if (sym[k].st_name > strtab_section->sh_size) {
 					perror ("index out of strtab range\n");
+                    free (ret);
 					return NULL;
 				}
 				len = __strnlen (&strtab[sym[k].st_name], ELF_STRING_LENGTH-1);
