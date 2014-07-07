@@ -1,4 +1,3 @@
 link-needed-libmagic.patch
-#06_no_forced_rpath.patch
-#09_fix_internal_plugins.patch
-#101_split_plugins_installation
+typos.patch
+unused_code.patch

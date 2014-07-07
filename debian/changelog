@@ -20,6 +20,9 @@ radare2 (0.9.7-1) UNRELEASED; urgency=low
       - 09_fix_internal_plugins: Internal plugins moved to radare2-bindings, so
         commented for now.
       - 101_split_plugins_installation: Commented for the same reason as above.
+    - New:
+      - typos: Typographic mistakes.
+      - unused_code: Fix warnings from the build about unused variables.
   * debian/control: Commented out the radare2-plugins package.
 
  -- David Martínez Moreno <ender@debian.org>  Mon, 23 Jun 2014 12:02:18 +0200
