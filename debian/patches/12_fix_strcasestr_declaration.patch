@@ -1,14 +1,18 @@
 Description: Fix an implicit declaration of strcasestr.
  Matthias Klose found a function not defined in the build logs.  It's due
  to a missing include.  I checked upstream and it's has already been fixed.
+ Updated by Steve McIntyre <93sam@debian.org>
 Author: David Martínez Moreno <ender@debian.org>
 Bug-Debian: http://bugs.debian.org/735921
 Forwarded: not-needed
-Last-Update: 2014-01-28
+Last-Update: 2014-03-23
 
 --- radare2-0.9.6.orig/libr/util/str.c
 +++ radare2-0.9.6/libr/util/str.c
-@@ -3,6 +3,7 @@
+@@ -1,8 +1,10 @@
+ /* radare - LGPL - Copyright 2007-2013 - pancake */
+
++#define _GNU_SOURCE
  #include "r_types.h"
  #include "r_util.h"
  #include <stdio.h>

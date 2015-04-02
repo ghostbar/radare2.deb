@@ -1,3 +1,10 @@
+radare2 (0.9.6-3.1) unstable; urgency=medium
+
+  * debian/patches/12_fix_strcasestr_declaration: Add #define _GNU_SOURCE
+    as well, to get the definition of strcasestr (closes: #735921).
+
+ -- Steve McIntyre <93sam@debian.org>  Sun, 23 Mar 2014 14:38:44 +0000
+
 radare2 (0.9.6-3) unstable; urgency=medium
 
   * debian/patches/12_fix_strcasestr_declaration: Fixed a missing include,
