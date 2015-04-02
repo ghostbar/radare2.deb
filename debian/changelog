@@ -1,8 +1,8 @@
 radare2 (0.9.7-1) UNRELEASED; urgency=low
 
   * New upstream version:
-    - Support for GameBoy added.
-    - Tons of bugs and segfaults fixed.
+    - Support for GameBoy added.  I'm sure you were anxiously awaiting it.
+    - Tons of bugs and segfaults fixed, some others added for sure.
   * debian/patches:
     - Merged or just not applicable:
       - 01_fix-kfreebsd-compilation.
@@ -23,7 +23,8 @@ radare2 (0.9.7-1) UNRELEASED; urgency=low
     - New:
       - typos: Typographic mistakes.
       - unused_code: Fix warnings from the build about unused variables.
-  * debian/control: Commented out the radare2-plugins package.
+  * debian/control: Commented out the radare2-plugins package, and removed all
+    dependencies.
 
  -- David Martínez Moreno <ender@debian.org>  Mon, 23 Jun 2014 12:02:18 +0200
 

@@ -4,7 +4,6 @@ Priority: extra
 Maintainer: David Martínez Moreno <ender@debian.org>
 Uploaders: Sebastian Reichel <sre@debian.org>
 Build-Depends: debhelper (>= 9),
-               dh-exec (>= 0.3),
                quilt,
                flex,
                gobject-introspection,
