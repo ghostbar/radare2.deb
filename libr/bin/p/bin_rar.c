@@ -1,17 +1,55 @@
-/* radare - LGPL - Copyright 2012-2013 - pancake */
+/* radare - LGPL - Copyright 2012-2015 - pancake */
 
 #include <r_types.h>
 #include <r_util.h>
 #include <r_lib.h>
 #include <r_bin.h>
 
+#define RAR_CONST "\x00\x00\x00\x00\x20\x73\x74\x64\x6f\x75\x74\x20\x21\x55\x0c\xcd"
 #define RARVMHDR "\x52\x61\x72\x21\x1a\x07\x00\xf9\x4e\x73\x00\x00\x0e\x00\x00\x00"
 
+typedef struct r_bin_obj_rar_t {
+	RBuffer *buf;
+	ut64 loadaddr;
+	Sdb *kv;
+} RRarBinObj;
+
+static int check(RBinFile *arch);
+static int check_bytes(const ut8 *buf, ut64 length);
+
 static int check(RBinFile *arch) {
-	if (arch && arch->buf && arch->buf->buf)
-		if (!memcmp (arch->buf->buf, RARVMHDR, 16))
+	const ut8 *bytes = arch ? r_buf_buffer (arch->buf) : NULL;
+	ut64 sz = arch ? r_buf_size (arch->buf): 0;
+	return check_bytes (bytes, sz);
+}
+
+static int check_bytes(const ut8 *buf, ut64 length) {
+	if (buf && length > 16)
+		if (!memcmp (buf, RARVMHDR, 16))
 			return R_TRUE;
 	return R_FALSE;
+}
+
+static Sdb* get_sdb (RBinObject *o) {
+	if (!o) return NULL;
+	struct r_bin_obj_rar_t *bin = (struct r_bin_obj_rar_t *) o->bin_obj;
+	if (bin->kv) return bin->kv;
+	return NULL;
+}
+
+static void * load_bytes(RBinFile *arch, const ut8 *buf, ut64 sz, ut64 loadaddr, Sdb *sdb){
+	RBuffer *tbuf = NULL;
+	RRarBinObj *res = NULL;
+	if (!buf || sz == 0 || sz == UT64_MAX) {
+		return NULL;
+	}
+	res = R_NEW0 (RRarBinObj);
+	tbuf = r_buf_new ();
+	r_buf_set_bytes (tbuf, buf, sz);
+	res->buf = tbuf;
+	res->kv = sdb;
+	res->loadaddr = loadaddr;
+	return res;
 }
 
 static int load(RBinFile *arch) {
@@ -29,11 +67,15 @@ static ut64 baddr(RBinFile *arch) {
 static RList* entries(RBinFile *arch) {
 	RList* ret = r_list_new ();;
 	RBinAddr *ptr = NULL;
+	RRarBinObj *bin_obj = arch && arch->o ? arch->o->bin_obj : NULL;
+	const ut8 *buf = bin_obj ? r_buf_buffer (bin_obj->buf) : NULL;
+	ut64 sz = arch && bin_obj ? r_buf_size (bin_obj->buf) : 0;
+
 	if (!ret) return NULL;
 	ret->free = free;
-	if (!memcmp (arch->buf+0x30, "\x00\x00\x00\x00\x20\x73\x74\x64\x6f\x75\x74\x20\x21\x55\x0c\xcd", 16)) {
+	if (bin_obj && sz > 0x30 && !memcmp (buf+0x30, RAR_CONST, 16)) {
 		if ((ptr = R_NEW (RBinAddr))) {
-			ptr->rva = ptr->offset = 0x9a;
+			ptr->vaddr = ptr->paddr = 0x9a;
 			r_list_append (ret, ptr);
 		}
 	}
@@ -43,24 +85,27 @@ static RList* entries(RBinFile *arch) {
 static RList* sections(RBinFile *arch) {
 	RList *ret = NULL;
 	RBinSection *ptr = NULL;
+	RRarBinObj *bin_obj = arch && arch->o ? arch->o->bin_obj : NULL;
+	const ut8 *buf = bin_obj ? r_buf_buffer (bin_obj->buf) : NULL;
+	ut64 sz = 0;
+	if (bin_obj)
+		sz = r_buf_size (bin_obj->buf);
 
 	if (!(ret = r_list_new ()))
 		return NULL;
 	ret->free = free;
 
 	// TODO: return NULL here?
-	if (memcmp (arch->buf+0x30,
-	"\x00\x00\x00\x00\x20\x73\x74\x64\x6f\x75\x74\x20\x21\x55\x0c\xcd", 16))
+	if (!buf || sz < 0x30 || memcmp (buf+0x30, RAR_CONST, 16))
 		return ret;
 
 	// add text segment
 	if (!(ptr = R_NEW0 (RBinSection)))
 		return ret;
 	strncpy (ptr->name, "header", R_BIN_SIZEOF_STRINGS);
-	ptr->size =
-	ptr->vsize = 0x9a;
-	ptr->offset = 0;
-	ptr->rva = ptr->offset;
+	ptr->size = ptr->vsize = 0x9a;
+	ptr->paddr = 0;
+	ptr->vaddr = ptr->paddr;
 	ptr->srwx = 4; // r--
 	r_list_append (ret, ptr);
 
@@ -68,8 +113,8 @@ static RList* sections(RBinFile *arch) {
 	if (!(ptr = R_NEW0 (RBinSection)))
 		return ret;
 	strncpy (ptr->name, "rarvm", R_BIN_SIZEOF_STRINGS);
-	ptr->vsize = ptr->size = arch->buf->length - 0x9a;
-	ptr->rva = ptr->offset = 0x9a;
+	ptr->vsize = ptr->size = sz - 0x9a;
+	ptr->vaddr = ptr->paddr = 0x9a;
 	ptr->srwx = 5; // rw-
 	r_list_append (ret, ptr);
 	return ret;
@@ -88,26 +133,30 @@ static RList* libs(RBinFile *arch) {
 }
 
 static RBinInfo* info(RBinFile *arch) {
-	const char *archstr;
 	RBinInfo *ret = R_NEW0 (RBinInfo);
-	int bits = 32;
+	RRarBinObj *bin_obj = arch && arch->o ? arch->o->bin_obj : NULL;
+	const ut8 *buf = bin_obj ? r_buf_buffer (bin_obj->buf) : NULL;
+	ut64 sz = arch && bin_obj ? r_buf_size (bin_obj->buf): 0;
+	int bits = 32; // Default value
 
-	if (!ret) return NULL;
-	strncpy (ret->file, arch->file, R_BIN_SIZEOF_STRINGS);
-	strncpy (ret->rpath, "NONE", R_BIN_SIZEOF_STRINGS);
-	strncpy (ret->rclass, "rar", R_BIN_SIZEOF_STRINGS);
-	strncpy (ret->os, "rar", R_BIN_SIZEOF_STRINGS);
-	archstr = "rar";
-	strncpy (ret->arch, archstr, R_BIN_SIZEOF_STRINGS);
-	strncpy (ret->machine, archstr, R_BIN_SIZEOF_STRINGS);
-	if (!memcmp (arch->buf+0x30, "\x00\x00\x00\x00\x20\x73\x74\x64\x6f\x75\x74\x20\x21\x55\x0c\xcd", 16)) {
-		strncpy (ret->subsystem, "rarvm", R_BIN_SIZEOF_STRINGS);
-		strncpy (ret->bclass, "program", R_BIN_SIZEOF_STRINGS);
-		strncpy (ret->type, "EXEC (Compressed executable)", R_BIN_SIZEOF_STRINGS);
+	if (!ret || !buf || sz < 0x30) {
+		free (ret);
+		return NULL;
+	}
+
+	ret->file = strdup (arch->file);
+	ret->rclass = strdup ("rar");
+	ret->os = strdup ("rar");
+	ret->arch = strdup ("rar");
+	ret->machine = strdup ("rarvm");
+	if (!memcmp (buf+0x30, RAR_CONST, 16)) {
+		ret->subsystem = strdup ("rarvm");
+		ret->bclass = strdup ("program");
+		ret->type = strdup ("EXEC (Compressed executable)");
 	} else {
-		strncpy (ret->subsystem, "archive", R_BIN_SIZEOF_STRINGS);
-		strncpy (ret->bclass, "archive", R_BIN_SIZEOF_STRINGS);
-		strncpy (ret->type, "ARCHIVE (Compressed archive)", R_BIN_SIZEOF_STRINGS);
+		ret->subsystem = strdup ("archive");
+		ret->bclass = strdup ("archive");
+		ret->type = strdup ("ARCHIVE (Compressed archive)");
 	}
 // TODO: specify if its compressed or executable
 	ret->bits = bits;
@@ -135,10 +184,13 @@ RBinPlugin r_bin_plugin_rar = {
 	.license = "LGPL3",
 	.init = NULL,
 	.fini = NULL,
+	.get_sdb = &get_sdb,
 	.load = &load,
+	.load_bytes = &load_bytes,
 	.size = &size,
 	.destroy = &destroy,
 	.check = &check,
+	.check_bytes = &check_bytes,
 	.baddr = &baddr,
 	.boffset = NULL,
 	.entries = &entries,
@@ -150,7 +202,7 @@ RBinPlugin r_bin_plugin_rar = {
 	.fields = NULL,
 	.libs = &libs,
 	.relocs = NULL,
-	.meta = NULL,
+	.dbginfo = NULL,
 	.write = NULL,
 	.create = &create,
 };

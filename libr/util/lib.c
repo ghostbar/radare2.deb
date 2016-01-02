@@ -29,8 +29,8 @@ R_LIB_VERSION(r_lib);
 
 /* XXX : this must be registered in runtime */
 static const char *r_lib_types[] = {
-	"io", "dbg", "lang", "asm", "anal", "parse", "bin", //"bininfo", 
-	"bp", "syscall", "fastcall", "crypto", "cmd", NULL
+	"io", "dbg", "lang", "asm", "anal", "parse", "bin", //"bininfo",
+	"bp", "syscall", "fastcall", "crypto", "cmd", "egg", NULL
 };
 
 static int __has_debug = 0;
@@ -39,13 +39,24 @@ static int __has_debug = 0;
 
 /* XXX: Rename this helper function */
 R_API const char *r_lib_types_get(int idx) {
-	if (idx<0||idx>R_LIB_TYPE_LAST)
+	if (idx < 0 || idx > R_LIB_TYPE_LAST-1)
 		return "unk";
 	return r_lib_types[idx];
 }
 
+R_API int r_lib_types_get_i(const char *str) {
+	int i;
+	for (i=0; r_lib_types[i]; i++) {
+		if (!strcmp (str, r_lib_types[i])) 
+			return i;
+	}
+	return -1;
+}
+
 R_API void *r_lib_dl_open(const char *libname) {
 	void *ret;
+	if (!libname || !*libname)
+		return NULL;
 	ret = DLOPEN (libname);
 	if (__has_debug && ret == NULL)
 #if __UNIX__
@@ -99,8 +110,13 @@ R_API char *r_lib_path(const char *libname) {
 
 R_API RLib *r_lib_new(const char *symname) {
 	RLib *lib = R_NEW (RLib);
+	char *env_debug;
 	if (lib) {
-		__has_debug = r_sys_getenv ("R_DEBUG")?R_TRUE:R_FALSE;
+		env_debug = r_sys_getenv ("R_DEBUG");
+		__has_debug = env_debug ? R_TRUE : R_FALSE;
+		if (env_debug) {
+			free (env_debug);
+		}
 		lib->handlers = r_list_newf (free);
 		lib->plugins = r_list_newf (free);
 		strncpy (lib->symname, symname, sizeof (lib->symname)-1);
@@ -128,8 +144,10 @@ R_API int r_lib_dl_check_filename(const char *file) {
 
 R_API int r_lib_run_handler(RLib *lib, RLibPlugin *plugin, RLibStruct *symbol) {
 	RLibHandler *h = plugin->handler;
-	if (h && h->constructor)
+	if (h && h->constructor) {
+		IFDBG eprintf ("PLUGIN HANDLER %p %p\n", h, h->constructor);
 		return h->constructor (plugin, h->user, symbol->data);
+	} else IFDBG eprintf ("Cannot find plugin constructor\n");
 	return R_FAIL;
 }
 
@@ -148,8 +166,26 @@ R_API R_API int r_lib_close(RLib *lib, const char *file) {
 	RListIter *iter;
 	/* No _safe loop necessary because we return immediately after the delete. */
 	r_list_foreach (lib->plugins, iter, p) {
-		if ((file==NULL || (!strcmp(file, p->file))) && p->handler->destructor != NULL) {
-			int ret = p->handler->destructor (p, p->handler->user, p->data);
+		if ((file==NULL || (!strcmp (file, p->file)))) {
+			int ret = 0;
+			if (p->handler && p->handler->constructor) {
+				ret = p->handler->destructor (p,
+					p->handler->user, p->data);
+			}
+			free (p->file);
+			r_list_delete (lib->plugins, iter);
+			return ret;
+		}
+	}
+	// delete similar plugin name
+	r_list_foreach (lib->plugins, iter, p) {
+		if (strstr (p->file, file)) {
+			int ret = 0;
+			if (p->handler && p->handler->constructor) {
+				ret = p->handler->destructor (p,
+					p->handler->user, p->data);
+			}
+			eprintf ("Unloaded %s\n", p->file);
 			free (p->file);
 			r_list_delete (lib->plugins, iter);
 			return ret;
@@ -189,11 +225,8 @@ static int samefile(const char *a, const char *b) {
 }
 
 R_API int r_lib_open(RLib *lib, const char *file) {
-	RLibPlugin *p;
-	RListIter *iter;
 	RLibStruct *stru;
 	void *handler;
-	int ret = R_FALSE;
 
 	/* ignored by filename */
 	if (!r_lib_dl_check_filename (file)) {
@@ -206,28 +239,41 @@ R_API int r_lib_open(RLib *lib, const char *file) {
 		IFDBG eprintf ("Cannot open library: '%s'\n", file);
 		return R_FAIL;
 	}
-	
+
 	stru = (RLibStruct *) r_lib_dl_sym (handler, lib->symname);
 	if (stru == NULL) {
 		IFDBG eprintf ("Cannot find symbol '%s' in library '%s'\n",
 			lib->symname, file);
+		r_lib_dl_close (handler);
 		return R_FAIL;
 	}
 
+	return r_lib_open_ptr (lib, file, handler, stru);
+}
+
+R_API int r_lib_open_ptr (RLib *lib, const char *file, void *handler, RLibStruct *stru) {
+	RLibPlugin *p;
+	RListIter *iter;
+	int ret = R_FALSE;
+	// TODO: Use Sdb here. just a single line
 	r_list_foreach (lib->plugins, iter, p) {
 		if (samefile (file, p->file)) {
+			IFDBG eprintf ("Dupped\n");
+			// TODO: reload if opening again?
+			// TODO: store timestamp of file
+			// TODO: autoreload plugins if updated \o/
 			r_lib_dl_close (handler);
 			return R_FAIL;
 		}
 	}
 
-	p = R_NEW (RLibPlugin);
+	p = R_NEW0 (RLibPlugin);
 	p->type = stru->type;
 	p->data = stru->data;
 	p->file = strdup (file);
 	p->dl_handler = handler;
 	p->handler = r_lib_get_handler (lib, p->type);
-	
+
 	ret = r_lib_run_handler (lib, p, stru);
 	if (ret == R_FAIL) {
 		IFDBG eprintf ("Library handler has failed for '%s'\n", file);
@@ -311,20 +357,11 @@ R_API int r_lib_del_handler(RLib *lib, int type) {
 	return R_FALSE;
 }
 
-/* XXX _list methods must be deprecated before r2-1.0 */
 R_API void r_lib_list(RLib *lib) {
 	RListIter *iter;
 	RLibPlugin *p;
-#if 0
-	printf("Plugin Plugins:\n");
-	list_for_each_prev(pos, &lib->handlers) {
-		RLibHandler *h = list_entry(pos, RLibHandler, list);
-		printf(" - %d: %s\n", h->type, h->desc);
-	}
-#endif
-	//printf("Loaded plugins:\n");
 	r_list_foreach (lib->plugins, iter, p) {
 		printf (" %5s %p %s \n", r_lib_types_get (p->type),
-			p->handler->destructor, p->file);
+			p->dl_handler, p->file);
 	}
 }

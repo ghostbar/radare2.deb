@@ -103,12 +103,17 @@ f.obj.style.zIndex = 99999+this.ctr2++;
 				} else {
 					height = (h-topmargin)/rows;
 				}
+				height = 0|height;
 				f.obj.style.position = 'absolute';
 				f.obj.style.top = mtop;
 				f.obj.style.left = left;
 				// TODO: add proportions
 				f.obj.style.width = width;
+				if (row==0) {
+					height-=22;
+				}
 				f.obj.style.height = height;
+
 				//f.obj.style.backgroundColor = "green";
 				if (f.update)
 					f.update (f.obj);
@@ -193,9 +198,11 @@ f.obj.style.zIndex = 99999+this.ctr2++;
 			if (row<=this.frames[col].length) {
 				row++;
 				var f = this.frames[col][row];
-				this.select_frame (f.name);
-				this.curframe = [f,col,row];
-				this.run();
+				if (f) {
+					this.select_frame (f.name);
+					this.curframe = [f,col,row];
+					this.run();
+				}
 			}
 			break;
 		case 'left':
@@ -203,19 +210,26 @@ f.obj.style.zIndex = 99999+this.ctr2++;
 			if (col>0) {
 				col--;
 				var f = this.frames[col][0];
-				this.select_frame (f.name);
-				this.curframe = [f,col,0];
-				this.run();
+				if (f) {
+					this.select_frame (f.name);
+					this.curframe = [f,col,0];
+					this.run();
+				}
 			}
 			break;
 		case 'right':
 			var col = +this.curframe[1];
+			if (col>=this.frames.length-1)
+				col = -1;
 			if (col<this.frames.length) {
 				col++;
-				var f = this.frames[col][0];
-				this.select_frame (f.name);
-				this.curframe = [f,col,0];
-				this.run();
+				var f = this.frames[col]
+				if (f) f = f[0];
+				if (f) {
+					this.select_frame (f.name);
+					this.curframe = [f,col,0];
+					this.run();
+				}
 			}
 			break;
 		}
@@ -242,26 +256,83 @@ f.mw = false;
 				}
 			}
 		}
-this.tile ();
+		this.tile ();
 		return ret;
 	}
-	this.new_frame = function(name, body, update, pos) {
+	this.new_frame = function(name, body, update, pos, cb) {
 		var nf = {};
 		nf.name = name = name || this.defname ();
+
 			var obj_title = document.createElement ('div');
 			obj_title.className = 'frame_title';
 			obj_title.id = 'frame_'+name;
 			var d = document.createElement ('div');
-			d.style.backgroundColor = '#d0a090';
+			d.style.backgroundColor = '#c0c0c0';
+			d.style['overflow-x'] = 'hidden';
+
+			var x = document.createElement ('a');
+			x.innerHTML = "[x]";
+			x.href='#';
+			(function (self,name) {
+				 x.onclick = function() {
+					 //alert ("clicked "+name);
+					 self.del_frame (name);
+				 }
+			})(this,name);
+			d.appendChild (x);
+
+			var b2 = document.createElement ('a');
+			b2.innerHTML = "[r]";
+			b2.href='#';
+			b2.ival = null;
+			var self = this;
+			b2.onclick = function (x) {
+				// TODO : toggle auto refresh
+				if (b2.ival) {
+					clearInterval (b2.ival);
+					b2.ival = null;
+					b2.innerHTML = "[r]";
+				} else {
+					b2.innerHTML = "[R]";
+					if (cb) {
+						cb (self, nf);
+						b2.ival = setInterval (function () {
+							cb (self, nf);
+						}, 1000);
+					}
+				}
+			}
+			d.appendChild (b2);
+
+			var b = document.createElement ('a');
+			b.innerHTML = "[@] ";
+			b.href='#';
+			b.onclick = nf.refresh = function (x) {
+				if (cb) {
+					cb (self, nf);
+				}
+			}
+			d.appendChild (b);
+//nf.offset = "entry0"; //0x404981;
+
 			var a = document.createElement ('a');
 			a.innerHTML = name;
 			a.href='#';
 			d.appendChild (a);
+
+/*
+			var inp = document.createElement ('input');
+			inp.value = "entry0";
+			inp.href='#';
+			d.appendChild (inp);
+*/
+
 			obj_title.appendChild (d);
-			(function(self,name) {
+			(function (self,name) {
 				 a.onclick = function() {
 					 //alert ("clicked "+name);
-					 self.del_frame (name);
+					 var newname = prompt ("title");
+			//		 self.del_frame (name);
 				 }
 			})(this,name);
 		if (typeof (update) === 'string') {
@@ -298,6 +369,9 @@ this.tile ();
 			break;
 		}
 		this.select_frame (name);
+		if (cb) {
+			cb (self, nf);
+		}
 		(function (self, name) {
 			var f = _('frame_'+name);
 			f.onmouseup = function() {
@@ -309,6 +383,13 @@ this.tile ();
 			}
 		})(this, name);
 		return nf;
+	}
+	this.update_all = function() {
+		for (var col in this.frames) {
+			for (var row in this.frames[col]) {
+				this.frames[col][row].refresh ();
+			}
+		}
 	}
 	this.del_frame = function (name) {
 		var prev = undefined;
@@ -360,7 +441,7 @@ this.tile ();
 		obj.style.left = 0;
 		obj.style.width = w;
 		obj.style.height = h;
-		obj.style.backgroundColor = '#a0a0a0';
+		obj.style.backgroundColor = '#202020';
 		this.tile ();
 	}
 }

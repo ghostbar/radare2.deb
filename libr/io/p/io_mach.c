@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2013 - pancake */
+/* radare - LGPL - Copyright 2009-2014 - pancake */
 
 #include <r_userconf.h>
 
@@ -61,12 +61,43 @@ static task_t pid_to_task(int pid) {
 
 static int __read(RIO *io, RIODesc *fd, ut8 *buf, int len) {
 	vm_size_t size = 0;
-        int err = vm_read_overwrite (RIOMACH_TASK (fd->data),
-		(vm_offset_t)io->off, len, (pointer_t)buf, &size);
-        if (err == -1) {
-                eprintf ("Cannot read\n");
-                return -1;
-        }
+	int blen, err, copied = 0;
+	int blocksize = 16;
+	while (copied<len) {
+		blen = R_MIN ((len-copied), blocksize);
+		err = vm_read_overwrite (RIOMACH_TASK (fd->data),
+			(ut64)io->off+copied, blen, (pointer_t)buf+copied, &size);
+		switch (err) {
+		case KERN_PROTECTION_FAILURE:
+			//eprintf ("r_io_mach_read: kern protection failure.\n");
+			break;
+		case KERN_INVALID_ADDRESS:
+			if (blocksize == 1) {
+				memset (buf+copied, 0xff, len-copied);
+				return size+copied;
+			}
+			blocksize = 1;
+			blen = 1;
+			buf[copied] = 0xff;
+			//eprintf("invaddr %d\n",len);
+			break;
+		}
+		if (err == -1) {
+			//eprintf ("Cannot read\n");
+			return -1;
+		}
+		if (size==0) {
+			if (blocksize == 1) {
+				memset (buf+copied, 0xff, len-copied);
+				return size+copied;
+			}
+			blocksize = 1;
+			blen = 1;
+			buf[copied] = 0xff;
+		}
+		//if (size != blen) { return size+copied; }
+		copied += blen;
+	}
         return (int)size;
 }
 
@@ -100,7 +131,7 @@ eprintf ("+ PERMS (%x) %llx\n", basic64->protection, addr);
 
         // XXX SHOULD RESTORE PERMS LATER!!!
         if (vm_protect (task, addr, len, 0, VM_PROT_COPY | VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE) != KERN_SUCCESS)
-		if (mach_vm_protect (task, addr, len, 0, VM_PROT_READ | VM_PROT_WRITE) != KERN_SUCCESS)
+		//if (mach_vm_protect (task, addr, len, 0, VM_PROT_READ | VM_PROT_WRITE) != KERN_SUCCESS)
 			if (vm_protect (task, addr, len, 0, VM_PROT_WRITE) != KERN_SUCCESS)
 				eprintf ("cant change page perms to rw at 0x%"PFMT64x" with len= %d\n", addr, len);
         if (vm_write (task, (vm_address_t)addr,
@@ -209,17 +240,19 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 		}
 		return NULL;
 	}
-	riom = R_NEW (RIOMach);
+	riom = R_NEW0 (RIOMach);
 	riom->pid = pid;
 	riom->task = task;
+	// sleep 1s to get proper path (program name instead of ls) (racy)
 	pidpath = r_sys_pid_to_path (pid);
 	ret = r_io_desc_new (&r_io_plugin_mach, riom->pid,
-		pidpath, 1, mode, riom);
+		pidpath, rw | R_IO_EXEC, mode, riom);
 	free (pidpath);
 	return ret;
 }
 
 static ut64 __lseek(RIO *io, RIODesc *fd, ut64 offset, int whence) {
+	io->off = offset;
 	return offset;
 }
 
@@ -267,7 +300,7 @@ RIOPlugin r_io_plugin_mach = {
 	.lseek = __lseek,
 	.system = __system,
 	.write = __write,
-	.debug = (void*)(size_t)1
+	.isdbg = R_TRUE
 };
 
 #else

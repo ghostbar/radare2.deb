@@ -6,7 +6,8 @@ TARGET_MACH0=bin_mach0.${EXT_SO}
 ALL_TARGETS+=${TARGET_MACH0}
 
 ${TARGET_MACH0}: ${OBJ_MACH0}
-	pwd
-	echo SHLR=$(SHLR)
-	${CC} $(call libname,bin_mach0) ${CFLAGS} \
-		$(LDFLAGS) ${OBJ_MACH0} ${SHLR}/sdb/src/libsdb.a
+	@pwd
+	@echo SHLR=$(SHLR)
+	-${CC} $(call libname,bin_mach0) ${CFLAGS} \
+		${OBJ_MACH0} ${SHLR}/sdb/src/libsdb.a \
+		$(LINK) $(LDFLAGS) 

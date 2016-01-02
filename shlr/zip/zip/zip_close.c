@@ -408,6 +408,8 @@ add_data(struct zip *za, struct zip_source *src, struct zip_dirent *de, FILE *ft
 	return -1;
 
     offend = ftello(ft);
+	if (offend < 0)
+		return -1;
 
     if (fseeko(ft, offstart, SEEK_SET) < 0) {
 	_zip_error_set(&za->error, ZIP_ER_SEEK, errno);
@@ -529,6 +531,8 @@ write_cdir(struct zip *za, const struct zip_filelist *filelist, zip_uint64_t sur
     char buf[TORRENT_CRC_LEN+1];
     
     cd_start = ftello(out);
+	if (cd_start < 0)
+		return -1;
 
     if ((size=_zip_cdir_write(za, filelist, survivors, out)) < 0)
 	return -1;
@@ -610,20 +614,21 @@ _zip_create_temp_output(struct zip *za, FILE **outp)
         sprintf(temp, "%s.XXXXXX", za->zn);
     }
 
-#if _WIN32 || __MINGW32__
+#if __WIN32__ || __MINGW32__ || defined(_WIN32)
     if ((tfd=open(temp, O_RDWR|O_CREAT, 0644)) == -1) {
 	_zip_error_set(&za->error, ZIP_ER_TMPOPEN, errno);
 	free(temp);
 	return NULL;
     }
 #else
+	umask (S_IWGRP | S_IWOTH);
     if ((tfd=mkstemp(temp)) == -1) {
 	_zip_error_set(&za->error, ZIP_ER_TMPOPEN, errno);
 	free(temp);
 	return NULL;
     }
 #endif
-    
+
     if ((tfp=fdopen(tfd, "r+b")) == NULL) {
 	_zip_error_set(&za->error, ZIP_ER_TMPOPEN, errno);
 	close(tfd);
@@ -657,5 +662,5 @@ _zip_torrentzip_cmp(const void *a, const void *b)
     else if (bname == NULL)
 	return 1;
 
-    return strcasecmp(aname, bname);
+    return __strcasecmp(aname, bname);
 }

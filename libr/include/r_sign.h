@@ -1,5 +1,5 @@
-#ifndef _INCLUDE_R_SIGN_H_
-#define _INCLUDE_R_SIGN_H_
+#ifndef R2_SIGN_H
+#define R2_SIGN_H
 
 #include <r_types.h>
 #include <r_anal.h>
@@ -34,7 +34,7 @@ typedef struct r_sign_t {
 	int s_byte;
 	int s_head;
 	int s_func; // TODO: this must be an array count[N]
-	char prefix[32];
+	char ns[32]; // namespace
 	PrintfCallback printf;
 	RList *items;
 } RSign;
@@ -42,14 +42,18 @@ typedef struct r_sign_t {
 typedef int (*RSignCallback)(RSignItem *si, void *user);
 
 #ifdef R_API
-R_API RSign *r_sign_new();
+R_API RSign *r_sign_new(void);
 R_API int r_sign_add(RSign *sig, RAnal *anal, int type,
 		const char *name, const char *arg);
 R_API RSign *r_sign_free(RSign *sig);
-R_API void r_sign_prefix(RSign *sig, const char *str);
+R_API void r_sign_ns(RSign *sig, const char *str);
 R_API void r_sign_list(RSign *sig, int rad);
 R_API void r_sign_reset(RSign *sig);
 R_API void r_sign_item_free(void *_item);
+R_API int r_sign_remove_ns(RSign* sig, const char* ns);
+R_API int r_sign_is_flirt (RBuffer *buf);
+R_API void r_sign_flirt_dump (const RAnal *anal, const char *flirt_file);
+R_API void r_sign_flirt_scan (const RAnal *anal, const char *flirt_file);
 
 // old api
 R_API int r_sign_generate(RSign *sig, const char *file, FILE *fd);

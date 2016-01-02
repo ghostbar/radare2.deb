@@ -1,10 +1,11 @@
-/* radare - LGPL - Copyright 2009-2014 - nibble, pancake */
+/* radare - LGPL - Copyright 2009-2015 - nibble, pancake */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.c>
 #include <r_core.h>
 #include "../blob/version.c"
+#include "../../libr/bin/pdb/pdb_downloader.h"
 
 #define ACTION_UNK       0x00000
 #define ACTION_ENTRIES   0x00001
@@ -26,23 +27,28 @@
 #define ACTION_CLASSES   0x10000
 #define ACTION_DWARF     0x20000
 #define ACTION_SIZE      0x40000
+#define ACTION_PDB       0x80000
+#define ACTION_PDB_DWNLD 0x100000
+#define ACTION_DLOPEN    0x200000
 
 static struct r_bin_t *bin = NULL;
 static char* output = NULL;
 static char* create = NULL;
 static int rad = R_FALSE;
+static ut64 laddr = 0LL;
 static ut64 baddr = 0LL;
 static char* file = NULL;
 static char *name = NULL;
 static int rw = R_FALSE;
-static int va = R_FALSE;
+static int va = R_TRUE;
+static const char *do_demangle = NULL;
 static ut64 at = 0LL;
 static RLib *l;
 
 static int rabin_show_help(int v) {
 	printf ("Usage: rabin2 [-ACdehHiIjlLMqrRsSvVxzZ] [-@ addr] [-a arch] [-b bits]\n"
-		"              [-B addr] [-c F:C:D] [-f str] [-m addr] [-n str] [-N len]\n"
-		"              [-o str] [-O str] file\n");
+		"              [-B addr] [-c F:C:D] [-f str] [-m addr] [-n str] [-N m:M]\n"
+		"              [-o str] [-O str] [-k query] [-D lang symname] | file>\n");
 	if (v) printf (
 		" -@ [addr]       show section, symbol or import at addr\n"
 		" -A              list archs\n"
@@ -52,95 +58,147 @@ static int rabin_show_help(int v) {
 		" -c [fmt:C:D]    create [elf,mach0,pe] with Code and Data hexpairs (see -a)\n"
 		" -C              list classes\n"
 		" -d              show debug/dwarf information\n"
+		" -D lang name    demangle symbol name\n"
 		" -e              entrypoint\n"
+		" -E              show loading offset (useful for non-ASLR libraries)"
 		" -f [str]        select sub-bin named str\n"
-		" -g              same as -SMRevsiz (show all info)\n"
+		" -F [binfmt]     force to use that bin plugin (ignore header check)\n"
+		" -k [query]      perform sdb query on loaded file\n"
+		" -K [algo]       calculate checksums (md5, sha1, ..)\n"
+		" -g              same as -SMResiz (show all info)\n"
+		" -G [addr]       load address . offset to header\n"
 		" -h              this help\n"
 		" -H              header fields\n"
 		" -i              imports (symbols imported from libraries)\n"
 		" -I              binary info\n"
 		" -j              output in json\n"
+		" -k [sdb-query]  run sdb query. for example: '*'\n"
 		" -l              linked libraries\n"
 		" -L              list supported bin plugins\n"
 		" -m [addr]       show source line at addr\n"
 		" -M              main (show address of main symbol)\n"
 		" -n [str]        show section, symbol or import named str\n"
-		" -N [minlen]     force minimum number of chars per string (see -z)\n"
+		" -N [min:max]    force min:max number of chars per string (see -z and -zz)\n"
 		" -o [str]        output file/folder for write operations (out by default)\n"
 		" -O [str]        write/extract operations (-O help)\n"
+		" -p              show physical addresses\n"
+		" -P              show debug/pdb information\n"
+		" -PP             download pdb file for binary\n"
 		" -q              be quiet, just show fewer data\n"
 		" -r              radare output\n"
 		" -R              relocations\n"
 		" -s              symbols (exports)\n"
 		" -S              sections\n"
-		" -v              use vaddr in radare output (or show version if no file)\n"
-		//" -V              show version information\n"
+		" -v              display version and quit\n"
 		" -x              extract bins contained in file\n"
 		" -z              strings (from data section)\n"
 		" -zz             strings (from raw bins [e bin.rawstr=1])\n"
+		" -zzz            dump raw strings to stdout (for huge files)\n"
 		" -Z              guess size of binary program\n"
 		);
 	return 1;
 }
 
-static int rabin_extract(int all) {
-	char outfile[512], outpath[512], *path, *ptr;
-	int i = 0;
+static char *stdin_gets() {
+        static char buf[96096];
+        fgets (buf, sizeof (buf)-1, stdin);
+        if (feof (stdin)) return NULL;
+        buf[strlen (buf)-1] = 0;
+        return strdup (buf);
+}
 
-	if (all) {
-		for (i=0; i<bin->narch; i++) {
-			const char *arch;
-			int bits;
+static void __sdb_prompt(Sdb *sdb) {
+	char *line;
+	for (;(line = stdin_gets ());) {
+		sdb_query (sdb, line);
+		free (line);
+	}
+}
 
-			r_bin_select_idx (bin, i);
-			if (bin->cur->o->info == NULL) {
-				arch = "unknown";
-				bits = 0;
-			//	eprintf ("No extract info found.\n");
-			//	continue;
-			} else {
-				arch = bin->cur->o->info->arch;
-				bits = bin->cur->o->info->bits;
-			}
-			path = strdup (bin->cur->file);
-			// XXX: Wrong for w32 (/)
-			if ((ptr = strrchr (path, '/'))) {
-				*ptr = '\0';
-				ptr++;
-			} else ptr = bin->cur->file;
-/*
-			if (output)
-				snprintf (outpath, sizeof (outpath), "%s/%s", output, path);
-			else snprintf (outpath, sizeof (outpath), "./%s", path);
-*/
-			snprintf (outpath, sizeof (outpath), "%s.fat", ptr);
-			if (!r_sys_rmkdir (outpath)) {
-				eprintf ("Error creating dir structure\n");
-				return R_FALSE;
-			}
-			snprintf (outfile, sizeof (outfile), "%s/%s.%s_%i.%d",
-					outpath, ptr, arch, bits, i);
-			if (!r_file_dump (outfile, bin->cur->buf->buf, bin->cur->size)) {
-				eprintf ("Error extracting %s\n", outfile);
-				return R_FALSE;
-			} else printf ("%s created (%i)\n", outfile, bin->cur->size);
-		}
-	} else { /* XXX: Use 'output' for filename? */
-		if (bin->cur->o->info == NULL) {
-			eprintf ("No extract info found.\n");
+static int extract_binobj (const RBinFile *bf, const RBinObject *o, int idx) {
+	ut64 boffset = o ? o->boffset : 0;
+	ut64 bin_size = o ? o->obj_size : 0;
+	const ut8 *bytes = bf ? r_buf_buffer (bf->buf) : NULL;
+	//ut64 sz = bf ? r_buf_size (bf->buf) : 0;
+	RBinInfo *info = o ? o->info : NULL;
+	const char *arch = info ? info->arch : "unknown";
+	char bits = info ? info->bits : 0;
+	const char *filename = bf ? bf->file : NULL;
+	char *path = NULL, *outpath = NULL, *outfile = NULL, *ptr = NULL;
+	ut32 outfile_sz = 0, outpath_sz = 0;
+	int res = R_FALSE;
+
+	if (!bf || !o || !filename ) return R_FALSE;
+
+	path = strdup (filename);
+
+	// XXX: Wrong for w32 (/)
+
+	ptr = strrchr (path, DIRSEP);
+	if (ptr) {
+		*ptr++ = '\0';
+	} else {
+		ptr = path;
+	}
+
+	outpath_sz = strlen (path) + 20;
+
+	if (outpath_sz > 0)
+		outpath = malloc (outpath_sz);
+
+	if (outpath)
+		snprintf (outpath, outpath_sz, "%s.fat", ptr);
+
+	if (!outpath || !r_sys_rmkdir (outpath)) {
+		free (path);
+		free (outpath);
+		eprintf ("Error creating dir structure\n");
+		return R_FALSE;
+	}
+
+	outfile_sz = outpath_sz + strlen (ptr) + strlen (arch) + 23;
+	if (outfile_sz)
+		outfile = malloc (outfile_sz);
+
+	if (outfile)
+		snprintf (outfile, outfile_sz, "%s/%s.%s_%i.%d",
+			outpath, ptr, arch, bits, idx);
+
+	if (boffset > r_buf_size (bf->buf)) {
+		eprintf ("Invalid offsets\n");
+		res = R_FALSE;
+	} else {
+		if (!outfile || !r_file_dump (outfile, bytes+boffset, bin_size, 0)) {
+			eprintf ("Error extracting %s\n", outfile);
+			res = R_FALSE;
 		} else {
-			if ((ptr = strrchr (bin->cur->file, '/')))
-				ptr++;
-			else ptr = bin->cur->file;
-			snprintf (outfile, sizeof (outfile), "%s.%s_%i", ptr,
-					bin->cur->o->info->arch, bin->cur->o->info->bits);
-			if (!r_file_dump (outfile, bin->cur->buf->buf, bin->cur->size)) {
-				eprintf ("Error extracting %s\n", outfile);
-				return R_FALSE;
-			} else printf ("%s created (%i)\n", outfile, bin->cur->size);
+			printf ("%s created (%"PFMT64d")\n", outfile, bin_size);
+			res = R_TRUE;
 		}
 	}
-	return R_TRUE;
+
+	free (outfile);
+	free (outpath);
+	free (path);
+	return res;
+}
+
+static int rabin_extract(int all) {
+	RBinObject *obj = NULL;
+	int res = R_FALSE;
+	RBinFile *bf = r_bin_cur (bin);
+	if (!bf) return res;
+	if (all) {
+		int idx = 0;
+		RListIter *iter = NULL;
+		r_list_foreach (bf->objs, iter, obj)
+			res = extract_binobj (bf, obj, idx++);
+	} else {
+		obj = r_bin_cur_object (bin);
+		if (!obj) return res;
+		res = extract_binobj (bf, obj, 0);
+	}
+	return res;
 }
 
 static int rabin_dump_symbols(int len) {
@@ -167,7 +225,7 @@ static int rabin_dump_symbols(int len) {
 			free (buf);
 			return R_FALSE;
 		}
-		r_buf_read_at (bin->cur->buf, symbol->offset, buf, len);
+		r_buf_read_at (bin->cur->buf, symbol->paddr, buf, len);
 		r_hex_bin2str (buf, len, ret);
 		printf ("%s %s\n", symbol->name, ret);
 		free (buf);
@@ -188,12 +246,15 @@ static int rabin_dump_sections(char *scnname) {
 
 	r_list_foreach (sections, iter, section) {
 		if (!strcmp (scnname, section->name)) {
-			if (!(buf = malloc (section->size)) ||
-					!(ret = malloc (section->size*2+1)))
+			if (!(buf = malloc (section->size)))
 				return R_FALSE;
-			r_buf_read_at (bin->cur->buf, section->offset, buf, section->size);
+			if (!(ret = malloc (section->size*2+1))) {
+				free (buf);
+				return R_FALSE;
+			}
+			r_buf_read_at (bin->cur->buf, section->paddr, buf, section->size);
 			if (output) {
-				r_file_dump (output, buf, section->size);
+				r_file_dump (output, buf, section->size, 0);
 			} else {
 				r_hex_bin2str (buf, section->size, ret);
 				printf ("%s\n", ret);
@@ -232,14 +293,18 @@ static int rabin_do_operation(const char *op) {
 			if (ptr2) {
 				if (!rabin_dump_symbols (r_num_math (NULL, ptr2)))
 					return R_FALSE;
-			} else if (!rabin_dump_symbols (0))
-					return R_FALSE;
+			} else if (!rabin_dump_symbols (0)) {
+				free (arg);
+				return R_FALSE;
+			}
 			break;
 		case 'S':
 			if (!ptr2)
 				goto _rabin_do_operation_error;
-			if (!rabin_dump_sections (ptr2))
+			if (!rabin_dump_sections (ptr2)) {
+				free (arg);
 				return R_FALSE;
+			}
 			break;
 		default:
 			goto _rabin_do_operation_error;
@@ -253,6 +318,7 @@ static int rabin_do_operation(const char *op) {
 	default:
 	_rabin_do_operation_error:
 		eprintf ("Unknown operation. use -O help\n");
+		free (arg);
 		return R_FALSE;
 	}
 
@@ -262,7 +328,7 @@ static int rabin_do_operation(const char *op) {
 
 static int rabin_show_srcline(ut64 at) {
 	char *srcline;
-	if ((srcline = r_bin_meta_get_source_line (bin, at))) {
+	if ((srcline = r_bin_addr2text (bin, at))) {
 		printf ("%s\n", srcline);
 		free (srcline);
 		return R_TRUE;
@@ -295,12 +361,19 @@ static int __lib_bin_xtr_dt(struct r_lib_plugin_t *pl, void *p, void *u) {
 }
 
 int main(int argc, char **argv) {
+	const char *query = NULL;
 	int c, bits = 0, actions_done = 0, actions = 0, action = ACTION_UNK;
 	char *homeplugindir = r_str_home (R2_HOMEDIR"/plugins");
 	char *ptr, *arch = NULL, *arch_name = NULL;
 	const char *op = NULL;
+	const char *chksum = NULL;
+	const char *forcebin = NULL;
 	RCoreBinFilter filter;
 	RCore core;
+	RCoreFile *cf = NULL;
+	int xtr_idx = 0; // load all files if extraction is necessary.
+	int fd = -1;
+	int rawstr = 0;
 
 	r_core_init (&core);
 	bin = core.bin;
@@ -316,24 +389,24 @@ int main(int argc, char **argv) {
 	r_lib_opendir (l, LIBDIR"/radare2/"R2_VERSION);
 
 #define is_active(x) (action&x)
-#define set_action(x) actions++; action |=x
-	while ((c = getopt (argc, argv, "jgqAf:a:B:b:c:CdMm:n:N:@:isSIHelRwO:o:rvLhxzZ")) != -1) {
+#define set_action(x) actions++; action |= x
+#define unset_action(x) action &= ~x
+	while ((c = getopt (argc, argv, "DjgqAf:F:a:B:G:b:c:Ck:K:dD:Mm:n:N:@:isSIHeElRwO:o:pPrvLhxzZ")) != -1) {
 		switch (c) {
 		case 'g':
 			set_action (ACTION_CLASSES);
-			set_action (ACTION_IMPORTS); 
-			set_action (ACTION_SYMBOLS); 
-			set_action (ACTION_SECTIONS); 
-			set_action (ACTION_STRINGS); 
-			set_action (ACTION_SIZE); 
-			set_action (ACTION_INFO); 
-			set_action (ACTION_FIELDS); 
-			set_action (ACTION_DWARF); 
-			set_action (ACTION_ENTRIES); 
-			set_action (ACTION_MAIN); 
-			set_action (ACTION_LIBS); 
-			set_action (ACTION_RELOCS); 
-			set_action (ACTION_EXTRACT); 
+			set_action (ACTION_IMPORTS);
+			set_action (ACTION_SYMBOLS);
+			set_action (ACTION_SECTIONS);
+			set_action (ACTION_STRINGS);
+			set_action (ACTION_SIZE);
+			set_action (ACTION_INFO);
+			set_action (ACTION_FIELDS);
+			set_action (ACTION_DWARF);
+			set_action (ACTION_ENTRIES);
+			set_action (ACTION_MAIN);
+			set_action (ACTION_LIBS);
+			set_action (ACTION_RELOCS);
 			break;
 		case 'q': rad = R_CORE_BIN_SIMPLE; break;
 		case 'j': rad = R_CORE_BIN_JSON; break;
@@ -342,13 +415,17 @@ int main(int argc, char **argv) {
 		case 'c':
 			if (!optarg) {
 				eprintf ("Missing argument for -c");
+				r_core_fini (&core);
 				return 1;
 			}
 			set_action (ACTION_CREATE);
 			create = strdup (optarg);
 			break;
+		case 'k': query = optarg; break;
+		case 'K': chksum = optarg; break;
 		case 'C': set_action (ACTION_CLASSES); break;
 		case 'f': if (optarg) arch_name = strdup (optarg); break;
+		case 'F': forcebin = optarg; break;
 		case 'b': bits = r_num_math (NULL, optarg); break;
 		case 'm':
 			at = r_num_math (NULL, optarg);
@@ -357,18 +434,31 @@ int main(int argc, char **argv) {
 		case 'i': set_action (ACTION_IMPORTS); break;
 		case 's': set_action (ACTION_SYMBOLS); break;
 		case 'S': set_action (ACTION_SECTIONS); break;
-		case 'z': 
+		case 'z':
 			if (is_active (ACTION_STRINGS)) {
-				r_config_set_i (core.config, "bin.rawstr", R_TRUE);
-				core.bin->cur->rawstr = R_TRUE;
-			}
-			set_action (ACTION_STRINGS); 
+				if (rawstr) {
+					/* rawstr mode 2 means that we are not going */
+					/* to store them just dump'm all to stdout */
+					rawstr = 2;
+				} else {
+					rawstr = R_TRUE;
+				}
+			} else set_action (ACTION_STRINGS);
 			break;
 		case 'Z': set_action (ACTION_SIZE); break;
 		case 'I': set_action (ACTION_INFO); break;
 		case 'H': set_action (ACTION_FIELDS); break;
 		case 'd': set_action (ACTION_DWARF); break;
+		case 'P':
+			if (is_active(ACTION_PDB)) {
+				set_action (ACTION_PDB_DWNLD);
+			} else {
+				set_action (ACTION_PDB);
+			}
+			break;
+		case 'D': do_demangle = argv[optind]; break;
 		case 'e': set_action (ACTION_ENTRIES); break;
+		case 'E': set_action (ACTION_DLOPEN); break;
 		case 'M': set_action (ACTION_MAIN); break;
 		case 'l': set_action (ACTION_LIBS); break;
 		case 'R': set_action (ACTION_RELOCS); break;
@@ -377,35 +467,84 @@ int main(int argc, char **argv) {
 		case 'O':
 			op = optarg;
 			set_action (ACTION_OPERATION);
-			if (!strcmp (op, "help")) {
+			if (op && !strcmp (op, "help")) {
 				printf ("Operation string:\n"
 						"  Dump symbols: d/s/1024\n"
 						"  Dump section: d/S/.text\n"
 						"  Resize section: r/.data/1024\n");
+				r_core_fini (&core);
 				return 0;
 			}
 			if (optind==argc) {
 				eprintf ("Missing filename\n");
+				r_core_fini (&core);
 				return 1;
 			}
 			break;
 		case 'o': output = optarg; break;
+		case 'p': va = R_FALSE; break;
 		case 'r': rad = R_TRUE; break;
-		case 'v': va = R_TRUE; break;
+		case 'v': return blob_version ("rabin2");
 		case 'L': r_bin_list (bin); return 1;
-		case 'B': baddr = r_num_math (NULL, optarg); break;
+		case 'G':
+			laddr = r_num_math (NULL, optarg);
+			if (laddr == 0LL)
+				va = R_FALSE;
+			break;
+		case 'B':
+			baddr = r_num_math (NULL, optarg);
+			break;
 		case '@': at = r_num_math (NULL, optarg); break;
 		case 'n': name = optarg; break;
-		case 'N': bin->minstrlen = r_num_math (NULL, optarg); break;
-		//case 'V': return blob_version ("rabin2");
-		case 'h': return rabin_show_help (1);
+		case 'N': {
+				  char *q, *p = strdup (optarg);
+				  q = strchr (p, ':');
+				  if (q) {
+					  r_config_set (core.config, "bin.minstr", p);
+					  r_config_set (core.config, "bin.maxstr", q+1);
+				  } else {
+					  r_config_set (core.config, "bin.minstr", optarg);
+				  }
+				  free (p);
+			} break;
+		case 'h':
+			  r_core_fini (&core);
+			  return rabin_show_help (1);
 		default: action |= ACTION_HELP;
 		}
 	}
 
-	file = argv[optind];
+	if (do_demangle) {
+		char *res = NULL;
+		int type;
+		if ((argc-optind)<2) {
+			return rabin_show_help (0);
+		}
+		type = r_bin_demangle_type (do_demangle);
+		file = argv[optind +1];
+		switch (type) {
+		case R_BIN_NM_CXX: res = r_bin_demangle_cxx (file); break;
+		case R_BIN_NM_JAVA: res = r_bin_demangle_java (file); break;
+		case R_BIN_NM_OBJC: res = r_bin_demangle_objc (NULL, file); break;
+		case R_BIN_NM_SWIFT: res = r_bin_demangle_swift (file); break;
+		case R_BIN_NM_MSVC: res = r_bin_demangle_msvc(file); break;
+		default:
+			eprintf ("Unknown lang to demangle. Use: cxx, java, objc, swift\n");
+			return 1;
+		}
+		if (res && *res) {
+			printf ("%s\n", res);
+			free(res);
+			return 0;
+		}
+		free (res);
+		//eprintf ("%s\n", file);
+		return 1;
+	}
+	file = argv[optind ];
+	if (!query)
 	if (action & ACTION_HELP || action == ACTION_UNK || file == NULL) {
-		if (va) return blob_version ("rabin2");
+		r_core_fini (&core);
 		return rabin_show_help (0);
 	}
 
@@ -424,6 +563,7 @@ int main(int argc, char **argv) {
 		char *p2, *p = strchr (create, ':');
 		if (!p) {
 			eprintf ("Invalid format for -c flag. Use 'format:codehexpair:datahexpair'\n");
+			r_core_fini (&core);
 			return 1;
 		}
 		*p++ = 0;
@@ -437,74 +577,207 @@ int main(int argc, char **argv) {
 			data = NULL;
 			datalen = 0;
 		}
-		code = malloc (strlen (p));
+		code = malloc (strlen (p)+1);
+		if (!code) {
+			r_core_fini (&core);
+			return 1;
+		}
 		codelen = r_hex_str2bin (p, code);
 		if (!arch) arch = "x86";
 		if (!bits) bits = 32;
 
 		if (!r_bin_use_arch (bin, arch, bits, create)) {
 			eprintf ("Cannot set arch\n");
+			r_core_fini (&core);
 			return 1;
 		}
 		b = r_bin_create (bin, code, codelen, data, datalen);
 		if (b) {
-			if (r_file_dump (file, b->buf, b->length)) {
-				eprintf ("dumped %d bytes in '%s'\n", b->length, file);
+			if (r_file_dump (file, b->buf, b->length, 0)) {
+				eprintf ("Dumped %d bytes in '%s'\n", b->length, file);
 				r_file_chmod (file, "+x", 0);
-			} else eprintf ("error dumping into a.out\n");
+			} else eprintf ("Error dumping into a.out\n");
 			r_buf_free (b);
 		} else eprintf ("Cannot create binary for this format '%s'.\n", create);
-		r_bin_free (bin);
+		r_core_fini (&core);
+		return 0;
+	}
+	if (rawstr == 2) {
+		unset_action (ACTION_STRINGS);
+	}
+	r_config_set_i (core.config, "bin.rawstr", rawstr);
+
+	if (file && *file && action&ACTION_DLOPEN) {
+		void *addr = r_lib_dl_open (file);
+		if (addr) {
+			printf ("%s is loaded at 0x%"PFMT64x"\n", file, (ut64)(size_t)(addr));
+			r_lib_dl_close (addr);
+		} else
+			printf("Cannot open the '%s' library\n", file);
 		return 0;
 	}
 
-	if (!r_bin_load (bin, file, 0, 0, R_FALSE) && \
-		!r_bin_load (bin, file, 0, 0, R_TRUE)) {
-		eprintf ("r_bin: Cannot open '%s'\n", file);
-		return 1;
+	if (file && *file) {
+		cf = r_core_file_open (&core, file, R_IO_READ, 0);
+		fd = cf ? r_core_file_cur_fd (&core) : -1;
+		if (!cf || fd == -1) {
+			eprintf ("r_core: Cannot open file\n");
+			r_core_fini (&core);
+			return 1;
+		}
 	}
 
-	// XXX: TODO move this to libr/core/bin.c
-	if (action & ACTION_LISTARCHS || ((arch || bits || arch_name) &&
-		!r_bin_select (bin, arch, bits, arch_name))) {
-		if (rad == R_CORE_BIN_JSON) {
-			int i;
-			printf ("[");
-			for (i = 0; i < bin->narch; i++) {
-				if (r_bin_select_idx (bin, i)) {
-					RBinInfo *info = bin->cur->o->info;
-					printf ("%s{\"arch\":\"%s\",\"bits\":%d,"
-						"\"offset\":%"PFMT64d",\"machine\":\"%s\"}",
-						i?",":"",info->arch, info->bits,
-						bin->cur->offset, info->machine);
-				}
-			}
-			printf ("]");
-		} else r_bin_list_archs (bin);
-		free (arch_name);
+	bin->minstrlen = r_config_get_i (core.config, "bin.minstr");
+	r_bin_force_plugin (bin, forcebin);
+	if (!r_bin_load (bin, file, laddr, 0, xtr_idx, fd, rawstr)) {
+		if (!r_bin_load (bin, file, laddr, 0, xtr_idx, fd, rawstr)) {
+			eprintf ("r_bin: Cannot open file\n");
+			r_core_fini (&core);
+			return 1;
+		}
 	}
-
-	if (baddr != 0LL)
+	if (baddr != 0LL) {
 		bin->cur->o->baddr = baddr;
+		//bin->cur->o->baddr = laddr;
+	}
+	if (rawstr == 2) {
+		rawstr = R_FALSE;
+		r_bin_dump_strings (core.bin->cur, bin->minstrlen);
+	}
 
-	core.bin = bin;
-	filter.offset = at;
-	filter.name = name;
+	if (query) {
+		if (rad) {
+// TODO: Should be moved into core, to load those flags and formats into r2
+			Sdb *db = sdb_ns (bin->cur->sdb, "info", 0);
+			char *flagname;
+			if (db) {
 
-	r_cons_new ()->is_interactive = R_FALSE;
+				SdbListIter *iter;
+				SdbKv *kv;
+				printf ("fs format\n");
+				// iterate over all keys
+				ls_foreach (db->ht->list, iter, kv) {
+					char *k = kv->key;
+					char *v = kv->value;
+					char *dup = strdup (k);
 
+					if ((flagname=strstr (dup, ".offset"))) {
+						*flagname = 0;
+						flagname = dup;
+
+						printf ("f %s @ %s\n", flagname, v);
+					}
+					if ((flagname=strstr (dup, ".cparse"))) {
+						printf ("\"td %s\"\n", v);
+					}
+					if ((flagname=strstr (dup, ".format"))) {
+						*flagname = 0;
+						flagname = dup;
+
+						printf ("pf.%s %s\n", flagname, v);
+					}
+					free (dup);
+				}
+
+			}
+			//sdb_query (bin->cur->sdb, "info/*");
+		} else {
+			if (!strcmp (query, "-")) {
+				__sdb_prompt (bin->cur->sdb);
+			} else sdb_query (bin->cur->sdb, query);
+		}
+		r_core_fini (&core);
+		return 0;
+	}
+
+#if 0
+	// ASLR WTF
+	if (laddr != 0LL) {
+		//r_bin_set_baddr (bin, laddr);
+		//bin->cur->o->baddr = laddr;
+	}
+#endif
 #define isradjson (rad==R_CORE_BIN_JSON&&actions>0)
 #define run_action(n,x,y) {\
 	if (action&x) {\
-		if (isradjson) r_cons_printf ("\"%s\":",n);\
-		if (!r_core_bin_info (&core, y, rad, va, &filter, 0)) {\
-			if (isradjson) r_cons_printf("false");\
+		if (isradjson) r_cons_printf ("%s\"%s\":",actions_done?",":"",n);\
+		if (!r_core_bin_info (&core, y, rad, va, &filter, laddr, chksum)) {\
+			if (isradjson) r_cons_printf ("false");\
 		};\
 		actions_done++;\
-		if (isradjson) r_cons_printf (actions==actions_done? "":",");\
 	}\
 }
+	r_config_set_i (core.config, "bin.laddr", laddr);
+	core.bin = bin;
+	bin->printf = r_cons_printf;
+	filter.offset = at;
+	filter.name = name;
+	r_cons_new ()->is_interactive = R_FALSE;
+
 	if (isradjson) r_cons_printf ("{");
+
+	// List fatmach0 sub-binaries, etc
+	if (action & ACTION_LISTARCHS || ((arch || bits || arch_name) &&
+		!r_bin_select (bin, arch, bits, arch_name))) {
+		r_bin_list_archs (bin, (rad == R_CORE_BIN_JSON)? 'j': 1);
+		actions_done++;
+		free (arch_name);
+	}
+	if (action & ACTION_PDB_DWNLD) {
+		int ret;
+		char *env_pdbserver = r_sys_getenv ("PDB_SERVER");
+		char *env_pdbextract = r_sys_getenv("PDB_EXTRACT");
+		char *env_useragent = r_sys_getenv("PDB_USER_AGENT");
+		SPDBDownloader pdb_downloader;
+		SPDBDownloaderOpt opt;
+		RBinInfo *info = r_bin_get_info (core.bin);
+		char *path;
+
+		if (!info || !info->debug_file_name) {
+			eprintf ("Can't find debug filename\n");
+			r_core_fini (&core);
+			return 1;
+		}
+
+		if (info->file) {
+			path = r_file_dirname (info->file);
+		} else {
+			path = strdup (".");
+		}
+
+		if (env_pdbserver && *env_pdbserver)
+			r_config_set (core.config, "pdb.server", env_pdbserver);
+		if (env_useragent && *env_useragent)
+			r_config_set (core.config, "pdb.user_agent", env_useragent);
+		if (env_pdbextract && *env_pdbextract)
+			r_config_set_i (core.config, "pdb.extract",
+				!(*env_pdbextract == '0'));
+		free (env_pdbextract);
+		free (env_useragent);
+
+		opt.dbg_file = info->debug_file_name;
+		opt.guid = info->guid;
+		opt.symbol_server = (char *)r_config_get (core.config, "pdb.server");
+		opt.user_agent = (char *)r_config_get (core.config, "pdb.user_agent");
+		opt.path = path;
+		opt.extract = r_config_get_i(core.config, "pdb.extract");
+
+		init_pdb_downloader (&opt, &pdb_downloader);
+		ret = pdb_downloader.download (&pdb_downloader);
+		if (isradjson) {
+			printf ("%s\"pdb\":{\"file\":\"%s\",\"download\":%s}",
+				actions_done?",":"", opt.dbg_file, ret?"true":"false");
+		} else {
+			printf ("PDB \"%s\" download %s\n",
+				opt.dbg_file, ret? "success": "failed");
+		}
+		actions_done++;
+		deinit_pdb_downloader (&pdb_downloader);
+
+		free (path);
+		r_core_fini (&core);
+		return 0;
+	}
 	run_action ("sections", ACTION_SECTIONS, R_CORE_BIN_ACC_SECTIONS);
 	run_action ("entries", ACTION_ENTRIES, R_CORE_BIN_ACC_ENTRIES);
 	run_action ("main", ACTION_MAIN, R_CORE_BIN_ACC_MAIN);
@@ -517,6 +790,7 @@ int main(int argc, char **argv) {
 	run_action ("libs", ACTION_LIBS, R_CORE_BIN_ACC_LIBS);
 	run_action ("relocs", ACTION_RELOCS, R_CORE_BIN_ACC_RELOCS);
 	run_action ("dwarf", ACTION_DWARF, R_CORE_BIN_ACC_DWARF);
+	run_action ("pdb", ACTION_PDB, R_CORE_BIN_ACC_PDB);
 	run_action ("size", ACTION_SIZE, R_CORE_BIN_ACC_SIZE);
 	if (action&ACTION_SRCLINE)
 		rabin_show_srcline (at);

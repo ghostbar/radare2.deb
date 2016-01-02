@@ -10,6 +10,12 @@ It is distributed as a standalone binary and a library.
 There's also the sdbtypes: a vala library that implements
 several data structures on top of an sdb or a memcache instance.
 
+[![Travis](https://api.travis-ci.org/radare/sdb.svg)](https://travis-ci.org/radare/sdb)
+
+[![Build Status](http://ci.rada.re/buildStatus/icon?job=sdb)](http://ci.rada.re/job/sdb/)
+
+[![Build Status](https://scan.coverity.com/projects/1651/badge.svg)](https://scan.coverity.com/projects/1651)
+
 Author
 ------
 pancake <pancake@nopcode.org>
@@ -56,16 +62,13 @@ Using arrays (>=0.6):
 	1
 	foo
 	2
-	foo
-	fuck
-	2
 
 Let's play with json:
 
 	$ sdb d g='{"foo":1,"bar":{"cow":3}}'
-	$ sdb d g?bar.cow
+	$ sdb d g:bar.cow
 	3
-	$ sdb - user='{"id":123}' user?id=99 user?id
+	$ sdb - user='{"id":123}' user:id=99 user:id
 	99
 
 Using the commandline without any disk database:
@@ -88,27 +91,3 @@ Using the commandline without any disk database:
 Remove the database
 
 	$ rm -f d
-
-Backups
--------
-To make a backup of a database to move it between different boxes use the textual format:
-
-	$ sdb my.db | xz > my.xz
-	$ du -hs my.*
-	my.db        3.9M
-	my.xz        5K
-
-Using ascii+xz is the best option for storing compressed sdb databases:
-
-	$ gzip < my.db | wc -c
-	  110768
-	$ xz -9 < my.db | wc -c
-	  37480
-	$ sdb my.db | xz -9 | wc -c
-	  5620
-	$ sdb my.db | lzma -9 | wc -c
-	  5575
-
-To import the database:
-
-	$ xz -d < my.xz | sdb my.db =

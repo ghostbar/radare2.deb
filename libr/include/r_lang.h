@@ -1,5 +1,5 @@
-#ifndef _INCLUDE_R_LANG_H_
-#define _INCLUDE_R_LANG_H_
+#ifndef R2_LANG_H
+#define R2_LANG_H
 
 #include <r_types.h>
 #include <r_list.h>
@@ -10,11 +10,15 @@ extern "C" {
 
 R_LIB_VERSION_HEADER(r_lang);
 
+typedef char* (*RCoreCmdStrCallback)(void* core, const char *s);
+
 typedef struct r_lang_t {
 	struct r_lang_plugin_t *cur;
 	void *user;
 	RList *defs;
 	RList *langs;
+	PrintfCallback printf;
+	RCoreCmdStrCallback cmd_str;
 } RLang;
 
 typedef struct r_lang_plugin_t {
@@ -38,7 +42,7 @@ typedef struct r_lang_def_t {
 } RLangDef;
 
 #ifdef R_API
-R_API RLang *r_lang_new();
+R_API RLang *r_lang_new(void);
 R_API void *r_lang_free(RLang *lang);
 R_API int r_lang_setup(RLang *lang);
 R_API int r_lang_add(RLang *lang, RLangPlugin *foo);

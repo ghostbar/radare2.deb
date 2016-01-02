@@ -6,8 +6,10 @@
 #include "rangstr.h"
 
 void rangstr_print (Rangstr *s) {
-	/*printf ("%.%s", s->t-s->f, s->p); */
-	if (s->p) fwrite (s->p+s->f, s->t-s->f, 1, stdout);
+	if (s && s->p) {
+		(void) fwrite (s->p+s->f,
+			s->t-s->f, 1, stdout);
+	}
 }
 
 Rangstr rangstr_new (const char *s) {
@@ -70,6 +72,9 @@ Rangstr rangstr_news (const char *s, ut16 *res, int i) {
 int rangstr_cmp (Rangstr *a, Rangstr *b) {
 	int la = a->t-a->f;
 	int lb = b->t-b->f;
+	int lbz = strlen (b->p + b->f);
+	if (lbz<lb)
+		lb = lbz;
 	if (la != lb)
 		return 1;
 	return memcmp (a->p+a->f, b->p+b->f, la);
@@ -77,7 +82,7 @@ int rangstr_cmp (Rangstr *a, Rangstr *b) {
 
 int rangstr_find (Rangstr* a, char ch) {
 	size_t i = a->f;
-	while (a->p[i] && i<a->t && a->p[i] != ch) i++;
+	while (i<a->t && a->p[i] && a->p[i] != ch) i++;
 	return a->p[i]? (int)i: -1;
 }
 

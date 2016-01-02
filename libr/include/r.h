@@ -1,5 +1,5 @@
-#ifndef _INCLUDE_R_
-#define _INCLUDE_R_
+#ifndef R2_H
+#define R2_H
 
 #include "r_cons.h"
 #include "r_hash.h"

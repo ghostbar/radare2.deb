@@ -40,7 +40,7 @@ static void emit_init (REgg *egg) {
 
 static char *emit_syscall (REgg *egg, int nargs) {
 	char p[512];
-	if (attsyntax) 
+	if (attsyntax)
 		return strdup (": mov $`.arg`, %"R_AX"\n: "SYSCALL_ATT"\n");
 	switch (egg->os) {
 	case R_EGG_OS_LINUX:
@@ -72,11 +72,11 @@ static void emit_frame (REgg *egg, int sz) {
 	if (sz<1)
 		return;
 	if (attsyntax)
-		r_egg_printf (egg, 
+		r_egg_printf (egg,
 		"  push %%"R_BP"\n"
 		"  mov %%"R_SP", %%"R_BP"\n"
 		"  sub $%d, %%"R_SP"\n", sz);
-	else r_egg_printf (egg, 
+	else r_egg_printf (egg,
 		"  push "R_BP"\n"
 		"  mov "R_BP", "R_SP"\n"
 		"  sub "R_SP", %d\n", sz);
@@ -145,21 +145,28 @@ static void emit_string(REgg *egg, const char *dstvar, const char *str, int j) {
 		p = r_egg_mkvar (egg, str2, dstvar, i+BPOFF);
 		if (attsyntax) r_egg_printf (egg, "  movl $0x%x, %s\n", M32(*n), p);
 		else r_egg_printf (egg, "  mov %s, 0x%x\n", p, M32(*n));
+		free (p);
 		j -= 4;
 	}
 #undef M32
+
 	/* zero */
 	p = r_egg_mkvar (egg, str2, dstvar, i+BPOFF);
 	if (attsyntax) r_egg_printf (egg, "  movl $0, %s\n", p);
 	else r_egg_printf (egg, "  mov %s, 0\n", p);
+	free (p);
 
 	/* store pointer */
 	p = r_egg_mkvar (egg, str2, dstvar, j+4+BPOFF);
 	if (attsyntax) r_egg_printf (egg, "  lea %s, %%"R_AX"\n", p);
 	else r_egg_printf (egg, "  lea "R_AX", %s\n", p);
+	free (p);
+
 	p = r_egg_mkvar (egg, str2, dstvar, 0);
 	if (attsyntax) r_egg_printf (egg, "  mov %%"R_AX", %s\n", p);
 	else r_egg_printf (egg, "  mov %s, "R_AX"\n", p);
+	free (p);
+
 #undef BPOFF
 #if 0
 	char *p, str2[64];
@@ -342,6 +349,7 @@ static void emit_branch(REgg *egg, char *b, char *g, char *e, char *n, int sz, c
 		r_egg_printf (egg, "  cmp "R_AX", %s\n", p);
 	}
 	// if (context>0)
+	free (p);
 	r_egg_printf (egg, "  %s %s\n", op, dst);
 }
 
@@ -396,7 +404,7 @@ static void emit_mathop(REgg *egg, int ch, int vs, int type, const char *eq, con
 	} else {
 		if (eq == NULL) eq = R_AX;
 		if (p == NULL) p = R_AX;
-	// TODO: 
+	// TODO:
 #if 0
 		eprintf ("TYPE = %c\n", type);
 		eprintf ("  %s%c %c%s, %s\n", op, vs, type, eq, p);

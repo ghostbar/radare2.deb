@@ -94,7 +94,7 @@ static int oc = '\n';
 static int mode = NORMAL;
 
 static char *find_include(const char *prefix, const char *file) {
-	char *pfx, *ret, *env = r_sys_getenv (R_EGG_INCDIR_ENV);
+	char *pfx = NULL, *ret = NULL, *env = r_sys_getenv (R_EGG_INCDIR_ENV);
 	//eprintf ("find_include (%s,%s)\n", prefix, file);
 	if (!prefix) prefix = "";
 	if (*prefix=='$') {
@@ -102,7 +102,10 @@ static char *find_include(const char *prefix, const char *file) {
 		pfx = out? out: strdup ("");
 	} else {
 		pfx = strdup (prefix);
-		if (!pfx) return NULL;
+		if (!pfx) {
+			free (env);
+			return NULL;
+		}
 	}
 
 	if (env) {
@@ -112,6 +115,7 @@ static char *find_include(const char *prefix, const char *file) {
 		while (str) {
 			if (ptr)
 				*ptr = 0;
+			free (ret);
 			ret = r_str_concatf (NULL, "%s/%s", pfx, file);
 			{
 				char *filepath = r_str_concatf (NULL, "%s/%s/%s", str, pfx, file);
@@ -119,6 +123,7 @@ static char *find_include(const char *prefix, const char *file) {
 				if (r_file_exists (filepath)) {
 					free (env);
 					free (pfx);
+					free (ret);
 					return filepath;
 				}
 				free (filepath);
@@ -134,12 +139,16 @@ static char *find_include(const char *prefix, const char *file) {
 }
 
 R_API void r_egg_lang_include_path (REgg *egg, const char *path) {
+	char *tmp_ptr = NULL;
 	char *env = r_sys_getenv (R_EGG_INCDIR_ENV);
 	if (!env || !*env) {
 		r_egg_lang_include_init (egg);
+		free (env);
 		env = r_sys_getenv (R_EGG_INCDIR_ENV);
+		tmp_ptr = env;
 	}
 	env = r_str_concatf (NULL, "%s:%s", path, env);
+	free (tmp_ptr);
 	r_sys_setenv (R_EGG_INCDIR_ENV, env);
 	free (env);
 }
@@ -197,7 +206,7 @@ static char *get_end_frame_label(REgg *egg) {
 #endif
 
 static void rcc_pusharg(REgg *egg, char *str) {
-	REggEmit *e = egg->emit;
+	REggEmit *e = egg->remit;
 	char buf[64], *p = r_egg_mkvar (egg, buf, str, 0);
 	if (!p) return;
 	// TODO: free (ctxpush[context]);
@@ -206,10 +215,11 @@ static void rcc_pusharg(REgg *egg, char *str) {
 	if (pushargs)
 		e->push_arg (egg, varxs, nargs, p);
 	//ctxpush[context+nbrackets] = strdup(str); // use nargs??? (in callname)
+	free (p);
 }
 
 static void rcc_element(REgg *egg, char *str) {
-	REggEmit *e = egg->emit;
+	REggEmit *e = egg->remit;
 	char *p = strrchr (str, ',');
 	int num, num2;
 
@@ -254,7 +264,7 @@ static void rcc_element(REgg *egg, char *str) {
 			p = strchr (str, ',');
 			if (p) {
 				*p='\0';
-				num2 = atoi (p+1); 
+				num2 = atoi (p+1);
 			} else num2 = 0;
 			num = atoi (str) + num2;
 			stackframe = num;
@@ -270,7 +280,7 @@ static void rcc_element(REgg *egg, char *str) {
 static void rcc_pushstr(REgg *egg, char *str, int filter) {
         int dotrim = 1;
         int i, j, len;
-	REggEmit *e = egg->emit;
+	REggEmit *e = egg->remit;
 
         e->comment (egg, "encode %s string (%s) (%s)",
                 filter? "filtered": "unfiltered", str, callname);
@@ -298,13 +308,13 @@ static void rcc_pushstr(REgg *egg, char *str, int filter) {
 
 R_API char *r_egg_mkvar(REgg *egg, char *out, const char *_str, int delta) {
 	int i, idx, len, qi;
-	char *str, foo[32], *q, *ret;
+	char *oldstr = NULL, *str = NULL, foo[32], *q, *ret = NULL;
 
 	delta += stackfixed; // XXX can be problematic
 	if (_str == NULL)
 		return NULL; /* fix segfault, but not badparsing */
 	/* XXX memory leak */
- 	ret = str = strdup (skipspaces (_str));
+	ret = str = oldstr = strdup (skipspaces (_str));
 	//if (num || str[0]=='0') { sprintf(out, "$%d", num); ret = out; }
 	if ( (q = strchr (str, ':')) ) {
 		*q = '\0';
@@ -316,8 +326,7 @@ R_API char *r_egg_mkvar(REgg *egg, char *out, const char *_str, int delta) {
 		str++;
 	} else varxs = 0;
 	if (str[0]=='.') {
-		REggEmit *e = egg->emit;
-		ret = out;
+		REggEmit *e = egg->remit;
 		idx = atoi (str+4) + delta + e->size;
 		if (!memcmp (str+1, "ret", 3)) {
 			strcpy (out, e->retvar);
@@ -333,7 +342,7 @@ R_API char *r_egg_mkvar(REgg *egg, char *out, const char *_str, int delta) {
 		if (!memcmp (str+1, "arg", 3)) {
 			if (str[4]) {
 				if (stackframe == 0) {
-					e->get_var (egg, 1, out, 4); //idx-4); 
+					e->get_var (egg, 1, out, 4); //idx-4);
 				} else {
 					e->get_var (egg, 2, out, idx+4);
 				}
@@ -341,8 +350,10 @@ R_API char *r_egg_mkvar(REgg *egg, char *out, const char *_str, int delta) {
 				/* TODO: return size of syscall */
 				if (callname) {
 					for (i=0; i<nsyscalls; i++)
-						if (!strcmp (syscalls[i].name, callname))
+						if (!strcmp (syscalls[i].name, callname)) {
+							free (oldstr);
 							return syscalls[i].arg;
+						}
 					eprintf ("Unknown arg for syscall '%s'\n", callname);
 				} else eprintf ("NO CALLNAME '%s'\n", callname);
 			}
@@ -353,9 +364,10 @@ R_API char *r_egg_mkvar(REgg *egg, char *out, const char *_str, int delta) {
 				snprintf (out, 32, "%%%s", e->regs (egg, atoi (str+4)));
 			else snprintf (out, 32, "%s", e->regs (egg, atoi (str+4)));
 		} else {
-			ret = str; /* TODO: show error, invalid var name? */
+			out = str; /* TODO: show error, invalid var name? */
 			eprintf ("Something is really wrong\n");
 		}
+		ret = strdup(out);
 	} else if (*str=='"' || *str=='\'') {
 		int mustfilter = *str=='"';
 		/* TODO: check for room in stackfixed area */
@@ -366,17 +378,18 @@ R_API char *r_egg_mkvar(REgg *egg, char *out, const char *_str, int delta) {
 				stackfixed, len);
 		str[len]='\0';
 		snprintf (foo, sizeof (foo)-1, ".fix%d", nargs*16); /* XXX FIX DELTA !!!1 */
+		free(dstvar);
 		dstvar = strdup (skipspaces (foo));
 		rcc_pushstr (egg, str, mustfilter);
 		ret = r_egg_mkvar (egg, out, foo, 0);
 	}
-	//free ((void *)_str);
+	free (oldstr);
 	return ret;
 }
 
 static void rcc_fun(REgg *egg, const char *str) {
 	char *ptr, *ptr2;
-	REggEmit *e = egg->emit;
+	REggEmit *e = egg->remit;
 	str = skipspaces (str);
 	if (CTX) {
 		ptr = strchr (str, '=');
@@ -390,7 +403,7 @@ static void rcc_fun(REgg *egg, const char *str) {
 		} else {
 			str = skipspaces (str);
 			rcc_set_callname (skipspaces (str));
-			egg->emit->comment (egg, "rcc_fun %d (%s)",
+			egg->remit->comment (egg, "rcc_fun %d (%s)",
 				CTX, callname);
 		}
 	} else {
@@ -502,7 +515,7 @@ static void set_nested(REgg *egg, const char *s) {
 }
 
 static void rcc_context(REgg *egg, int delta) {
-	REggEmit *emit = egg->emit;
+	REggEmit *emit = egg->remit;
 	char str[64];
 
 	nestedi[CTX-1]++;
@@ -515,8 +528,8 @@ static void rcc_context(REgg *egg, int delta) {
 	lastctxdelta = delta;
 
 	if (CTX == 0 && delta < 0) {
-if (mode != NAKED)
-		emit->frame_end (egg, stackframe+stackfixed, nbrackets);
+		if (mode != NAKED)
+			emit->frame_end (egg, stackframe+stackfixed, nbrackets);
 		if (mode == NORMAL) /* XXX : commenting this makes hello.r unhappy! TODO: find a cleaner alternative */
 			stackframe = 0;
 		mode = NORMAL;
@@ -617,7 +630,7 @@ eprintf ("STACKTRAF %d\n", stackframe);
 			/* register */
 			if (dstval != NULL && dstvar != NULL) {
 				dstval[ndstval]='\0';
-				egg->emit->comment (egg, "data (%s)(%s)size=(%d)\n",
+				egg->remit->comment (egg, "data (%s)(%s)size=(%d)\n",
 					dstvar, dstval, stackframe);
 				r_egg_printf (egg, ".data\n");
 				for (str=dstval; is_space (*str); str++);
@@ -687,8 +700,8 @@ static int parseinlinechar(REgg *egg, char c) {
 /* TODO: split this function into several ones..quite long fun */
 static void rcc_next(REgg *egg) {
 	const char *ocn;
-	REggEmit *e = egg->emit;
-	char *str, *p, *ptr, buf[64];
+	REggEmit *e = egg->remit;
+	char *str = NULL, *p, *ptr, buf[64];
 	int i;
 
 	if (setenviron) {
@@ -729,7 +742,7 @@ static void rcc_next(REgg *egg) {
 			if (nargs != 1) {
 				eprintf ("Invalid number of arguments for goto()\n");
 				return;
-			} 
+			}
 			e->jmp (egg, ctxpush[CTX], 0);
 			rcc_reset_callname ();
 			return;
@@ -742,10 +755,14 @@ static void rcc_next(REgg *egg) {
 		ptr = strchr (callname, '=');
 		if (ptr) {
 			*ptr = '\0';
-			ocn = ptr+1;
+			//ocn = ptr+1; // what is the point of this?
 		}
 		ocn = skipspaces (callname);
 		str = r_egg_mkvar (egg, buf, ocn, 0);
+		if (!str) {
+			eprintf ("Cannot mkvar\n");
+			return;
+		}
 		if (*ocn=='.')
 			e->call (egg, str, 1);
 		else
@@ -819,6 +836,7 @@ static void rcc_next(REgg *egg) {
 		if (ocn) { // Used to call .var0()
 			/* XXX: Probably buggy and wrong */
 			*buf = 0;
+			free (str);
 			str = r_egg_mkvar (egg, buf, ocn, 0);
 			if (*buf)
 				e->get_result (egg, buf);
@@ -826,13 +844,14 @@ static void rcc_next(REgg *egg) {
 		}
 		/* store result of call */
 		if (dstvar) {
-if (mode != NAKED) {
-			*buf = 0;
-			str = r_egg_mkvar (egg, buf, dstvar, 0);
-			if (*buf == 0)
-				eprintf ("Cannot resolve variable '%s'\n", dstvar);
-			else e->get_result (egg, buf);
-}
+			if (mode != NAKED) {
+				*buf = 0;
+				free (str);
+				str = r_egg_mkvar (egg, buf, dstvar, 0);
+				if (*buf == 0)
+					eprintf ("Cannot resolve variable '%s'\n", dstvar);
+				else e->get_result (egg, buf);
+			}
 			R_FREE (dstvar);
 		}
 		rcc_reset_callname ();
@@ -857,11 +876,15 @@ if (mode != NAKED) {
 					/* XXX this is a hack .. must be integrated with pusharg */
 					if (varxs=='&')
 						e->load_ptr (egg, eq);
-					eq = NULL;
+					if (eq) {
+						free (eq);
+						eq = NULL;
+					}
 					type = ' ';
 				} else type = '$';
 				vs = 'l'; // XXX: add support for != 'l' size
 				e->mathop (egg, ch, vs, type, eq, p);
+				free(p);
 			} else {
 				if (!strcmp (ptr, "break")) { // handle 'break;'
 					e->trap (egg);
@@ -872,11 +895,12 @@ if (mode != NAKED) {
 			}
 		}
 	}
+	free (str);
 }
 
 R_API int r_egg_lang_parsechar(REgg *egg, char c) {
-	REggEmit *e = egg->emit;
-	char *ptr, str[64];
+	REggEmit *e = egg->remit;
+	char *ptr, str[64], *tmp_ptr = NULL;
 	if (c=='\n') {
 		line++;
 		elem_n = 0;
@@ -888,7 +912,7 @@ R_API int r_egg_lang_parsechar(REgg *egg, char c) {
 			oc = c;
 			return 0;
 		}
-		skipline = 0; 
+		skipline = 0;
 	}
 	if (mode == DATA)
 		return parsedatachar (egg, c);
@@ -901,7 +925,9 @@ R_API int r_egg_lang_parsechar(REgg *egg, char c) {
 				if (c == '`') {
 					elem[elem_n] = 0;
 					elem_n = 0;
-					r_egg_printf (egg, "%s", r_egg_mkvar (egg, str, elem, 0));
+					tmp_ptr = r_egg_mkvar (egg, str, elem, 0);
+					r_egg_printf (egg, "%s", tmp_ptr);
+					free (tmp_ptr);
 					quotelinevar = 0;
 				} else elem[elem_n++] = c;
 			} else {

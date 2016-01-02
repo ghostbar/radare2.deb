@@ -58,8 +58,8 @@ strupr (a)
 
   while (*a != '\0')
     {
-      if (islower (*a))
-	*a = toupper (*a);
+      if (islower ((unsigned char)*a))
+	*a = toupper ((unsigned char)*a);
       ++a;
     }
 
@@ -69,8 +69,8 @@ strupr (a)
 char * strlwr (char *a) {
 	char *ret = a;
 	while (*a != '\0') {
-		if (isupper (*a))
-			*a = tolower (*a);
+		if (isupper ((unsigned char)*a))
+			*a = tolower ((unsigned char)*a);
 		++a;
 	}
 	return ret;
@@ -117,7 +117,7 @@ static void DecodeRG(int index,int datasize,int type) {
   else {
     da->error=DAE_INTERN; return; };
   if (mode>=DISASM_FILE) {
-    strcpy(name,regname[sizeindex][index]);
+    strncpy(name,regname[sizeindex][index], sizeof(name)-1);
     if (lowercase) strlwr(name);
     if (type<PSEUDOOP)                 // Not a pseudooperand
       nresult+=sprintf(da->result+nresult,"%s",name);
@@ -418,7 +418,7 @@ static void DecodeMR(int type) {
       da->indexed=1;
       j=sib & 0x07;
       if (mode>=DISASM_FILE) {
-        strcpy(s,regname[2][j]);
+        strncpy(s,regname[2][j], TEXTLEN - 1);
         seg=addr32[j].defseg;
       };
     };
@@ -982,7 +982,7 @@ ulong Disasm(const unsigned char *src,ulong srcsize,ulong srcip,
         };
         name[i]='\0'; }
       else {
-        strcpy(name,pd->name);
+        strncpy(name,pd->name, TEXTLEN - 1);
         for (i=0; name[i]!='\0'; i++) {
           if (name[i]==',') {          // Use main mnemonic
             name[i]='\0'; break;
@@ -1160,7 +1160,7 @@ ulong Disasm(const unsigned char *src,ulong srcsize,ulong srcip,
           DecodeST(1,1); break;
         case PCX:                      // CX/ECX (pseudooperand)
           DecodeRG(GREG_ECX,cxsize,PCX); break;
-        case PDI:                      // EDI (pseudooperand in MMX extentions)
+        case PDI:                      // EDI (pseudooperand in MMX extensions)
           DecodeRG(GREG_EDI,4,PDI); break;
         default:
           da->error=DAE_INTERN;        // Unknown argument type
@@ -1282,4 +1282,3 @@ ulong Disasm(const unsigned char *src,ulong srcsize,ulong srcip,
   };
   return (srcsize-size);               // Returns number of recognized bytes
 };
-

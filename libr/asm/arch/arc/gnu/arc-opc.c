@@ -258,7 +258,7 @@ static const struct arc_operand arc_operands_a4[] =
 #define SYNTAX_LD (SYNTAX_ST + 1)
   { '3', 9, 0, ARC_OPERAND_FAKE | ARC_OPERAND_ERROR, insert_ld_syntax, extract_ld_syntax },
 
-/* Flag update bit (insertion is defered until we know how).  */
+/* Flag update bit (insertion is deferred until we know how).  */
 #define FLAG (SYNTAX_LD + 1)
   { 'f', 1, 8, ARC_OPERAND_SUFFIX, insert_flag, extract_flag },
 
@@ -528,7 +528,7 @@ static const struct arc_operand arc_operands_ac[] =
 #define COND_AC (FORCELIMM_AC + 1)
   { 'q', 5, 0, ARC_OPERAND_SUFFIX, insert_cond, extract_cond },
 
-/* flag update bit (insertion is defered until we know how) */
+/* flag update bit (insertion is deferred until we know how) */
 #define FLAG_AC (COND_AC + 1)
   { 'f', 1, 15, ARC_OPERAND_SUFFIX, insert_flag, extract_flag },
 
@@ -2310,7 +2310,7 @@ extract_flag (arc_insn *insn,
   val = arc_opcode_lookup_suffix (operand, 1);
   if (opval != NULL && val != NULL)
     *opval = val;
-  return val->value;
+  return val?val->value:0;
 }
 
 /* Extract the condition code (if it exists).

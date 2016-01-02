@@ -1,16 +1,18 @@
-.TH RAHASH2 1
-.SH NAME
-hasher2 \- block based hashing utility
-.Dd Nov 11, 2013
+.Dd Feb 6, 2015
+.Dt RAHASH2 1
+.Sh NAME
+.Nm hasher2
+.Nd block based hashing utility
 .Sh SYNOPSIS
 .Nm hasher2
-.Op Fl heBrkv
+.Op Fl BdDehjrkv
 .Op Fl a Ar algorithm
 .Op Fl b Ar size
 .Op Fl s Ar string
 .Op Fl i Ar iterations
 .Op Fl S Ar seed
 .Op Fl f Ar from
+.Op Fl x Ar hexstr
 .Op Fl t Ar to
 .Op [file] ...
 .Sh DESCRIPTION
@@ -25,13 +27,19 @@ This command can be used to calculate hashes of a certain part of a file or a co
 This is the command used by the '#' command of radare.
 .Bl -tag -width Fl
 .It Fl a Ar algo
-Select an algorithm for the hashing. Valid values are md5, crc32 and sha1
+Select an algorithm for the hashing. Valid values are listed in: rahash2 -L
 .It Fl b Ar blocksize
 Define the block size
+.It Fl d
+encoDe base64 string or file
+.It Fl D
+Decode base64 string or file
 .It Fl e
 Use little endian to display checksums
 .It Fl i Ar iters
 Apply the hash Iters times to itself+seed
+.It Fl j
+Show output in JSON (see -r)
 .It Fl B
 Show per-block hash
 .It Fl k
@@ -46,6 +54,8 @@ Start hashing at given address
 Stop hashing at given address
 .It Fl r
 Show output in radare commands
+.It Fl x Ar hexstr
+Hash the given hexpair string instead of using the 'source' and 'hash-file' arguments.
 .It Fl v
 Show version information
 .It Fl h

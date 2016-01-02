@@ -61,7 +61,13 @@
 
 static const struct {
 // XXX: this can be ut32 ...
-   ut32 max_entries, size, rehash;
+   //ut32 max_entries, size, rehash;
+#if HT64
+   ut64
+#else
+   ut32
+#endif
+   max_entries, size, rehash;
 } hash_sizes[] = {
     { 2,		5,		3	  },
     { 4,		7,		5	  },
@@ -166,7 +172,10 @@ R_API RHT* ht_(new)(void) {
 }
 
 R_API void ht_(free)(RHT *ht) {
-	if (ht) free (ht->table), free (ht);
+	if (ht) {
+		free (ht->table);
+		free (ht);
+	}
 }
 
 R_API void *ht_(lookup)(RHT *ht, utH hash) {

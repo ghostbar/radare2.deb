@@ -141,6 +141,7 @@ extract_fields (aarch64_insn code, aarch64_insn mask, ...)
       value <<= field->width;
       value |= extract_field (kind, code, mask);
     }
+  va_end (va);
   return value;
 }
 
@@ -1217,8 +1218,8 @@ decode_sizeq (aarch64_inst *inst)
   if (debug_dump)
     {
       int i;
-      for (i = 0; candidates[i] != AARCH64_OPND_QLF_NIL
-	   && i < AARCH64_MAX_QLF_SEQ_NUM; ++i)
+      for (i = 0; i < AARCH64_MAX_QLF_SEQ_NUM
+	   && candidates[i] != AARCH64_OPND_QLF_NIL; ++i)
 	DEBUG_TRACE ("qualifier %d: %s", i,
 		     aarch64_get_qualifier_name(candidates[i]));
       DEBUG_TRACE ("%d, %d", (int)value, (int)mask);
@@ -2318,7 +2319,7 @@ print_insn_aarch64 (bfd_vma pc,
 	    n = last_mapping_sym;
 
 	  /* No mapping symbol found at this address.  Look backwards
-	     for a preceeding one.  */
+	     for a preceding one.  */
 	  for (; n >= 0; n--)
 	    {
 	      if (get_sym_code_type (info, n, &type))

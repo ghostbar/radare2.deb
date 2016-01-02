@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2013 - pancake */
+/* radare - LGPL - Copyright 2009-2015 - pancake */
 
 static int cmd_zign(void *data, const char *input) {
 	RCore *core = (RCore *)data;
@@ -9,13 +9,37 @@ static int cmd_zign(void *data, const char *input) {
 	char *ptr, *name;
 
 	switch (*input) {
+	case 'B':
+		if (input[1]==' ' && input[2]) {
+			ut8 buf[128];
+			ut64 addr = core->offset;
+			int size = 32;
+			ptr = strchr (input+2, ' ');
+			if (ptr) {
+				size = atoi (ptr+1);
+				if (size<1) size = 1;
+			}
+			if (r_io_read_at (core->io, core->offset, buf,
+					sizeof (buf)) == sizeof (buf)) {
+				RFlagItem *flag = r_flag_get_i (core->flags, addr);
+				if (flag) {
+					name = flag->name;
+					r_cons_printf ("zb %s ", name);
+					len = R_MIN (size, sizeof (buf));
+					for (i=0; i<len; i++)
+						r_cons_printf ("%02x", buf[i]);
+					r_cons_newline ();
+				} else eprintf ("Unnamed function at 0x%08"PFMT64x"\n", addr);
+			} else eprintf ("Cannot read at 0x%08"PFMT64x"\n", addr);
+		} else eprintf ("Usage: zB [size] @@ sym*\nNote: Use zn and zn-");
+		break;
 	case 'g':
 		if (input[1]==' ' && input[2]) {
 			int fdold = r_cons_singleton ()->fdout;
 			ptr = strchr (input+2, ' ');
 			if (ptr) {
 				*ptr = '\0';
-				fd = open (ptr+1, O_RDWR|O_CREAT|O_TRUNC, 0644);
+				fd = r_sandbox_open (ptr+1, O_RDWR|O_CREAT|O_TRUNC, 0644);
 				if (fd == -1) {
 					eprintf ("Cannot open %s in read-write\n", ptr+1);
 					return R_FALSE;
@@ -23,22 +47,25 @@ static int cmd_zign(void *data, const char *input) {
 				r_cons_singleton ()->fdout = fd;
 				r_cons_strcat ("# Signatures\n");
 			}
-			r_cons_printf ("zp %s\n", input+2);
+			r_cons_printf ("zn %s\n", input+2);
 			r_list_foreach (core->anal->fcns, iter, fcni) {
 				ut8 buf[128];
-				if (r_io_read_at (core->io, fcni->addr, buf, sizeof (buf)) == sizeof (buf)) {
-					RFlagItem *flag = r_flag_get_i (core->flags, fcni->addr);
+				if (r_io_read_at (core->io, fcni->addr, buf,
+						sizeof (buf)) == sizeof (buf)) {
+					RFlagItem *flag = r_flag_get_i (
+						core->flags, fcni->addr);
 					if (flag) {
 						name = flag->name;
 						r_cons_printf ("zb %s ", name);
-						len = (fcni->size>sizeof (buf))?sizeof (buf):fcni->size;
+						len = (fcni->size > sizeof (buf))?
+							sizeof (buf): fcni->size;
 						for (i=0; i<len; i++)
 							r_cons_printf ("%02x", buf[i]);
 						r_cons_newline ();
 					} else eprintf ("Unnamed function at 0x%08"PFMT64x"\n", fcni->addr);
 				} else eprintf ("Cannot read at 0x%08"PFMT64x"\n", fcni->addr);
 			}
-			r_cons_strcat ("zp-\n");
+			r_cons_strcat ("zn-\n");
 			if (ptr) {
 				r_cons_flush ();
 				r_cons_singleton ()->fdout = fdold;
@@ -46,12 +73,12 @@ static int cmd_zign(void *data, const char *input) {
 			}
 		} else eprintf ("Usage: zg libc [libc.sig]\n");
 		break;
-	case 'p':
+	case 'n':
 		if (!input[1])
-			r_cons_printf ("%s", core->sign->prefix);
+			r_cons_printf ("%s\n", core->sign->ns);
 		else if (!strcmp ("-", input+1))
-			r_sign_prefix (core->sign, "");
-		else r_sign_prefix (core->sign, input+2);
+			r_sign_ns (core->sign, "");
+		else r_sign_ns (core->sign, input+2);
 		break;
 	case 'a':
 	case 'b':
@@ -71,7 +98,10 @@ static int cmd_zign(void *data, const char *input) {
 	case '-':
 		if (input[1] == '*')
 			r_sign_reset (core->sign);
-		else eprintf ("TODO\n");
+		else {
+			int i = r_sign_remove_ns(core->sign, input+1);
+			r_cons_printf ("%d zignatures removed\n", i);
+		}
 		break;
 	case '/':
 		{
@@ -92,7 +122,7 @@ static int cmd_zign(void *data, const char *input) {
 					fin = ini+r_num_math (core->num, input+2);
 				}
 			} else {
-				s = r_io_section_get (core->io, core->io->off);
+				s = r_io_section_vget (core->io, core->io->off);
 				if (s) {
 					ini = core->io->va?s->vaddr:s->offset;
 					fin = ini + (core->io->va?s->vsize:s->size);
@@ -108,20 +138,27 @@ static int cmd_zign(void *data, const char *input) {
 			len = fin-ini;
 			buf = malloc (len);
 			if (buf != NULL) {
+				int count = 0;
 				eprintf ("Ranges are: 0x%08"PFMT64x" 0x%08"PFMT64x"\n", ini, fin);
-				r_cons_printf ("f-sign*\n");
+				r_cons_printf ("fs sign\n");
+				r_cons_break (NULL, NULL);
 				if (r_io_read_at (core->io, ini, buf, len) == len) {
 					for (idx=0; idx<len; idx++) {
+						if (r_cons_singleton ()->breaked)
+							break;
 						si = r_sign_check (core->sign, buf+idx, len-idx);
 						if (si) {
+							count++;
 							if (si->type == 'f')
 								r_cons_printf ("f sign.fun_%s_%d @ 0x%08"PFMT64x"\n",
 									si->name, idx, ini+idx); //core->offset);
 							else r_cons_printf ("f sign.%s @ 0x%08"PFMT64x"\n",
 								si->name, ini+idx); //core->offset+idx);
+							eprintf ("- Found %d matching function signatures\r", count);
 						}
 					}
 				} else eprintf ("Cannot read %d bytes at 0x%08"PFMT64x"\n", len, ini);
+				r_cons_break_end ();
 				free (buf);
 			} else eprintf ("Cannot alloc %d bytes\n", len);
 		}
@@ -130,25 +167,47 @@ static int cmd_zign(void *data, const char *input) {
 	case '*':
 		r_sign_list (core->sign, (*input=='*'));
 		break;
+	case 'F': {
+		if (input[1] == 'd') {
+			if(input[2] != ' ') {
+				eprintf("Usage: zFd <file>\n");
+				return R_FALSE;
+			}
+			r_sign_flirt_dump (core->anal, input + 3);
+		} else {
+			if(input[1] != ' ') {
+				eprintf("Usage: zF <file>\n");
+				return R_FALSE;
+			}
+			r_sign_flirt_scan (core->anal, input + 2);
+		}
+	}
+		break;
 	default:
-	case '?':
-		r_cons_printf (
-			"Usage: z[abcp/*-] [arg]\n"
-			" z              show status of zignatures\n"
-			" z*             display all zignatures\n"
-			" zp             display current prefix\n"
-			" zp prefix      define prefix for following zignatures\n"
-			" zp-            unset prefix\n"
-			" z-prefix       unload zignatures prefixed as\n"
-			" z-*            unload all zignatures\n"
-			" za ...         define new zignature for analysis\n"
-			" zf name fmt    define function zignature (fast/slow, args, types)\n"
-			" zb name bytes  define zignature for bytes\n"
-			" zh name bytes  define function header zignature\n"
-			" zg pfx [file]  generate signature for current file\n"
-			" .zc @ fcn.foo  flag signature if matching (.zc@@fcn)\n"
-			" z/ [ini] [end] search zignatures between these regions\n"
-			"NOTE: bytes can contain '.' (dots) to specify a binary mask\n");
+	case '?':{
+		const char* help_msg[] = {
+			"Usage:", "z[abcp/*-] [arg]", "Zignatures",
+			"z", "", "show status of zignatures",
+			"z*", "", "display all zignatures",
+			"z-", "namespace", "Unload zignatures in namespace",
+			"z-*", "", "unload all zignatures",
+			"z/", "[ini] [end]", "search zignatures between these regions",
+			"za", " ...", "define new zignature for analysis",
+			"zb", " name bytes", "define zignature for bytes",
+			"zB", " size", "Generate zignatures for current offset/flag",
+			"zc", " @ fcn.foo", "flag signature if matching (.zc@@fcn)",
+			"zf", " name fmt", "define function zignature (fast/slow, args, types)",
+			"zF", " file", "Open a flirt signature file and scan opened file",
+			"zFd", " file", "Dump a flirt signature",
+			"zg", " namespace [file]", "Generate zignatures for current file",
+			"zh", " name bytes", "define function header zignature",
+			"zn", " namespace", "Define namespace for following zignatures (until zn-)",
+			"zn", "", "Display current namespace",
+			"zn-", "", "Unset namespace",
+			"NOTE:", "", "bytes can contain '.' (dots) to specify a binary mask",
+			NULL};
+			r_core_cmd_help (core, help_msg);
+			 }
 		break;
 	}
 	return 0;

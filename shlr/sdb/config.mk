@@ -1,7 +1,9 @@
 DESTDIR?=
 PREFIX?=/usr
 
-SDBVER=0.8.0.rc2
+SDBVER=0.9.6
+
+BUILD_MEMCACHE=0
 
 INSTALL?=install
 
@@ -21,54 +23,87 @@ INSTALL_MAN=$(INSTALL) -m 444
 INSTALL_LIB=$(INSTALL) -c
 endif
 
-CFLAGS_STD?=-D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE=700
+CFLAGS_STD=-std=gnu99 -D_XOPEN_SOURCE=700 -D_POSIX_C_SOURCE=200809L 
 #CFLAGS+=-Wno-initializer-overrides
 CFLAGS+=${CFLAGS_STD}
 
 # Hack to fix clang warnings
+ifeq ($(CC),cc)
 CFLAGS+=$(shell gcc -v 2>&1 | grep -q LLVM && echo '-Wno-initializer-overrides')
+endif
 CFLAGS+=-Wall
 #CFLAGS+=-O3
 #CFLAGS+=-ggdb -g -Wall -O0
+CFLAGS+=-g
+LDFLAGS+=-g
 
 HAVE_VALA=#$(shell valac --version 2> /dev/null)
 # This is hacky
 HOST_CC?=gcc
 RANLIB?=ranlib
 OS?=$(shell uname)
+OSTYPE?=$(shell uname -s)
 ARCH?=$(shell uname -m)
 
+AR?=ar
+CC?=gcc
+EXEXT=
+SOEXT=.so
+
+ifneq (,$(findstring MINGW32,${OSTYPE}))
+OS=w32
+CC=gcc
+else
 ifeq (${OS},w32)
 WCP?=i386-mingw32
 CC=${WCP}-gcc
 AR?=${WCP}-ar
-CFLAGS_SHARED?=-fPIC
+endif
+endif
+
+#LDFLAGS_SHARED?=-fPIC -shared
+LDFLAGS_SHARED?=-shared
+
+ifeq (${OS},w32)
 EXEXT=.exe
-else
-CFLAGS_SHARED?=-fPIC
-# -fvisibility=hidden
-AR?=ar
-CC?=gcc
-EXEXT=
+SOEXT=.dll
+LDFLAGS_SHARED=-shared
 endif
 
 # create .d files
 CFLAGS+=-MMD
 
+ifeq (${OS},w32)
+OSTYPE=MINGW32
+endif
+
 ifeq (${OS},Darwin)
 SOEXT=dylib
 SOVER=dylib
 LDFLAGS+=-dynamic
-LDFLAGS_SHARED?=-fPIC -shared
- ifeq (${ARCH},i386)
-   #CC+=-arch i386 
-   CC+=-arch x86_64
- endif
+  ifeq (${ARCH},i386)
+#CC+=-arch i386
+CC+=-arch x86_64
+  endif
 else
+  ifneq (,$(findstring CYGWIN,${OSTYPE}))
+CFLAGS+=-D__CYGWIN__=1
+SOEXT=dll
+SOVER=${SOEXT}
+LDFLAGS_SHARED?=-shared
+  else
+    ifneq (,$(findstring MINGW32,${OSTYPE}))
+CFLAGS+=-DMINGW32=1
+SOEXT=dll
+SOVER=${SOEXT}
+    else
+CFLAGS+=-fPIC
 SOVERSION=0
 SOEXT=so
 SOVER=${SOEXT}.${SDBVER}
-LDFLAGS_SHARED?=-fPIC -shared
+LDFLAGS_SHARED?=-fPIC 
+    endif
+  endif
 LDFLAGS_SHARED+=-Wl,-soname,libsdb.so.$(SOVERSION)
 endif
 

@@ -1,5 +1,5 @@
-#ifndef _INCLUDE_BIN_DWARF_H_
-#define _INCLUDE_BIN_DWARF_H_
+#ifndef R2_BIN_DWARF_H
+#define R2_BIN_DWARF_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -116,6 +116,8 @@ extern "C" {
 #define DW_TAG_type_unit                0x41  /* DWARF4 */
 #define DW_TAG_rvalue_reference_type    0x42  /* DWARF4 */
 #define DW_TAG_template_alias           0x43  /* DWARF4 */
+
+#define DW_TAG_LAST                     0x44  // correct ?
 #define DW_TAG_lo_user			0x4080
 #define DW_TAG_hi_user			0xffff
 
@@ -464,8 +466,17 @@ extern "C" {
 #define DW_LANG_UPC			0x0012
 #define DW_LANG_D			0x0013
 #define DW_LANG_Python			0x0014
+#define DW_LANG_Rust			0x001c
+#define DW_LANG_C11			0x001d
+#define DW_LANG_Swift			0x001e
+#define DW_LANG_Julia			0x001f
+#define DW_LANG_Dylan			0x0020
+#define DW_LANG_C_plus_plus_14		0x0021
+#define DW_LANG_Fortran03		0x0022
+#define DW_LANG_Fortran08		0x0023
 #define DW_LANG_lo_user			0x8000
 #define DW_LANG_hi_user			0xffff
+
 
 #define DW_ID_case_sensitive		0x00
 #define DW_ID_up_case			0x01
@@ -553,7 +564,7 @@ typedef struct {
 
 typedef struct {
 	ut64 address;
-	const char *file;
+	char *file;
 	unsigned int line;
 	unsigned int column;
 } RBinDwarfRow;
@@ -715,9 +726,9 @@ typedef struct {
 
 #define r_bin_dwarf_line_new(o,a,f,l) o->address=a, o->file = strdup (f?f:""), o->line = l, o->column =0,o
 
-R_API int r_bin_dwarf_parse_info_raw(RBinDwarfDebugAbbrev *da,
+R_API int r_bin_dwarf_parse_info_raw(Sdb *s, RBinDwarfDebugAbbrev *da,
 		const ut8 *obuf, size_t len,
-		const ut8 *debug_str, size_t debug_str_len);
+		const ut8 *debug_str, size_t debug_str_len, int mode);
 
 R_API void r_bin_dwarf_free_debug_abbrev(RBinDwarfDebugAbbrev *da);
 #ifdef __cplusplus

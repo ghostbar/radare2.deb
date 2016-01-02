@@ -1,5 +1,5 @@
-#ifndef _LIB_R_FS_H_
-#define _LIB_R_FS_H_
+#ifndef R2_FS_H
+#define R2_FS_H
 
 #include <r_types.h>
 #include <r_list.h>
@@ -22,6 +22,11 @@ typedef struct r_fs_t {
 	int view;
 	void *ptr;
 } RFS;
+
+
+typedef struct r_fs_partition_plugin_t {
+	const char *name;
+} RFSPartitionPlugin;
 
 typedef struct r_fs_file_t {
 	char *name;
@@ -53,8 +58,8 @@ typedef struct r_fs_plugin_t {
 	boolt (*read)(RFSFile *fs, ut64 addr, int len);
 	void (*close)(RFSFile *fs);
 	RList *(*dir)(RFSRoot *root, const char *path, int view);
-	void (*init)();
-	void (*fini)();
+	void (*init)(void);
+	void (*fini)(void);
 	int (*mount)(RFSRoot *root);
 	void (*umount)(RFSRoot *root);
 } RFSPlugin;
@@ -73,9 +78,12 @@ typedef struct r_fs_partition_t {
 #define R_FS_FILE_TYPE_SPECIAL 's'
 #define R_FS_FILE_TYPE_MOUNT 'm'
 
+typedef int (*RFSPartitionIterator)(void *disk, void *ptr, void *user);
 typedef struct r_fs_partition_type_t {
 	const char *name;
-	void *ptr;
+	void *ptr; // grub_msdos_partition_map
+	RFSPartitionIterator iterate;
+	//RFSPartitionIterator parhook;
 } RFSPartitionType;
 #define R_FS_PARTITIONS_LENGTH (int)(sizeof (partitions)/sizeof(RFSPartitionType)-1)
 
@@ -87,7 +95,7 @@ enum {
 };
 
 #ifdef R_API
-R_API RFS *r_fs_new();
+R_API RFS *r_fs_new(void);
 R_API void r_fs_view(RFS* fs, int view);
 R_API void r_fs_free(RFS* fs);
 R_API void r_fs_add(RFS *fs, RFSPlugin *p);
@@ -116,7 +124,7 @@ R_API RFSPartition *r_fs_partition_new(int num, ut64 start, ut64 length);
 R_API void r_fs_partition_free(RFSPartition *p);
 R_API const char *r_fs_partition_type(const char *part, int type);
 R_API const char *r_fs_partition_type_get(int n);
-R_API int r_fs_partition_get_size(); // WTF. wrong function name
+R_API int r_fs_partition_get_size(void); // WTF. wrong function name
 
 /* plugins */
 extern RFSPlugin r_fs_plugin_ext2;

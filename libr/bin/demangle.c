@@ -1,7 +1,38 @@
-/* radare - LGPL - Copyright 2011-2013 - pancake */
+/* radare - LGPL - Copyright 2011-2015 - pancake */
 
 #include <r_bin.h>
 #include <cxx/demangle.h>
+
+//TODO: mangler_branch: remove?
+#include "mangling/demangler.h"
+
+R_API void r_bin_demangle_list(RBin *bin) {
+	const char *langs[] = { "cxx", "java", "objc", "swift", "dlang", "msvc", NULL };
+	RBinPlugin *plugin;
+	RListIter *it;
+	int i;
+	if (!bin) return;
+	for (i=0; langs[i]; i++) {
+		eprintf ("%s\n", langs[i]);
+	}
+	r_list_foreach (bin->plugins, it, plugin) {
+		if (plugin->demangle) {
+			eprintf ("%s\n", plugin->name);
+		}
+	}
+}
+
+R_API char *r_bin_demangle_plugin(RBin *bin, const char *name, const char *str) {
+	RBinPlugin *plugin;
+	RListIter *it;
+	if (!bin || !name || !str) return NULL;
+	r_list_foreach (bin->plugins, it, plugin) {
+		if (plugin->demangle) {
+			return plugin->demangle (str);
+		}
+	}
+	return NULL;
+}
 
 // http://code.google.com/p/smali/wiki/TypesMethodsAndFields
 R_API char *r_bin_demangle_java(const char *str) {
@@ -73,17 +104,61 @@ R_API char *r_bin_demangle_java(const char *str) {
 	return ret;
 }
 
-R_API char *r_bin_demangle_cxx(const char *str) {
-	char *out;
-	int flags = DMGL_TYPES | DMGL_PARAMS | DMGL_ANSI | DMGL_VERBOSE; // | DMGL_RET_POSTFIX | DMGL_TYPES;
-	if (*str==str[1] && *str=='_') str++;
-	else if (!strncmp (str, "__symbol_stub1_", 15))
-		str += 15;
-	out = cplus_demangle_v3 (str, flags);
+R_API char *r_bin_demangle_msvc(const char *str)
+{
+	char *out = NULL;
+	SDemangler *mangler = 0;
+
+	create_demangler(&mangler);
+	if (init_demangler(mangler, (char *)str) == eDemanglerErrOK) {
+		mangler->demangle(mangler, &out/*demangled_name*/);
+	}
+	free_demangler(mangler);
+
 	return out;
 }
 
-R_API char *r_bin_demangle_objc(RBin *bin, const char *sym) {
+R_API char *r_bin_demangle_cxx(const char *str) {
+	char *out;
+	// DMGL_TYPES | DMGL_PARAMS | DMGL_ANSI | DMGL_VERBOSE
+	// | DMGL_RET_POSTFIX | DMGL_TYPES;
+	int i;
+#if WITH_GPL
+	int flags = DMGL_NO_OPTS;
+#endif
+	const char *prefixes[] = {
+		"__symbol_stub1_",
+		"reloc.",
+		"sym.imp.",
+		"imp.",
+		NULL
+	};
+	if (str[0]==str[1] && *str=='_') {
+		str++;
+	} {
+		for (i=0; prefixes[i]; i++) {
+			int plen = strlen (prefixes[i]);
+			if (!strncmp (str, prefixes[i], plen)) {
+				str += plen;
+				break;
+			}
+		}
+	}
+#if WITH_GPL
+	out = cplus_demangle_v3 (str, flags);
+#else
+	/* TODO: implement a non-gpl alternative to c++v3 demangler */
+	out = NULL;
+#endif
+
+	if (out) {
+		r_str_replace_char (out, ' ', 0);
+	}
+
+	return out;
+}
+
+R_API char *r_bin_demangle_objc(RBinFile *binfile, const char *sym) {
 	char *ret = NULL;
 	char *clas = NULL;
 	char *name = NULL;
@@ -94,13 +169,13 @@ R_API char *r_bin_demangle_objc(RBin *bin, const char *sym) {
 	if (!strncmp (sym, "_OBJC_Class_", 12)) {
 		ret = malloc (10+strlen (sym));
 		sprintf (ret, "class %s", sym+12);
-		if (bin) r_bin_class_new (bin, sym+12, NULL, R_BIN_CLASS_PUBLIC);
+		if (binfile) r_bin_class_new (binfile, sym+12, NULL, R_BIN_CLASS_PUBLIC);
 		return ret;
 	} else
 	if (!strncmp (sym, "_OBJC_CLASS_$_", 14)) {
 		ret = malloc (10+strlen (sym));
 		sprintf (ret, "class %s", sym+14);
-		if (bin) r_bin_class_new (bin, sym+14, NULL, R_BIN_CLASS_PUBLIC);
+		if (binfile) r_bin_class_new (binfile, sym+14, NULL, R_BIN_CLASS_PUBLIC);
 		return ret;
 	} else
 	/* fields */
@@ -111,9 +186,9 @@ R_API char *r_bin_demangle_objc(RBin *bin, const char *sym) {
 		type = "field";
 		if (p) {
 			*p = 0;
-			name = p+1;
+			name = strdup (p+1);
 		} else name = NULL;
-		if (bin) r_bin_class_add_field (bin, clas, name);
+		if (binfile) r_bin_class_add_field (binfile, clas, name);
 	} else
 	/* methods */
 	if (sym[1] == '[') { // apple style
@@ -122,14 +197,17 @@ R_API char *r_bin_demangle_objc(RBin *bin, const char *sym) {
 		if (type) {
 			clas = strdup (sym+2);
 			name = strchr (clas, ' ');
-			if (name) *name++ = 0;
-			for (i=0; name[i]; i++) {
-				if (name[i]==']') {
-					name[i] = 0;
-				} else
-				if (name[i]==':') {
-					nargs++;
-					name[i] = 0;
+			if (name) {
+				*name++ = 0;
+				name = strdup (name);
+				for (i=0; name[i]; i++) {
+					if (name[i]==']') {
+						name[i] = 0;
+					} else
+					if (name[i]==':') {
+						nargs++;
+						name[i] = 0;
+					}
 				}
 			}
 		}
@@ -142,7 +220,7 @@ R_API char *r_bin_demangle_objc(RBin *bin, const char *sym) {
 			return NULL;
 		}
 		*args = 0;
-		name = strdup (args+2); // memleak :D
+		name = strdup (args+2);
 		args = NULL;
 		for (i=0; name[i]; i++) {
 			if (name[i]=='_') {
@@ -155,7 +233,8 @@ R_API char *r_bin_demangle_objc(RBin *bin, const char *sym) {
 	}
 	if (type) {
 		if (!strcmp (type, "field")) {
-			ret = malloc (strlen (clas)+strlen (name)+32);
+			int namelen = name?strlen (name):0;
+			ret = malloc (strlen (clas)+namelen+32);
 			if (ret) sprintf (ret, "field int %s::%s", clas, name);
 		} else {
 			if (nargs) {
@@ -168,12 +247,13 @@ R_API char *r_bin_demangle_objc(RBin *bin, const char *sym) {
 						strcat (args, ", ");
 				}
 			} else args = strdup ("");
-			ret = malloc (strlen (type)+strlen (name)+
-				strlen(clas)+strlen(args)+15);
-			sprintf (ret, "%s int %s::%s(%s)", type, clas, name, args);
-			if (bin) r_bin_class_add_method (bin, clas, name, nargs);
+				if (type && name && *name) {
+				ret = malloc (strlen (type)+strlen (name)+
+					strlen(clas)+strlen(args)+15);
+				sprintf (ret, "%s int %s::%s(%s)", type, clas, name, args);
+				if (binfile) r_bin_class_add_method (binfile, clas, name, nargs);
+			}
 		}
-		name = NULL;
 	}
 	free (clas);
 	free (args);
@@ -182,18 +262,49 @@ R_API char *r_bin_demangle_objc(RBin *bin, const char *sym) {
 }
 
 R_API int r_bin_demangle_type (const char *str) {
-	// XXX: add
-	return R_BIN_NM_CXX;
+	if (!str || !*str)
+		return R_BIN_NM_NONE;
+	if (!strcmp (str, "swift"))
+		return R_BIN_NM_SWIFT;
+	if (!strcmp (str, "java"))
+		return R_BIN_NM_JAVA;
+	if (!strcmp (str, "objc"))
+		return R_BIN_NM_OBJC;
+	if (!strcmp (str, "cxx"))
+		return R_BIN_NM_CXX;
+	if (!strcmp (str, "dlang"))
+		return R_BIN_NM_DLANG;
+	if (!strcmp (str, "msvc"))
+		return R_BIN_NM_MSVC;
+	return R_BIN_NM_NONE;
 }
 
-R_API char *r_bin_demangle (RBin *bin, const char *str) {
+R_API int r_bin_lang_type(RBinFile *binfile, const char *def) {
 	int type;
-	if (bin && bin->cur->curplugin && bin->cur->curplugin->demangle_type)
-		type = bin->cur->curplugin->demangle_type (str);
-	else type = r_bin_demangle_type (str);
+	RBinPlugin *plugin;
+	if (def && *def) {
+		type = r_bin_demangle_type (def);
+		if (type != R_BIN_NM_NONE)
+			return type;
+	}
+	plugin = r_bin_file_cur_plugin (binfile);
+	if (plugin && plugin->demangle_type)
+		type = plugin->demangle_type (def);
+	else type = r_bin_demangle_type (binfile->o->info->lang);
+	if (type == R_BIN_NM_NONE)
+		type = r_bin_demangle_type (def);
+	return type;
+}
+
+R_API char *r_bin_demangle (RBinFile *binfile, const char *def, const char *str) {
+	RBin *bin = binfile->rbin;
+	int type = r_bin_lang_type (binfile, def);
 	switch (type) {
 	case R_BIN_NM_JAVA: return r_bin_demangle_java (str);
 	case R_BIN_NM_CXX: return r_bin_demangle_cxx (str);
+	case R_BIN_NM_OBJC: return r_bin_demangle_objc (NULL, str);
+	case R_BIN_NM_SWIFT: return r_bin_demangle_swift (str);
+	case R_BIN_NM_DLANG: return r_bin_demangle_plugin (bin, "dlang", str);
 	}
 	return NULL;
 }

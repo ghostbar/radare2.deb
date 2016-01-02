@@ -1,5 +1,5 @@
-#ifndef _INCLUDE_R_EGG_H_
-#define _INCLUDE_R_EGG_H_
+#ifndef R2_EGG_H
+#define R2_EGG_H
 
 #include <r_db.h>
 #include <r_asm.h>
@@ -14,7 +14,7 @@ extern "C" {
 R_LIB_VERSION_HEADER(r_egg);
 
 #define R_EGG_INCDIR_ENV "EGG_INCDIR"
-#define R_EGG_INCDIR_PATH R2_PREFIX"/lib/radare2/"R2_VERSION"/egg"
+#define R_EGG_INCDIR_PATH R2_PREFIX "/lib/radare2/" R2_VERSION "/egg"
 
 // rename to REggShellcode
 #define R_EGG_PLUGIN_SHELLCODE 0
@@ -35,10 +35,10 @@ typedef struct r_egg_t {
 	//RList *shellcodes; // XXX is plugins nao?
 	RAsm *rasm;
 	RSyscall *syscall;
-	RPair *pair;
+	Sdb *db;
 	RList *plugins;
 	RList *patches; // <RBuffer>
-	struct r_egg_emit_t *emit;
+	struct r_egg_emit_t *remit;
 	int arch;
 	int endian;
 	int bits;
@@ -119,7 +119,7 @@ typedef struct r_egg_lang_t {
 } REggLang;
 
 #ifdef R_API
-R_API REgg *r_egg_new ();
+R_API REgg *r_egg_new (void);
 R_API char *r_egg_to_string (REgg *egg);
 R_API void r_egg_free (REgg *egg);
 R_API int r_egg_add (REgg *a, REggPlugin *foo);
@@ -141,6 +141,7 @@ R_API void r_egg_printf(REgg *egg, const char *fmt, ...);
 R_API int r_egg_compile(REgg *egg);
 R_API int r_egg_padding (REgg *egg, const char *pad);
 R_API int r_egg_assemble(REgg *egg);
+R_API void r_egg_pattern(REgg *egg, int size);
 R_API RBuffer *r_egg_get_bin(REgg *egg);
 //R_API int r_egg_dump (REgg *egg, const char *file) { }
 R_API char *r_egg_get_source(REgg *egg);

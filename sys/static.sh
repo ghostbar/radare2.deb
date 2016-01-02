@@ -13,10 +13,32 @@ if [ $? = 0 ]; then
 	CC="ccache ${CC}"
 	export CC
 fi
-
-# build
-if [ -f config-user.mk ]; then
-	${MAKE} mrproper > /dev/null 2>&1
+PREFIX=/usr
+if [ -n "$1" ]; then
+	PREFIX="$1"
 fi
-./configure --prefix=/usr --with-nonpic --without-pic && \
-${MAKE} -j 4
+DOBUILD=1
+if [ 1 = "${DOBUILD}" ]; then
+	# build
+	if [ -f config-user.mk ]; then
+		${MAKE} mrproper > /dev/null 2>&1
+	fi
+	export CFLAGS="-fPIC -pie "
+#-D__ANDROID__=1"
+	./configure-plugins
+	./configure --prefix=$PREFIX --with-nonpic --without-pic --disable-loadlibs
+fi
+${MAKE} -j 8
+BINS="rarun2 rasm2 radare2 ragg2 rabin2 rax2 rahash2 rafind2 rasign2 r2agent radiff2"
+for a in ${BINS} ; do
+(
+cd binr/$a
+${MAKE} clean
+LDFLAGS=-static ${MAKE} -j2
+strip -s $a
+)
+done
+
+rm -rf r2-static
+mkdir r2-static
+${MAKE} install DESTDIR=${PWD}/r2-static

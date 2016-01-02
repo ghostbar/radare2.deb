@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2012-2014 - pancake, Fedor Sakharov */
+/* radare - LGPL - Copyright 2012-2015 - pancake, Fedor Sakharov */
 
 #define D0 if(1)
 #define D1 if(1)
@@ -15,12 +15,13 @@
 
 #include <r_bin.h>
 #include <r_bin_dwarf.h>
+#include <r_core.h>
 
 #define STANDARD_OPERAND_COUNT_DWARF2 9
 #define STANDARD_OPERAND_COUNT_DWARF3 12
 #define R_BIN_DWARF_INFO 1
 
-#define READ(x,y) *((y*)x); x += sizeof (y)
+#define READ(x,y) ((x+sizeof(y)<buf_end)? *((y*)x): 0); x += sizeof (y)
 
 static const char *dwarf_tag_name_encodings[] = {
 	[DW_TAG_array_type] = "DW_TAG_array_type",
@@ -65,6 +66,7 @@ static const char *dwarf_tag_name_encodings[] = {
 	[DW_TAG_subprogram] = "DW_TAG_subprogram",
 	[DW_TAG_template_type_param] = "DW_TAG_template_type_param",
 	[DW_TAG_template_value_param] = "DW_TAG_template_value_param",
+	[DW_TAG_template_alias] = "DW_TAG_template_alias",
 	[DW_TAG_thrown_type] = "DW_TAG_thrown_type",
 	[DW_TAG_try_block] = "DW_TAG_try_block",
 	[DW_TAG_variant_part] = "DW_TAG_variant_part",
@@ -178,18 +180,39 @@ static const char *dwarf_langs[] = {
 	[DW_LANG_UPC] = "UPC",
 	[DW_LANG_D] = "D",
 	[DW_LANG_Python] = "Python",
+	[DW_LANG_Rust] = "Rust",
+	[DW_LANG_C11] = "C11",
+	[DW_LANG_Swift] = "Swift",
+	[DW_LANG_Julia] = "Julia",
+	[DW_LANG_Dylan] = "Dylan",
+	[DW_LANG_C_plus_plus_14] = "C++14",
+	[DW_LANG_Fortran03] = "Fortran03",
+	[DW_LANG_Fortran08] = "Fortran08"
 };
 
-static const ut8 *r_bin_dwarf_parse_lnp_header (const ut8 *buf,
-		RBinDwarfLNPHeader *hdr, FILE *f) {
+static int add_sdb_include_dir(Sdb *s, const char *incl, int idx) {
+	if (!s || !incl)
+		return R_FALSE;
+	return sdb_array_set (s, "includedirs", idx, incl, 0);
+}
+
+static const ut8 *r_bin_dwarf_parse_lnp_header (
+		RBinFile *bf, const ut8 *buf, const ut8 *buf_end,
+		RBinDwarfLNPHeader *hdr, FILE *f, int mode)
+{
 	int i;
+	Sdb *s;
 	size_t count;
-	const ut8 *tmp_buf;
+	const ut8 *tmp_buf = NULL;
+
+	if (!hdr || !bf || !buf) return NULL;
 
 	hdr->unit_length.part1 = READ (buf, ut32);
 	if (hdr->unit_length.part1 == DWARF_INIT_LEN_64) {
 		hdr->unit_length.part2 = READ (buf, ut32);
 	}
+
+	s = sdb_new (NULL, NULL, 0);
 
 	hdr->version = READ (buf, ut16);
 
@@ -199,8 +222,13 @@ static const ut8 *r_bin_dwarf_parse_lnp_header (const ut8 *buf,
 		hdr->header_length = READ (buf, ut32);
 	}
 
+	if (buf_end-buf < 8) {
+		sdb_free (s);
+		return NULL;
+	}
 	hdr->min_inst_len = READ (buf, ut8);
 	//hdr->max_ops_per_inst = READ (buf, ut8);
+	hdr->file_names = NULL;
 	hdr->default_is_stmt = READ (buf, ut8);
 	hdr->line_base = READ (buf, char);
 	hdr->line_range = READ (buf, ut8);
@@ -210,7 +238,7 @@ static const ut8 *r_bin_dwarf_parse_lnp_header (const ut8 *buf,
 		fprintf(f, "DWARF LINE HEADER\n");
 		fprintf(f, "  total_length: %d\n", hdr->unit_length.part1);
 		fprintf(f, "  version: %d\n", hdr->version);
-		fprintf(f, "  header_length: : %lld\n", hdr->header_length);
+		fprintf(f, "  header_length: : %"PFMT64d"\n", hdr->header_length);
 		fprintf(f, "  mininstlen: %d\n", hdr->min_inst_len);
 		fprintf(f, "  is_stmt: %d\n", hdr->default_is_stmt);
 		fprintf(f, "  line_base: %d\n", hdr->line_base);
@@ -221,98 +249,191 @@ static const ut8 *r_bin_dwarf_parse_lnp_header (const ut8 *buf,
 	hdr->std_opcode_lengths = calloc(sizeof(ut8), hdr->opcode_base);
 
 	for (i = 1; i <= hdr->opcode_base - 1; i++) {
+		if (buf+2>buf_end) break;
 		hdr->std_opcode_lengths[i] = READ (buf, ut8);
 		if (f) {
 			fprintf(f, " op %d %d\n", i, hdr->std_opcode_lengths[i]);
 		}
 	}
 
-	while (1) {
-		size_t len = strlen((const char*)buf);
-		if (!len) {
+	i = 0;
+	while (buf+1 < buf_end) {
+		int maxlen = R_MIN ((size_t)(buf_end-buf)-1, 0xfff);
+		int len = r_str_nlen ((const char*)buf, maxlen);
+		char *str = r_str_ndup ((const char *)buf, len);
+		if (len<1 || len >= 0xfff) {
 			buf += 1;
+			free (str);
+			break;
+		}
+		if (*str != '/' && *str != '.') {
+			// no more paths in here
+			free (str);
 			break;
 		}
 		if (f) {
-			fprintf(f, "INCLUDEDIR (%s)\n", buf);
+			fprintf (f, "INCLUDEDIR (%s)\n", str);
 		}
+		add_sdb_include_dir (s, str, i);
+		free (str);
+		i++;
 		buf += len + 1;
 	}
 
 	tmp_buf = buf;
 	count = 0;
 	for (i = 0; i < 2; i++) {
-		while (1) {
+		while (buf+1<buf_end) {
 			const char *filename = (const char *)buf;
+			int maxlen = R_MIN ((size_t)(buf_end-buf-1), 0xfff);
 			ut64 id_idx, mod_time, file_len;
-			size_t len = strlen(filename);
+			size_t namelen, len = r_str_nlen (filename, maxlen);
 
 			if (!len) {
 				buf++;
 				break;
 			}
 			buf += len + 1;
-			buf = r_uleb128 (buf, &id_idx);
-			buf = r_uleb128 (buf, &mod_time);
-			buf = r_uleb128 (buf, &file_len);
-
+			if (buf>=buf_end) { buf = NULL; goto beach; }
+			buf = r_uleb128 (buf, buf_end-buf, &id_idx);
+			if (buf>=buf_end) { buf = NULL; goto beach; }
+			buf = r_uleb128 (buf, buf_end-buf, &mod_time);
+			if (buf>=buf_end) { buf = NULL; goto beach; }
+			buf = r_uleb128 (buf, buf_end-buf, &file_len);
+			if (buf>=buf_end) { buf = NULL; goto beach; }
 
 			if (i) {
-				hdr->file_names[count].name = strdup (filename);
-				hdr->file_names[count].id_idx = id_idx;
-				hdr->file_names[count].mod_time = mod_time;
-				hdr->file_names[count].file_len = file_len;
+				char *include_dir = NULL, *comp_dir = NULL;
+				char *allocated_id = NULL;
+				if (id_idx > 0) {
+					include_dir = sdb_array_get (s, "includedirs", id_idx - 1, 0);
+
+					if (include_dir && include_dir[0] != '/') {
+						comp_dir = sdb_get (bf->sdb_addrinfo, "DW_AT_comp_dir", 0);
+						if (comp_dir) {
+							allocated_id = calloc(1,strlen(comp_dir) +
+									strlen(include_dir) + 8);
+							snprintf(allocated_id, strlen(comp_dir) + strlen(include_dir) + 8,
+									"%s/%s/", comp_dir, include_dir);
+							include_dir = allocated_id;
+						}
+					}
+				} else {
+					include_dir = sdb_get (bf->sdb_addrinfo, "DW_AT_comp_dir", 0);
+					if (!include_dir)
+						include_dir = "./";
+				}
+
+				namelen = len + (include_dir?strlen (include_dir):0) + 8;
+
+				if (hdr->file_names) {
+					hdr->file_names[count].name = calloc (sizeof(char), namelen);
+					snprintf (hdr->file_names[count].name, namelen - 1,
+						"%s/%s", include_dir, filename);
+					hdr->file_names[count].name[namelen - 1] = '\0';
+					if (allocated_id)
+						free (allocated_id);
+					hdr->file_names[count].id_idx = id_idx;
+					hdr->file_names[count].mod_time = mod_time;
+					hdr->file_names[count].file_len = file_len;
+				}
 			}
 			count++;
 			if (f && i) {
-				fprintf(f, "FILE (%s)\n", filename);
-				fprintf(f, "| dir idx %lld\n", id_idx);
-				fprintf(f, "| lastmod %lld\n", mod_time);
-				fprintf(f, "| filelen %lld\n", file_len);
+				fprintf (f, "FILE (%s)\n", filename);
+				fprintf (f, "| dir idx %"PFMT64d"\n", id_idx);
+				fprintf (f, "| lastmod %"PFMT64d"\n", mod_time);
+				fprintf (f, "| filelen %"PFMT64d"\n", file_len);
 			}
 		}
 		if (i == 0) {
-			hdr->file_names = calloc(sizeof(file_entry), count);
+			if (count>0) {
+				hdr->file_names = calloc(sizeof(file_entry), count);
+			} else {
+				hdr->file_names = NULL;
+			}
 			hdr->file_names_count = count;
 			buf = tmp_buf;
 			count = 0;
 		}
 	}
 
+beach:
+	sdb_free (s);
+
 	return buf;
+}
+
+static inline void add_sdb_addrline(Sdb *s, ut64 addr, const char *file, ut64 line, FILE *f, int mode) {
+	const char *p;
+	char fileline[128];
+	char offset[64];
+	char *offset_ptr;
+
+	if (!s || !file)
+		return;
+	p = r_str_rchr (file, NULL, '/');
+	if (p) p++; else p = file;
+	// includedirs and properly check full paths
+	switch (mode) {
+	case 1:
+	case 'r':
+	case '*':
+		if (!f) f = stdout;
+		fprintf (f, "CL %s:%d 0x%08"PFMT64x"\n", p, (int)line, addr);
+		break;
+	}
+	if (r_file_exists (file))
+		p = file;
+	snprintf (fileline, sizeof (fileline) - 1, "%s|%"PFMT64d, p, line);
+	offset_ptr = sdb_itoa (addr, offset, 16);
+
+	if (!sdb_add (s, offset_ptr, fileline, 0)) {
+		sdb_set (s, offset_ptr, fileline, 0);
+	}
+
+	if (!sdb_add (s, fileline, offset_ptr, 0)) {
+		sdb_set (s, fileline, offset_ptr, 0);
+	}
 }
 
 static const ut8* r_bin_dwarf_parse_ext_opcode(const RBin *a, const ut8 *obuf,
 		size_t len, const RBinDwarfLNPHeader *hdr,
-		RBinDwarfSMRegisters *regs, RList *list, FILE *f)
+		RBinDwarfSMRegisters *regs, FILE *f, int mode)
 {
+	// XXX - list is an unused parameter.
 	const ut8 *buf;
+	const ut8 *buf_end;
 	ut8 opcode;
 	ut64 addr;
 	buf = obuf;
 	st64 op_len;
-	buf = r_leb128(buf, &op_len);
-	ut32 addr_size = a->cur->o->info->bits / 8;
+	RBinFile *binfile = a ? a->cur : NULL;
+	RBinObject *o = binfile ? binfile->o : NULL;
+	ut32 addr_size = o && o->info && o->info->bits ? o->info->bits / 8 : 4;
 	const char *filename;
 
+	if (!binfile || !obuf || !hdr || !regs) return NULL;
+
+	buf = r_leb128 (buf, &op_len);
+	buf_end = buf+len;
 	opcode = *buf++;
 
 	if (f) {
-		fprintf(f, "Extended opcode %d: ", opcode);
+		fprintf (f, "Extended opcode %d: ", opcode);
 	}
 
 	switch (opcode) {
 	case DW_LNE_end_sequence:
 		regs->end_sequence = DWARF_TRUE;
 
-#if 0
-		if (list) {
-			RBinDwarfRow *row = R_NEW (RBinDwarfRow);
-			r_bin_dwarf_line_new (row, regs->address,
-					hdr->file_names[0].name, regs->line);
-			r_list_append (list, row);
+		if (binfile && binfile->sdb_addrinfo && hdr->file_names) {
+			int fnidx = regs->file - 1;
+			if (fnidx>=0 && fnidx<hdr->file_names_count) {
+				add_sdb_addrline(binfile->sdb_addrinfo, regs->address,
+						hdr->file_names[fnidx].name, regs->line, f, mode);
+			}
 		}
-#endif
 
 		if (f) {
 			fprintf(f, "End of Sequence\n");
@@ -328,7 +449,7 @@ static const ut8* r_bin_dwarf_parse_ext_opcode(const RBin *a, const ut8 *obuf,
 		regs->address = addr;
 
 		if (f) {
-			fprintf(f, "set Address to 0x%llx\n", addr);
+			fprintf(f, "set Address to 0x%"PFMT64x"\n", addr);
 		}
 		break;
 	case DW_LNE_define_file:
@@ -341,12 +462,13 @@ static const ut8* r_bin_dwarf_parse_ext_opcode(const RBin *a, const ut8 *obuf,
 
 		buf += (strlen (filename) + 1);
 		ut64 dir_idx;
-		buf = r_uleb128(buf, &dir_idx);
+		if (buf+1 < buf_end)
+			buf = r_uleb128 (buf, ST32_MAX, &dir_idx);
 		break;
 	case DW_LNE_set_discriminator:
-		buf = r_uleb128(buf, &addr);
+		buf = r_uleb128(buf, ST32_MAX, &addr);
 		if (f) {
-			fprintf(f, "set Discriminator to %lld\n", addr);
+			fprintf(f, "set Discriminator to %"PFMT64d"\n", addr);
 		}
 		regs->discriminator = addr;
 		break;
@@ -361,34 +483,41 @@ static const ut8* r_bin_dwarf_parse_ext_opcode(const RBin *a, const ut8 *obuf,
 }
 
 static const ut8* r_bin_dwarf_parse_spec_opcode(
-		const ut8 *obuf, size_t len,
+		const RBin *a, const ut8 *obuf, size_t len,
 		const RBinDwarfLNPHeader *hdr,
 		RBinDwarfSMRegisters *regs,
-		ut8 opcode, RList *list, FILE *f)
+		ut8 opcode, FILE *f, int mode)
 {
-	const ut8 *buf;
-	buf = obuf;
-	ut8 adj_opcode = opcode - hdr->opcode_base;
+	// XXX - list is not used
+	const ut8 *buf = obuf;
+	ut8 adj_opcode = 0;
 	ut64 advance_adr;
+	RBinFile *binfile = a ? a->cur : NULL;
 
+	if (!obuf || !hdr || !regs) return NULL;
+
+	adj_opcode = opcode - hdr->opcode_base;
+	if (!hdr->line_range) {
+		eprintf ("Error r_bin_dwarf_parse_spec_opcode: hdr->line_range is 0\n");
+		return NULL;
+	}
 	advance_adr = adj_opcode / hdr->line_range;
 	regs->address += advance_adr;
-
 	regs->line += hdr->line_base + (adj_opcode % hdr->line_range);
 	if (f) {
 		fprintf(f, "Special opcode %d: ", adj_opcode);
-		fprintf(f, "advance Address by %lld to %llx and Line by %d to %lld\n",
+		fprintf(f, "advance Address by %"PFMT64d" to %"PFMT64x" and Line by %d to %"PFMT64d"\n",
 			advance_adr, regs->address, hdr->line_base +
 			(adj_opcode % hdr->line_range), regs->line);
 	}
-
-	if (list) {
-		RBinDwarfRow *row = R_NEW (RBinDwarfRow);
-		r_bin_dwarf_line_new (row, regs->address,
-			hdr->file_names[0].name, regs->line);
-		r_list_append (list, row);
+	if (binfile && binfile->sdb_addrinfo && hdr->file_names) {
+		int idx = regs->file -1;
+		if (idx>=0 && idx<hdr->file_names_count) {
+			add_sdb_addrline (binfile->sdb_addrinfo, regs->address,
+					hdr->file_names[idx].name,
+					regs->line, f, mode);
+		}
 	}
-
 	regs->basic_block = DWARF_FALSE;
 	regs->prologue_end = DWARF_FALSE;
 	regs->epilogue_begin = DWARF_FALSE;
@@ -397,38 +526,44 @@ static const ut8* r_bin_dwarf_parse_spec_opcode(
 	return buf;
 }
 
-static const ut8* r_bin_dwarf_parse_std_opcode(const ut8 *obuf, size_t len,
+static const ut8* r_bin_dwarf_parse_std_opcode(
+		const RBin *a, const ut8 *obuf, size_t len,
 		const RBinDwarfLNPHeader *hdr, RBinDwarfSMRegisters *regs,
-		ut8 opcode, RList *list, FILE *f)
+		ut8 opcode, FILE *f, int mode)
 {
 	const ut8* buf = obuf;
-	ut64 addr;
+	const ut8* buf_end = obuf+len;
+	ut64 addr = 0LL;
 	st64 sbuf;
 	ut8 adj_opcode;
 	ut64 op_advance;
 	ut16 operand;
+	RBinFile *binfile = a ? a->cur : NULL;
 
+	if (!binfile || !hdr || !regs || !obuf) return NULL;
 	switch (opcode) {
 	case DW_LNS_copy:
 		if (f) {
 			fprintf(f, "Copy\n");
 		}
-#if 0
-		if (list) {
-			RBinDwarfRow *row = R_NEW (RBinDwarfRow);
-			r_bin_dwarf_line_new (row, regs->address,
-					hdr->file_names[0].name, regs->line);
-			r_list_append (list, row);
+
+		if (binfile && binfile->sdb_addrinfo && hdr->file_names) {
+			int fnidx = regs->file - 1;
+			if (fnidx>=0 && fnidx<hdr->file_names_count) {
+				add_sdb_addrline(binfile->sdb_addrinfo,
+					regs->address,
+					hdr->file_names[fnidx].name,
+					regs->line, f, mode);
+			}
 		}
-#endif
 		regs->basic_block = DWARF_FALSE;
 		break;
 	case DW_LNS_advance_pc:
-		buf = r_uleb128(buf, &addr);
+		buf = r_uleb128 (buf, ST32_MAX, &addr);
 		regs->address += addr * hdr->min_inst_len;
 
 		if (f) {
-			fprintf(f, "Advance PC by %lld to 0x%llx\n",
+			fprintf(f, "Advance PC by %"PFMT64d" to 0x%"PFMT64x"\n",
 				addr * hdr->min_inst_len, regs->address);
 		}
 		break;
@@ -436,20 +571,20 @@ static const ut8* r_bin_dwarf_parse_std_opcode(const ut8 *obuf, size_t len,
 		buf = r_leb128(buf, &sbuf);
 		regs->line += sbuf;
 		if (f) {
-			fprintf(f, "Advance line by %lld, to %lld\n", sbuf, regs->line);
+			fprintf(f, "Advance line by %"PFMT64d", to %"PFMT64d"\n", sbuf, regs->line);
 		}
 		break;
 	case DW_LNS_set_file:
-		buf = r_uleb128(buf, &addr);
+		buf = r_uleb128 (buf, ST32_MAX, &addr);
 		if (f) {
-			fprintf(f, "Set file to %lld\n", addr);
+			fprintf(f, "Set file to %"PFMT64d"\n", addr);
 		}
 		regs->file = addr;
 		break;
 	case DW_LNS_set_column:
-		buf = r_uleb128(buf, &addr);
+		buf = r_uleb128(buf, ST32_MAX, &addr);
 		if (f) {
-			fprintf(f, "Set column to %lld\n", addr);
+			fprintf(f, "Set column to %"PFMT64d"\n", addr);
 		}
 		regs->column = addr;
 		break;
@@ -467,10 +602,14 @@ static const ut8* r_bin_dwarf_parse_std_opcode(const ut8 *obuf, size_t len,
 		break;
 	case DW_LNS_const_add_pc:
 		adj_opcode = 255 - hdr->opcode_base;
-		op_advance = adj_opcode / hdr->line_range;
+		if (hdr->line_range>0) {
+			op_advance = adj_opcode / hdr->line_range;
+		} else {
+			op_advance = 0;
+		}
 		regs->address += op_advance;
 		if (f) {
-			fprintf(f, "Advance PC by constant %lld to 0x%llx\n",
+			fprintf(f, "Advance PC by constant %"PFMT64d" to 0x%"PFMT64x"\n",
 				op_advance, regs->address);
 		}
 		break;
@@ -478,7 +617,7 @@ static const ut8* r_bin_dwarf_parse_std_opcode(const ut8 *obuf, size_t len,
 		operand = READ (buf, ut16);
 		regs->address += operand;
 		if (f) {
-			fprintf(f,"Fixed advance pc to %lld\n", regs->address);
+			fprintf(f,"Fixed advance pc to %"PFMT64d"\n", regs->address);
 		}
 		break;
 	case DW_LNS_set_prologue_end:
@@ -494,7 +633,7 @@ static const ut8* r_bin_dwarf_parse_std_opcode(const ut8 *obuf, size_t len,
 		}
 		break;
 	case DW_LNS_set_isa:
-		buf = r_uleb128(buf, &addr);
+		buf = r_uleb128(buf, ST32_MAX, &addr);
 		regs->isa = addr;
 		if (f) {
 			fprintf(f, "set_isa\n");
@@ -511,27 +650,31 @@ static const ut8* r_bin_dwarf_parse_std_opcode(const ut8 *obuf, size_t len,
 
 static const ut8* r_bin_dwarf_parse_opcodes (const RBin *a, const ut8 *obuf,
 		size_t len, const RBinDwarfLNPHeader *hdr,
-		RBinDwarfSMRegisters *regs, RList *list, FILE *f) {
+		RBinDwarfSMRegisters *regs, FILE *f, int mode) {
 	const ut8 *buf, *buf_end;
 	ut8 opcode, ext_opcode;
 
+	if (!a || !obuf || len<8)
+		return NULL;
 	buf = obuf;
 	buf_end = obuf + len;
 
-	while (buf < buf_end) {
+	while (buf && buf+1 < buf_end) {
 		opcode = *buf++;
+		len--;
 		if (opcode == 0) {
 			ext_opcode = *buf;
-			buf = r_bin_dwarf_parse_ext_opcode(a, buf, len, hdr, regs, list,f );
-			if (ext_opcode == DW_LNE_end_sequence)
+			buf = r_bin_dwarf_parse_ext_opcode (a, buf, len, hdr, regs, f, mode);
+			if (ext_opcode == DW_LNE_end_sequence) {
 				break;
+			}
 		} else if (opcode >= hdr->opcode_base) {
-			buf = r_bin_dwarf_parse_spec_opcode(buf, len, hdr, regs, opcode, list, f);
+			buf = r_bin_dwarf_parse_spec_opcode (a, buf, len, hdr, regs, opcode, f, mode);
 		} else {
-			buf = r_bin_dwarf_parse_std_opcode(buf, len, hdr, regs, opcode, list, f);
+			buf = r_bin_dwarf_parse_std_opcode (a, buf, len, hdr, regs, opcode, f, mode);
 		}
+		len = (int)(buf_end - buf);
 	}
-
 	return buf;
 }
 
@@ -547,105 +690,112 @@ static void r_bin_dwarf_set_regs_default (const RBinDwarfLNPHeader *hdr,
 }
 
 R_API int r_bin_dwarf_parse_line_raw2(const RBin *a, const ut8 *obuf,
-		size_t len, RList *list, FILE *f) {
+		size_t len, int mode) {
 	RBinDwarfLNPHeader hdr;
-	const ut8 *buf, *buf_tmp, *buf_end;
+	const ut8 *buf = NULL, *buf_tmp = NULL, *buf_end = NULL;
 	RBinDwarfSMRegisters regs;
+	int tmplen;
+	FILE *f = NULL;
+	RBinFile *binfile = a ? a->cur : NULL;
+
+	if (!binfile || !obuf) return R_FALSE;
+
+	if (mode == R_CORE_BIN_PRINT) {
+		f = stdout;
+	}
 
 	buf = obuf;
 	buf_end = obuf + len;
-	while (buf < buf_end) {
+	while (buf+1 < buf_end) {
 		buf_tmp = buf;
-		buf = r_bin_dwarf_parse_lnp_header (buf, &hdr, f);
+		buf = r_bin_dwarf_parse_lnp_header (a->cur, buf, buf_end, &hdr, f, mode);
+		if (!buf) return R_FALSE;
 		r_bin_dwarf_set_regs_default (&hdr, &regs);
-		r_bin_dwarf_parse_opcodes (a, buf, 4 + hdr.unit_length.part1,
-				&hdr, &regs, list, f);
-		buf = buf_tmp + 4 + hdr.unit_length.part1;
+		//tmplen = R_MIN (len-(buf_end-buf)-1, 4+hdr.unit_length.part1);
+		tmplen = (int)(buf_end - buf);
+		tmplen = R_MIN (tmplen, 4+hdr.unit_length.part1);
+		if (tmplen<1) break;
+		r_bin_dwarf_parse_opcodes (a, buf, tmplen, &hdr, &regs, f, mode);
+		buf = buf_tmp + tmplen;
+		len = (int)(buf_end - buf);
 	}
 
-	return 0;
+	return R_TRUE;
 }
 
-R_API int r_bin_dwarf_parse_aranges_raw(const ut8 *obuf, int len, FILE *f)
-{
-	ut32 length = *(ut32*)obuf;
+#define READ_BUF(x,y) if (idx+sizeof(y)>=len) { return R_FALSE;} \
+	x=*(y*)buf; idx+=sizeof(y);buf+=sizeof(y)
+
+R_API int r_bin_dwarf_parse_aranges_raw(const ut8 *obuf, int len, FILE *f) {
+	ut32 length, offset;
 	ut16 version;
 	ut32 debug_info_offset;
 	ut8 address_size, segment_size;
 	const ut8 *buf = obuf;
+	int idx = 0;
 
-if (f) {
-	printf("parse_aranges\n");
-	printf("length 0x%x\n", length);
-}
-
-	if (length >= 0xfffffff0) {
-		buf += 4;
-		buf += 8;
-	} else {
-		buf += 4;
+	if (!buf || len< 4) {
+		return R_FALSE;
 	}
 
-	version = *(ut16*)buf;
+	READ_BUF (length, ut32);
+	if (f) {
+		printf("parse_aranges\n");
+		printf("length 0x%x\n", length);
+	}
 
-	buf += 2;
+	if (idx+12>=len)
+		return R_FALSE;
 
-	if (f)
-	printf("Version %d\n", version);
+	READ_BUF (version, ut16);
+	if (f) printf("Version %d\n", version);
 
-	debug_info_offset = *(ut32*)buf;
+	READ_BUF (debug_info_offset, ut32);
+	if (f) fprintf(f, "Debug info offset %d\n", debug_info_offset);
 
-	if (f)
-	fprintf(f, "Debug info offset %d\n", debug_info_offset);
+	READ_BUF (address_size, ut8);
+	if (f) fprintf(f, "address size %d\n", (int)address_size);
 
-	buf += 4;
+	READ_BUF (segment_size, ut8);
+	if (f) fprintf(f, "segment size %d\n", (int)segment_size);
 
-	address_size = *(ut8*)buf;
+	offset = segment_size + address_size * 2;
 
-	if (f)
-	fprintf(f, "address size %d\n", (int)address_size);
+	if (offset) {
+		ut64 n = (((ut64) (size_t)buf / offset) + 1) * offset - ((ut64)(size_t)buf);
+		if (idx+n>=len)
+			return R_FALSE;
+		buf += n;
+		idx += n;
+	}
 
-	buf += 1;
-
-	segment_size = *(ut8*)buf;
-
-	if (f)
-	fprintf(f, "segment size %d\n", (int)segment_size);
-
-	buf += 1;
-
-	size_t offset = segment_size + address_size * 2;
-
-	buf += (((ut64) buf / offset) + 1) * offset - ((ut64)buf);
-
-	while (buf - obuf < len) {
+	while ((buf - obuf) < len) {
 		ut64 adr, length;
-
-		adr = *(ut64*)buf;
-		buf += 8;
-		length = *(ut64*)buf;
-		buf += 8;
-
-		if (f)
-		printf("length 0x%llx address 0x%llx\n", length, adr);
+		if ((idx+8)>=len)
+			break;
+		READ_BUF (adr, ut64);
+		READ_BUF (length, ut64);
+		if (f) printf("length 0x%"PFMT64x" address 0x%"PFMT64x"\n", length, adr);
 	}
 
 	return 0;
 }
 
 static int r_bin_dwarf_init_debug_info(RBinDwarfDebugInfo *inf) {
-	inf->comp_units = calloc(sizeof(RBinDwarfCompUnit), DEBUG_INFO_CAPACITY);
+	if (!inf) return -1;
+	inf->comp_units = calloc (sizeof(RBinDwarfCompUnit), DEBUG_INFO_CAPACITY);
 
-	if (!inf->comp_units)
-		return -ENOMEM;
+	// XXX - should we be using error codes?
+	if (!inf->comp_units) return -ENOMEM;
 
 	inf->capacity = DEBUG_INFO_CAPACITY;
 	inf->length = 0;
 
-	return 0;
+	return R_TRUE;
 }
 
 static int r_bin_dwarf_init_die(RBinDwarfDIE *die) {
+	if (!die) return -EINVAL;
 	die->attr_values = calloc(sizeof(RBinDwarfAttrValue), 8);
 
 	if (!die->attr_values)
@@ -658,10 +808,10 @@ static int r_bin_dwarf_init_die(RBinDwarfDIE *die) {
 }
 
 static int r_bin_dwarf_expand_die(RBinDwarfDIE* die) {
-	RBinDwarfAttrValue *tmp;
+	RBinDwarfAttrValue *tmp = NULL;
+	if (!die || die->capacity == 0) return -EINVAL;
 
-	if (die->capacity != die->length)
-		return -EINVAL;
+	if (die->capacity != die->length) return -EINVAL;
 
 	tmp = (RBinDwarfAttrValue*)realloc(die->attr_values,
 			die->capacity * 2 * sizeof(RBinDwarfAttrValue));
@@ -675,10 +825,11 @@ static int r_bin_dwarf_expand_die(RBinDwarfDIE* die) {
 }
 
 static int r_bin_dwarf_init_comp_unit(RBinDwarfCompUnit *cu) {
+
+	if (!cu) return -EINVAL;
 	cu->dies = calloc(sizeof(RBinDwarfDIE), COMP_UNIT_CAPACITY);
 
-	if (!cu->dies)
-		return -ENOMEM;
+	if (!cu->dies) return -ENOMEM;
 
 	cu->capacity = COMP_UNIT_CAPACITY;
 	cu->length = 0;
@@ -689,14 +840,12 @@ static int r_bin_dwarf_init_comp_unit(RBinDwarfCompUnit *cu) {
 static int r_bin_dwarf_expand_cu(RBinDwarfCompUnit *cu) {
 	RBinDwarfDIE *tmp;
 
-	if (cu->capacity != cu->length)
-		return -EINVAL;
+	if (!cu || cu->capacity == 0 || cu->capacity != cu->length) return -EINVAL;
 
 	tmp = (RBinDwarfDIE*)realloc(cu->dies,
 			cu->capacity * 2 * sizeof(RBinDwarfDIE));
 
-	if (!tmp)
-		return -ENOMEM;
+	if (!tmp) return -ENOMEM;
 
 	cu->dies = tmp;
 	cu->capacity *= 2;
@@ -705,6 +854,7 @@ static int r_bin_dwarf_expand_cu(RBinDwarfCompUnit *cu) {
 }
 
 static int r_bin_dwarf_init_abbrev_decl(RBinDwarfAbbrevDecl *ad) {
+	if (!ad) return -EINVAL;
 	ad->specs = calloc(sizeof(RBinDwarfAttrSpec), ABBREV_DECL_CAP);
 
 	if (!ad->specs)
@@ -719,7 +869,7 @@ static int r_bin_dwarf_init_abbrev_decl(RBinDwarfAbbrevDecl *ad) {
 static int r_bin_dwarf_expand_abbrev_decl(RBinDwarfAbbrevDecl *ad) {
 	RBinDwarfAttrSpec *tmp;
 
-	if (ad->capacity != ad->length)
+	if (!ad || ad->capacity==0 || ad->capacity != ad->length)
 		return -EINVAL;
 
 	tmp = (RBinDwarfAttrSpec*)realloc(ad->specs,
@@ -735,10 +885,11 @@ static int r_bin_dwarf_expand_abbrev_decl(RBinDwarfAbbrevDecl *ad) {
 }
 
 static int r_bin_dwarf_init_debug_abbrev(RBinDwarfDebugAbbrev *da) {
+
+	if (!da) return -EINVAL;
 	da->decls = calloc(sizeof(RBinDwarfAbbrevDecl), DEBUG_ABBREV_CAP);
 
-	if (!da->decls)
-		return -ENOMEM;
+	if (!da->decls) return -ENOMEM;
 
 	da->capacity = DEBUG_ABBREV_CAP;
 	da->length = 0;
@@ -749,7 +900,7 @@ static int r_bin_dwarf_init_debug_abbrev(RBinDwarfDebugAbbrev *da) {
 static int r_bin_dwarf_expand_debug_abbrev(RBinDwarfDebugAbbrev *da) {
 	RBinDwarfAbbrevDecl *tmp;
 
-	if (da->capacity != da->length)
+	if (!da || da->capacity == 0 || da->capacity != da->length)
 		return -EINVAL;
 
 	tmp = (RBinDwarfAbbrevDecl*)realloc(da->decls,
@@ -768,14 +919,15 @@ static void dump_r_bin_dwarf_debug_abbrev(FILE *f, RBinDwarfDebugAbbrev *da) {
 	size_t i, j;
 	ut64 attr_name, attr_form;
 
-eprintf ("F = %p\n", f);
-	if (!f) return;
+	if (!f || !da) return;
 	for (i = 0; i < da->length; i++) {
-		fprintf(f, "Abbreviation Code %lld ", da->decls[i].code);
-		fprintf(f, "Tag %s ", dwarf_tag_name_encodings[da->decls[i].tag]);
+		int declstag = da->decls[i].tag;
+		fprintf(f, "Abbreviation Code %"PFMT64d" ", da->decls[i].code);
+		if (declstag>=0 && declstag < DW_TAG_LAST)
+			fprintf(f, "Tag %s ", dwarf_tag_name_encodings[declstag]);
 		fprintf(f, "[%s]\n", da->decls[i].has_children ?
 				"has children" : "no children");
-		fprintf(f, "Offset 0x%llx\n", da->decls[i].offset);
+		fprintf(f, "Offset 0x%"PFMT64x"\n", da->decls[i].offset);
 
 		for (j = 0; j < da->decls[i].length; j++) {
 			attr_name = da->decls[i].specs[j].attr_name;
@@ -801,8 +953,8 @@ R_API void r_bin_dwarf_free_debug_abbrev(RBinDwarfDebugAbbrev *da) {
 	free (da->decls);
 }
 
-static void r_bin_dwarf_free_attr_value (RBinDwarfAttrValue *val)
-{
+static void r_bin_dwarf_free_attr_value (RBinDwarfAttrValue *val) {
+	if (!val) return;
 	switch (val->form) {
 	case DW_FORM_strp:
 	case DW_FORM_string:
@@ -823,21 +975,19 @@ static void r_bin_dwarf_free_attr_value (RBinDwarfAttrValue *val)
 	};
 }
 
-static void r_bin_dwarf_free_die (RBinDwarfDIE *die)
-{
+static void r_bin_dwarf_free_die (RBinDwarfDIE *die) {
 	size_t i;
-
+	if (!die) return;
 	for (i = 0; i < die->length; i++) {
 		r_bin_dwarf_free_attr_value (&die->attr_values[i]);
 	}
-
 	free (die->attr_values);
 }
 
 static void r_bin_dwarf_free_comp_unit (RBinDwarfCompUnit *cu)
 {
 	size_t i;
-
+	if (!cu) return;
 	for (i = 0; i < cu->length; i++) {
 		r_bin_dwarf_free_die (&cu->dies[i]);
 	}
@@ -848,7 +998,7 @@ static void r_bin_dwarf_free_comp_unit (RBinDwarfCompUnit *cu)
 static void r_bin_dwarf_free_debug_info (RBinDwarfDebugInfo *inf)
 {
 	size_t i;
-
+	if (!inf) return;
 	for (i = 0; i < inf->length; i++) {
 		r_bin_dwarf_free_comp_unit (&inf->comp_units[i]);
 	}
@@ -859,10 +1009,10 @@ static void r_bin_dwarf_free_debug_info (RBinDwarfDebugInfo *inf)
 static void r_bin_dwarf_dump_attr_value(const RBinDwarfAttrValue *val, FILE *f)
 {
 	size_t i;
-
+	if (!val || !f) return;
 	switch (val->form) {
 	case DW_FORM_addr:
-		fprintf(f, "0x%llx", val->encoding.address);
+		fprintf(f, "0x%"PFMT64x"", val->encoding.address);
 		break;
 	case DW_FORM_block:
 	case DW_FORM_block1:
@@ -883,7 +1033,7 @@ static void r_bin_dwarf_dump_attr_value(const RBinDwarfAttrValue *val, FILE *f)
 		}
 		break;
 	case DW_FORM_strp:
-		fprintf (f, "(indirect string, offset: 0x%llx): ",
+		fprintf (f, "(indirect string, offset: 0x%"PFMT64x"): ",
 				val->encoding.str_struct.offset);
 	case DW_FORM_string:
 		if (val->encoding.str_struct.string) {
@@ -896,34 +1046,33 @@ static void r_bin_dwarf_dump_attr_value(const RBinDwarfAttrValue *val, FILE *f)
 		fprintf (f, "%u", val->encoding.flag);
 		break;
 	case DW_FORM_sdata:
-		fprintf (f, "%lld", val->encoding.sdata);
+		fprintf (f, "%"PFMT64d"", val->encoding.sdata);
 		break;
 	case DW_FORM_udata:
 		fprintf (f, "%llu", val->encoding.data);
 		break;
 	case DW_FORM_ref_addr:
-		fprintf (f, "<0x%llx>", val->encoding.reference);
+		fprintf (f, "<0x%"PFMT64x">", val->encoding.reference);
 		break;
 	case DW_FORM_ref1:
 	case DW_FORM_ref2:
 	case DW_FORM_ref4:
 	case DW_FORM_ref8:
-		fprintf (f, "<0x%llx>", val->encoding.reference);
+		fprintf (f, "<0x%"PFMT64x">", val->encoding.reference);
 		break;
 	default:
-		fprintf (f, "Unknown attr value form %lld\n", val->form);
+		fprintf (f, "Unknown attr value form %"PFMT64d"\n", val->form);
 	};
 }
 
-static void r_bin_dwarf_dump_debug_info (FILE *f, const RBinDwarfDebugInfo *inf)
-{
+static void r_bin_dwarf_dump_debug_info (FILE *f, const RBinDwarfDebugInfo *inf) {
 	size_t i, j, k;
 	RBinDwarfDIE *dies;
 	RBinDwarfAttrValue *values;
-	if (!f) return;
+	if (!inf || !f) return;
 
 	for (i = 0; i < inf->length; i++) {
-		fprintf(f, "  Compilation Unit @ offset 0x%llx:\n", inf->comp_units [i].offset);
+		fprintf(f, "  Compilation Unit @ offset 0x%"PFMT64x":\n", inf->comp_units [i].offset);
 		fprintf(f, "   Length:        0x%x\n", inf->comp_units [i].hdr.length);
 		fprintf(f, "   Version:       %d\n", inf->comp_units [i].hdr.version);
 		fprintf(f, "   Abbrev Offset: 0x%x\n", inf->comp_units [i].hdr.abbrev_offset);
@@ -962,14 +1111,17 @@ static void r_bin_dwarf_dump_debug_info (FILE *f, const RBinDwarfDebugInfo *inf)
 	}
 }
 
-static const ut8 *r_bin_dwarf_parse_attr_value (const ut8 *obuf,
+static const ut8 *r_bin_dwarf_parse_attr_value (const ut8 *obuf, int obuf_len,
 		RBinDwarfAttrSpec *spec, RBinDwarfAttrValue *value,
 		const RBinDwarfCompUnitHdr *hdr,
 		const ut8 *debug_str, size_t debug_str_len)
 {
 	const ut8 *buf = obuf;
+	const ut8 *buf_end = obuf + obuf_len;
+
 	size_t j;
 
+	if (!spec || !value || !hdr || !obuf) return NULL;
 	value->form = spec->attr_form;
 	value->name = spec->attr_name;
 
@@ -993,7 +1145,6 @@ static const ut8 *r_bin_dwarf_parse_attr_value (const ut8 *obuf,
 					(unsigned)hdr->pointer_size);
 			return NULL;
 		}
-
 		break;
 
 	case DW_FORM_block2:
@@ -1034,7 +1185,7 @@ static const ut8 *r_bin_dwarf_parse_attr_value (const ut8 *obuf,
 		break;
 
 	case DW_FORM_block:
-		buf = r_uleb128 (buf, &value->encoding.block.length);
+		buf = r_uleb128 (buf, ST32_MAX, &value->encoding.block.length);
 
 		value->encoding.block.data = calloc(sizeof(ut8),
 				value->encoding.block.length);
@@ -1076,7 +1227,7 @@ static const ut8 *r_bin_dwarf_parse_attr_value (const ut8 *obuf,
 		break;
 
 	case DW_FORM_udata:
-		buf = r_uleb128 (buf, &value->encoding.data);
+		buf = r_uleb128 (buf, ST32_MAX, &value->encoding.data);
 		break;
 
 	case DW_FORM_ref_addr:
@@ -1110,7 +1261,7 @@ static const ut8 *r_bin_dwarf_parse_attr_value (const ut8 *obuf,
 	return buf;
 }
 
-static const ut8 *r_bin_dwarf_parse_comp_unit(const ut8 *obuf,
+static const ut8 *r_bin_dwarf_parse_comp_unit(Sdb *s, const ut8 *obuf,
 		RBinDwarfCompUnit *cu, const RBinDwarfDebugAbbrev *da,
 		size_t offset, const ut8 *debug_str, size_t debug_str_len)
 {
@@ -1118,17 +1269,22 @@ static const ut8 *r_bin_dwarf_parse_comp_unit(const ut8 *obuf,
 	ut64 abbr_code;
 	size_t i;
 
-	while (buf < buf_end) {
+	while (buf && buf < buf_end && buf >= obuf) {
 		if (cu->length && cu->capacity == cu->length)
 			r_bin_dwarf_expand_cu (cu);
 
-		buf = r_uleb128 (buf, &abbr_code);
+		buf = r_uleb128 (buf, ST32_MAX, &abbr_code);
+
+		if (abbr_code > da->length) {
+			return NULL;
+		}
 
 		r_bin_dwarf_init_die (&cu->dies[cu->length]);
 
 		if (!abbr_code) {
 			cu->dies[cu->length].abbrev_code = 0;
 			cu->length++;
+			buf++;
 			continue;
 		}
 
@@ -1138,34 +1294,41 @@ static const ut8 *r_bin_dwarf_parse_comp_unit(const ut8 *obuf,
 
 		for (i = 0; i < da->decls[abbr_code - 1].length; i++) {
 			if (cu->dies[cu->length].length ==
-				cu->dies[cu->length].capacity)
+					cu->dies[cu->length].capacity)
 				r_bin_dwarf_expand_die (&cu->dies[cu->length]);
-			buf = r_bin_dwarf_parse_attr_value (buf,
+			buf = r_bin_dwarf_parse_attr_value (buf, buf_end-buf,
 					&da->decls[abbr_code - 1].specs[i],
 					&cu->dies[cu->length].attr_values[i],
 					&cu->hdr, debug_str, debug_str_len);
 
+			if (cu->dies[cu->length].attr_values[i].name == DW_AT_comp_dir) {
+				ut64 comp_dir = (ut64)(size_t)
+					cu->dies[cu->length].attr_values[i].encoding.str_struct.string;
+				if (s) {
+					sdb_num_add (s, "DW_AT_comp_dir", comp_dir, 0);
+					//sdb_add (s, "DW_AT_comp_dir", (const char *)comp_dir, 0);
+				}
+			}
 			cu->dies[cu->length].length++;
 		}
-
 		cu->length++;
 	}
 
 	return buf;
 }
 
-R_API int r_bin_dwarf_parse_info_raw(RBinDwarfDebugAbbrev *da,
+R_API int r_bin_dwarf_parse_info_raw(Sdb *s, RBinDwarfDebugAbbrev *da,
 		const ut8 *obuf, size_t len,
-		const ut8 *debug_str, size_t debug_str_len)
+		const ut8 *debug_str, size_t debug_str_len, int mode)
 {
 	const ut8 *buf = obuf, *buf_end = obuf + len;
 	size_t curr_unit = 0, k, offset = 0;
 
-	RBinDwarfDebugInfo *inf, di;
+	RBinDwarfDebugInfo *inf = NULL, di;
 	inf = &di;
 
 	r_bin_dwarf_init_debug_info (inf);
-
+	if (!da || !s || !obuf) return R_FALSE;
 	while (buf < buf_end) {
 		if (inf->length >= inf->capacity)
 			break;
@@ -1177,11 +1340,11 @@ R_API int r_bin_dwarf_parse_info_raw(RBinDwarfDebugAbbrev *da,
 		inf->comp_units[curr_unit].hdr.version = READ (buf, ut16);
 
 		if (inf->comp_units[curr_unit].hdr.version != 2) {
-			eprintf("DWARF: version %d is yet not supported\n",
-					inf->comp_units[curr_unit].hdr.version);
-
+//			eprintf ("DWARF: version %d is not yet supported.\n",
+//					inf->comp_units[curr_unit].hdr.version);
 			return -1;
 		}
+		if (inf->comp_units[curr_unit].hdr.length > len) return -1;
 
 		inf->comp_units[curr_unit].hdr.abbrev_offset = READ (buf, ut32);
 		inf->comp_units[curr_unit].hdr.pointer_size = READ (buf, ut8);
@@ -1196,35 +1359,44 @@ R_API int r_bin_dwarf_parse_info_raw(RBinDwarfDebugAbbrev *da,
 			}
 		}
 
-		buf = r_bin_dwarf_parse_comp_unit(buf, &inf->comp_units[curr_unit],
+		buf = r_bin_dwarf_parse_comp_unit(s, buf, &inf->comp_units[curr_unit],
 				da, offset, debug_str, debug_str_len);
+
+		if (!buf) {
+			r_bin_dwarf_free_debug_info (inf);
+			return R_FALSE;
+		}
 
 		curr_unit++;
 	}
 
-	r_bin_dwarf_dump_debug_info (NULL, inf);
+	if (mode == R_CORE_BIN_PRINT) {
+		r_bin_dwarf_dump_debug_info (NULL, inf);
+	}
+
 	r_bin_dwarf_free_debug_info (inf);
 
-	return 0;
+	return R_TRUE;
 }
 
-static RBinDwarfDebugAbbrev *r_bin_dwarf_parse_abbrev_raw(const ut8 *obuf,
-		size_t len)
-{
+static RBinDwarfDebugAbbrev *r_bin_dwarf_parse_abbrev_raw(const ut8 *obuf, size_t len, int mode) {
 	const ut8 *buf = obuf, *buf_end = obuf + len;
 	ut64 tmp, spec1, spec2, offset;
 	ut8 has_children;
 	RBinDwarfAbbrevDecl *tmpdecl;
 
-	RBinDwarfDebugAbbrev *da = (RBinDwarfDebugAbbrev*)
-		malloc(sizeof(RBinDwarfDebugAbbrev));
+	RBinDwarfDebugAbbrev *da = NULL;
+	// XXX - Set a suitable value here.
+	if (!obuf || len < 3) return da;
+	
+	da = R_NEW0(RBinDwarfDebugAbbrev);
 
 	r_bin_dwarf_init_debug_abbrev (da);
 
-	while (buf < buf_end) {
+	while (buf && buf+1 < buf_end) {
 		offset = buf - obuf;
-		buf = r_uleb128(buf, &tmp);
-		if (!tmp)
+		buf = r_uleb128 (buf, (size_t)(buf_end-buf), &tmp);
+		if (!buf || !tmp)
 			continue;
 
 		if (da->length == da->capacity)
@@ -1235,18 +1407,20 @@ static RBinDwarfDebugAbbrev *r_bin_dwarf_parse_abbrev_raw(const ut8 *obuf,
 		r_bin_dwarf_init_abbrev_decl(tmpdecl);
 
 		tmpdecl->code = tmp;
-		buf = r_uleb128(buf, &tmp);
+		buf = r_uleb128 (buf, (size_t)(buf_end-buf), &tmp);
 		tmpdecl->tag = tmp;
 
 		tmpdecl->offset = offset;
+		if (buf>=buf_end)
+			break;
 		has_children = READ (buf, ut8);
 		tmpdecl->has_children = has_children;
 		do {
 			if (tmpdecl->length == tmpdecl->capacity)
 				r_bin_dwarf_expand_abbrev_decl(tmpdecl);
 
-			buf = r_uleb128(buf, &spec1);
-			buf = r_uleb128(buf, &spec2);
+			buf = r_uleb128(buf, (size_t)(buf_end-buf), &spec1);
+			buf = r_uleb128(buf, (size_t)(buf_end-buf), &spec2);
 
 			tmpdecl->specs[tmpdecl->length].attr_name = spec1;
 			tmpdecl->specs[tmpdecl->length].attr_form = spec2;
@@ -1257,43 +1431,63 @@ static RBinDwarfDebugAbbrev *r_bin_dwarf_parse_abbrev_raw(const ut8 *obuf,
 		da->length++;
 	}
 
-	dump_r_bin_dwarf_debug_abbrev(NULL, da);
+	if (mode == R_CORE_BIN_PRINT)
+		dump_r_bin_dwarf_debug_abbrev(stdout, da);
 
 	return da;
 }
 
 RBinSection *getsection(RBin *a, const char *sn) {
 	RListIter *iter;
-	RBinSection *section;
+	RBinSection *section = NULL;
+	RBinFile *binfile = a ? a->cur: NULL;
+	RBinObject *o = binfile ? binfile->o : NULL;
 
-	if (a->cur->o->sections) {
-		r_list_foreach (a->cur->o->sections, iter, section) {
-			if (strstr (section->name, sn))
+	if ( o && o->sections) {
+		r_list_foreach (o->sections, iter, section) {
+			if (strstr (section->name, sn)) {
 				return section;
+}
 		}
 	}
 	return NULL;
 }
 
-R_API int r_bin_dwarf_parse_info(RBinDwarfDebugAbbrev *da, RBin *a) {
+R_API int r_bin_dwarf_parse_info(RBinDwarfDebugAbbrev *da, RBin *a, int mode) {
 	ut8 *buf, *debug_str_buf = 0;
 	int len, debug_str_len = 0, ret;
 	RBinSection *debug_str;
 	RBinSection *section = getsection (a, "debug_info");
-	if (section) {
+	RBinFile *binfile = a ? a->cur: NULL;
+
+	if (binfile && section) {
 		debug_str = getsection (a, "debug_str");
 		if (debug_str) {
 			debug_str_len = debug_str->size;
-			debug_str_buf = malloc (debug_str_len);
-			r_buf_read_at (a->cur->buf, debug_str->offset,
+			debug_str_buf = calloc (1, debug_str_len);
+			ret = r_buf_read_at (binfile->buf, debug_str->paddr,
 					debug_str_buf, debug_str_len);
+			if (!ret) {
+				free (debug_str_buf);
+				return R_FALSE;
+			}
 		}
 
 		len = section->size;
-		buf = malloc (len);
-		r_buf_read_at (a->cur->buf, section->offset, buf, len);
-		ret = r_bin_dwarf_parse_info_raw (da, buf, len,
-				debug_str_buf, debug_str_len);
+		if (len > (UT32_MAX>>1) || len <1) {
+			free (debug_str_buf);
+			return R_FALSE;
+		}
+		buf = calloc (1, len);
+		ret = r_buf_read_at (binfile->buf, section->paddr, buf, len);
+
+		if (!ret) {
+			free (debug_str_buf);
+			free (buf);
+			return R_FALSE;
+		}
+		ret = r_bin_dwarf_parse_info_raw (binfile->sdb_addrinfo, da, buf, len,
+				debug_str_buf, debug_str_len, mode);
 		if (debug_str_buf) {
 			free (debug_str_buf);
 		}
@@ -1303,49 +1497,106 @@ R_API int r_bin_dwarf_parse_info(RBinDwarfDebugAbbrev *da, RBin *a) {
 	return R_FALSE;
 }
 
-R_API RList *r_bin_dwarf_parse_line(RBin *a) {
-	ut8 *buf;
-	int len;
-	RBinSection *section = getsection (a, "debug_line");
-	if (section) {
-		RList *list = r_list_new ();
-		len = section->size;
-		buf = malloc (len);
-		r_buf_read_at (a->cur->buf, section->offset, buf, len);
-		r_bin_dwarf_parse_line_raw2 (a, buf, len, list, DBGFD);
-		free (buf);
-		return list;
-	}
-	return NULL;
+static RBinDwarfRow *r_bin_dwarf_row_new (ut64 addr, const char *file, int line, int col) {
+	RBinDwarfRow *row = R_NEW0 (RBinDwarfRow);
+	row->file = strdup (file);
+	row->address = addr;
+	row->line = line;
+	row->column = 0;
+	return row;
 }
 
-R_API RList *r_bin_dwarf_parse_aranges(RBin *a) {
+static void r_bin_dwarf_row_free (void *p) {
+	RBinDwarfRow *row = (RBinDwarfRow*)p;
+	free (row->file);
+	free (row);
+}
+
+R_API RList *r_bin_dwarf_parse_line(RBin *a, int mode) {
 	ut8 *buf;
+	RList *list = NULL;
+	int len, ret;
+	RBinSection *section = getsection (a, "debug_line");
+	RBinFile *binfile = a ? a->cur: NULL;
+	if (binfile && section) {
+		len = section->size;
+		if (len<1) {
+			return NULL;
+		}
+		buf = calloc (1, len+1);
+		ret = r_buf_read_at (binfile->buf, section->paddr, buf, len);
+		if (!ret) {
+			free (buf);
+			return NULL;
+		}
+		list = r_list_new (); // always return empty list wtf
+		list->free = r_bin_dwarf_row_free;
+		r_bin_dwarf_parse_line_raw2 (a, buf, len, mode);
+		// k bin/cur/addrinfo/*
+		SdbListIter *iter;
+		SdbKv *kv;
+		ls_foreach (binfile->sdb_addrinfo->ht->list, iter, kv) {
+			if (!strncmp (kv->key, "0x", 2)) {
+				ut64 addr;
+				RBinDwarfRow *row;
+				int line;
+				char *file = strdup (kv->value);
+				char *tok = strchr (file, '|');
+				if (tok) {
+					*tok++ = 0;
+					line = atoi (tok);
+					addr = r_num_math (NULL, kv->key);
+					row = r_bin_dwarf_row_new (addr, file, line, 0);
+					r_list_append (list, row);
+				}
+				free (file);
+			}
+		}
+		free (buf);
+	}
+	return list;
+}
+
+R_API RList *r_bin_dwarf_parse_aranges(RBin *a, int mode) {
+	ut8 *buf;
+	int ret;
 	size_t len;
 	RBinSection *section = getsection (a, "debug_aranges");
+	RBinFile *binfile = a ? a->cur: NULL;
 
-	if (section) {
+	if (binfile && section) {
 		len = section->size;
-		buf = malloc (len);
-		r_buf_read_at (a->cur->buf, section->offset, buf, len);
-		r_bin_dwarf_parse_aranges_raw (buf, len, DBGFD);
-		free(buf);
-	}
+		if (len<1 || len > ST32_MAX) return NULL;
+		buf = calloc (1, len);
+		ret = r_buf_read_at (binfile->buf, section->paddr, buf, len);
 
+		if (!ret) {
+			free (buf);
+			return NULL;
+		}
+
+		if (mode == R_CORE_BIN_PRINT) {
+			r_bin_dwarf_parse_aranges_raw (buf, len, stdout);
+		} else {
+			r_bin_dwarf_parse_aranges_raw (buf, len, DBGFD);
+		}
+		free (buf);
+	}
 	return NULL;
 }
 
-R_API RBinDwarfDebugAbbrev *r_bin_dwarf_parse_abbrev(RBin *a) {
+R_API RBinDwarfDebugAbbrev *r_bin_dwarf_parse_abbrev(RBin *a, int mode) {
 	ut8 *buf;
 	size_t len;
 	RBinSection *section = getsection (a, "debug_abbrev");
 	RBinDwarfDebugAbbrev *da = NULL;
+	RBinFile *binfile = a ? a->cur: NULL;
 
-	if (section) {
+	if (binfile && section) {
 		len = section->size;
-		buf = malloc (len);
-		r_buf_read_at (a->cur->buf, section->offset, buf, len);
-		da = r_bin_dwarf_parse_abbrev_raw (buf, len);
+		buf = calloc (1,len);
+		r_buf_read_at (binfile->buf, section->paddr, buf, len);
+		da = r_bin_dwarf_parse_abbrev_raw (buf, len, mode);
 		free (buf);
 	}
 

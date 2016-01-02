@@ -1,12 +1,22 @@
-/* radare - LGPL - Copyright 2009-2013 - nibble, pancake */
+/* radare - LGPL - Copyright 2009-2014 - nibble, pancake */
 
 #define R_BIN_MACH064 1
 #include "bin_mach0.c"
 
+static int check(RBinFile *arch);
+static int check_bytes(const ut8 *buf, ut64 length);
+
 static int check(RBinFile *arch) {
-	if (arch && arch->buf && arch->buf->buf)
-	if (!memcmp (arch->buf->buf, "\xfe\xed\xfa\xcf", 4) ||
-		!memcmp (arch->buf->buf, "\xcf\xfa\xed\xfe", 4))
+	const ut8 *bytes = arch ? r_buf_buffer (arch->buf) : NULL;
+	ut64 sz = arch ? r_buf_size (arch->buf): 0;
+	return check_bytes (bytes, sz);
+}
+
+static int check_bytes(const ut8 *buf, ut64 length) {
+
+	if (buf && length > 4)
+	if (!memcmp (buf, "\xfe\xed\xfa\xcf", 4) ||
+		!memcmp (buf, "\xcf\xfa\xed\xfe", 4))
 		return R_TRUE;
 	return R_FALSE;
 }
@@ -165,11 +175,10 @@ static RBinAddr* binsym(RBinFile *arch, int sym) {
 	RBinAddr *ret = NULL;
 	switch (sym) {
 	case R_BIN_SYM_MAIN:
-		addr = MACH0_(r_bin_mach0_get_main) (arch->o->bin_obj);
-		if (!addr || !(ret = R_NEW (RBinAddr)))
+		addr = MACH0_(get_main) (arch->o->bin_obj);
+		if (!addr || !(ret = R_NEW0 (RBinAddr)))
 			return NULL;
-		memset (ret, '\0', sizeof (RBinAddr));
-		ret->offset = ret->rva = addr;
+		ret->paddr = ret->vaddr = addr;
 		break;
 	}
 	return ret;
@@ -181,9 +190,12 @@ RBinPlugin r_bin_plugin_mach064 = {
 	.license = "LGPL3",
 	.init = NULL,
 	.fini = NULL,
+	.get_sdb = &get_sdb,
 	.load = &load,
+	.load_bytes = &load_bytes,
 	.destroy = &destroy,
 	.check = &check,
+	.check_bytes = &check_bytes,
 	.baddr = &baddr,
 	.boffset = NULL,
 	.binsym = binsym,
@@ -196,7 +208,7 @@ RBinPlugin r_bin_plugin_mach064 = {
 	.fields = NULL,
 	.libs = &libs,
 	.relocs = &relocs,
-	.meta = NULL,
+	.dbginfo = NULL,
 	.write = NULL,
 	.create = &create,
 };

@@ -1,11 +1,10 @@
 #!/bin/sh
 
 BUILD=1
-PREFIX="/data/data/org.radare.installer/radare2"
-if [ -z "${NDK}" ]; then
-	echo "use ./android-{arm|mips|x86}.sh"
-	exit 1
-fi
+PREFIX="/data/data/org.radare2.installer/radare2"
+
+type pax
+[ $? != 0 ] && exit 1
 
 cd `dirname $PWD/$0` ; cd ..
 
@@ -15,15 +14,29 @@ case "$1" in
 	STATIC_BUILD=0
 	STRIP=mips-linux-android-strip
 	;;
+"mips64")
+	NDK_ARCH=mips64
+	STATIC_BUILD=0
+	STRIP=mips64el-linux-android-strip
+	;;
 "arm")
 	NDK_ARCH=arm
 	STATIC_BUILD=0
 	STRIP=arm-eabi-strip
 	;;
+"aarch64")
+	NDK_ARCH=aarch64
+	STATIC_BUILD=0
+	STRIP=aarch64-linux-android-strip
+	;;
 "x86")
 	NDK_ARCH=x86
 	STATIC_BUILD=0
 	STRIP=strip
+	;;
+aarch64-static|static-aarch64)
+	NDK_ARCH=aarch64
+	STATIC_BUILD=1
 	;;
 arm-static|static-arm)
 	NDK_ARCH=arm
@@ -39,8 +52,19 @@ mips-static|static-mips)
 	STATIC_BUILD=1
 	STRIP=mips-linux-android-strip
 	;;
+mips64-static|static-mips64)
+	NDK_ARCH=mips64
+	# XXX: by default we should build all libs as .a but link binary dinamically
+	STATIC_BUILD=1
+	STRIP=mips64el-linux-android-strip
+	;;
+local)
+	BUILD=0
+	sys/static.sh ${PREFIX}
+	NDK_ARCH=local
+	;;
 ""|"-h")
-	echo "Usage: android-build.sh [arm|x86|mips][-static]"
+	echo "Usage: android-build.sh [local|arm|aarch64|x86|mips|mips64][-static]"
 	exit 1
 	;;
 *)
@@ -64,21 +88,26 @@ echo "Using NDK_ARCH: ${NDK_ARCH}"
 echo "Using STATIC_BUILD: ${STATIC_BUILD}"
 
 if [ "${BUILD}" = 1 ]; then
-# start build
-sleep 2
+	if [ -z "${NDK}" ]; then
+		echo "Missing NDK env var. Use ./android-{arm|aarch64|mips|mips64|x86}.sh"
+		exit 1
+	fi
+	export ANDROID=1
+	# start build
+	sleep 1
 
-make mrproper
-if [ $STATIC_BUILD = 1 ]; then
-	CFGFLAGS="--without-pic --with-nonpic"
-fi
-# dup
-echo ./configure --with-compiler=android \
-	--with-ostype=android --without-ewf \
-	--prefix=${PREFIX} ${CFGFLAGS}
+	make mrproper
+	if [ $STATIC_BUILD = 1 ]; then
+		CFGFLAGS="--without-pic --with-nonpic"
+	fi
+	# dup
+	echo ./configure --with-compiler=android \
+		--with-ostype=android --without-ewf \
+		--prefix=${PREFIX} ${CFGFLAGS}
 
-./configure --with-compiler=android --with-ostype=android \
-	--without-ewf --prefix=${PREFIX} ${CFGFLAGS} || exit 1
-make -s -j 4 || exit 1
+	./configure --with-compiler=android --with-ostype=android \
+		--prefix=${PREFIX} ${CFGFLAGS} || exit 1
+	make -s -j 4 || exit 1
 fi
 rm -rf $D
 mkdir -p $D
@@ -88,14 +117,14 @@ INSTALL_PROGRAM=`grep INSTALL_DATA config-user.mk|cut -d = -f 2`
 make install INSTALL_PROGRAM="${INSTALL_PROGRAM}" DESTDIR=$PWD/$D || exit 1
 
 make purge-dev DESTDIR=${PWD}/${D} STRIP="${STRIP}"
-make purge-doc DESTDIR=${PWD}/${D} STRIP="${STRIP}"
+#make purge-doc DESTDIR=${PWD}/${D} STRIP="${STRIP}"
 rm -rf ${PWD}/${D}/share
 rm -rf ${PWD}/${D}/include
 rm -rf ${PWD}/${D}/lib/pkgconfig
 rm -rf ${PWD}/${D}/lib/libsdb.a
 
 echo rm -rf ${PWD}/${D}/${PREFIX}/bin/*
-rm -rf ${PWD}/${D}/${PREFIX}/bin/*
+rm -rf "${PWD}/${D}/${PREFIX}/bin/"*
 
 #end build
 
@@ -104,24 +133,43 @@ HERE=${PWD}
 cd binr/blob
 make STATIC_BUILD=1 || exit 1
 make install PREFIX="${PREFIX}" DESTDIR="${HERE}/${D}" || exit 1
+mkdir -p ${HERE}/${D}/${PREFIX}/projects
+:> ${HERE}/${D}/${PREFIX}/projects/.empty
+mkdir -p ${HERE}/${D}/${PREFIX}/tmp
+:> ${HERE}/${D}/${PREFIX}/tmp/.empty
 cd ../..
 
-chmod +x ${PWD}/${D}/${PREFIX}/bin/*
+chmod +x "${HERE}/${D}/${PREFIX}/bin/"*
+find ${D}/${PREFIX}/share/radare2/*/www
+# Remove development files
+rm -f ${HERE}/${D}/${PREFIX}/lib/radare2/*/*.so
+rm -f ${HERE}/${D}/${PREFIX}/lib/*.a
+rm -rf ${HERE}/${D}/${PREFIX}/share/radare2/*/www/*/node_modules
+rm -rf ${HERE}/${D}/${PREFIX}/include
+eval `grep ^VERSION= ${HERE}/config-user.mk`
+#WWWROOT="/data/data/org.radare2.installer/radare2/share/radare2/${VERSION}/www"
+#ln -fs ${WWWROOT} ${HERE}/${D}/data/data/org.radare2.installer/www
+#cp -rf ${WWWROOT} ${HERE}/${D}/data/data/org.radare2.installer/www
+#chmod -R o+rx ${HERE}/${D}/data/data/org.radare2.installer/www
+cd ${D}
+#sltar -c data | gzip > ../$D.tar.gz
+pax -w data | gzip > ../$D.tar.gz
 
-# TODO: remove unused files like include files and so on
-rm -f ${PWD}/${D}/${PREFIX}/lib/radare2/*/*.so
-rm -f ${PWD}/${D}/${PREFIX}/lib/*.a
-rm -rf ${PWD}/${D}/${PREFIX}/include
-rm -rf ${PWD}/${D}/${PREFIX}/doc
-eval `grep ^VERSION= ${PWD}/config-user.mk`
-WWWROOT="/data/data/org.radare.installer/radare2/lib/radare2/${VERSION}/www"
-ln -fs ${WWWROOT} ${HERE}/${D}/data/data/org.radare.installer/www
-cd $D
-tar -czovf ../$D.tar.gz data
+#	tar --help| grep -q GNU
+#	if [ $? = 0 ]; then
+#		echo tar -czv -H oldgnu -f ../$D.tar.gz data
+#		tar -czv -H oldgnu -f ../$D.tar.gz data
+#	else
+#		echo tar -czovf ../$D.tar.gz data
+#		tar -czovf ../$D.tar.gz data
+#	fi
+
 cd ..
 D2=`git log HEAD 2>/dev/null|head -n1|awk '{print $2}'|cut -c 1-8`
 if [ -n "$D2" ]; then
 	ln -fs $D.tar.gz "${D}-${D2}".tar.gz
 fi
 echo `pwd`"/${D}.tar.gz"
-echo `pwd`"/${D}${D2}.tar.gz"
+echo `pwd`"/${D}-${D2}.tar.gz"
+
+adb push `pwd`"/${D}-${D2}.tar.gz" /sdcard/radare2-android.tar.gz || true

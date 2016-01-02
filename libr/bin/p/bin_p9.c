@@ -6,10 +6,30 @@
 #include <r_bin.h>
 #include "../format/p9/p9bin.h"
 
+static int check(RBinFile *arch);
+static int check_bytes(const ut8 *buf, ut64 length);
+
 static int check(RBinFile *arch) {
-	if (arch && arch->buf && arch->buf->buf)
-		return (r_bin_p9_get_arch (arch->buf->buf, NULL, NULL));
+	const ut8 *bytes = arch ? r_buf_buffer (arch->buf) : NULL;
+	ut64 sz = arch ? r_buf_size (arch->buf): 0;
+	return check_bytes (bytes, sz);
+}
+
+static int check_bytes(const ut8 *buf, ut64 length) {
+	if (buf && length >= 4)
+		return (r_bin_p9_get_arch (buf, NULL, NULL));
 	return R_FALSE;
+}
+
+static Sdb* get_sdb (RBinObject *o) {
+	if (!o) return NULL;
+	//struct r_bin_[NAME]_obj_t *bin = (struct r_bin_r_bin_[NAME]_obj_t *) o->bin_obj;
+	//if (bin->kv) return kv;
+	return NULL;
+}
+
+static void * load_bytes(RBinFile *arch, const ut8 *buf, ut64 sz, ut64 loadaddr, Sdb *sdb){
+	return (void*)(size_t)check_bytes (buf, sz);
 }
 
 static int load(RBinFile *arch) {
@@ -36,8 +56,8 @@ static RList* entries(RBinFile *arch) {
 		return NULL;
 	ret->free = free;
 	if ((ptr = R_NEW (RBinAddr))) {
-		ptr->offset = 8*4;
-		ptr->rva = 8*4;// + baddr (arch);
+		ptr->paddr = 8*4;
+		ptr->vaddr = 8*4;// + baddr (arch);
 		r_list_append (ret, ptr);
 	}
 	return ret;
@@ -60,8 +80,8 @@ static RList* sections(RBinFile *arch) {
 	strncpy (ptr->name, "text", R_BIN_SIZEOF_STRINGS);
 	ptr->size = textsize;
 	ptr->vsize = textsize + (textsize%4096);
-	ptr->offset = 8*4;
-	ptr->rva = ptr->offset;
+	ptr->paddr = 8*4;
+	ptr->vaddr = ptr->paddr;
 	ptr->srwx = 5; // r-x
 	r_list_append (ret, ptr);
 	// add data segment
@@ -72,8 +92,8 @@ static RList* sections(RBinFile *arch) {
 		strncpy (ptr->name, "data", R_BIN_SIZEOF_STRINGS);
 		ptr->size = datasize;
 		ptr->vsize = datasize + (datasize%4096);
-		ptr->offset = textsize+(8*4);
-		ptr->rva = ptr->offset;
+		ptr->paddr = textsize+(8*4);
+		ptr->vaddr = ptr->paddr;
 		ptr->srwx = 6; // rw-
 		r_list_append (ret, ptr);
 	}
@@ -86,8 +106,8 @@ static RList* sections(RBinFile *arch) {
 		strncpy (ptr->name, "syms", R_BIN_SIZEOF_STRINGS);
 		ptr->size = symssize;
 		ptr->vsize = symssize + (symssize%4096);
-		ptr->offset = datasize+textsize+(8*4);
-		ptr->rva = ptr->offset;
+		ptr->paddr = datasize+textsize+(8*4);
+		ptr->vaddr = ptr->paddr;
 		ptr->srwx = 4; // r--
 		r_list_append (ret, ptr);
 	}
@@ -99,8 +119,8 @@ static RList* sections(RBinFile *arch) {
 		strncpy (ptr->name, "spsz", R_BIN_SIZEOF_STRINGS);
 		ptr->size = spszsize;
 		ptr->vsize = spszsize + (spszsize%4096);
-		ptr->offset = symssize+datasize+textsize+(8*4);
-		ptr->rva = ptr->offset;
+		ptr->paddr = symssize+datasize+textsize+(8*4);
+		ptr->vaddr = ptr->paddr;
 		ptr->srwx = 4; // r--
 		r_list_append (ret, ptr);
 	}
@@ -112,8 +132,8 @@ static RList* sections(RBinFile *arch) {
 		strncpy (ptr->name, "pcsz", R_BIN_SIZEOF_STRINGS);
 		ptr->size = pcszsize;
 		ptr->vsize = pcszsize + (pcszsize%4096);
-		ptr->offset = spszsize+symssize+datasize+textsize+(8*4);
-		ptr->rva = ptr->offset;
+		ptr->paddr = spszsize+symssize+datasize+textsize+(8*4);
+		ptr->vaddr = ptr->paddr;
 		ptr->srwx = 4; // r--
 		r_list_append (ret, ptr);
 	}
@@ -134,26 +154,21 @@ static RList* libs(RBinFile *arch) {
 }
 
 static RBinInfo* info(RBinFile *arch) {
-	const char *archstr;
 	RBinInfo *ret = NULL;
-	int big_endian = 0;
-	int bits = 32;
-	int bina;
+	int bits=32, bina, big_endian = 0;
 
 	if (!(bina = r_bin_p9_get_arch (arch->buf->buf, &bits, &big_endian)))
 		return NULL;
 	if ((ret = R_NEW0 (RBinInfo)) == NULL)
 		return NULL;
-	strncpy (ret->file, arch->file, R_BIN_SIZEOF_STRINGS);
-	strncpy (ret->rpath, "NONE", R_BIN_SIZEOF_STRINGS);
-	strncpy (ret->bclass, "program", R_BIN_SIZEOF_STRINGS);
-	strncpy (ret->rclass, "p9", R_BIN_SIZEOF_STRINGS);
-	strncpy (ret->os, "plan9", R_BIN_SIZEOF_STRINGS);
-	archstr = r_sys_arch_str (bina);
-	strncpy (ret->arch, archstr, R_BIN_SIZEOF_STRINGS);
-	strncpy (ret->machine, archstr, R_BIN_SIZEOF_STRINGS);
-	strncpy (ret->subsystem, "plan9", R_BIN_SIZEOF_STRINGS);
-	strncpy (ret->type, "EXEC (Executable file)", R_BIN_SIZEOF_STRINGS);
+	ret->file = strdup (arch->file);
+	ret->bclass = strdup ("program");
+	ret->rclass = strdup ("p9");
+	ret->os = strdup ("Plan9");
+	ret->arch = strdup (r_sys_arch_str (bina));
+	ret->machine = strdup (ret->arch);
+	ret->subsystem = strdup ("plan9");
+	ret->type = strdup ("EXEC (executable file)");
 	ret->bits = bits;
 	ret->has_va = R_TRUE;
 	ret->big_endian = big_endian;
@@ -203,10 +218,13 @@ struct r_bin_plugin_t r_bin_plugin_p9 = {
 	.license = "LGPL3",
 	.init = NULL,
 	.fini = NULL,
+	.get_sdb = &get_sdb,
 	.load = &load,
+	.load_bytes = &load_bytes,
 	.size = &size,
 	.destroy = &destroy,
 	.check = &check,
+	.check_bytes = &check_bytes,
 	.baddr = &baddr,
 	.boffset = NULL,
 	.binsym = &binsym,
@@ -219,7 +237,7 @@ struct r_bin_plugin_t r_bin_plugin_p9 = {
 	.fields = NULL,
 	.libs = &libs,
 	.relocs = NULL,
-	.meta = NULL,
+	.dbginfo = NULL,
 	.write = NULL,
 	.create = &create,
 };

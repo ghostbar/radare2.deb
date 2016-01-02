@@ -3,7 +3,7 @@
 #include <r_debug.h>
 #include "../config.h"
 
-static RDebugPlugin *debug_static_plugins[] = 
+static RDebugPlugin *debug_static_plugins[] =
 	{ R_DEBUG_STATIC_PLUGINS };
 
 R_API int r_debug_plugin_init(RDebug *dbg) {
@@ -43,6 +43,7 @@ R_API int r_debug_use(RDebug *dbg, const char *str) {
 			if (dbg->h->init)
 				dbg->h->init (dbg);
 			r_reg_set_profile_string (dbg->reg, p);
+			free (p);
 		}
 	}
 	return (dbg->h != NULL);

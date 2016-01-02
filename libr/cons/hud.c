@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2013 - pancake */
+/* radare - LGPL - Copyright 2008-2014 - pancake */
 
 #include <r_cons.h>
 #include <ctype.h>
@@ -20,6 +20,8 @@ R_API char *r_cons_hud_file(const char *f) {
 	if (s) {
 		char *ret = r_cons_hud_string (s);
 		free (s);
+		if (!ret)
+			ret = strdup ("");
 		return ret;
 	}
 	return NULL;
@@ -29,18 +31,17 @@ R_API char *r_cons_hud_string(const char *s) {
 	int i;
 	char *os, *ret, *o = strdup (s);
 	RList *fl = r_list_new ();
+	if (!fl) {
+		free (o);
+		return NULL;
+	}
 	fl->free = free;
 	for (os=o, i=0; o[i]; i++) {
 		if (o[i]=='\n') {
 			o[i] = 0;
-			if (!fl) {
-				r_list_free (fl);
-				free (o);
-				return NULL;
-			}
 			if (*os && *os != '#')
 				r_list_append (fl, strdup (os));
-			os = o+i+1;
+			os = o + i + 1;
 		}
 	}
 	ret = r_cons_hud (fl, NULL);
@@ -93,7 +94,7 @@ R_API char *r_cons_hud(RList *list, const char *prompt) {
 					p = strdup (pos);
 					for (j=0; p[j]; j++) {
 						if (strchr (buf, p[j]))
-							p[j] = toupper (p[j]);
+							p[j] = toupper ((unsigned char)p[j]);
 					}
 					r_cons_printf (" %c %s\n", first?'-':' ', p);
 					free (p);
@@ -144,9 +145,11 @@ R_API char *r_cons_hud(RList *list, const char *prompt) {
 			buf[--i] = 0;
 			break;
 		default:
-			choose = 0;
-			buf[i++] = ch;
-			buf[i] = 0;
+			if (IS_PRINTABLE (ch)) {
+				choose = 0;
+				buf[i++] = ch;
+				buf[i] = 0;
+			}
 			break;
 		}
 	}
@@ -156,10 +159,13 @@ R_API char *r_cons_hud(RList *list, const char *prompt) {
 R_API char *r_cons_hud_path(const char *path, int dir) {
 	char *tmp = NULL, *ret = NULL;
 	RList *files;
-	while (*path==' ') path++;
-	if (!path || !*path)
+	if (path){
+		while (*path==' ')
+			path++;
+		tmp = (*path)? strdup(path): strdup ("./");
+	} else
 		tmp = strdup ("./");
-	else tmp = strdup (path);
+
 	files = r_sys_dir (tmp);
 	if (files) {
 		ret = r_cons_hud (files, tmp);
@@ -175,6 +181,7 @@ R_API char *r_cons_hud_path(const char *path, int dir) {
 				tmp = ret;
 			}
 		}
+		r_list_free (files);
 	} else eprintf ("No files found\n");
 	if (!ret) {
 		free (tmp);
@@ -195,7 +202,7 @@ R_API char *r_cons_message(const char *msg) {
 	r_cons_printf ("%s\n", msg);
 	r_cons_flush ();
 	r_cons_gotoxy (0, rows-2); // XXX
-	r_cons_any_key ();
+	r_cons_any_key (NULL);
 	return NULL;
 }
 

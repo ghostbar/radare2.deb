@@ -1,31 +1,28 @@
-/* radare - LGPL - Copyright 2009-2013 - pancake */
+/* radare - LGPL - Copyright 2009-2015 - pancake */
 
 #include <r_io.h>
+#include <r_util.h>
+#include <r_cons.h>
 // TODO: to be deprecated.. this is slow and boring
 
 R_API void r_io_desc_init(RIO *io) {
-	io->desc = r_list_new ();
-	io->desc->free = (RListFree)r_io_desc_free;
+	io->files = r_list_new ();
+	io->files->free = (RListFree)r_io_desc_free;
 }
 
 R_API void r_io_desc_fini(RIO *io) {
-	r_list_free (io->desc);
+	r_list_free (io->files);
 }
 
 R_API ut64 r_io_desc_size(RIO *io, RIODesc *desc){
 	RIODesc *old = NULL;
     	ut64 sz = -1;
-
-	if (desc && io->fd != desc){
-		old = io->fd;
-		r_io_set_fd(io, desc);
+	if (desc && io->desc != desc){
+		old = io->desc;
+		r_io_use_desc (io, desc);
 	}
-
 	if (desc) sz = r_io_size(io);
-
-	if(old){
-		r_io_set_fd(io, old);
-	}
+	if (old) r_io_use_desc (io, old);
 	return sz;
 }
 
@@ -58,29 +55,41 @@ R_API RIODesc *r_io_desc_new(RIOPlugin *plugin, int fd, const char *name, int fl
 
 R_API void r_io_desc_free(RIODesc *desc) {
 	if (!desc) return;
+	if (desc->io) {
+		RIO* io = (RIO*)desc->io;
+		desc->io = NULL;
+		r_io_close (io, desc);
+	}
 	if (desc->plugin && desc->plugin->close)
 		desc->plugin->close (desc);
-	if (desc->name) {
-		free (desc->name);
-		desc->name = NULL;
-	}
-//	free (desc); double free orw at
+	R_FREE (desc->name);
+	R_FREE (desc->uri);
+	R_FREE (desc->referer);
+	free (desc);
 }
 
 R_API int r_io_desc_add(RIO *io, RIODesc *desc) {
 	RIODesc *foo = r_io_desc_get (io, desc->fd);
-	if (!foo)
-		r_list_append (io->desc, desc);
+	if (!foo){
+		desc->io = io;
+		r_list_append (io->files, desc);
+	}
 	return foo? 1: 0;
 }
 
 R_API int r_io_desc_del(RIO *io, int fd) {
 	RListIter *iter;
 	RIODesc *d;
+	io->desc = NULL;
+	if (!r_list_empty (io->files)) {
+		io->desc = r_list_first (io->files);
+	}
 	/* No _safe loop necessary because we return immediately after the delete. */
-	r_list_foreach (io->desc, iter, d) {
-		if (d->fd == fd) {
-			r_list_delete (io->desc, iter);
+	r_list_foreach (io->files, iter, d) {
+		if (d->fd == fd || fd == -1) {
+			r_io_desc_free (d);
+			iter->data = NULL; // enforce free
+			r_list_delete (io->files, iter);
 			return R_TRUE;
 		}
 	}
@@ -90,11 +99,38 @@ R_API int r_io_desc_del(RIO *io, int fd) {
 R_API RIODesc *r_io_desc_get(RIO *io, int fd) {
 	RListIter *iter;
 	RIODesc *d;
-	r_list_foreach (io->desc, iter, d) {
-		if (d->fd == fd)
+	if (fd<0)
+		return NULL;
+	r_list_foreach (io->files, iter, d) {
+		if (d && d->fd == fd)
 			return d;
 	}
 	return NULL;
+}
+
+R_API ut64 r_io_desc_seek (RIO *io, RIODesc *desc, ut64 offset) {
+	if (!io || !desc)
+		return UT64_MAX;
+	if (!desc->plugin)
+		return (ut64)lseek (desc->fd, offset, SEEK_SET);
+	return desc->plugin->lseek (io, desc, offset, SEEK_SET);
+}
+
+R_API void r_io_desc_list (RIO *io) {
+	RIODesc *desc = NULL;
+	RListIter *iter;
+	if (io && io->files) {
+		r_list_foreach (io->files, iter, desc) {
+			if (desc) {
+				io->printf ("- %i", desc->fd);
+				if (desc->uri)
+					io->printf ("\t%s", desc->uri);
+				if (desc->name)
+					io->printf ("\t%s", desc->name);
+				io->printf ("\tstate: %i\tflags: %s\n", desc->state, r_str_rwx_i (desc->flags));
+			}
+		}
+	}
 }
 
 #if 0
@@ -106,3 +142,80 @@ R_API int r_io_desc_generate(struct r_io_t *io) {
 	return fd;
 }
 #endif
+
+R_API void r_io_desc_list_visual(RIO *io, ut64 seek, ut64 len, int width, int use_color) {
+	ut64 mul, min = -1, max = -1;
+	RListIter *iter;
+	RIOMap *s;
+	int j, i;
+
+	width -= 52;
+	if (width<1)
+		width = 30;
+
+	seek = (io->va || io->debug) ? r_io_section_vaddr_to_offset (io, seek) : seek;
+
+	r_list_foreach (io->maps, iter, s) {
+		if (min == -1 || s->from< min)
+			min = s->from;
+		if (max == -1 || s->to > max)
+			max = s->to;
+	}
+
+	mul = (max-min) / width;
+	if (min != -1 && mul != 0) {
+		const char * color = "", *color_end = "";
+		i = 0;
+		r_list_foreach (io->maps, iter, s) {
+			if (use_color) {
+				color_end = Color_RESET;
+				if (s->flags & 1) { // exec bit
+					color = Color_GREEN;
+				} else if (s->flags & 2) { // write bit
+					color = Color_RED;
+				} else {
+					color = "";
+					color_end = "";
+				}
+			} else {
+				color = "";
+				color_end = "";
+			}
+			if (io->va) {
+				io->printf ("%02d%c %s0x%08"PFMT64x"%s |", i,
+						(seek>=s->from&& seek<s->to)?'*':' ', 
+						//(seek>=s->vaddr && seek<s->vaddr+s->size)?'*':' ', 
+						color, s->from, color_end);
+			} else {
+				io->printf ("%02d%c %s0x%08"PFMT64x"%s |", i,
+						(seek>=s->from && seek<s->to)?'*':' ', 
+						color, s->from, color_end);
+			}
+			for (j=0; j<width; j++) {
+				ut64 pos = min + (j*mul);
+				ut64 npos = min + ((j+1)*mul);
+				if (s->from<npos && (s->to)>pos)
+					io->printf ("#");
+				else io->printf ("-");
+			}
+			io->printf ("| %s0x%08"PFMT64x"%s %s %d\n", 
+				color, s->to, color_end,
+				r_str_rwx_i (s->flags), s->fd);
+			i++;
+		}
+		/* current seek */
+		if (i>0 && len != 0) {
+			if (seek == UT64_MAX)
+				seek = 0;
+			//len = 8096;//r_io_size (io);
+			io->printf ("=>  0x%08"PFMT64x" |", seek);
+			for (j=0;j<width;j++) {
+				io->printf (
+					((j*mul)+min >= seek &&
+					 (j*mul)+min <= seek+len)
+					?"^":"-");
+			}
+			io->printf ("| 0x%08"PFMT64x"\n", seek+len);
+		}
+	}
+}

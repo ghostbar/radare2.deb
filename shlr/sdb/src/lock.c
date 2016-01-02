@@ -1,17 +1,13 @@
-/* sdb - LGPLv3 - Copyright 2012-2013 - pancake */
+/* sdb - LGPLv3 - Copyright 2012-2015 - pancake */
 
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include "sdb.h"
-#if WINDOWS
-#include <windows.h>
-#endif
 
-static char buf[128];
-
-SDB_API const char *sdb_lockfile(const char *f) {
+SDB_API const char *sdb_lock_file(const char *f) {
+	static char buf[128];
 	size_t len;
 	if (!f || !*f)
 		return NULL;
@@ -23,26 +19,40 @@ SDB_API const char *sdb_lockfile(const char *f) {
 	return buf;
 }
 
+#define os_getpid() getpid()
+
 SDB_API int sdb_lock(const char *s) {
-	int ret;
+	int fd;
+	char *pid, pidstr[64];
 	if (!s) return 0;
-	ret = open (s, O_CREAT | O_TRUNC | O_WRONLY | O_EXCL, 0644);
-	if (ret==-1)
+	fd = open (s, O_CREAT | O_TRUNC | O_WRONLY | O_EXCL, SDB_MODE);
+	if (fd==-1)
 		return 0;
-	close (ret);
+	pid = sdb_itoa (getpid(), pidstr, 10);
+	if (pid) {
+		if ((write (fd, pid, strlen (pid)) < 0)
+			|| (write (fd, "\n", 1) < 0)) {
+			close (fd);
+			return 0;
+		}
+	}
+	close (fd);
 	return 1;
 }
 
-SDB_API void sdb_lock_wait(const char *s UNUSED) {
+SDB_API int sdb_lock_wait(const char *s) {
 	// TODO use flock() here
+	// wait forever here?
  	while (!sdb_lock (s)) {
-#if WINDOWS
+		// TODO: if waiting too much return 0
+#if __SDB_WINDOWS__
 	 	Sleep (500); // hack
 #else
-	// TODO flock (fd, LOCK_EX);
-	// 	usleep (100); // hack
+	// TODO use lockf() here .. flock is not much useful (fd, LOCK_EX);
+	 	sleep (1); // hack
 #endif
  	}
+	return 1;
 }
 
 SDB_API void sdb_unlock(const char *s) {

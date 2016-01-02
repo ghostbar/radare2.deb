@@ -25,7 +25,7 @@ DPTR = 16 bit pointer to data
 PSW1 - status word register
 
 Bit 7	Bit 6	Bit 5	Bit 4	Bit 3	Bit 2	Bit 1	Bit 0
-CY	AC	N	RS1	RS0	OV	Z	—
+CY	AC	N	RS1	RS0	OV	Z	-
 
 The following table describes the status bits in the PSW:
 
@@ -39,35 +39,15 @@ RS1 RS0 Working Register Bank and Address
 
 #include <r_types.h>
 
-typedef struct op {
-	const char *name;
-	int length;
-	int operand;
-	ut32 addr;
-	const char *arg;
-	const ut8 *buf;
-} Op8051;
-
-enum {
-	NONE = 0,
-	ADDR11, // 8 bits from argument + 3 high bits from opcode
-	ADDR16, // A 16-bit address destination. Used by LCALL and LJMP
-	DIRECT, // An internal data RAM location (0-127) or SFR (128-255).
-	OFFSET, // same as direct?
-	ARG,    // register
-};
+#include <8051_disas.h>
 
 #undef _
-#define _ (Op8051)
+#define _ (r_8051_op)
 #define _ARG(x) ARG, 0, x, buf
 #define _ADDR11(x) ADDR11, ((x[1])+((x[0]>>5)<<8)), NULL, buf
 #define _ADDR16(x) ADDR16, ((x[1])<<8)+((x[2])), NULL, buf
 #define _OFFSET(x) OFFSET, ((x[1])), NULL, buf
 #define _DIRECT(x) DIRECT, (x[1]), NULL, x
-
-#ifndef R_AII
-#define R_AII static
-#endif
 
 static const char *arg[] = { "#immed", "#imm", "@r0", "@r1",
 	"r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7" };
@@ -94,7 +74,7 @@ static const char *ops[] = {
 	"+, a;mov"      // F.   F4 == CPL A
 };
 
-R_AII Op8051 do8051struct(const ut8 *buf, int len) {
+r_8051_op r_8051_decode(const ut8 *buf, int len) {
 	ut8 op = buf[0];
 	if (!op) return _{ "nop", 1, NONE, 0 };
 	if ((op&0xf)==1)
@@ -158,14 +138,10 @@ R_AII Op8051 do8051struct(const ut8 *buf, int len) {
 		switch (op) {
 		case 0x04: length = 1; opstr = "inc a"; argstr=""; break;
 		case 0x14: length = 1; opstr = "dec a"; break;
-		case 0x78: length = 2; break;
-		case 0xaa: length = 2; break;
-		case 0x77: length = 2; break;
-		case 0x7f: length = 2; break;
-		case 0xa4: opstr = "mul ab"; break;
-		case 0xa5: opstr = "reserved"; break;
    // XXX: 75 opcode is wrong
 		case 0x75: opstr = "mov $1, #RAM_D0"; argstr=""; length = 3; break;
+		case 0xa4: opstr = "mul ab"; break;
+		case 0xa5: opstr = "reserved"; break;
 		case 0xc4: opstr = "swap a"; break;
 		case 0xd4: opstr = "da a"; break;
 		case 0xd5: opstr = "djnz d, "; break;
@@ -179,15 +155,22 @@ R_AII Op8051 do8051struct(const ut8 *buf, int len) {
 		if (op==0x06) length = 2;
 		else if (op==0x84) length = 1;
 		else if (op==0x85) length = 3;
-		else if (op==0x85) length = 3;
+		else if (op >= 0x86 && op <= 0x8f) length = 2;
+		else if (op >= 0xa6 && op <= 0xaf) length = 2;
+		else if (op >= 0x76 && op <= 0x7f) length = 2;
+		else if (op >= 0xb4 && op <= 0xbf) length = 3;
 		return _{ opstr, length, _ARG (argstr) };
 	}
-	return _{ "xxx", 0 }; // XXX
+	return _{ "xxx", 0, 0 }; // XXX
 }
 
 static char *strdup_filter (const char *str, const ut8 *buf) {
-	int i, j, len = strlen (str);
-	char *o = malloc (1+len*4);
+	char *o;
+	int i, j, len;
+	if (!str)
+		return NULL;
+	len = strlen (str);
+	o = malloc (1+len*4);
 	for (i=j=0; i<len; i++) {
 		if (str[i] == '$') {
 			int n = str[i+1];
@@ -202,17 +185,18 @@ static char *strdup_filter (const char *str, const ut8 *buf) {
 	return o;
 }
 
-R_AII char *do8051disasm(Op8051 op, ut32 addr, char *str, int len) {
-	char *tmp, *tmp2, *eof, *out;
-	if (str && len>10) {
-		out = str;
+char *r_8051_disasm(r_8051_op op, ut32 addr, char *str, int len) {
+	char *tmp, *tmp2, *eof, *out = NULL;
+	if (str && *str && len > 10) {
+		out = strdup (str);
 	} else {
-		len = 32;
+		len = 64;
 		out = malloc (len);
+		*out = 0;
 	}
 	switch (op.operand) {
-	case NONE: strcpy (out, op.name); break;
-	case ARG: 
+	case NONE: strncpy (out, op.name, len-1); break;
+	case ARG:
 		   if (!strncmp (op.arg, "#imm", 4))
 			   snprintf (out, len, "%s 0x%x", op.name, op.buf[1]);
 		   else snprintf (out, len, "%s %s", op.name, op.arg);
@@ -235,24 +219,20 @@ R_AII char *do8051disasm(Op8051 op, ut32 addr, char *str, int len) {
 			free (tmp2);
 		} else eprintf ("do8051disasm: Internal bug\n");
 	} else {
+		tmp = out;
 		out = strdup_filter (out, (const ut8*)op.buf);
+		free (tmp);
 	}
 	return out;
 }
-
-#if 0
-R_AII Op8051 do8051assemble(const char *str) {
-	return _{"TODO"};
-}
-#endif
 
 #if MAIN
 
 int main() {
 	char *str;
 	ut8 buf[3] = {0xb3, 0x11, 0x22};
-	Op8051 op = do8051struct (buf, sizeof (buf));
-	str = do8051disasm (op, 0, NULL, 0);
+	r_8051_ op = r_8051_decode (buf, sizeof (buf));
+	str = r_8051_disasm (op, 0, NULL, 0);
 	eprintf ("%s\n", str);
 	free (str);
 	return 0;

@@ -66,7 +66,7 @@ static int replace(int argc, const char *argv[], char *newstr) {
 }
 
 static int parse(RParse *p, const char *data, char *str) {
-	int i, n, len = strlen (data);
+	int i, n;
 	char w0[32];
 	char w1[32];
 	char w2[32];
@@ -74,12 +74,8 @@ static int parse(RParse *p, const char *data, char *str) {
 	char *buf, *ptr, *optr, *num;
 
 	// malloc can be slow here :?
-	if ((buf = malloc (len+1)) == NULL)
-		return R_FALSE;
-	{/* strip whitechars from the beggining */	
-	char *o = (char *)r_str_trim_head (data);
-	memcpy (buf, o, strlen (o)+1);
-	}
+	buf = strdup (data);
+	r_str_trim_head (buf);
 
 	ptr = strchr (buf, '#');
 	if (ptr) {
@@ -124,22 +120,22 @@ static int parse(RParse *p, const char *data, char *str) {
 		if (ptr) {
 			*ptr = '\0';
 			for (++ptr; *ptr==' '; ptr++);
-			strcpy (w0, buf);
-			strcpy (w1, ptr);
+			strncpy (w0, buf, sizeof(w0) - 1);
+			strncpy (w1, ptr, sizeof(w1) - 1);
 
 			optr = ptr;
 			ptr = strchr (ptr, ',');
 			if (ptr) {
 				*ptr = '\0';
 				for (++ptr; *ptr==' '; ptr++);
-				strcpy (w1, optr);
-				strcpy (w2, ptr);
+				strncpy (w1, optr, sizeof(w1)-1);
+				strncpy (w2, ptr, sizeof(w2)-1);
 				ptr = strchr (ptr, ',');
 				if (ptr) {
 					*ptr = '\0';
 					for (++ptr; *ptr==' '; ptr++);
-					strcpy (w2, optr);
-					strcpy (w3, ptr);
+					strncpy (w2, optr, sizeof(w2)-1);
+					strncpy (w3, ptr, sizeof(w3)-1);
 				}
 			}
 		}
@@ -157,44 +153,12 @@ static int parse(RParse *p, const char *data, char *str) {
 	return R_TRUE;
 }
 
-static int assemble(RParse *p, char *data, char *str) {
-	char *ptr;
-	printf ("---> assembling '%s' to generate real asm code\n", str);
-	ptr = strchr (str, '=');
-	if (ptr) {
-		*ptr = '\0';
-		sprintf (data, "mov %s, %s", str, ptr+1);
-	} else strcpy (data, str);
-	return R_TRUE;
-}
-
-static int varsub(RParse *p, RAnalFunction *f, char *data, char *str, int len) {
-#if USE_VARSUBS
-	char *ptr, *ptr2;
-	int i;
-	strncpy (str, data, len);
-	for (i = 0; i < R_ANAL_VARSUBS; i++)
-		if (f->varsubs[i].pat[0] != '\0' && f->varsubs[i].sub[0] != '\0' &&
-			(ptr = strstr (data, f->varsubs[i].pat))) {
-				*ptr = '\0';
-				ptr2 = ptr + strlen (f->varsubs[i].pat);
-				snprintf (str, len, "%s%s%s", data, f->varsubs[i].sub, ptr2);
-		}
-	return R_TRUE;
-#else
-	strncpy (str, data, len);
-	return R_FALSE;
-#endif
-}
-
 struct r_parse_plugin_t r_parse_plugin_att2intel = {
 	.name = "att2intel",
 	.desc = "X86 att 2 intel plugin",
 	.init = NULL,
 	.fini = NULL,
 	.parse = &parse,
-	.assemble = &assemble,
-	.varsub = &varsub,
 };
 
 #ifndef CORELIB

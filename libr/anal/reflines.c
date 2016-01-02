@@ -4,16 +4,16 @@
 #include <r_util.h>
 #include <r_cons.h>
 
-R_API struct r_anal_refline_t *r_anal_reflines_get(struct r_anal_t *anal,
+R_API struct r_anal_refline_t *r_anal_reflines_get(RAnal *anal,
 	ut64 addr, const ut8 *buf, ut64 len, int nlines, int linesout, int linescall)
 {
 	RAnalRefline *list2, *list = R_NEW (RAnalRefline);
 	RAnalOp op = {0};
 	const ut8 *ptr = buf;
 	const ut8 *end = buf + len;
-	ut64 bytes_consumed = 0;
 	ut64 opc = addr;
 	int sz = 0, index = 0;
+	int count = 0;
 
 	INIT_LIST_HEAD (&(list->list));
 
@@ -22,6 +22,8 @@ R_API struct r_anal_refline_t *r_anal_reflines_get(struct r_anal_t *anal,
 	/* analyze code block */
 	while (ptr<end) {
 		if (nlines != -1 && --nlines == 0)
+			break;
+		if (anal->maxreflines && count> anal->maxreflines)
 			break;
 #if 0
 		if (config.interrupted)
@@ -57,6 +59,7 @@ R_API struct r_anal_refline_t *r_anal_reflines_get(struct r_anal_t *anal,
 				list2->to = op.jump;
 				list2->index = index++;
 				list_add_tail (&(list2->list), &(list->list));
+				count++;
 				break;
 			case R_ANAL_OP_TYPE_SWITCH:
 				//if (!linesout && (op.jump > opc+len || op.jump < opc))
@@ -76,6 +79,7 @@ R_API struct r_anal_refline_t *r_anal_reflines_get(struct r_anal_t *anal,
 							list2->to = caseop->jump;
 							list2->index = index++;
 							list_add_tail (&(list2->list), &(list->list));
+							count++;
 						}
 					}
 				}
@@ -97,7 +101,6 @@ R_API struct r_anal_refline_t *r_anal_reflines_fcn_get( struct r_anal_t *anal, R
 	RListIter *bb_iter;
 
 	int index = 0;
-	ut64 opc = fcn->addr, addr = 0;
 	ut32 len;
 
 	INIT_LIST_HEAD (&(list->list));
@@ -107,7 +110,6 @@ R_API struct r_anal_refline_t *r_anal_reflines_fcn_get( struct r_anal_t *anal, R
 		if (!bb || bb->size == 0) continue;
 		if (nlines != -1 && --nlines == 0) break;
 		len = bb->size;
-		addr = bb->addr;
 
 		/* store data */
 		ut64 control_type = bb->type;
@@ -208,7 +210,7 @@ R_API char* r_anal_reflines_str(void *core, ut64 addr, int opts) {
 			if (addr < ref->from && addr > ref->to) {
 				if (ch=='-' || ch=='=')
 					r_buf_append_bytes (b, (const ut8*)&ch, 1);
-				else r_buf_append_string (b, "|");
+				else r_buf_append_string (b, "|"); // line going up
 			} else r_buf_append_bytes (b, (const ut8*)&ch, 1);
 		}
 		if (wide) {
@@ -227,8 +229,10 @@ R_API char* r_anal_reflines_str(void *core, ut64 addr, int opts) {
 			lw-=l;
 			memset (pfx, ' ', sizeof (pfx));
 			if (lw>=sizeof (pfx)) lw = sizeof (pfx);
-			pfx[lw - 1] = 0;
-			if (lw>0) str = r_str_prefix (str, pfx);
+			if (lw > 0) {
+				pfx[lw - 1] = 0;
+				str = r_str_prefix (str, pfx);
+			}
 		}
 	}
 	str = r_str_concat (str, (dir==1)? "-> "
@@ -240,6 +244,7 @@ R_API char* r_anal_reflines_str(void *core, ut64 addr, int opts) {
 		//str = r_str_replace (str, "=", "-", 1);
 		str = r_str_replace (str, "<", c->vline[ARROW_LEFT], 1);
 		str = r_str_replace (str, ">", c->vline[ARROW_RIGHT], 1);
+		str = r_str_replace (str, "!", c->vline[LINE_UP], 1);
 		str = r_str_replace (str, "|", c->vline[LINE_VERT], 1);
 		str = r_str_replace (str, "=", c->vline[LINE_HORIZ], 1);
 		str = r_str_replace (str, "-", c->vline[LINE_HORIZ], 1);

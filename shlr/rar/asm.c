@@ -21,8 +21,11 @@ memri 01 10 r3 11 x32
 imm   0011 x32
 */
 static int assemble_arg(Bitbuf *b, char *a) {
-printf ("A = (%s)\n", a);
-	int r = getreg (a);
+	printf ("A = (%s)\n", a);
+	int r;
+	if (!a)
+		return 1;
+	r = getreg (a);
 	if (r != -1) {
 		bitadd (b, 1, 1);
 		bitadd (b, r, 3);
@@ -80,7 +83,8 @@ printf ("n=%d (%s)\n", n, a);
 }
 
 int rarvm_assemble (Bitbuf *b, const char *c) {
-	char *arg0, *arg1;
+	char* arg0 = NULL;
+	char* arg1 = NULL;
 	int opnum;
 	char *p, *str = strdup (skipspaces (c));
 	p = strchr (str, ' ');
@@ -101,6 +105,7 @@ int rarvm_assemble (Bitbuf *b, const char *c) {
 		bitadd (b, 1, 1);
 		bitadd (b, opnum+24, 5);
 	} else {
+		free (str);
 		fprintf (stderr, "Oops. unsupported opcode\n");
 		return 0;
 	}
@@ -111,12 +116,16 @@ int rarvm_assemble (Bitbuf *b, const char *c) {
 
 	if (opcodes[opnum].flags & 1) {
 		SKIPSPACES (arg0);
-		SKIPSPACES (arg1);
-		if (!assemble_arg (b, arg0))
+		if (!assemble_arg (b, arg0)) {
+                        free (str);
 			return 0;
-		if (opcodes[opnum].flags & 2)
+                }
+		if (opcodes[opnum].flags & 2) {
+			SKIPSPACES (arg1);
 			if (!assemble_arg (b, arg1))
 				return 0;
+		}
 	}
+	free (str);
 	return b->bits;
 }

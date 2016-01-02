@@ -6,18 +6,9 @@ cd `dirname $PWD/$0`
 cd ..
 
 . ./sys/CONFIG
-echo =============
+echo "============="
 cat sys/CONFIG
-echo =============
-
-[ -z "${PREFIX}" ] && PREFIX=/usr
-ID=`id -u` 
-if [ "$ID" = 0 ]; then
-	SUDO=
-else
-	SUDO=sudo
-fi
-[ -n "${NOSUDO}" ] && SUDO=
+echo "============="
 
 export PYTHON
 export DESTDIR

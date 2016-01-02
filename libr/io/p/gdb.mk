@@ -4,18 +4,12 @@ STATIC_OBJ+=${OBJ_GDB}
 TARGET_GDB=io_gdb.${EXT_SO}
 ALL_TARGETS+=${TARGET_GDB}
 
-CFLAGS+=-I$(LTOP)/debug/p/libgdbwrap/
-CFLAGS+=-I$(LTOP)/debug/p/libgdbwrap/include
+LIB_PATH=$(SHLR)/gdb/
+CFLAGS+=-I$(SHLR)/gdb/include/
+LDFLAGS+=$(SHLR)/gdb/lib/libgdbr.a
 
-# copypasted from socket/Makefile
-# on solaris only
-ifeq (${OSTYPE},solaris)
-LDFLAGS+=-lsocket
-endif
-# windows
-ifeq (${OSTYPE},windows)
-LDFLAGS+=-lwsock32
-endif
+include $(LIBR)/socket/deps.mk
+
 ifeq (${WITHPIC},0)
 LINKFLAGS=../../socket/libr_socket.a
 LINKFLAGS+=../../util/libr_util.a
@@ -30,7 +24,6 @@ CFLAGS+=${SSL_CFLAGS}
 LINKFLAGS+=${SSL_LDFLAGS}
 endif
 
-# TODO : link against gdbwrapper
 ${TARGET_GDB}: ${OBJ_GDB}
-	${CC} $(call libname,io_gdb) ${OBJ_GDB} ${CFLAGS} ${LDFLAGS} \
-		${GDBWRAPFILES} ${LINKFLAGS} ${LDFLAGS_LIB}
+	${CC} $(call libname,io_gdb) ${OBJ_GDB} ${CFLAGS} \
+		${LINKFLAGS} ${LDFLAGS_LIB} $(LDFLAGS)

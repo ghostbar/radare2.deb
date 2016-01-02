@@ -1,8 +1,10 @@
 /* radare - Apache 2.0 - Copyright 2013 - Adam Pridgen <dso@rice.edu || adam.pridgen@thecoverofnight.com> */
 #include <r_anal.h>
 
-#ifndef _INCLUDE_R_ANAL_EX_H_
-#define _INCLUDE_R_ANAL_EX_H_
+#ifndef R2_ANAL_EX_H
+#define R2_ANAL_EX_H
+#undef R_API
+#define R_API
 
 enum {
 	R_ANAL_EX_FMT_EXEC,
@@ -34,7 +36,7 @@ enum {
 
 enum {
 	R_ANAL_EX_TYPE_REF_NULL  = 0,
-	R_ANAL_EX_TYPE_UNK_REF   = 1 << 1, 
+	R_ANAL_EX_TYPE_REF_UNK   = 1 << 1, 
 	R_ANAL_EX_TYPE_REF	   = 1 << 2, 
 	R_ANAL_EX_TYPE_SIGNED	= 1 << 3,
 	R_ANAL_EX_TYPE_PRIM	  = 1 << 4, 
@@ -47,9 +49,14 @@ enum {
 	R_ANAL_EX_TYPE_BYTE   = 1 << 11,
 	R_ANAL_EX_TYPE_SHORT  = 1 << 12,
 	R_ANAL_EX_TYPE_INT32  = 1 << 13,
+	R_ANAL_EX_TYPE_INTEGER = 1 << 13,
 	R_ANAL_EX_TYPE_INT64  = 1 << 14, 
+	R_ANAL_EX_TYPE_LONG   = 1 << 14, 
 	R_ANAL_EX_TYPE_FLOAT  = 1 << 15, 
 	R_ANAL_EX_TYPE_DOUBLE = 1 << 16, 
+	R_ANAL_EX_TYPE_STRING = 1 << 17, 
+	R_ANAL_EX_TYPE_CHAR   = 1 << 18,
+	R_ANAL_EX_TYPE_VOID   = 1 << 19,
 };
 
 // code ops
@@ -77,7 +84,7 @@ enum {
 
 // jmp conditionals
 enum {
-	// TODO these should be mapped to some sort of 
+	// TODO these should be mapped to some sort of
 	// flags register
 	R_ANAL_EX_COND_EQ  = 1 << 11,
 	R_ANAL_EX_COND_NE  = 1 << 12,
@@ -92,6 +99,7 @@ enum {
 
 // bin ops
 enum {
+	R_ANAL_EX_BINOP_NEG = 0 | R_ANAL_EX_BIN_OP,
 	R_ANAL_EX_BINOP_XCHG = 1 << 1 | R_ANAL_EX_BIN_OP,
 	R_ANAL_EX_BINOP_CMP  = 1 << 2  | R_ANAL_EX_BIN_OP,
 	R_ANAL_EX_BINOP_ADD  = 1 << 3  | R_ANAL_EX_BIN_OP,
@@ -454,5 +462,3 @@ R_API int r_anal_ex_bb_address_comparator(RAnalBlock *a, RAnalBlock *b);
 #define R_ANAL_EX_LDST_STORE_PUT_FIELD_STR "load from_ref to_stack ref"
 
 #endif
-
-

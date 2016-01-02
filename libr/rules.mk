@@ -7,14 +7,14 @@ _INCLUDE_RULES_MK_=
 ifeq ($(DEBUG),1)
 export NOSTRIP=1
 CFLAGS+=-g
-LDFLAGS+=-g -ggdb
+LINK+=-g -ggdb
 endif
 
 ALL?=
 CFLAGS+=-I$(LIBR)/include
 CFLAGS+=-DGIT_TAP=\"${GIT_TAP}\"
-LDFLAGS+=$(addprefix -L../,$(subst r_,,$(BINDEPS)))
-LDFLAGS+=$(addprefix -l,$(BINDEPS))
+LINK+=$(addprefix -L../,$(subst r_,,$(BINDEPS)))
+LINK+=$(addprefix -l,$(BINDEPS))
 SRC=$(subst .o,.c,$(OBJ))
 MAGICSED=| sed -e 's,-lr_magic,@LIBMAGIC@,g'
 LIBR:=$(abspath $(dir $(lastword $(MAKEFILE_LIST))))
@@ -22,17 +22,29 @@ LIBR:=$(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 BEXE=$(BIN)$(EXT_EXE)
 
 ifeq ($(USE_RPATH),1)
-LDFLAGS+=-Wl,-R${PREFIX}/lib
+LINK+=-Wl,-rpath "${PREFIX}/lib"
 endif
 
 ifeq (${OSTYPE},gnulinux)
+ifeq (${HAVE_LIBVERSION},1)
 LIBNAME=${LDFLAGS_SONAME}${LIBSO}.${LIBVERSION}
 else
 LIBNAME=${LDFLAGS_SONAME}${LIBSO}
 endif
+else
+ifeq (${OSTYPE},darwin)
+ifeq (${HAVE_LIBVERSION},1)
+LIBNAME=${LDFLAGS_SONAME}${LIB}.${LIBVERSION}.${EXT_SO}
+else
+LIBNAME=${LDFLAGS_SONAME}${LIB}.${EXT_SO}
+endif
+else
+LIBNAME=${LDFLAGS_SONAME}${LIBSO}
+endif
+endif
 
 ifeq (${OSTYPE},haiku)
-LDFLAGS+=-lnetwork
+LINK+=-lnetwork
 endif
 
 all: ${LIBSO} ${LIBAR} ${EXTRA_TARGETS}
@@ -50,8 +62,8 @@ ${LIBSO}: $(EXTRA_TARGETS) ${WFD} ${OBJS} ${SHARED_OBJ}
 	  if [ $$do = 1 ]; then \
 	    [ -n "${SILENT}" ] && \
 	    echo "LD $(LIBSO)" || \
-	    echo "${CC_LIB} ${LIBNAME} ${OBJS} ${SHARED_OBJ} ${LDFLAGS} ${LINK}" ; \
-	    ${CC_LIB} ${LIBNAME} ${OBJS} ${SHARED_OBJ} ${LDFLAGS} ${LINK} || exit 1; \
+	    echo "${CC_LIB} ${LIBNAME} ${OBJS} ${SHARED_OBJ} ${LINK} ${LDFLAGS}" ; \
+	    ${CC_LIB} ${LIBNAME} ${OBJS} ${SHARED_OBJ} ${LINK} ${LDFLAGS} || exit 1; \
 	    [ -f "$(LIBR)/stripsyms.sh" ] && sh $(LIBR)/stripsyms.sh ${LIBSO} ${NAME} ; \
 	  break ; \
 	fi ; done

@@ -1,21 +1,29 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake */
+/* radare - LGPL - Copyright 2009-2015 - pancake */
 
 static int cmd_section(void *data, const char *input) {
 	RCore *core = (RCore *)data;
+	const char* help_msg[] = {
+		"Usage:","S[?-.*=adlr] [...]","",
+		"S","","list sections",
+		"S.","","show current section name",
+		"S*","","list sections (in radare commands)",
+		"S=","","list sections (ascii-art bars) (io.va to display paddr or vaddr)",
+		"Sa","[-] [arch] [bits] [[off]]","Specify arch and bits for given section",
+		"Sd"," [file]","dump current section to a file (see dmd)",
+		"Sl"," [file]","load contents of file into current section (see dml)",
+		"Sj","","list sections in JSON (alias for iSj)",
+		"Sr"," [name]","rename section on current seek",
+		"S"," off va sz vsz name rwx","add new section (if(!vsz)vsz=sz)",
+		"S-","[id|0xoff|*]","remove this section definition",
+		NULL
+	};
 	switch (*input) {
 	case '?':
-		r_cons_printf (
-		" S               ; list sections\n"
-		" S.              ; show current section name\n"
-		" S?              ; show this help message\n"
-		" S*              ; list sections (in radare commands)\n"
-		" S=              ; list sections (in nice ascii-art bars)\n"
-		" Sa[-] [arch] [bits] [[off]] ; Specify arch and bits for given section\n"
-		" Sd [file]       ; dump current section to a file (see dmd)\n"
-		" Sl [file]       ; load contents of file into current section (see dml)\n"
-		" Sr [name]       ; rename section on current seek\n"
-		" S [off] [vaddr] [sz] [vsz] [name] [rwx] ; add new section\n"
-		" S-[id|0xoff|*]  ; remove this section definition\n");
+		r_core_cmd_help (core, help_msg);
+// TODO: add command to resize current section
+		break;
+	case 'j':
+		r_core_cmd0 (core, "iSj");
 		break;
 	case 'a':
 		switch (input[1]) {
@@ -66,13 +74,13 @@ static int cmd_section(void *data, const char *input) {
 		if (input[1]==' ') {
 			RIOSection *s;
 			int len = 0;
-			ut64 addr;
+			ut64 vaddr;
 			char *p = strchr (input+2, ' ');
 			if (p) {
-				addr = r_num_math (core->num, p+1);
+				vaddr = r_num_math (core->num, p+1);
 				len = (int)(size_t)(p-input+2);
-			} else addr = core->offset;
-			s = r_io_section_get (core->io, addr);
+			} else vaddr = core->offset;
+			s = r_io_section_vget (core->io, vaddr);
 			if (s) {
 				if (!len) len = sizeof (s->name);
 				r_str_ncpy (s->name, input+2, len);
@@ -92,10 +100,10 @@ static int cmd_section(void *data, const char *input) {
 				ut8 *buf = malloc (s->size);
 				r_io_read_at (core->io, s->offset, buf, s->size);
 				if (input[1]==' ' && input[2]) {
-					strncpy (file, input+2, sizeof (file));
+					snprintf (file, sizeof (file), "%s", input+2);
 				} else snprintf (file, sizeof (file), "0x%08"PFMT64x"-0x%08"PFMT64x"-%s.dmp",
 					s->vaddr, s->vaddr+s->size, r_str_rwx_i (s->rwx));
-				if (!r_file_dump (file, buf, s->size)) {
+				if (!r_file_dump (file, buf, s->size, 0)) {
 					eprintf ("Cannot write '%s'\n", file);
 					free (buf);
 					return R_FALSE;
@@ -122,7 +130,7 @@ static int cmd_section(void *data, const char *input) {
 			if (o>=s->offset && o<s->offset+s->size) {
 				int sz;
 				char *buf = r_file_slurp (input+2, &sz);
-#warning TODO: use mmap here. we need a portable implementation
+				// TODO: use mmap here. we need a portable implementation
 				if (!buf) {
 					eprintf ("Cannot allocate 0x%08"PFMT64x" bytes\n", s->size);
 					return R_FALSE;
@@ -143,7 +151,8 @@ static int cmd_section(void *data, const char *input) {
 			r_io_section_init (core->io);
 		} else
 		if (input[1] == '0' && input[2]=='x') {
-			RIOSection *s = r_io_section_get (core->io, r_num_get (NULL, input+1));
+			RIOSection *s = r_io_section_vget (core->io, r_num_get (NULL, input+1));
+			if (!s) return 0;
 			// use offset
 			r_io_section_rm (core->io, s->id);
 		} else {
@@ -167,7 +176,7 @@ static int cmd_section(void *data, const char *input) {
 			ut64 offset = 0LL;
 			ut64 size = 0LL;
 			ut64 vsize = 0LL;
-
+			int fd = r_core_file_cur_fd(core);
 			i = r_str_word_set0 (ptr);
 			switch (i) {
 			case 6: // get rwx
@@ -176,6 +185,7 @@ static int cmd_section(void *data, const char *input) {
 				name = r_str_word_get0 (ptr, 4);
 			case 4: // get vsize
 				vsize = r_num_math (core->num, r_str_word_get0 (ptr, 3));
+				if (!vsize) vsize = size;
 			case 3: // get size
 				size = r_num_math (core->num, r_str_word_get0 (ptr, 2));
 			case 2: // get vaddr
@@ -193,14 +203,15 @@ static int cmd_section(void *data, const char *input) {
 					r_list_length (core->io->sections));
 				name = vname;
 			}
-			r_io_section_add (core->io, offset, vaddr, size, vsize, rwx, name);
+			r_io_section_add (core->io, offset, vaddr, size, vsize, rwx, name, 0, fd);
 			free (ptr);
 			}
 			break;
 		}
 		break;
 	case '=':
-		r_io_section_list_visual (core->io, core->offset, core->blocksize);
+		r_io_section_list_visual (core->io, core->offset, core->blocksize,
+			r_cons_get_size (NULL), r_config_get_i (core->config, "scr.color"));
 		break;
 	case '.':
 		{

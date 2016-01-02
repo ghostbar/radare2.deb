@@ -156,6 +156,7 @@ R_API int r_regex_match (const char *pattern, const char *flags, const char *tex
 
 R_API RRegex *r_regex_new (const char *pattern, const char *flags) {
 	RRegex rx, *r;
+	memset(&rx, 0, sizeof(RRegex));
 	if (r_regex_comp (&rx, pattern, r_regex_flags (flags)))
 		return NULL;
 	r = malloc (sizeof (RRegex));
@@ -460,7 +461,7 @@ p_ere_exp(struct parse *p)
 				count2 = p_count(p);
 				REQUIRE(count <= count2, R_REGEX_BADBR);
 			} else		/* single number with comma */
-				count2 = INFINITY;
+				count2 = INTFINITY;
 		} else		/* just a single number */
 			count2 = count;
 		repeat(p, pos, count, count2);
@@ -631,7 +632,7 @@ p_simp_re(struct parse *p,
 				count2 = p_count(p);
 				REQUIRE(count <= count2, R_REGEX_BADBR);
 			} else		/* single number with comma */
-				count2 = INFINITY;
+				count2 = INTFINITY;
 		} else		/* just a single number */
 			count2 = count;
 		repeat(p, pos, count, count2);
@@ -822,7 +823,7 @@ p_b_cclass(struct parse *p, cset *cs)
 	char *u;
 	char c;
 
-	while (MORE() && isalpha(PEEK()))
+	while (MORE() && isalpha((unsigned char)PEEK()))
 		NEXT();
 	len = p->next - sp;
 	for (cp = cclasses; cp->name != NULL; cp++)
@@ -989,13 +990,13 @@ static void
 repeat(struct parse *p,
     sopno start,		/* operand from here to end of strip */
     int from,			/* repeated from this number */
-    int to)			/* to this number of times (maybe INFINITY) */
+    int to)			/* to this number of times (maybe INTFINITY) */
 {
 	sopno finish = HERE();
 #	define	N	2
 #	define	INF	3
 #	define	REP(f, t)	((f)*8 + (t))
-#	define	MAP(n)	(((n) <= 1) ? (n) : ((n) == INFINITY) ? INF : N)
+#	define	MAP(n)	(((n) <= 1) ? (n) : ((n) == INTFINITY) ? INF : N)
 	sopno copy;
 
 	if (p->error != 0)	/* head off possible runaway recursion */
@@ -1299,17 +1300,17 @@ samesets(struct re_guts *g, int c1, int c2)
 static void
 categorize(struct parse *p, struct re_guts *g)
 {
-	cat_t *cats = g->categories;
-	int c;
-	int c2;
+	cat_t *cats = g? g->categories : NULL;
+	unsigned int c;
+	unsigned int c2;
 	cat_t cat;
 
 	/* avoid making error situations worse */
-	if (p->error != 0)
+	if (!p || p->error != 0 || !cats )
 		return;
 
 	for (c = CHAR_MIN; c <= CHAR_MAX; c++)
-		if (cats[c] == 0 && isinsets(g, c)) {
+		if ( *(cats+c) && isinsets(g, c)) {
 			cat = g->ncategories++;
 			cats[c] = cat;
 			for (c2 = c+1; c2 <= CHAR_MAX; c2++)

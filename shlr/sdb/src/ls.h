@@ -1,5 +1,5 @@
-#ifndef _INCLUDE_LS_H_
-#define _INCLUDE_LS_H_
+#ifndef LS_H
+#define LS_H
 
 #include <stdio.h>
 #include "types.h"
@@ -12,7 +12,7 @@ typedef struct ls_iter_t {
 } SdbListIter;
 
 typedef struct ls_t {
-	unsigned int length;
+	size_t length;
 	struct ls_iter_t *head;
 	struct ls_iter_t *tail;
 	SdbListFree free;
@@ -21,9 +21,9 @@ typedef struct ls_t {
 typedef int (*SdbListComparator)(void *a, void *b);
 
 #define ls_foreach(list, it, pos) \
-	if(list)for (it = list->head; it && (pos = it->data); it = it->n)
+	if((list)) for (it = (list)->head; it && (pos = it->data); it = it->n)
 #define ls_foreach_prev(list, it, pos) \
-	if(list)for (it = list->tail; it && (pos = it->data); it = it->p)
+	if((list))for (it = list->tail; it && (pos = it->data); it = it->p)
 #define ls_iterator(x) (x)?(x)->head:NULL
 #define ls_empty(x) (x==NULL || (x->head==NULL && x->tail==NULL))
 #define ls_head(x) x->head
@@ -36,11 +36,10 @@ typedef int (*SdbListComparator)(void *a, void *b);
 SDB_API SdbList *ls_new(void);
 SDB_API SdbListIter *ls_append(SdbList *list, void *data);
 SDB_API SdbListIter *ls_prepend(SdbList *list, void *data);
-SDB_API int ls_length(SdbList *list);
-SDB_API void ls_add_sorted(SdbList *list, void *data, SdbListComparator cmp);
+//SDB_API void ls_add_sorted(SdbList *list, void *data, SdbListComparator cmp);
 SDB_API void ls_sort(SdbList *list, SdbListComparator cmp);
 
-SDB_API void ls_del (SdbList *list, SdbListIter *iter);
+SDB_API void ls_delete (SdbList *list, SdbListIter *iter);
 SDB_API void ls_iter_init (SdbListIter *iter, SdbList *list);
 SDB_API void ls_destroy (SdbList *list);
 SDB_API void ls_free (SdbList *list);
@@ -49,7 +48,6 @@ SDB_API void ls_unlink (SdbList *list, void *ptr);
 SDB_API void ls_split (SdbList *list, void *ptr);
 SDB_API void ls_split_iter (SdbList *list, SdbListIter *iter);
 SDB_API void *ls_get_n (SdbList *list, int n);
-SDB_API int ls_del_n (SdbList *list, int n);
 SDB_API void *ls_get_top (SdbList *list);
 #define ls_push(x,y) ls_append(x,y)
 SDB_API void *ls_pop (SdbList *list);

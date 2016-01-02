@@ -1,4 +1,4 @@
-/* sdb - LGPLv3 - Copyright 2012-2014 - pancake */
+/* sdb - LGPLv3 - Copyright 2012-2015 - pancake */
 
 #include <stdarg.h>
 #include "sdb.h"
@@ -6,6 +6,7 @@
 #include "json/js0n.c"
 #include "json/path.c"
 #include "json/rangstr.c"
+#include "json/indent.c"
 
 SDB_API char *sdb_json_get (Sdb *s, const char *k, const char *p, ut32 *cas) {
 	Rangstr rs;
@@ -44,130 +45,171 @@ SDB_API int sdb_json_num_get (Sdb *s, const char *k, const char *p, ut32 *cas) {
 	return 0;
 }
 
+static int findkey(Rangstr *rs) {
+	int i;
+	for (i = rs->f ; i>0; i--) {
+		if (rs->p[i] == '"') {
+			for (--i;i>0; i--) {
+				if (rs->p[i] == '"')
+					return i;
+			}
+		}
+	}
+	return -1;
+}
+
+static int isstring(const char *s) {
+	if (!strcmp (s, "true"))
+		return 0;
+	if (!strcmp (s, "false"))
+		return 0;
+	for (;*s;s++) {
+		if (*s<'0' || *s>'9')
+			return 1;
+	}
+	return 0;
+}
+
+// JSON only supports base16 numbers
 SDB_API int sdb_json_num_set (Sdb *s, const char *k, const char *p, int v, ut32 cas) {
 	char *_str, str[64];
 	_str = sdb_itoa (v, str, 10);
 	return sdb_json_set (s, k, p, _str, cas);
 }
 
+SDB_API int sdb_json_unset (Sdb *s, const char *k, const char *p, ut32 cas) {
+	return sdb_json_set (s, k, p, NULL, cas);
+}
+
 SDB_API int sdb_json_set (Sdb *s, const char *k, const char *p, const char *v, ut32 cas) {
 	const char *beg[3];
 	const char *end[3];
-	int l, idx, len[3];
-	char *str = NULL;
+	int l, idx, len[3], jslen = 0;
+	char *b, *str = NULL;
+	const char *js;
 	Rangstr rs;
 	ut32 c;
-	char *js = sdb_get (s, k, &c);
-	if (!js) return 0;
+
+	if (!s || !k || !v)
+		return 0;
+	js = sdb_const_get_len (s, k, &jslen, &c);
+	if (!js) {
+		b = malloc (strlen (p)+strlen (v)+8);
+		if (b) {
+			int is_str = isstring (v);
+			const char *q = is_str?"\"":"";
+			sprintf (b, "{\"%s\":%s%s%s}", p, q, v, q);
+#if 0
+			/* disabled because it memleaks */
+			sdb_set_owned (s, k, b, cas);
+#else
+			sdb_set (s, k, b, cas);
+			free (b);
+#endif
+			return 1;
+		}
+		return 0;
+	}
 	if (cas && c != cas) {
-		free (js);
 		return 0;
 	}
 	rs = json_get (js, p);
 	if (!rs.p) {
-		free (js);
+		int b_len = jslen + strlen (k) + strlen (v) + 32;
+		char *b = malloc (b_len);
+		if (b) {
+			int curlen, is_str = isstring (v);
+			const char *q = is_str?"\"":"";
+			const char *e = ""; // XX: or comma
+			if (js[0] && js[1] != '}')
+				e = ",";
+			curlen = sprintf (b, "{\"%s\":%s%s%s%s",
+				p, q, v, q, e);
+			strcpy (b+curlen, js+1);
+			// transfer ownership
+			sdb_set_owned (s, k, b, cas);
+			return 1;
+		}
+		// invalid json?
 		return 0;
-	}
+	} 
 #define WLEN(x) (int)(size_t)(end[x]-beg[x])
 
 	beg[0] = js;
 	end[0] = rs.p + rs.f;
 	len[0] = WLEN (0);
 
-	beg[1] = v;
-	end[1] = v + strlen (v);
-	len[1] = WLEN (1);
+	if (*v) {
+		beg[1] = v;
+		end[1] = v + strlen (v);
+		len[1] = WLEN (1);
+	}
 
 	beg[2] = rs.p + rs.t;
-	end[2] = js + strlen (js);
+	end[2] = js + jslen;
 	len[2] = WLEN (2);
 
 	// TODO: accelerate with small buffer in stack for small jsons
-	str = malloc (len[0]+len[1]+len[2]+1);
-	idx = len[0];
-	memcpy (str, beg[0], idx);
-	l = len[1];
-	memcpy (str+idx, beg[1], l);
-	idx += len[1];
-	l = len[2];
-	memcpy (str+idx, beg[2], l);
-	str[idx+l] = 0;
-
-	sdb_set (s, k, str, cas);
-	free (str);
-	free (js);
-	return 1;
-}
-
-SDB_API char *sdb_json_indent(const char *s) {
-	int indent = 0;
-	int i, instr = 0;
-	char *o, *O = malloc (strlen (s)*2);
-	for (o=O; *s; s++) {
-		if (instr) {
-			if (s[0] == '"') instr = 0;
-			else if (s[0] == '\\' && s[1] == '"')
-				*o++ = *s;
-			*o++ = *s;
-			continue;
+	if (*v) {
+		int is_str = isstring (v);
+		int msz = len[0]+len[1]+len[2]+strlen (v);
+		if (msz<1)
+			return 0;
+		str = malloc (msz);
+		if (!str)
+			return 0;
+		idx = len[0];
+		memcpy (str, beg[0], idx);
+		if (is_str) {
+			if (beg[2][0]!='"') {
+				str[idx]='"';
+				idx++;
+			}
 		} else {
-			if (s[0] == '"')
-				instr = 1;
+			if (beg[2][0]=='"') {
+				idx--;
+			}
 		}
-		if (*s == '\n'|| *s == '\r' || *s == '\t' || *s == ' ')
-			continue;
-		#define INDENT(x) indent+=x; for (i=0;i<indent;i++) *o++ = '\t'
-		switch (*s) {
-                case ':':
-                        *o++ = *s;
-                        *o++ = ' ';
-                        break;
-                case ',':
-                        *o++ = *s;
-                        *o++ = '\n';
-                        INDENT (0);
-                        break;
-                case '{':
-                case '[':
-			*o++ = *s;
-			*o++ = (indent!=-1)?'\n':' ';
-                        INDENT (1);
-                        break;
-                case '}':
-                case ']':
-                        *o++ = '\n';
-                        INDENT (-1);
-                        *o++ = *s;
-                        break;
-		default:
-			*o++ = *s;
+		l = len[1];
+		memcpy (str+idx, beg[1], l);
+		idx += len[1];
+		if (is_str) {
+			// TODO: add quotes
+			if (beg[2][0]!='"') {
+				str[idx]='"';
+				idx++;
+			}
+		} else {
+			if (beg[2][0]=='"') {
+				beg[2]++;
+			}
 		}
+		l = len[2];
+		memcpy (str+idx, beg[2], l);
+		str[idx+l] = 0;
+	} else {
+		int kidx;
+		// DELETE KEY
+		rs.f -= 2;
+		kidx = findkey (&rs);
+		len[0] = R_MAX (1, kidx-1);
+		if (kidx==1){
+			if (beg[2][0]=='"')
+				beg[2]++;
+			beg[2]++;
+			len[2]--;
+		}
+		str = malloc (len[0]+len[2]+1);
+		if (!str)
+			return 0;
+		memcpy (str, beg[0], len[0]);
+		if (!*beg[2])
+			beg[2]--;
+		memcpy (str+len[0], beg[2], len[2]);
+		str[len[0]+len[2]] = 0;
 	}
-	*o = 0;
-	return O;
-}
-
-SDB_API char *sdb_json_unindent(const char *s) {
-	int instr = 0;
-	int len = strlen (s);
-	char *o, *O = malloc (len+1);
-	if (!O) return NULL;
-	memset (O, 0, len);
-	for (o=O; *s; s++) {
-		if (instr) {
-			if (s[0] != '"') {
-				if (s[0] == '\\' && s[1] == '"')
-					*o++ = *s;
-			} else instr = 0;
-			*o++ = *s;
-			continue;
-		} else if (s[0] == '"') instr = 1;
-		if (*s == '\n'|| *s == '\r' || *s == '\t' || *s == ' ')
-			continue;
-		*o++ = *s;
-	}
-	*o = 0;
-	return O;
+	sdb_set_owned (s, k, str, cas);
+	return 1;
 }
 
 SDB_API const char *sdb_json_format(SdbJsonString* s, const char *fmt, ...) {
@@ -181,12 +223,18 @@ SDB_API const char *sdb_json_format(SdbJsonString* s, const char *fmt, ...) {
 	if (s->len+y>s->blen) {\
 		s->blen *= 2;\
 		x = realloc (s->buf, s->blen);\
-		if (!x) return NULL;\
+		if (!x) { \
+			va_end (ap); \
+			return NULL;\
+		}\
 		s->buf = x;\
 	}
+	if (!s) return NULL;
 	if (!s->buf) {
 		s->blen = 1024;
 		s->buf = malloc (s->blen);
+		if (!s->buf)
+			return NULL;
 		*s->buf = 0;
 	}
 	if (!fmt || !*fmt) return s->buf;
@@ -212,7 +260,7 @@ SDB_API const char *sdb_json_format(SdbJsonString* s, const char *fmt, ...) {
 			case 'l':
 				JSONSTR_ALLOCATE (32);
 				arg_l = va_arg (ap, unsigned long long);
-				snprintf (tmp, sizeof (tmp), "0x%llx", arg_l);
+				snprintf (tmp, sizeof (tmp), "0x%"ULLFMT"x", arg_l);
 				memcpy (s->buf+s->len, tmp, strlen (tmp));
 				s->len += strlen (tmp);
 				break;
