@@ -21,6 +21,42 @@ R_API void r_anal_cc_init (RAnalCC *cc) {
 	memset (cc, 0, sizeof (RAnalCC));
 }
 
+R_API int r_anal_cc_str2type (const char *str) {
+	if (!strcmp (str, "none")) return R_ANAL_CC_TYPE_NONE;
+	if (!strcmp (str, "cdecl")) return R_ANAL_CC_TYPE_CDECL;
+	if (!strcmp (str, "stdcall")) return R_ANAL_CC_TYPE_STDCALL;
+	if (!strcmp (str, "fastcall")) return R_ANAL_CC_TYPE_FASTCALL;
+	if (!strcmp (str, "pascal")) return R_ANAL_CC_TYPE_PASCAL;
+	if (!strcmp (str, "winapi")) return R_ANAL_CC_TYPE_WINAPI;
+	if (!strcmp (str, "msfastcall")) return R_ANAL_CC_TYPE_MSFASTCALL;
+	if (!strcmp (str, "bofastcall")) return R_ANAL_CC_TYPE_BOFASTCALL;
+	if (!strcmp (str, "wafastcall")) return R_ANAL_CC_TYPE_WAFASTCALL;
+	if (!strcmp (str, "clarion")) return R_ANAL_CC_TYPE_CLARION;
+	if (!strcmp (str, "safecall")) return R_ANAL_CC_TYPE_SAFECALL;
+	if (!strcmp (str, "sysv")) return R_ANAL_CC_TYPE_SYSV;
+	if (!strcmp (str, "thiscall")) return R_ANAL_CC_TYPE_THISCALL;
+	return -1;
+}
+
+R_API const char *r_anal_cc_type2str(int type) {
+	switch (type) {
+	case R_ANAL_CC_TYPE_NONE: return "none";
+	case R_ANAL_CC_TYPE_CDECL: return "cdecl";
+	case R_ANAL_CC_TYPE_STDCALL: return "stdcall";
+	case R_ANAL_CC_TYPE_FASTCALL: return "fastcall";
+	case R_ANAL_CC_TYPE_PASCAL: return "pascal";
+	case R_ANAL_CC_TYPE_WINAPI: return "winapi";
+	case R_ANAL_CC_TYPE_MSFASTCALL: return "msfastcall";
+	case R_ANAL_CC_TYPE_BOFASTCALL: return "bofastcall";
+	case R_ANAL_CC_TYPE_WAFASTCALL: return "wafastcall";
+	case R_ANAL_CC_TYPE_CLARION: return "clarion";
+	case R_ANAL_CC_TYPE_SAFECALL: return "safecall";
+	case R_ANAL_CC_TYPE_SYSV: return "sysv";
+	case R_ANAL_CC_TYPE_THISCALL: return "thiscall";
+	}
+	return NULL;
+}
+
 R_API RAnalCC* r_anal_cc_new_from_string (const char *str, int type) {
 	// str = 0x804899 (123, 930, 0x804800)
 	return NULL;
@@ -80,8 +116,11 @@ R_API char *r_anal_cc_to_string (RAnal *anal, RAnalCC* cc) {
 		}
 		}
 		break;
+	case R_ANAL_CC_TYPE_CDECL:
+		eprintf ("TODO\n");
+		break;
 	case R_ANAL_CC_TYPE_STDCALL: // CALL
-		fcn = r_anal_fcn_find (anal, cc->jump,
+		fcn = r_anal_get_fcn_in (anal, cc->jump,
 				R_ANAL_FCN_TYPE_FCN|R_ANAL_FCN_TYPE_SYM|R_ANAL_FCN_TYPE_IMP);
 		if (fcn && fcn->name)
 			snprintf (str, sizeof (str), "%s(", fcn->name);
@@ -141,20 +180,30 @@ R_API boolt r_anal_cc_update (RAnal *anal, RAnalCC *cc, RAnalOp *op) {
 				r_reg_set_value (anal->reg, it, 0);
 			}
 		}
-		return R_TRUE;
+		break;
 	case R_ANAL_OP_TYPE_MOV:
 		if (op->dst && op->dst->reg) {
 			it = r_reg_get (anal->reg, op->dst->reg->name, R_REG_TYPE_GPR);
 			if (it && op->src[0])
 				r_reg_set_value (anal->reg, it, op->src[0]->imm);
 		}
-		return R_TRUE;
+		break;
+	case R_ANAL_OP_TYPE_ADD:
+	case R_ANAL_OP_TYPE_SUB:
+		{
+		       const char *sp = r_reg_get_name (anal->reg, R_REG_NAME_SP);
+		       const char *esil = r_strbuf_get (&op->esil);
+		       if (esil && sp && strstr (esil, sp)) {
+			       cc->nargs = 0;
+		       }
+		}
+		break;
 	case R_ANAL_OP_TYPE_PUSH:
 	case R_ANAL_OP_TYPE_UPUSH: // add argument
 		cc->nargs ++;
 		if (cc->nargs>0 && cc->nargs < R_ANAL_CC_ARGS)
 			cc->args[cc->nargs] = op->val;
-		return R_TRUE;
+		break;
 	}
 	// must update internal stuff to recognize parm
 	return R_TRUE;

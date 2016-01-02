@@ -4,23 +4,28 @@
 #include <r_util.h>
 #include <r_lib.h>
 #include <r_asm.h>
-
-#include "../../shlr/java/class.h"
-#include "../../shlr/java/code.h"
 #include <r_core.h>
+
+#include "../../shlr/java/code.h"
+#include "../../shlr/java/class.h"
 
 static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	//void *cp;
 	RBinJavaObj *obj = NULL;
-	RBin *b = a->binb.bin;
-	if (b->cur->curplugin) {
-		if (!strcmp (b->cur->curplugin->name, "java")) { // XXX slow
-			obj = b->cur->o->bin_obj; //o;
+	RBin *bin = a->binb.bin;
+	RBinPlugin *plugin = bin && bin->cur && bin->cur->o ?
+		bin->cur->o->plugin : NULL;
+	if (plugin) {
+		if (!strcmp (plugin->name, "java")) { // XXX slow
+			obj = bin->cur->o->bin_obj; //o;
 			//eprintf("Handling: %s disasm.\n", b->cur.file);
 		}
 	}
-	return op->size = r_java_disasm (obj, a->pc, buf,
+
+	op->size = r_java_disasm (obj, a->pc, buf,
 		op->buf_asm, sizeof (op->buf_asm));
+	a->pc += op->size;
+	return  op->size;
 }
 
 static int assemble(RAsm *a, RAsmOp *op, const char *buf) {

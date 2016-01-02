@@ -1,4 +1,4 @@
-/* radare - Copyright 2009-2014 - pancake, nibble */
+/* radare - Copyright 2009-2015 - pancake, nibble */
 
 #include "r_core.h"
 #include "r_socket.h"
@@ -10,19 +10,303 @@
 static RSocket *s = NULL;
 static const char *listenport = NULL;
 
-static void http_break (void *u) {
+typedef struct {
+	const char *host;
+	const char *port;
+	const char *file;
+} TextLog;
+static int rtr_textlog_chat (RCore *core, TextLog T);
+
+static char *rtrcmd (TextLog T, const char *str) {
+	int len;
+	char uri[1024];
+	char *res, *ptr2, *ptr = r_str_uri_encode (str);
+	if (ptr) str = ptr;
+	snprintf (uri, sizeof (uri), "http://%s:%s/%s%s",
+		T.host, T.port, T.file, str);
+	if (ptr == str) free (ptr);
+	ptr2 = r_socket_http_get (uri, NULL, &len);
+	if (ptr2) {
+		ptr2[len] = 0;
+		res = strstr (ptr2, "\n\n");
+		if (res) res = strstr (res+1, "\n\n");
+		if (res) res += 2; else res = ptr2;
+		return ptr2;
+	}
+	return NULL;
+}
+
+static void showcursor(RCore *core, int x) {
+	if (core && core->vmode) {
+		r_cons_show_cursor (x);
+		if (x) {
+			// TODO: cache this
+			int wheel = r_config_get_i (core->config, "scr.wheel");
+			if (wheel)
+				r_cons_enable_mouse (R_TRUE);
+		} else {
+			r_cons_enable_mouse (R_FALSE);
+		}
+	} else r_cons_enable_mouse (R_FALSE);
+	r_cons_flush ();
+}
+
+static int rtr_visual (RCore *core, TextLog T, const char *cmd) {
+	int autorefresh = R_FALSE;
+	if (cmd) {
+		r_cons_break (NULL, NULL);
+		for (;;) {
+			char *ret;
+			r_cons_clear00 ();
+			ret = rtrcmd (T, cmd);
+			r_cons_printf ("%s\n", ret);
+			free (ret);
+			r_cons_flush ();
+			if (r_cons_singleton ()->breaked)
+				break;
+			r_sys_sleep (1);
+		}
+		r_cons_break_end ();
+	} else {
+		const char *cmds[] = { "px", "pd", "pxa", "dr", "sr sp;pxa", NULL };
+		int cmdidx = 0;
+		char *ret, ch;
+		free (rtrcmd (T, "e scr.color=true"));
+		free (rtrcmd (T, "e scr.html=false"));
+		for (;;) {
+			r_cons_clear00 ();
+			ret = rtrcmd (T, cmds[cmdidx]);
+			if (ret) {
+				r_cons_printf ("%s\n", ret);
+				free (ret);
+			}
+			r_cons_flush ();
+			if (autorefresh) {
+				r_cons_printf ("(auto-refresh)\n");
+				r_cons_flush ();
+				r_cons_break (NULL, NULL);
+				r_sys_sleep (1);
+				if (r_cons_singleton()->breaked)  {
+					autorefresh = R_FALSE;
+					ch = r_cons_readchar ();
+				} else {
+					r_cons_break_end ();
+					continue;
+				}
+				r_cons_break_end ();
+			} else {
+				ch = r_cons_readchar ();
+			}
+#if 0
+TODO:
+ i   insert hex/string/asm
+ 0-9 follow jumps
+#endif
+			switch (ch) {
+			case '?':
+				r_cons_clear00();
+				r_cons_printf ("Remote Visual keys:\n"
+				" hjkl : move\n"
+				" HJKL : move faster\n"
+				" +-*/ : change block size\n"
+				" pP   : rotate print modes\n"
+				" T    : enter TextLog chat console\n"
+				" @    : enter auto-refresh mode\n"
+				" i    : insert hexpair\n"
+				" q    : quit this mode and go back to the shell\n"
+				" sS   : step / step over\n"
+				" .    : seek entry or pc\n");
+				r_cons_flush ();
+				r_cons_any_key (NULL);
+				break;
+			case 'i':
+				{
+					char buf[1024];
+#if __UNIX__
+					if (core->print->flags & R_PRINT_FLAGS_COLOR) {
+#else
+					if (0) {
+#endif
+						r_line_set_prompt (Color_RESET":> ");
+					} else {
+						r_line_set_prompt (":> ");
+					}
+					showcursor (core, R_TRUE);
+					r_cons_fgets (buf+3, sizeof (buf)-4, 0, NULL);
+					memcpy (buf, "wx ", 3);
+					if (buf[3]) {
+						char *res = rtrcmd (T, buf);
+						if (res) {
+							r_cons_printf ("%s\n", res);
+							free (res);
+						}
+						r_cons_flush ();
+					}
+				}
+				break;
+			case 's':
+				free (rtrcmd (T, "ds;.dr*"));
+				break;
+			case 'S':
+				free (rtrcmd (T, "dso;.dr*"));
+				break;
+			case '.':
+				free (rtrcmd (T, "s entry0;dr?rip;?? sr pc"));
+				break;
+			case ':':
+				{
+					int ret;
+					eprintf ("Press <enter> to return to Visual mode.\n");
+					do {
+						char buf[1024];
+#if __UNIX__
+						r_line_set_prompt (Color_RESET":> ");
+#else
+						r_line_set_prompt (":> ");
+#endif
+						showcursor (core, R_TRUE);
+						r_cons_fgets (buf, sizeof (buf), 0, NULL);
+						if (*buf) {
+							r_line_hist_add (buf);
+							char *res = rtrcmd (T, buf);
+							if (res) {
+								r_cons_printf ("%s\n", res);
+								free (res);
+							}
+							r_cons_flush ();
+							ret = R_TRUE;
+						} else {
+							ret = R_FALSE;
+							//r_cons_any_key ();
+							r_cons_clear00 ();
+							showcursor (core, R_FALSE);
+						}
+					} while (ret);
+				}
+				break;
+			case '@': autorefresh = R_TRUE; break;
+			case 'j':
+				if (cmdidx==1) {
+					free (rtrcmd (T, "so")); break;
+				} else {
+					free (rtrcmd (T, "s+16")); break;
+				}
+				break;
+			case 'k': free (rtrcmd (T, "s-16")); break;
+			case 'h': free (rtrcmd (T, "s-1")); break;
+			case 'l': free (rtrcmd (T, "s+1")); break;
+			case 'J':
+				if (cmdidx==1) {
+					free (rtrcmd (T, "4so"));
+				} else {
+					free (rtrcmd (T, "s+32"));
+				} break;
+			case 'K': free (rtrcmd (T, "s-32")); break;
+			case 'H': free (rtrcmd (T, "s-2")); break;
+			case 'L': free (rtrcmd (T, "s+2")); break;
+			case 'T': rtr_textlog_chat (core, T); break;
+			case '+': free (rtrcmd (T, "b+1")); break;
+			case '*': free (rtrcmd (T, "b+16")); break;
+			case '-': free (rtrcmd (T, "b-1")); break;
+			case '/': free (rtrcmd (T, "b-16")); break;
+			case 'p': cmdidx++; if (!cmds[cmdidx]) cmdidx = 0; break;
+			case 'P': cmdidx--; if (cmdidx<0) cmdidx = 2; break;
+			case 'q':
+//restore prompt
+				return 0;
+			}
+		}
+	}
+	return 1;
+}
+
+// TODO: rename /name to /nick or /so?
+// clone of textlog_chat () using rtrcmd()
+static int rtr_textlog_chat (RCore *core, TextLog T) {
+	char prompt[64];
+	char buf[1024];
+	int lastmsg = 0;
+	const char *me = r_config_get (core->config, "cfg.user");
+	char *ret, msg[1024];
+
+	eprintf ("Type '/help' for commands and ^D to quit:\n");
+	char *oldprompt = strdup (r_line_singleton ()->prompt);
+	snprintf (prompt, sizeof (prompt)-1, "[%s]> ", me);
+	r_line_set_prompt (prompt);
+	ret = rtrcmd (T, msg);
+	for (;;) {
+		if (lastmsg>=0) {
+			snprintf (msg, sizeof (msg)-1, "T %d", lastmsg);
+		} else {
+			strcpy (msg, "T");
+}
+		ret = rtrcmd (T, msg);
+		r_cons_printf ("%s\n", ret);
+		free (ret);
+		ret = rtrcmd (T, "Tl");
+		lastmsg = atoi (ret)-1;
+		free (ret);
+		if (r_cons_fgets (buf, sizeof (buf)-1, 0, NULL)<0)
+			goto beach;
+		if (!*buf) continue;
+		if (!strcmp (buf, "/help")) {
+			eprintf ("/quit           quit the chat (same as ^D)\n");
+			eprintf ("/nick <nick>    set cfg.user nick name\n");
+			eprintf ("/log            show full log\n");
+			eprintf ("/clear          clear text log messages\n");
+		} else if (!strncmp (buf, "/nick ", 6)) {
+			snprintf (msg, sizeof (msg)-1, "* '%s' is now known as '%s'", me, buf+6);
+			r_cons_printf ("%s\n", msg);
+			r_core_log_add (core, msg);
+			r_config_set (core->config, "cfg.user", buf+6);
+			me = r_config_get (core->config, "cfg.user");
+			snprintf (prompt, sizeof (prompt)-1, "[%s]> ", me);
+			r_line_set_prompt (prompt);
+		} else if (!strcmp (buf, "/log")) {
+			char *ret = rtrcmd (T, "T");
+			if (ret) {
+				r_cons_printf ("%s\n", ret);
+				free (ret);
+			}
+		} else if (!strcmp (buf, "/clear")) {
+			//r_core_log_del (core, 0);
+			free (rtrcmd (T, "T-"));
+		} else if (!strcmp (buf, "/quit")) {
+			goto beach;
+		} else if (*buf=='/') {
+			eprintf ("Unknown command: %s\n", buf);
+		} else {
+			snprintf (msg, sizeof (msg)-1, "T [%s] %s", me, buf);
+			free (rtrcmd (T, msg));
+		}
+	}
+beach:
+	r_line_set_prompt (oldprompt);
+	free (oldprompt);
+	return 1;
+}
+
+#define http_break r_core_rtr_http_stop
+R_API int r_core_rtr_http_stop(RCore *u) {
 	RSocket* sock;
 	const char *port;
 	const int timeout = 1; // 1 second
 	RCore *core = (RCore*)u;
+#if __WINDOWS__
+	r_socket_http_server_set_breaked(1);
+#endif
 	if (((size_t)u)>0xff) {
-		port = listenport? listenport: r_config_get (core->config, "http.port");
+		port = listenport? listenport: r_config_get (
+			core->config, "http.port");
 		sock = r_socket_new (0);
-		r_socket_connect (sock, "localhost", port, R_SOCKET_PROTO_TCP, timeout);
+		(void)r_socket_connect (sock, "localhost",
+				//r_config_get (core->config, "http.bind"),
+			port, R_SOCKET_PROTO_TCP, timeout);
 		r_socket_free (sock);
 	}
 	r_socket_free (s);
 	s = NULL;
+	return 0;
 }
 
 #if 0
@@ -35,30 +319,76 @@ SECURITY IMPLICATIONS
 - follow symlinks
 #endif
 
-R_API int r_core_rtr_http(RCore *core, int launch, const char *path) {
+static char *rtr_dir_files (const char *path) {
+	char *ptr = strdup ("<html><body>\n");
+	const char *file;
+	RListIter *iter;
+	// list files
+	RList *files = r_sys_dir (path);
+	eprintf ("Listing directory %s\n", path);
+	r_list_foreach (files, iter, file) {
+		if (file[0] == '.') continue;
+		ptr = r_str_concatf (ptr, "<a href=\"%s%s\">%s</a><br />\n",
+			path, file, file);
+	}
+	r_list_free (files);
+	return r_str_concat (ptr, "</body></html>\n");
+}
+
+
+typedef struct {
+	RCore *core;
+	int launch;
+	const char *path;
+} HttpThread;
+
+#if __UNIX__
+static void dietime (int sig) {
+	eprintf ("It's Die Time!\n");
+	exit (0);
+}
+#endif
+
+static void activateDieTime (RCore *core) {
+	int dt = r_config_get_i (core->config, "http.dietime");
+	if (dt>0) {
+#if __UNIX__
+		signal (SIGALRM, dietime);
+		alarm (dt);
+#else
+		eprintf ("http.dietime only works on *nix systems\n");
+#endif
+	}
+}
+
+// return 1 on error
+static int r_core_rtr_http_run (RCore *core, int launch, const char *path) {
 	char buf[32];
+	RSocket *s;
 	RSocketHTTPRequest *rs;
-	int iport, oldsandbox = -1;
-	int timeout = r_config_get_i (core->config, "http.timeout");
-	int x = r_config_get_i (core->config, "scr.html");
-	int y = r_config_get_i (core->config, "scr.color");
-	int z = r_config_get_i (core->config, "asm.bytes");
-	int u = r_config_get_i (core->config, "scr.interactive");
-	int v = r_config_get_i (core->config, "asm.cmtright");
+	RConfig *newcfg = NULL, *origcfg = NULL;
+	int iport, timeout = r_config_get_i (core->config, "http.timeout");
+	const char *host = r_config_get (core->config, "http.bind");
 	const char *port = r_config_get (core->config, "http.port");
-	char *allow = (char *)r_config_get (core->config, "http.allow");
-	if (core->http_up) {
-		eprintf ("http server is already running\n");
-		return 1;
-	}
-	if (r_sandbox_enable (0)) {
-		eprintf ("sandbox: connect disabled\n");
-		return 1;
-	}
+	const char *allow = r_config_get (core->config, "http.allow");
+	const char *httpui = r_config_get (core->config, "http.ui");
+	char *dir;
+	int ret = 0;
+	char headers[128] = {0};
+
 	if (path && atoi (path)) {
 		port = path;
 		path = NULL;
+	} else {
+		if (core->file) {
+			if (!strcmp (httpui, "p")
+					|| !strcmp (httpui, "enyo")
+					|| !strcmp (httpui, "t")) {
+				path = httpui;
+			}
+		}
 	}
+
 	if (!strcmp (port, "0")) {
 		r_num_irand ();
 		iport = 1024+r_num_rand (45256);
@@ -66,41 +396,114 @@ R_API int r_core_rtr_http(RCore *core, int launch, const char *path) {
 		port = buf;
 	}
 	s = r_socket_new (R_FALSE);
-	s->local = !r_config_get_i (core->config, "http.public");
+	{
+		if (host && *host) {
+			if (!strcmp (host, "::1")) {
+				s->local = R_TRUE;
+			} else if (!strcmp (host, "localhost")) {
+				s->local = R_TRUE;
+			} else if (!strcmp (host, "127.0.0.1")) {
+				s->local = R_TRUE;
+			} else if (!strcmp (host, "local")) {
+				s->local = R_TRUE;
+				r_config_set (core->config, "http.bind", "localhost");
+			} else if (host[0]=='0' || !strcmp (host, "public")) {
+				// public
+				r_config_set (core->config, "http.bind", "0.0.0.0");
+				host = "127.0.0.1";
+				s->local = R_FALSE;
+			} else {
+				s->local = R_TRUE;
+			}
+		} else {
+			s->local = R_TRUE;
+		}
+	}
 	if (!r_socket_listen (s, port, NULL)) {
+		r_socket_free (s);
 		eprintf ("Cannot listen on http.port\n");
 		return 1;
 	}
-	if (launch) {
+	if (launch=='H') {
 		char cmd[128];
 		const char *browser = r_config_get (core->config, "http.browser");
-		snprintf (cmd, sizeof (cmd)-1, "%s http://localhost:%d/%s &",
-			browser, atoi (port), path?path:"");
+		snprintf (cmd, sizeof (cmd)-1, "%s http://%s:%d/%s &",
+			browser, host, atoi (port), path? path:"");
 		r_sys_cmd (cmd);
 	}
+
+	origcfg = core->config;
+	newcfg = r_config_clone (core->config);
+	core->config = newcfg;
+
 	r_config_set (core->config, "asm.cmtright", "false");
 	r_config_set (core->config, "scr.html", "true");
 	r_config_set (core->config, "scr.color", "false");
 	r_config_set (core->config, "asm.bytes", "false");
 	r_config_set (core->config, "scr.interactive", "false");
 	if (r_config_get_i (core->config, "http.sandbox")) {
-		oldsandbox = r_config_get_i (core->config, "cfg.sandbox");
+		//(void)r_config_get_i (core->config, "cfg.sandbox");
 		r_config_set (core->config, "cfg.sandbox", "true");
 	}
 	eprintf ("Starting http server...\n");
-	eprintf ("http://localhost:%d/\n", atoi (port));
+	eprintf ("open http://%s:%d/\n", host, atoi (port));
+	eprintf ("r2 -C http://%s:%d/cmd/\n", host, atoi (port));
 	core->http_up = R_TRUE;
+
+	ut64 newoff, origoff = core->offset;
+	int newblksz, origblksz = core->blocksize;
+	ut8 *newblk, *origblk = core->block;
+
+	newblk = malloc (core->blocksize);
+	memcpy (newblk, core->block, core->blocksize);
+
+	core->block = newblk;
+// TODO: handle mutex lock/unlock here
 	while (!r_cons_singleton ()->breaked) {
-		r_cons_break (http_break, core);
+		r_cons_break ((RConsBreak)http_break, core);
+
+		/* restore environment */
+		core->config = origcfg;
+		r_config_set (origcfg, "scr.html", r_config_get (origcfg, "scr.html"));
+		r_config_set (origcfg, "scr.color", r_config_get (origcfg, "scr.color"));
+		r_config_set (origcfg, "scr.interactive", r_config_get (origcfg, "scr.interactive"));
+		core->http_up = 0; // DAT IS NOT TRUE AT ALL.. but its the way to enable visual
+
+		newoff = core->offset;
+		newblk = core->block;
+		newblksz = core->blocksize;
+
+		core->offset = origoff;
+		core->block = origblk;
+		core->blocksize = origblksz;
+
+// backup and restore offset and blocksize
+
+		/* this is blocking */
+		activateDieTime (core);
 		rs = r_socket_http_accept (s, timeout);
+
+		origoff = core->offset;
+		origblk = core->block;
+		origblksz = core->blocksize;
+		core->offset = newoff;
+		core->block = newblk;
+		core->blocksize = newblksz;
+		/* set environment */
+// backup and restore offset and blocksize
+		core->http_up = 1;
+		core->config = newcfg;
+		r_config_set (newcfg, "scr.html", r_config_get (newcfg, "scr.html"));
+		r_config_set (newcfg, "scr.color", r_config_get (newcfg, "scr.color"));
+		r_config_set (newcfg, "scr.interactive", r_config_get (newcfg, "scr.interactive"));
+
 		if (!rs) {
-			if (!s) break;
 			r_sys_usleep (100);
 			continue;
 		}
 		if (allow && *allow) {
 			int accepted = R_FALSE;
-			const char *host;
+			const char *allows_host;
 			char *p, *peer = r_socket_to_string (rs->s);
 			char *allows = strdup (allow);
 			//eprintf ("Firewall (%s)\n", allows);
@@ -108,9 +511,9 @@ R_API int r_core_rtr_http(RCore *core, int launch, const char *path) {
 			p = strchr (peer, ':');
 			if (p) *p = 0;
 			for (i=0; i<count; i++) {
-				host = r_str_word_get0 (allows, i);
+				allows_host = r_str_word_get0 (allows, i);
 				//eprintf ("--- (%s) (%s)\n", host, peer);
-				if (!strcmp (host, peer)) {
+				if (!strcmp (allows_host, peer)) {
 					accepted = R_TRUE;
 					break;
 				}
@@ -123,43 +526,57 @@ R_API int r_core_rtr_http(RCore *core, int launch, const char *path) {
 			}
 		}
 		if (!rs->method || !rs->path) {
+			eprintf ("Invalid http headers received from client\n");
 			r_socket_http_close (rs);
 			continue;
 		}
+		dir = NULL;
+
+		if (r_config_get_i (core->config, "http.verbose")) {
+			char *peer = r_socket_to_string (rs->s);
+			eprintf ("[HTTP] %s %s\n", peer, rs->path);
+			free (peer);
+		}
+		if (r_config_get_i (core->config, "http.dirlist"))
+			if (r_file_is_directory (rs->path))
+				dir = strdup (rs->path);
+
+		if (r_config_get_i (core->config, "http.cors")) {
+			sprintf (headers, "Access-Control-Allow-Origin: *\nAccess-Control-Allow-Headers: Origin, X-Requested-With, Content-Type, Accept\n");
+		}
+
+		if (!strcmp (rs->method, "OPTIONS")) {
+			r_socket_http_response (rs, 200, "", 0, NULL);
+		} else
 		if (!strcmp (rs->method, "GET")) {
-			if (!memcmp (rs->path, "/up", 3)) {
+			if (!strncmp (rs->path, "/up/", 4)) {
 				if (r_config_get_i (core->config, "http.upget")) {
 					const char *uproot = r_config_get (core->config, "http.uproot");
 					if (!rs->path[3] || (rs->path[3]=='/'&&!rs->path[4])) {
-						char *ptr = strdup ("<html><body>\n");
-						const char *file;
-						RListIter *iter;
-						// list files
-						RList *files = r_sys_dir (uproot);
-						eprintf ("Listing directory %s\n", uproot);
-						r_list_foreach (files, iter, file) {
-							if (file[0] == '.') continue;
-							ptr = r_str_concatf (ptr, "<a href=\"/up/%s\">%s</a><br />\n",
-								file, file);
-						}
-						r_list_free (files);
-						ptr = r_str_concat (ptr, "<html><body>\n");
-						r_socket_http_response (rs, 200, ptr, 0, NULL);
+						char *ptr = rtr_dir_files (uproot);
+						r_socket_http_response (rs, 200, ptr, 0, headers);
+						free (ptr);
 					} else {
 						char *path = r_file_root (uproot, rs->path + 4);
 						if (r_file_exists (path)) {
 							int sz = 0;
 							char *f = r_file_slurp (path, &sz);
 							if (f) {
-								r_socket_http_response (rs, 200, f, sz, NULL);
+								r_socket_http_response (rs, 200, f, sz, headers);
 								free (f);
 							} else {
-								r_socket_http_response (rs, 403, "Permission denied", 0, NULL);
+								r_socket_http_response (rs, 403, "Permission denied", 0, headers);
 								eprintf ("http: Cannot open '%s'\n", path);
 							}
 						} else {
-							eprintf ("File '%s' not found\n", path);
-							r_socket_http_response (rs, 404, "File not found\n", 0, NULL);
+							if (dir) {
+								char *resp = rtr_dir_files (dir);
+								r_socket_http_response (rs, 404, resp, 0, headers);
+								free (resp);
+							} else {
+								eprintf ("File '%s' not found\n", path);
+								r_socket_http_response (rs, 404, "File not found\n", 0, headers);
+							}
 						}
 						free (path);
 					}
@@ -167,7 +584,7 @@ R_API int r_core_rtr_http(RCore *core, int launch, const char *path) {
 					r_socket_http_response (rs, 403,
 							"Permission denied\n", 0, NULL);
 				}
-			} else if (!memcmp (rs->path, "/cmd/", 5)) {
+			} else if (!strncmp (rs->path, "/cmd/", 5)) {
 				char *cmd = rs->path +5;
 				char foo[32];
 				const char *httpcmd = r_config_get (core->config, "http.uri");
@@ -185,22 +602,42 @@ R_API int r_core_rtr_http(RCore *core, int launch, const char *path) {
 				} else {
 					char *out, *cmd = rs->path+5;
 					r_str_uri_decode (cmd);
-					// eprintf ("CMD (%s)\n", cmd);
-					out = r_core_cmd_str_pipe (core, cmd);
+					r_config_set (core->config, "scr.interactive", "false");
+					if (!strcmp (cmd, "=h*")) {
+						if (r_sandbox_enable (0)) {
+							out = NULL;
+						} else {
+							/* do stuff */
+							out = NULL;
+							r_socket_http_close (rs);
+							free (dir);
+							ret = -2;
+							goto the_end;
+						}
+					}
+					if (*cmd == ':') {
+						/* commands in /cmd/: starting with : do not show any output */
+						r_core_cmd0 (core, cmd+1);
+						out = NULL;
+					} else {
+						// eprintf ("CMD (%s)\n", cmd);
+						out = r_core_cmd_str_pipe (core, cmd);
+					}
 					// eprintf ("\nOUT LEN = %d\n", strlen (out));
 					if (out) {
 						char *res = r_str_uri_encode (out);
-						r_socket_http_response (rs, 200, out, 0,
-							"Content-Type: text/plain\n");
+						char newheaders [128];
+						snprintf(newheaders, sizeof(newheaders),
+							"Content-Type: text/plain\n%s", headers);
+						r_socket_http_response (rs, 200, out, 0, newheaders);
 						free (out);
 						free (res);
-					} else r_socket_http_response (rs, 200, "", 0, NULL);
+					} else r_socket_http_response (rs, 200, "", 0, headers);
 				}
 			} else {
 				const char *root = r_config_get (core->config, "http.root");
-				char *path;
-				path = r_file_root (root, rs->path);
-
+				char *path = r_file_root (root, rs->path);
+				// FD IS OK HERE
 				if (rs->path [strlen (rs->path)-1] == '/') {
 					path = r_str_concat (path, "index.html");
 					//rs->path = r_str_concat (rs->path, "index.html");
@@ -209,11 +646,13 @@ R_API int r_core_rtr_http(RCore *core, int launch, const char *path) {
 					if (r_file_is_directory (path)) {
 						char res[128];
 						snprintf (res, sizeof (res),
-							"Location: %s/\n", rs->path);
+							"Location: %s/\n%s", rs->path, headers);
 						r_socket_http_response (rs, 302,
 							NULL, 0, res);
 						r_socket_http_close (rs);
 						free (path);
+						free (dir);
+						dir = NULL;
 						continue;
 					}
 				}
@@ -222,22 +661,32 @@ R_API int r_core_rtr_http(RCore *core, int launch, const char *path) {
 					char *f = r_file_slurp (path, &sz);
 					if (f) {
 						const char *contenttype = NULL;
+						char newheaders [128];
 						if (strstr (path, ".js")) contenttype = "Content-Type: application/javascript\n";
 						if (strstr (path, ".css")) contenttype = "Content-Type: text/css\n";
 						if (strstr (path, ".html")) contenttype = "Content-Type: text/html\n";
-						r_socket_http_response (rs, 200, f, sz, contenttype);
+						snprintf(newheaders, sizeof(newheaders),
+							"%s%s", contenttype, headers);
+						r_socket_http_response (rs, 200, f, sz, newheaders);
 						free (f);
 					} else {
-						r_socket_http_response (rs, 403, "Permission denied", 0, NULL);
+						r_socket_http_response (rs, 403, "Permission denied", 0, headers);
 						eprintf ("http: Cannot open '%s'\n", path);
 					}
 				} else {
-					eprintf ("File '%s' not found\n", path);
-					r_socket_http_response (rs, 404, "File not found\n", 0, NULL);
+					if (dir) {
+						char *resp = rtr_dir_files (dir);
+						eprintf ("Dirlisting %s\n", dir);
+						r_socket_http_response (rs, 404, resp, 0, headers);
+						free (resp);
+					} else {
+						eprintf ("File '%s' not found\n", path);
+						r_socket_http_response (rs, 404, "File not found\n", 0, headers);
+					}
 				}
 				free (path);
 			}
-		} else 
+		} else
 		if (!strcmp (rs->method, "POST")) {
 			ut8 *ret;
 			int retlen;
@@ -248,58 +697,131 @@ R_API int r_core_rtr_http(RCore *core, int launch, const char *path) {
 				if (ret) {
 					ut64 size = r_config_get_i (core->config, "http.maxsize");
 					if (size && retlen > size) {
-						r_socket_http_response (rs, 403, "403 File too big\n", 0, NULL);
+						r_socket_http_response (rs, 403, "403 File too big\n", 0, headers);
 					} else {
 						char *filename = r_file_root (
 							r_config_get (core->config, "http.uproot"),
 							rs->path + 4);
 						eprintf ("UPLOADED '%s'\n", filename);
-						r_file_dump (filename, ret, retlen);
+						r_file_dump (filename, ret, retlen, 0);
 						free (filename);
 						snprintf (buf, sizeof (buf),
 							"<html><body><h2>uploaded %d bytes. Thanks</h2>\n", retlen);
-							r_socket_http_response (rs, 200, buf, 0, NULL);
+							r_socket_http_response (rs, 200, buf, 0, headers);
 					}
 					free (ret);
 				}
 			} else {
-				r_socket_http_response (rs, 403, "403 Forbidden\n", 0, NULL);
+				r_socket_http_response (rs, 403, "403 Forbidden\n", 0, headers);
 			}
 		} else {
-			r_socket_http_response (rs, 404, "Invalid protocol", 0, NULL);
+			r_socket_http_response (rs, 404, "Invalid protocol", 0, headers);
 		}
 		r_socket_http_close (rs);
+		free (dir);
 	}
+the_end:
+{
+	int timeout = r_config_get_i (core->config, "http.timeout");
+	const char *host = r_config_get (core->config, "http.bind");
+	const char *port = r_config_get (core->config, "http.port");
+	const char *cors = r_config_get (core->config, "http.cors");
+	const char *allow = r_config_get (core->config, "http.allow");
+	const char *httpui = r_config_get (core->config, "http.ui");
+        core->config = origcfg;
+	r_config_set_i (core->config, "http.timeout", timeout);
+	r_config_set (core->config, "http.bind", host);
+	r_config_set (core->config, "http.port", port);
+	r_config_set (core->config, "http.cors", cors);
+	r_config_set (core->config, "http.allow", allow);
+	r_config_set (core->config, "http.ui", httpui);
+}
+	r_cons_break_end ();
 	core->http_up = R_FALSE;
 	r_socket_free (s);
-	r_cons_break_end ();
-	r_config_set_i (core->config, "scr.html", x);
-	r_config_set_i (core->config, "scr.color", y);
-	r_config_set_i (core->config, "asm.bytes", z);
-	r_config_set_i (core->config, "scr.interactive", u);
-	r_config_set_i (core->config, "asm.cmtright", v);
-	if (oldsandbox != -1)
-		r_config_set_i (core->config, "cfg.sandbox", oldsandbox);
-	return 0;
+	r_config_free (newcfg);
+	r_config_set (origcfg, "scr.html", r_config_get (origcfg, "scr.html"));
+	r_config_set (origcfg, "scr.color", r_config_get (origcfg, "scr.color"));
+	r_config_set (origcfg, "scr.interactive", r_config_get (origcfg, "scr.interactive"));
+	return ret;
+}
+
+static int r_core_rtr_http_thread (RThread *th) {
+	HttpThread *ht;
+	if (!th) return R_FALSE;
+	ht = th->user;
+	if (!ht || !ht->core) return R_FALSE;
+	return r_core_rtr_http_run (ht->core, ht->launch, ht->path);
+}
+
+static RThread *httpthread = NULL;
+
+#define USE_THREADS 1
+
+R_API int r_core_rtr_http(RCore *core, int launch, const char *path) {
+	int ret;
+	if (r_sandbox_enable (0)) {
+		eprintf ("sandbox: connect disabled\n");
+		return 1;
+	}
+
+	if (launch=='-') {
+		if (httpthread) {
+			eprintf ("Press ^C to stop the webserver\n");
+			r_th_free (httpthread);
+			httpthread = NULL;
+		} else {
+			eprintf ("No webserver running\n");
+		}
+		return 0;
+	}
+	if (core->http_up) {
+		eprintf ("http server is already running\n");
+		return 1;
+	}
+	if (launch=='&') {
+		if (httpthread) {
+			eprintf ("HTTP Thread is already running\n");
+			eprintf ("This is experimental and probably buggy. Use at your own risk\n");
+			eprintf ("TODO: Use different eval environ for scr. for the web\n");
+			eprintf ("TODO: Visual mode should be enabled on local\n");
+		} else {
+			HttpThread ht = { core, launch, path };
+			httpthread = r_th_new (r_core_rtr_http_thread, &ht, 0);
+			r_th_start (httpthread, 1);
+			eprintf ("Background http server started.\n");
+		}
+		return 0;
+	}
+	do {
+		ret = r_core_rtr_http_run (core, launch, path);
+	} while (ret == -2);
+	return ret;
 }
 
 R_API void r_core_rtr_help(RCore *core) {
-	r_cons_printf (
-	"|Usage: =[:!+-=hH] [...]   # radare remote command execution protocol\n"
-	"| =:port              listen on given port using rap protocol (o rap://9999)\n"
-	"| =:host:port cmd     run 'cmd' command on remote server.\n"
-	"|rap commands:\n"
-	"| =                   list all open connections\n"
-	//"| =:port [cmd]      ; same as .: but allow to send command if cmd\n"
-	"| =<[fd] cmd          send output of local command to remote fd\n"
-	"| =[fd] cmd           exec cmd at remote 'fd' (last open is default one)\n"
-	"| =! cmd              run command via r_io_system\n"
-	"| =+ [proto://]host   add host (default=rap://, tcp://, udp://)\n"
-	"| =-[fd]              remove all hosts or host 'fd'\n"
-	"| ==[fd]              open remote session with host 'fd', 'q' to quit\n"
-	"|http server:\n"
-	"| =h                  listen for http connections (r2 -qc=H /bin/ls)\n"
-	"| =H                  launch browser and listen for http\n");
+	const char* help_msg[] = {
+	"Usage:", " =[:!+-=hH] [...]", " # radare remote command execution protocol",
+	"\nrap commands:", "", "",
+	"=", "", "list all open connections",
+	"=<", "[fd] cmd", "send output of local command to remote fd",
+	"=", "[fd] cmd", "exec cmd at remote 'fd' (last open is default one)",
+	"=!", " cmd", "run command via r_io_system",
+	"=+", " [proto://]host", "add host (default=rap://, tcp://, udp://)",
+	"=-", "[fd]", "remove all hosts or host 'fd'",
+	"==", "[fd]", "open remote session with host 'fd', 'q' to quit",
+	"\nrap server:","","",
+	"=", ":port", "listen on given port using rap protocol (o rap://9999)",
+	"=", ":host:port cmd", "run 'cmd' command on remote server",
+	"\nhttp server:", "", "",
+	"=h", " port", "listen for http connections (r2 -qc=H /bin/ls)",
+	"=h-", "", "stop background webserver",
+	"=h*", "", "restart current webserver",
+	"=h&", " port", "start http server in background)",
+	"=H", " port", "launch browser and listen for http",
+	"=H&", " port", "launch browser and listen for http in background",
+	NULL };
+	r_core_cmd_help (core, help_msg);
 }
 
 R_API void r_core_rtr_pushout(RCore *core, const char *input) {
@@ -308,7 +830,7 @@ R_API void r_core_rtr_pushout(RCore *core, const char *input) {
 	char *str = NULL;
 	if (fd) {
 		for (rtr_n = 0; rtr_host[rtr_n].fd->fd != fd \
-			&& rtr_n < RTR_MAX_HOSTS; rtr_n++);
+			&& rtr_n < RTR_MAX_HOSTS - 1; rtr_n++);
 		if (!(cmd = strchr (input, ' '))) {
 			eprintf ("Error\n");
 			return;
@@ -354,7 +876,7 @@ R_API void r_core_rtr_list(RCore *core) {
 				rtr_host[i].port, rtr_host[i].file);
 	}
 }
-		
+
 R_API void r_core_rtr_add(RCore *core, const char *_input) {
 	char *port, input[1024], *host = NULL, *file = NULL, *ptr = NULL, buf[1024];
 	int proto, i, timeout, ret;
@@ -362,6 +884,7 @@ R_API void r_core_rtr_add(RCore *core, const char *_input) {
 
 	timeout = r_config_get_i (core->config, "http.timeout");
 	strncpy (input, _input, sizeof (input)-4);
+	input[sizeof(input)-4] = '\0';
 	/* Parse uri */
 	if ((ptr = strstr (input, "tcp://"))) {
 		proto = RTR_PROT_TCP;
@@ -410,33 +933,77 @@ R_API void r_core_rtr_add(RCore *core, const char *_input) {
 	switch (proto) {
 	case RTR_PROT_HTTP:
 		{
-			char uri[1024], prompt[64];
+			char uri[1024], prompt[64], prompt2[64];
 			int len;
-			char *str, *res;
-			if (file[strlen (file)-1]=='/') {
+			const char* res;
+			char *str, *ptr;
+			int flen = strlen (file);
+			int is_visual = (file[flen-1]== 'V')?1:0;
+			int is_valid = (file[flen-(is_visual?2:1)] == '/')?1:0;
+			if (is_valid) {
+				TextLog T = { host, port, file };
+				if (is_visual) {
+					file[flen-1] = 0; // remove V from url
+					rtr_visual (core, T, NULL);
+				}
 				snprintf (prompt, sizeof (prompt), "[http://%s:%s/%s]> ",
-					host, port, file);
-				r_line_set_prompt (prompt);
+						host, port, file);
+				snprintf (prompt2, sizeof(prompt2), "[%s:%s]$ ", host, port);
 				for (;;) {
-					char *ptr, *str = r_line_readline ();
-					if (!str || !*str) break;
-					if (*str == 'q') break;
-					ptr = r_str_uri_encode (str);
-					if (ptr) str = ptr;
-					snprintf (uri, sizeof (uri), "http://%s:%s/%s%s",
-						host, port, file, str);
-					if (ptr == str) free (ptr);
-					str = r_socket_http_get (uri, NULL, &len);
-					if (str) {
-						str[len] = 0;
-						res = strstr (str, "\n\n");
-						if (res) res = strstr (res+1, "\n\n");
-						if (res) res += 2; else res = str;
-						printf ("%s%s", res, (res[strlen (res)-1]=='\n')?"":"\n");
-						r_line_hist_add (str);
-						free (str);
+					r_line_set_prompt (prompt);
+					res = r_line_readline ();
+					if (!res || !*res) break;
+					if (*res == 'q') break;
+					if (!strcmp (res, "!sh")) {
+						for (;;) {
+							r_line_set_prompt (prompt2);
+							res = r_line_readline ();
+							if (!res || !*res || !strcmp (res, "exit")) {
+								break;
+							}
+							ptr = r_str_uri_encode (res);
+
+							snprintf (uri, sizeof (uri), "http://%s:%s/%s!%s",
+									host, port, file, res);
+							str = r_socket_http_get (uri, NULL, &len);
+							if (str) {
+								str[len] = 0;
+								res = strstr (str, "\n\n");
+								if (res) res = strstr (res+1, "\n\n");
+								if (res) res += 2; else res = str;
+								printf ("%s%s", res, (res[strlen (res)-1]=='\n')?"":"\n");
+								r_line_hist_add (str);
+								free (str);
+							}
+							free (ptr);
+						}
+					} else if (res[0]=='V') {
+						if (res[1]==' ') {
+							rtr_visual (core, T, res+1);
+						} else {
+							rtr_visual (core, T, NULL);
+						}
+					} else if (!strcmp (res, "TT")) {
+						rtr_textlog_chat (core, T);
+					} else {
+						ptr = r_str_uri_encode (res);
+						if (ptr) res = ptr;
+						snprintf (uri, sizeof (uri), "http://%s:%s/%s%s",
+								host, port, file, res);
+						if (ptr == res) free (ptr);
+						str = r_socket_http_get (uri, NULL, &len);
+						if (str) {
+							str[len] = 0;
+							res = strstr (str, "\n\n");
+							if (res) res = strstr (res+1, "\n\n");
+							if (res) res += 2; else res = str;
+							printf ("%s%s", res, (res[strlen (res)-1]=='\n')?"":"\n");
+							r_line_hist_add (str);
+							free (str);
+						}
 					}
 				}
+				r_socket_free (fd);
 				return;
 			}
 			snprintf (uri, sizeof (uri), "http://%s:%s/%s",
@@ -451,12 +1018,14 @@ R_API void r_core_rtr_add(RCore *core, const char *_input) {
 				free (str);
 			} else eprintf ("HTTP connection has failed\n");
 			// do not add connection. wtf
+			r_socket_free(fd);
 			return;
 		}
 		break;
 	case RTR_PROT_RAP:
 		if (!r_socket_connect_tcp (fd, host, port, timeout)) { //TODO: Use rap.ssl
 			eprintf ("Error: Cannot connect to '%s' (%s)\n", host, port);
+			r_socket_free(fd);
 			return;
 		}
 		eprintf ("Connected to %s at port %s\n", host, port);
@@ -472,6 +1041,7 @@ R_API void r_core_rtr_add(RCore *core, const char *_input) {
 		r_mem_copyendian ((ut8 *)&i, (ut8*)buf+1, 4, core->assembler->big_endian);
 		if (buf[0] != (char)(RTR_RAP_OPEN|RTR_RAP_REPLY) || i<= 0) {
 			eprintf ("Error: Wrong reply\n");
+			r_socket_free(fd);
 			return;
 		}
 		eprintf ("ok\n");
@@ -480,6 +1050,7 @@ R_API void r_core_rtr_add(RCore *core, const char *_input) {
 		if (!r_socket_connect_tcp (fd, host, port, timeout)) { //TODO: Use rap.ssl
 			core->num->value = 1;
 			eprintf("Error: Cannot connect to '%s' (%s)\n", host, port);
+			r_socket_free(fd);
 			return;
 		}
 		core->num->value = 0;
@@ -489,6 +1060,7 @@ R_API void r_core_rtr_add(RCore *core, const char *_input) {
 		if (!r_socket_connect_udp (fd, host, port, timeout)) { //TODO: Use rap.ssl
 			core->num->value = 1;
 			eprintf ("Error: Cannot connect to '%s' (%s)\n", host, port);
+			r_socket_free(fd);
 			return;
 		}
 		core->num->value = 0;
@@ -500,14 +1072,15 @@ R_API void r_core_rtr_add(RCore *core, const char *_input) {
 	for (i = 0; i < RTR_MAX_HOSTS; i++)
 		if (!rtr_host[i].fd) {
 			rtr_host[i].proto = proto;
-			memcpy (rtr_host[i].host, host, 512);
+			strncpy (rtr_host[i].host, host, sizeof (rtr_host[i].proto)-1);
 			rtr_host[i].port = r_num_get (core->num, port);
-			memcpy (rtr_host[i].file, file, 1024);
+			strncpy (rtr_host[i].file, file, sizeof (rtr_host[i].file)-1);
 			rtr_host[i].fd = fd;
 			rtr_n = i;
 			break;
 		}
 	core->num->value = ret;
+	// double free wtf is freed this here? r_socket_free(fd);
 	//r_core_rtr_list (core);
 }
 
@@ -517,17 +1090,21 @@ R_API void r_core_rtr_remove(RCore *core, const char *input) {
 	if (input[0] >= '0' && input[0] <= '9') {
 		fd = r_num_math (core->num, input);
 		for (i = 0; i < RTR_MAX_HOSTS; i++)
-			if (rtr_host[i].fd->fd == fd) {
+			if (rtr_host[i].fd && rtr_host[i].fd->fd == fd) {
 				r_socket_free (rtr_host[i].fd);
 				rtr_host[i].fd = NULL;
 				if (rtr_n == i)
-					for (rtr_n = 0; !rtr_host[rtr_n].fd && rtr_n < RTR_MAX_HOSTS; rtr_n++);
+					for (rtr_n = 0; !rtr_host[rtr_n].fd \
+						&& rtr_n < RTR_MAX_HOSTS - 1; rtr_n++);
 				break;
 		}
 	} else {
-		for (i = 0; i < RTR_MAX_HOSTS; i++)
-			if (rtr_host[i].fd)
+		for (i = 0; i < RTR_MAX_HOSTS; i++) {
+			if (rtr_host[i].fd) {
 				r_socket_free (rtr_host[i].fd);
+				rtr_host[i].fd = NULL;
+			}
+		}
 		memset (rtr_host, '\0', RTR_MAX_HOSTS * sizeof(RCoreRtrHost));
 		rtr_n = 0;
 	}
@@ -540,8 +1117,9 @@ R_API void r_core_rtr_session(RCore *core, const char *input) {
 	prompt[0] = 0;
 	if (input[0] >= '0' && input[0] <= '9') {
 		fd = r_num_math (core->num, input);
-		for (rtr_n = 0; rtr_host[rtr_n].fd->fd != fd \
-			&& rtr_n < RTR_MAX_HOSTS; rtr_n++);
+		for (rtr_n = 0; rtr_host[rtr_n].fd \
+			&& rtr_host[rtr_n].fd->fd != fd \
+			&& rtr_n < RTR_MAX_HOSTS - 1; rtr_n++);
 	}
 
 	for (;;) {
@@ -551,15 +1129,15 @@ R_API void r_core_rtr_session(RCore *core, const char *input) {
 		free (r_line_singleton ()->prompt);
 		r_line_singleton ()->prompt = strdup (prompt);
 		if ((r_cons_fgets (buf, sizeof (buf), 0, NULL))) {
-			if (*buf == 'q')
+			if (!*buf || *buf == 'q')
 				break;
-			else if (*buf == 'V') {
+			if (*buf == 'V') {
 				eprintf ("Visual mode not supported\n");
 				continue;
 			}
 			r_core_rtr_cmd (core, buf);
 			r_cons_flush ();
-		}
+		} else break;
 	}
 }
 
@@ -575,7 +1153,7 @@ R_API void r_core_rtr_cmd(RCore *core, const char *input) {
 	if (fd != 0) {
 		if (rtr_host[rtr_n].fd)
 			for (rtr_n = 0; rtr_host[rtr_n].fd->fd != fd
-				&& rtr_n < RTR_MAX_HOSTS; rtr_n++);
+				&& rtr_n < RTR_MAX_HOSTS - 1; rtr_n++);
 		if (!(cmd = strchr (input, ' '))) {
 			eprintf ("Error\n");
 			return;
@@ -612,12 +1190,6 @@ R_API void r_core_rtr_cmd(RCore *core, const char *input) {
 		return;
 	}
 	r_mem_copyendian ((ut8*)&cmd_len, (ut8*)bufr+1, 4, endian);
-	if (i == 0)
-		return;
-	if (i < 0) {
-		eprintf ("Error: cmd length < 0\n");
-		return;
-	}
 	cmd_output = malloc (cmd_len);
 	if (!cmd_output) {
 		eprintf ("Error: Allocating cmd output\n");
@@ -658,8 +1230,9 @@ R_API char *r_core_rtr_cmds_query (RCore *core, const char *host, const char *po
 }
 
 R_API int r_core_rtr_cmds (RCore *core, const char *port) {
-	unsigned char buf[4096];
-	RSocket *ch, *s;
+	unsigned char buf[4097];
+	RSocket *ch = NULL;
+	RSocket *s;
 	int i, ret;
 	char *str;
 
@@ -674,14 +1247,14 @@ R_API int r_core_rtr_cmds (RCore *core, const char *port) {
 		r_socket_free (s);
 		return R_FALSE;
 	}
-	
+
 	eprintf ("Listening for commands on port %s\n", port);
 	listenport = port;
 	for (;;) {
-		r_cons_break (http_break, core);
+		r_cons_break ((RConsBreak)http_break, core);
 		ch = r_socket_accept (s);
 		buf[0] = 0;
-		ret = r_socket_read (ch, buf, sizeof (buf));
+		ret = r_socket_read (ch, buf, sizeof (buf) - 1);
 		if (ret>0) {
 			buf[ret] = 0;
 			for (i=0; buf[i]; i++)
@@ -693,13 +1266,17 @@ R_API int r_core_rtr_cmds (RCore *core, const char *port) {
 			str = r_core_cmd_str (core, (const char *)buf);
 			if (str &&*str)  {
 			r_socket_write (ch, str, strlen (str));
-			} else 
+			} else
 			r_socket_write (ch, "\n", 1);
 			free (str);
 		}
-		if (r_cons_singleton()->breaked) break;
+		if (r_cons_singleton()->breaked)
+			break;
 		r_socket_close (ch);
+		r_socket_free(ch);
 		r_cons_break_end ();
 	}
+	r_socket_free(s);
+	r_socket_free(ch);
 	return 0;
 }

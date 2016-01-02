@@ -130,9 +130,9 @@ static void Scanasm(int mode) {
     asmcmd++;                          // Skip leading spaces
   if (*asmcmd=='\0' || *asmcmd==';') {
     scan=SCAN_EOL; return; };          // Empty line
-  if (isalpha(*asmcmd) || *asmcmd=='_' || *asmcmd=='@') {
+  if (isalpha((unsigned char)*asmcmd) || *asmcmd=='_' || *asmcmd=='@') {
     sdata[0]=*asmcmd++; i=1;           // Some keyword or identifier
-    while ((isalnum(*asmcmd) || *asmcmd=='_' || *asmcmd=='@') &&
+    while ((isalnum((unsigned char)*asmcmd) || *asmcmd=='_' || *asmcmd=='@') &&
       i<sizeof(sdata))
       sdata[i++]=*asmcmd++;
     if (i>=sizeof(sdata)) {
@@ -210,20 +210,20 @@ static void Scanasm(int mode) {
       asmcmd++;
       while (*asmcmd==' ' || *asmcmd=='\t')
         asmcmd++;                      // Skip trailing spaces
-      if (!isdigit(*asmcmd)) {
+      if (!isdigit((unsigned char)*asmcmd)) {
         asmerror="Integer number expected";
         scan=SCAN_ERR; return; };
-      while (isdigit(*asmcmd))         // LOCAL index is decimal number!
+      while (isdigit((unsigned char)*asmcmd))         // LOCAL index is decimal number!
         idata=idata*10+(*asmcmd++)-'0';
       scan=SCAN_LOCAL; return; };
     if (strcmp(s,"ARG")==0 && *asmcmd=='.') {
       asmcmd++;
       while (*asmcmd==' ' || *asmcmd=='\t')
         asmcmd++;                      // Skip trailing spaces
-      if (!isdigit(*asmcmd)) {
+      if (!isdigit((unsigned char)*asmcmd)) {
         asmerror="Integer number expected";
         scan=SCAN_ERR; return; };
-      while (isdigit(*asmcmd))         // ARG index is decimal number!
+      while (isdigit((unsigned char)*asmcmd))         // ARG index is decimal number!
         idata=idata*10+(*asmcmd++)-'0';
       scan=SCAN_ARG; return; };
     if (strcmp(s,"REP")==0) {
@@ -261,27 +261,27 @@ static void Scanasm(int mode) {
       return; }
     asmerror="Unknown identifier";
     scan=SCAN_ERR; return; }
-  else if (isdigit(*asmcmd)) {         // Constant
+  else if (isdigit((unsigned char)*asmcmd)) {         // Constant
     base=10; maxdigit=0; decimal=hex=0L; floating=0.0;
-    if (asmcmd[0]=='0' && toupper(asmcmd[1])=='X') {
+    if (asmcmd[0]=='0' && toupper((unsigned char)asmcmd[1])=='X') {
       base=16; asmcmd+=2; };           // Force hexadecimal number
 //printf("DIGIT (%s) %d\n", asmcmd, base);
     while (1) {
-      if (isdigit(*asmcmd)) {
+      if (isdigit((unsigned char)*asmcmd)) {
         decimal=decimal*10+(*asmcmd)-'0';
         floating=floating*10.0+(*asmcmd)-'0';
         //hex=hex*16+(*asmcmd)-'0';
         hex=hex*base+(*asmcmd)-'0';
         if (maxdigit==0) maxdigit=9;
         asmcmd++; }
-      else if (isxdigit(*asmcmd)) {
-        hex=hex*16+toupper(*asmcmd++)-'A'+10;
+      else if (isxdigit((unsigned char)*asmcmd)) {
+        hex=hex*16+toupper((unsigned char)*asmcmd++)-'A'+10;
         maxdigit=15; }
       else break; };
     if (maxdigit==0) {
       asmerror="Hexadecimal digits after 0x... expected";
       scan=SCAN_ERR; return; };
-    if (toupper(*asmcmd)=='H') {       // Force hexadecimal number
+    if (toupper((unsigned char)*asmcmd)=='H') {       // Force hexadecimal number
       if (base==16) {
         asmerror="Please don't mix 0xXXXX and XXXXh forms";
         scan=SCAN_ERR; return; };
@@ -295,20 +295,20 @@ static void Scanasm(int mode) {
       if (base==16 || maxdigit>9) {
         asmerror="Not a decimal number"; scan=SCAN_ERR; return; };
       asmcmd++;
-      if (isdigit(*asmcmd) || toupper(*asmcmd)=='E') {
+      if (isdigit((unsigned char)*asmcmd) || toupper((unsigned char)*asmcmd)=='E') {
         divisor=1.0;
-        while (isdigit(*asmcmd)) {     // Floating-point number
+        while (isdigit((unsigned char)*asmcmd)) {     // Floating-point number
           divisor/=10.0;
           floating+=divisor*(*asmcmd-'0');
           asmcmd++; };
-        if (toupper(*asmcmd)=='E') {
+        if (toupper((unsigned char)*asmcmd)=='E') {
           asmcmd++;
           if (*asmcmd=='-') { base=-1; asmcmd++; }
           else base=1;
-          if (!isdigit(*asmcmd)) {
+          if (!isdigit((unsigned char)*asmcmd)) {
             asmerror="Invalid exponent"; scan=SCAN_ERR; return; };
           decimal=0;
-          while (isdigit(*asmcmd)) {
+          while (isdigit((unsigned char)*asmcmd)) {
             if (decimal<65536L) decimal=decimal*10+(*asmcmd++)-'0'; };
           floating*=pow10l(decimal*base); };
         fdata=floating;
@@ -1059,7 +1059,7 @@ retrylongjump:
         case PS0:                      // Top of FPU stack (pseudooperand)
         case PS1:                      // ST(1) (pseudooperand)
         case PCX:                      // CX/ECX (pseudooperand)
-        case PDI:                      // EDI (pseudooperand in MMX extentions)
+        case PDI:                      // EDI (pseudooperand in MMX extensions)
           break;
         default:                       // Undefined type of operand
           strcpy(errtext,"Internal Assembler error");
@@ -1114,9 +1114,14 @@ retrylongjump:
   segment=SEG_UNDEF;                   // Necessary segment prefix
   jmpsize=0;                           // No relative jumps
   memset(tcode,0,sizeof(tcode));
-  *(ulong *)tcode=pd->code & pd->mask;
-  memset(tmask,0,sizeof(tmask));
-  *(ulong *)tmask=pd->mask;
+  // Fix weak aliasing
+  {
+    unsigned int *word = (unsigned int*)&tcode;
+    unsigned int *mask = (unsigned int*)&tmask;
+    *(ulong *)word = pd->code & pd->mask;
+    memset(tmask, 0, sizeof(tmask));
+    *(ulong *)mask = pd->mask;
+  }
   i=pd->len-1;                         // Last byte of command itself
   if (rep) i++;                        // REPxx prefixes count as extra byte
   // In some cases at least one operand must have explicit size declaration (as
@@ -1245,7 +1250,7 @@ retrylongjump:
             op->index>=0 && op->scale==2 &&
             op->offset>=-128 && op->offset<128 && op->anyoffset==0) {
             op->base=op->index; op->scale=1; };
-          if (op->index==GREG_ESP) {    // Reordering was unsuccessfull
+          if (op->index==GREG_ESP) {    // Reordering was unsuccessful
             strcpy(errtext,"Invalid indexing mode");
             goto error; };
           if (op->base<0) {
@@ -1298,7 +1303,7 @@ retrylongjump:
       case IMX:                        // Immediate sign-extendable byte
       case IMS:                        // Immediate byte (for shifts)
       case IM1:                        // Immediate byte
-        if (immsize==2)                // To accomodate ENTER instruction
+        if (immsize==2)                // To accommodate ENTER instruction
           immediate=(immediate & 0xFFFF) | (op->offset<<16);
         else immediate=op->offset;
         anyimm|=op->anyoffset;
@@ -1352,7 +1357,7 @@ retrylongjump:
       case PS0:                        // Top of FPU stack (pseudooperand)
       case PS1:                        // ST(1) (pseudooperand)
       case PCX:                        // CX/ECX (pseudooperand)
-      case PDI:                        // EDI (pseudooperand in MMX extentions)
+      case PDI:                        // EDI (pseudooperand in MMX extensions)
         break;                         // Simply skip preudooperands
       default:                         // Undefined type of operand
         strcpy(errtext,"Internal Assembler error");
@@ -1421,4 +1426,3 @@ error:
 };
 
 //#pragma option -O.                     // Restore old optimization options
-

@@ -97,7 +97,7 @@ out:
 /*VARARGS*/
 static void file_error_core(RMagic *ms, int error, const char *f, va_list va, ut32 lineno) {
 	/* Only the first error is ok */
-	if (ms->haderr)
+	if (!ms || ms->haderr)
 		return;
 	if (lineno != 0) {
 		free(ms->o.buf);
@@ -107,7 +107,7 @@ static void file_error_core(RMagic *ms, int error, const char *f, va_list va, ut
 	// OPENBSDBUG
         file_vprintf (ms, f, va);
 	if (error > 0)
-		file_printf (ms, " (%s)", strerror(error));
+		(void)file_printf (ms, " (%s)", strerror(error));
 	ms->haderr++;
 	ms->error = error;
 }
@@ -144,9 +144,10 @@ void file_badread(RMagic *ms) {
 }
 
 int file_buffer(RMagic *ms, int fd, const char *inname, const void *buf, size_t nb) {
-	int m = 0;
-	int mime = ms->flags & R_MAGIC_MIME;
-
+	int mime, m = 0;
+	if (!ms)
+		return -1;
+	mime = ms->flags & R_MAGIC_MIME;
 	if (nb == 0) {
 		if ((!mime || (mime & R_MAGIC_MIME_TYPE)) &&
 		    file_printf(ms, mime ? "application/x-empty" :
@@ -176,10 +177,11 @@ int file_buffer(RMagic *ms, int fd, const char *inname, const void *buf, size_t 
 		    if ((ms->flags & R_MAGIC_NO_CHECK_ASCII) != 0 ||
 			(m = file_ascmagic(ms, buf, nb)) == 0) {
 			/* abandon hope, all ye who remain here */
-			if ((!mime || (mime & R_MAGIC_MIME_TYPE)) &&
-			    file_printf(ms, mime ? "application/octet-stream" :
-				"data") == -1)
+			if ((!mime || (mime & R_MAGIC_MIME_TYPE))) {
+		//		if (mime)
+					file_printf (ms, "application/octet-stream");
 				return -1;
+			}
 			m = 1;
 		    }
 		}
@@ -191,6 +193,8 @@ int file_buffer(RMagic *ms, int fd, const char *inname, const void *buf, size_t 
 }
 
 int file_reset(RMagic *ms) {
+	if (!ms)
+		return 0;
 	ms->o.buf = NULL;
 	ms->haderr = 0;
 	ms->error = -1;

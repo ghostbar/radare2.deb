@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2014 - earada, pancake */
+/* radare - LGPL - Copyright 2009-2015 - earada, pancake */
 
 #include <stdio.h>
 #include <string.h>
@@ -12,11 +12,12 @@
 static int dalvik_disassemble (RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	int i = (int) buf[0];
 	int vA, vB, vC;
-	char str[1024];
+	char str[1024], *strasm;
 	ut64 offset;
 	int size = dalvik_opcodes[i].len;
 	int payload = 0;
 
+	op->buf_asm[0] = 0;
 	if (buf[0] == 0x00) { /* nop */
 		switch (buf[1]) {
 		case 0x01: /* packed-switch-payload */
@@ -66,8 +67,10 @@ static int dalvik_disassemble (RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 			break;
 		}
 	}
+	strasm = NULL;
 	if (size <= len) {
-		strcpy (op->buf_asm, dalvik_opcodes[i].name);
+		strncpy (op->buf_asm, dalvik_opcodes[i].name, sizeof (op->buf_asm) - 1);
+		strasm = strdup (op->buf_asm);
 		size = dalvik_opcodes[i].len;
 		switch (dalvik_opcodes[i].fmt) {
 		case fmtop: break;
@@ -75,117 +78,130 @@ static int dalvik_disassemble (RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 			vA = buf[1] & 0x0f;
 			vB = (buf[1] & 0xf0)>>4;
 			sprintf (str, " v%i, v%i", vA, vB);
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvAAvBBBB:
 			vA = (int) buf[1];
 			vB = (buf[3]<<8) | buf[2];
 			sprintf (str, " v%i, v%i", vA, vB);
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvAAAAvBBBB: // buf[1] seems useless :/
 			vA = (buf[3]<<8) | buf[2];
 			vB = (buf[5]<<8) | buf[4];
 			sprintf (str, " v%i, v%i", vA, vB);
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvAA:
 			vA = (int) buf[1];
 			sprintf (str, " v%i", vA);
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvAcB:
 			vA = buf[1] & 0x0f;
 			vB = (buf[1] & 0xf0)>>4;
 			sprintf (str, " v%i, %#x", vA, vB);
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvAAcBBBB:
 			vA = (int) buf[1];
 			short sB = (buf[3]<<8) | buf[2];
 			sprintf (str, " v%i, %#04hx", vA, sB);
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvAAcBBBBBBBB:
 			vA = (int) buf[1];
-			vB = buf[5]|(buf[4]<<8)|(buf[3]<<16)|(buf[2]<<24);
-			sprintf (str, " v%i, %#08x", vA, vB);
-			strcat (op->buf_asm, str);
+			//vB = buf[5]|(buf[4]<<8)|(buf[3]<<16)|(buf[2]<<24);
+			vB = buf[2]|(buf[3]<<8)|(buf[4]<<16)|(buf[5]<<24);
+			{
+				float f;
+				memcpy (&f, &vB, sizeof (float));
+				snprintf (str, sizeof (str), " v%i, 0x%08x ; %ff", vA, vB, f);
+			}
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvAAcBBBB0000:
 			vA = (int) buf[1];
 			vB = 0|(buf[3]<<16)|(buf[2]<<24);
 			sprintf (str, " v%i, %#08x", vA, vB);
-			if (buf[0] == 19) strcat (str, "00000000"); // const-wide/high16
-			strcat (op->buf_asm, str);
+			if (buf[0] == 19)
+				strcat (str, "00000000"); // const-wide/high16
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvAAcBBBBBBBBBBBBBBBB:
 			vA = (int) buf[1];
-			long long int lB = buf[9]|(buf[8]<<8)|(buf[7]<<16)|(buf[6]<<24)|
+			long long int lB = (long long int)buf[9]|((long long int)buf[8]<<8)|
+				((long long int)buf[7]<<16)|((long long int)buf[6]<<24)|
 				((long long int)buf[5]<<32)|((long long int)buf[4]<<40)|
 				((long long int)buf[3]<<48)|((long long int)buf[2]<<56);
 			sprintf (str, " v%i, 0x%"PFMT64x, vA, lB);
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvAAvBBvCC:
 			vA = (int) buf[1];
 			vB = (int) buf[2];
 			vC = (int) buf[3];
 			sprintf (str, " v%i, v%i, v%i", vA, vB, vC);
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvAAvBBcCC:
 			vA = (int) buf[1];
 			vB = (int) buf[2];
 			vC = (int) buf[3];
 			sprintf (str, " v%i, v%i, %#x", vA, vB, vC);
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvAvBcCCCC:
 			vA = buf[1] & 0x0f;
 			vB = (buf[1] & 0xf0)>>4;
 			vC = (buf[3]<<8) | buf[2];
 			sprintf (str, " v%i, v%i, %#x", vA, vB, vC);
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtoppAA:
 			vA = (char) buf[1];
-			sprintf (str, " %i", vA*2); // vA : word -> byte
-			strcat (op->buf_asm, str);
+			//sprintf (str, " %i", vA*2); // vA : word -> byte
+			snprintf (str, sizeof (str), " 0x%08"PFMT64x, a->pc + (vA*2)); // vA : word -> byte
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtoppAAAA:
 			vA = (short) (buf[3] <<8 | buf[2]);
-			sprintf (str, " %i", vA*2); // vA: word -> byte
-			strcat (op->buf_asm, str);
+			snprintf (str, sizeof (str), " 0x%08"PFMT64x, a->pc + (vA*2)); // vA : word -> byte
+			strasm = r_str_concat (strasm, str);
 			break;
-		case fmtopvAApBBBB:
+		case fmtopvAApBBBB: // if-*z
 			vA = (int) buf[1];
 			vB = (int) (buf[3] <<8 | buf[2]);
-			sprintf (str, " v%i, %i", vA, vB);
-			strcat (op->buf_asm, str);
+			//sprintf (str, " v%i, %i", vA, vB);
+			snprintf (str, sizeof (str), " v%i, 0x%08"PFMT64x, vA, a->pc + (vB*2));
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtoppAAAAAAAA:
 			vA = (int) (buf[2]|(buf[3]<<8)|(buf[4]<<16)|(buf[5]<<24));
-			sprintf (str, " %#08x", vA*2); // vA: word -> byte
-			strcat (op->buf_asm, str);
+			//sprintf (str, " %#08x", vA*2); // vA: word -> byte
+			snprintf (str, sizeof (str), " 0x%08"PFMT64x, a->pc + (vA*2)); // vA : word -> byte
+			strasm = r_str_concat (strasm, str);
 			break;
-		case fmtopvAvBpCCCC:
+		case fmtopvAvBpCCCC: // if-*
 			vA = buf[1] & 0x0f;
 			vB = (buf[1] & 0xf0)>>4;
 			vC = (int) (buf[3] <<8 | buf[2]);
-			sprintf (str, " v%i, v%i, %i", vA, vB, vC);
-			strcat (op->buf_asm, str);
+			//sprintf (str, " v%i, v%i, %i", vA, vB, vC);
+			snprintf (str, sizeof (str)," v%i, v%i, 0x%"PFMT64x,
+				vA, vB, a->pc + (vC*2));
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvAApBBBBBBBB:
 			vA = (int) buf[1];
 			vB = (int) (buf[2]|(buf[3]<<8)|(buf[4]<<16)|(buf[5]<<24));
-			sprintf (str, " v%i,%s%i ; 0x%08"PFMT64x,
-				vA, vB>0?" +":" ", vB*2, a->pc + (vB*2));
-			strcat (op->buf_asm, str);
+			snprintf (str, sizeof (str), " v%i, 0x%08"PFMT64x,
+				vA, a->pc + vB); // + (vB*2));
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtoptinlineI:
 			vA = (int) (buf[1] & 0x0f);
 			vB = (buf[3]<<8) | buf[2];
+			*str = 0;
 			switch (vA) {
 				case 1:
 					sprintf (str, " {v%i}", buf[4] & 0x0f);
@@ -204,9 +220,9 @@ static int dalvik_disassemble (RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 				default:
 					sprintf (str, " {}");
 			}
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			sprintf (str, ", [%04x]", vB);
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtoptinlineIR:
 		case fmtoptinvokeVSR:
@@ -214,7 +230,7 @@ static int dalvik_disassemble (RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 			vB = (buf[3]<<8) | buf[2];
 			vC = (buf[5]<<8) | buf[4];
 			sprintf (str, " {v%i..v%i}, [%04x]", vC, vC+vA-1, vB);
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtoptinvokeVS:
 			vA = (int) (buf[1] & 0xf0)>>4;
@@ -237,9 +253,9 @@ static int dalvik_disassemble (RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 				default:
 					sprintf (str, " {}");
 			}
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			sprintf (str, ", [%04x]", vB);
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvAAtBBBB:
 			vA = (int) buf[1];
@@ -263,7 +279,7 @@ static int dalvik_disassemble (RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 				else
 					sprintf (str, " v%i, 0x%"PFMT64x, vA, offset);
 			}
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtoptopvAvBoCCCC:
 			vA = (buf[1] & 0x0f);
@@ -274,7 +290,7 @@ static int dalvik_disassemble (RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 				sprintf (str, " v%i, v%i, [obj+%04x]", vA, vB, vC);
 			else
 				sprintf (str, " v%i, v%i, [0x%"PFMT64x"]", vA, vB, offset);
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopAAtBBBB:
 			vA = (int) buf[1];
@@ -284,7 +300,7 @@ static int dalvik_disassemble (RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 				sprintf (str, " v%i, thing+%i", vA, vB);
 			else
 				sprintf (str, " v%i, 0x%"PFMT64x, vA, offset);
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvAvBtCCCC:
 			vA = (buf[1] & 0x0f);
@@ -303,7 +319,7 @@ static int dalvik_disassemble (RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 				else
 					sprintf (str, " v%i, v%i, 0x%"PFMT64x, vA, vB, offset);
 			}
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvAAtBBBBBBBB:
 			vA = (int) buf[1];
@@ -313,7 +329,7 @@ static int dalvik_disassemble (RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 				sprintf (str, " v%i, string+%i", vA, vB);
 			else
 				sprintf (str, " v%i, 0x%"PFMT64x, vA, offset);
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvCCCCmBBBB:
 			vA = (int) buf[1];
@@ -321,18 +337,19 @@ static int dalvik_disassemble (RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 			vC = (buf[5]<<8) | buf[4];
 			if (buf[0] == 0x25) { // filled-new-array/range
 				offset = R_ASM_GET_OFFSET(a, 'c', vB);
-				if (offset == -1)
+				if (offset == UT64_MAX)
 					sprintf (str, " {v%i..v%i}, class+%i", vC, vC+vA-1, vB);
 				else
 					sprintf (str, " {v%i..v%i}, 0x%"PFMT64x, vC, vC+vA-1, offset);
 			} else {
 				offset = R_ASM_GET_OFFSET(a, 'm', vB);
-				if (offset == -1)
+				if (offset == UT64_MAX)
 					sprintf (str, " {v%i..v%i}, method+%i", vC, vC+vA-1, vB);
-				else
+				else {
 					sprintf (str, " {v%i..v%i}, 0x%"PFMT64x, vC, vC+vA-1, offset);
+				}
 			}
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtopvXtBBBB:
 			vA = (int) (buf[1] & 0xf0)>>4;
@@ -355,29 +372,40 @@ static int dalvik_disassemble (RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 				default:
 					sprintf (str, " {}");
 			}
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			if (buf[0] == 0x24) { // filled-new-array
 				offset = R_ASM_GET_OFFSET(a, 'c', vB);
-				if (offset == -1)
+				if (offset == UT64_MAX) {
 					sprintf (str, ", class+%i", vB);
-				else
-					sprintf (str, ", 0x%"PFMT64x, offset);
+				} else {
+					sprintf (str, ", 0x%"PFMT64x" ; 0x%x", offset, vB);
+				}
 			} else {
 				offset = R_ASM_GET_OFFSET(a, 'm', vB);
-				if (offset == -1)
+				if (offset == UT64_MAX) {
 					sprintf (str, ", method+%i", vB);
-				else
-					sprintf (str, ", 0x%"PFMT64x, offset);
+				} else {
+					sprintf (str, ", 0x%"PFMT64x" ; 0x%x", offset, vB);
+				}
 
 			}
-			strcat (op->buf_asm, str);
+			strasm = r_str_concat (strasm, str);
 			break;
 		case fmtoptinvokeI: // Any opcode has this formats
 		case fmtoptinvokeIR:
 		case fmt00:
 		default:
 			strcpy (op->buf_asm, "invalid ");
+			free (strasm);
+			strasm = NULL;
 			size = 2;
+		}
+		if (strasm) {
+			strncpy (op->buf_asm, strasm, sizeof (op->buf_asm)-1);
+			op->buf_asm[sizeof (op->buf_asm)-1] = 0;
+		} else {
+			//op->buf_asm[0] = 0;
+			strcpy (op->buf_asm , "invalid");
 		}
 	} else if (len>0) {
 		strcpy (op->buf_asm, "invalid ");
@@ -388,6 +416,7 @@ static int dalvik_disassemble (RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	size += payload; // XXX
 	// align to 2
 	op->size = size;
+	free (strasm);
 	return size;
 }
 

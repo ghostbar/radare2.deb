@@ -1,10 +1,13 @@
 #!/bin/sh
 
+[ -z "${PREFIX}" ] && PREFIX=/usr
+
 # find root
 cd `dirname $PWD/$0`
+. ./CONFIG
 
-mkdir -p _work
-cd _work
+mkdir  _work
+cd _work || exit 1
 if [ -d valabind ]; then
 	cd valabind
 	git pull
@@ -15,4 +18,4 @@ fi
 
 make clean
 make
-sudo make install
+sudo make install PREFIX=${PREFIX}

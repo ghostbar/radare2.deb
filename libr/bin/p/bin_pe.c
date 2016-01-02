@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2014 - nibble, pancake */
+/* radare - LGPL - Copyright 2009-2015 - nibble, pancake */
 
 #include <r_types.h>
 #include <r_util.h>
@@ -6,10 +6,43 @@
 #include <r_bin.h>
 #include "pe/pe.h"
 
+static int check(RBinFile *arch);
+static int check_bytes(const ut8 *buf, ut64 length);
+
+static Sdb* get_sdb (RBinObject *o) {
+	struct PE_(r_bin_pe_obj_t) *bin;
+	if (!o || !o->bin_obj) return NULL;
+	bin = (struct PE_(r_bin_pe_obj_t) *) o->bin_obj;
+	if (bin && bin->kv) return bin->kv;
+	return NULL;
+}
+
+static void * load_bytes(RBinFile *arch, const ut8 *buf, ut64 sz, ut64 loadaddr, Sdb *sdb){
+	struct PE_(r_bin_pe_obj_t) *res = NULL;
+	RBuffer *tbuf = NULL;
+	if (!buf || sz == 0 || sz == UT64_MAX) return NULL;
+	tbuf = r_buf_new();
+	r_buf_set_bytes (tbuf, buf, sz);
+	res = PE_(r_bin_pe_new_buf) (tbuf);
+	if (res)
+		sdb_ns_set (sdb, "info", res->kv);
+	r_buf_free (tbuf);
+	return res;
+}
+
 static int load(RBinFile *arch) {
-	if(!(arch->o->bin_obj = PE_(r_bin_pe_new_buf) (arch->buf)))
+	void *res;
+	const ut8 *bytes;
+	ut64 sz;
+
+	if (!arch || !arch->o)
 		return R_FALSE;
-	return R_TRUE;
+
+	bytes = r_buf_buffer (arch->buf);
+	sz = r_buf_size (arch->buf);
+	res = load_bytes (arch, bytes, sz, arch->o->loadaddr, arch->sdb);
+ 	arch->o->bin_obj = res;
+	return res? R_TRUE: R_FALSE;
 }
 
 static int destroy(RBinFile *arch) {
@@ -22,17 +55,19 @@ static ut64 baddr(RBinFile *arch) {
 }
 
 static RBinAddr* binsym(RBinFile *arch, int type) {
-	ut64 addr;
+	struct r_bin_pe_addr_t *peaddr = NULL;
 	RBinAddr *ret = NULL;
+	if (arch && arch->o && arch->o->bin_obj)
 	switch (type) {
 	case R_BIN_SYM_MAIN:
-		addr = PE_(r_bin_pe_get_main_offset) (arch->o->bin_obj);
-		if (!addr) return NULL;
-		if (!(ret = R_NEW0 (RBinAddr)))
-			return NULL;
-		ret->offset = ret->rva = addr;
+		peaddr = PE_(r_bin_pe_get_main_vaddr) (arch->o->bin_obj);
 		break;
 	}
+	if (peaddr && (ret = R_NEW0 (RBinAddr))) {
+		ret->paddr = peaddr->paddr;
+		ret->vaddr = peaddr->vaddr;
+	}
+	free (peaddr);
 	return ret;
 }
 
@@ -47,8 +82,8 @@ static RList* entries(RBinFile *arch) {
 	if (!(entry = PE_(r_bin_pe_get_entrypoint) (arch->o->bin_obj)))
 		return ret;
 	if ((ptr = R_NEW (RBinAddr))) {
-		ptr->offset = entry->offset;
-		ptr->rva = entry->rva;
+		ptr->paddr = entry->paddr;
+		ptr->vaddr = entry->vaddr;
 		r_list_append (ret, ptr);
 	}
 	free (entry);
@@ -59,30 +94,34 @@ static RList* sections(RBinFile *arch) {
 	RList *ret = NULL;
 	RBinSection *ptr = NULL;
 	struct r_bin_pe_section_t *sections = NULL;
+	ut64 ba = baddr (arch);
 	int i;
-	
 	if (!(ret = r_list_new ()))
 		return NULL;
 	ret->free = free;
-	if (!(sections = PE_(r_bin_pe_get_sections)(arch->o->bin_obj)))
+	if (!(sections = PE_(r_bin_pe_get_sections)(arch->o->bin_obj))){
+		r_list_free (ret);
 		return NULL;
+	}
 	for (i = 0; !sections[i].last; i++) {
 		if (!(ptr = R_NEW0 (RBinSection)))
 			break;
-		strncpy (ptr->name, (char*)sections[i].name, R_BIN_SIZEOF_STRINGS);
+		if (sections[i].name[0])
+			strncpy (ptr->name, (char*)sections[i].name,
+				R_BIN_SIZEOF_STRINGS);
 		ptr->size = sections[i].size;
 		ptr->vsize = sections[i].vsize;
-		ptr->offset = sections[i].offset;
-		ptr->rva = sections[i].rva;
+		ptr->paddr = sections[i].paddr;
+		ptr->vaddr = sections[i].vaddr + ba;
 		ptr->srwx = 0;
 		if (R_BIN_PE_SCN_IS_EXECUTABLE (sections[i].flags))
-			ptr->srwx |= 0x1;
+			ptr->srwx |= R_BIN_SCN_EXECUTABLE;
 		if (R_BIN_PE_SCN_IS_WRITABLE (sections[i].flags))
-			ptr->srwx |= 0x2;
+			ptr->srwx |= R_BIN_SCN_WRITABLE;
 		if (R_BIN_PE_SCN_IS_READABLE (sections[i].flags))
-			ptr->srwx |= 0x4;
+			ptr->srwx |= R_BIN_SCN_READABLE;
 		if (R_BIN_PE_SCN_IS_SHAREABLE (sections[i].flags))
-			ptr->srwx |= 0x8;
+			ptr->srwx |= R_BIN_SCN_SHAREABLE;
 		r_list_append (ret, ptr);
 	}
 	free (sections);
@@ -93,27 +132,47 @@ static RList* symbols(RBinFile *arch) {
 	RList *ret = NULL;
 	RBinSymbol *ptr = NULL;
 	struct r_bin_pe_export_t *symbols = NULL;
+	struct r_bin_pe_import_t *imports = NULL;
 	int i;
 
 	if (!(ret = r_list_new ()))
 		return NULL;
 	ret->free = free;
-	if (!(symbols = PE_(r_bin_pe_get_exports)(arch->o->bin_obj)))
-		return ret;
-	for (i = 0; !symbols[i].last; i++) {
-		if (!(ptr = R_NEW0 (RBinSymbol)))
-			break;
-		strncpy (ptr->name, (char*)symbols[i].name, R_BIN_SIZEOF_STRINGS);
-		strncpy (ptr->forwarder, (char*)symbols[i].forwarder, R_BIN_SIZEOF_STRINGS);
-		strncpy (ptr->bind, "NONE", R_BIN_SIZEOF_STRINGS);
-		strncpy (ptr->type, "FUNC", R_BIN_SIZEOF_STRINGS); //XXX Get the right type 
-		ptr->size = 0;
-		ptr->rva = symbols[i].rva;
-		ptr->offset = symbols[i].offset;
-		ptr->ordinal = symbols[i].ordinal;
-		r_list_append (ret, ptr);
+	if ((symbols = PE_(r_bin_pe_get_exports)(arch->o->bin_obj))) {
+        for (i = 0; !symbols[i].last; i++) {
+            if (!(ptr = R_NEW0 (RBinSymbol)))
+                break;
+            //strncpy (ptr->name, (char*)symbols[i].name, R_BIN_SIZEOF_STRINGS);
+            snprintf (ptr->name, R_BIN_SIZEOF_STRINGS-1, "%s", symbols[i].name);
+            strncpy (ptr->forwarder, (char*)symbols[i].forwarder, R_BIN_SIZEOF_STRINGS);
+            strncpy (ptr->bind, "NONE", R_BIN_SIZEOF_STRINGS);
+            strncpy (ptr->type, "FUNC", R_BIN_SIZEOF_STRINGS); //XXX Get the right type
+            ptr->size = 0;
+            ptr->vaddr = symbols[i].vaddr;
+            ptr->paddr = symbols[i].paddr;
+            ptr->ordinal = symbols[i].ordinal;
+            r_list_append (ret, ptr);
+        }
+        free (symbols);
 	}
-	free (symbols);
+
+	if ((imports = PE_(r_bin_pe_get_imports)(arch->o->bin_obj))) {
+        for (i = 0; !imports[i].last; i++) {
+            if (!(ptr = R_NEW0 (RBinSymbol)))
+                break;
+            //strncpy (ptr->name, (char*)symbols[i].name, R_BIN_SIZEOF_STRINGS);
+            snprintf (ptr->name, R_BIN_SIZEOF_STRINGS-1, "imp.%s", imports[i].name);
+            //strncpy (ptr->forwarder, (char*)imports[i].forwarder, R_BIN_SIZEOF_STRINGS);
+            strncpy (ptr->bind, "NONE", R_BIN_SIZEOF_STRINGS);
+            strncpy (ptr->type, "FUNC", R_BIN_SIZEOF_STRINGS); //XXX Get the right type
+            ptr->size = 0;
+            ptr->vaddr = imports[i].vaddr;
+            ptr->paddr = imports[i].paddr;
+            ptr->ordinal = imports[i].ordinal;
+            r_list_append (ret, ptr);
+        }
+        free (imports);
+	}
 	return ret;
 }
 
@@ -134,6 +193,8 @@ static RList* imports(RBinFile *arch) {
 	struct r_bin_pe_import_t *imports = NULL;
 	int i;
 
+	if (!arch || !arch->o || !arch->o->bin_obj)
+		return NULL;
 	if (!(ret = r_list_new ()) || !(relocs = r_list_new ()))
 		return NULL;
 
@@ -145,9 +206,8 @@ static RList* imports(RBinFile *arch) {
 	if (!(imports = PE_(r_bin_pe_get_imports)(arch->o->bin_obj)))
 		return ret;
 	for (i = 0; !imports[i].last; i++) {
-		if (!(ptr = R_NEW (RBinImport)))
+		if (!(ptr = R_NEW0 (RBinImport)))
 			break;
-
 		filter_import (imports[i].name);
 		strncpy (ptr->name, (char*)imports[i].name, R_BIN_SIZEOF_STRINGS);
 		strncpy (ptr->bind, "NONE", R_BIN_SIZEOF_STRINGS);
@@ -158,7 +218,7 @@ static RList* imports(RBinFile *arch) {
 		//ptr->hint = imports[i].hint;
 		r_list_append (ret, ptr);
 
-		if (!(rel = R_NEW (RBinReloc)))
+		if (!(rel = R_NEW0 (RBinReloc)))
 			break;
 #ifdef R_BIN_PE64
 		rel->type = R_BIN_RELOC_64;
@@ -168,17 +228,18 @@ static RList* imports(RBinFile *arch) {
 		rel->additive = 0;
 		rel->import = ptr;
 		rel->addend = 0;
-		rel->rva = imports[i].rva;
-		rel->offset = imports[i].offset;
+		rel->vaddr = imports[i].vaddr + baddr (arch);
+		rel->paddr = imports[i].paddr;
 		r_list_append (relocs, rel);
 	}
 	free (imports);
-
 	return ret;
 }
 
 static RList* relocs(RBinFile *arch) {
-	return ((struct PE_(r_bin_pe_obj_t)*)arch->o->bin_obj)->relocs;
+	struct PE_(r_bin_pe_obj_t)* obj= arch->o->bin_obj;
+	if (obj) return obj->relocs;
+	return NULL;
 }
 
 static RList* libs(RBinFile *arch) {
@@ -215,69 +276,121 @@ static int is_dot_net(RBinFile *arch) {
 	return R_FALSE;
 }
 
+static int has_canary(RBinFile *arch) {
+	const RList* imports_list = imports (arch);
+	RListIter *iter;
+	RBinImport *import;
+	// TODO: use O(1) when imports sdbized
+	if (imports_list) {
+		r_list_foreach (imports_list, iter, import)
+			if (!strcmp (import->name, "__security_init_cookie")) {
+				//r_list_free (imports_list);
+				return 1;
+			}
+		// DO NOT FREE IT! r_list_free (imports_list);
+	}
+	return 0;
+}
+
+static int haschr(const RBinFile* arch, ut16 dllCharacteristic) {
+	const ut8 *buf;
+	unsigned int idx;
+	ut64 sz;
+	if (!arch) return R_FALSE;
+	buf = r_buf_buffer (arch->buf);
+	if (!buf) return R_FALSE;
+	sz = r_buf_size (arch->buf);
+	idx = (buf[0x3c] | (buf[0x3d]<<8));
+	if (sz < idx + 0x5E)
+		return R_FALSE;
+	return ((*(ut16*)(buf + idx + 0x5E)) & \
+		dllCharacteristic);
+}
+
 static RBinInfo* info(RBinFile *arch) {
-	char *str;
+	SDebugInfo di = {{0}};
 	RBinInfo *ret = R_NEW0 (RBinInfo);
 	if (!ret) return NULL;
-	strncpy (ret->file, arch->file, R_BIN_SIZEOF_STRINGS);
-	strncpy (ret->rpath, "NONE", R_BIN_SIZEOF_STRINGS);
-	if ((str = PE_(r_bin_pe_get_class) (arch->o->bin_obj))) {
-		strncpy (ret->bclass, str, R_BIN_SIZEOF_STRINGS);
-		free (str);
-	}
-	strncpy (ret->rclass, "pe", R_BIN_SIZEOF_STRINGS);
-	if ((str = PE_(r_bin_pe_get_os) (arch->o->bin_obj))) {
-		strncpy (ret->os, str, R_BIN_SIZEOF_STRINGS);
-		free (str);
-	}
-	if ((str = PE_(r_bin_pe_get_arch) (arch->o->bin_obj))) {
-		strncpy (ret->arch, str, R_BIN_SIZEOF_STRINGS);
-		free (str);
-	}
-	if ((str = PE_(r_bin_pe_get_machine) (arch->o->bin_obj))) {
-		strncpy (ret->machine, str, R_BIN_SIZEOF_STRINGS);
-		free (str);
-	}
-	if ((str = PE_(r_bin_pe_get_subsystem) (arch->o->bin_obj))) {
-		strncpy (ret->subsystem, str, R_BIN_SIZEOF_STRINGS);
-		free (str);
-	}
+	arch->file = strdup (arch->file);
+	ret->bclass = PE_(r_bin_pe_get_class) (arch->o->bin_obj);
+	ret->rclass = strdup ("pe");
+	ret->os = PE_(r_bin_pe_get_os) (arch->o->bin_obj);
+	ret->arch = PE_(r_bin_pe_get_arch) (arch->o->bin_obj);
+	ret->machine = PE_(r_bin_pe_get_machine) (arch->o->bin_obj);
+	ret->subsystem = PE_(r_bin_pe_get_subsystem) (arch->o->bin_obj);
 	if (is_dot_net (arch)) {
 		ret->lang = "msil";
 	}
 	if (PE_(r_bin_pe_is_dll) (arch->o->bin_obj))
-		strncpy (ret->type, "DLL (Dynamic Link Library)", R_BIN_SIZEOF_STRINGS);
-	else strncpy (ret->type, "EXEC (Executable file)", R_BIN_SIZEOF_STRINGS);
+		ret->type = strdup ("DLL (Dynamic Link Library)");
+	else ret->type = strdup ("EXEC (Executable file)");
 	ret->bits = PE_(r_bin_pe_get_bits) (arch->o->bin_obj);
 	ret->big_endian = PE_(r_bin_pe_is_big_endian) (arch->o->bin_obj);
 	ret->dbg_info = 0;
+	ret->has_canary = has_canary (arch);
+	ret->has_nx = haschr (arch, IMAGE_DLL_CHARACTERISTICS_NX_COMPAT);
+	ret->has_pi = haschr (arch, IMAGE_DLL_CHARACTERISTICS_DYNAMIC_BASE);
+
+	sdb_bool_set (arch->sdb, "pe.canary", has_canary(arch), 0);
+	sdb_bool_set (arch->sdb, "pe.highva", haschr(arch, IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA), 0);
+	sdb_bool_set (arch->sdb, "pe.aslr", haschr(arch, IMAGE_DLL_CHARACTERISTICS_DYNAMIC_BASE), 0);
+	sdb_bool_set (arch->sdb, "pe.forceintegrity", haschr(arch, IMAGE_DLL_CHARACTERISTICS_FORCE_INTEGRITY), 0);
+	sdb_bool_set (arch->sdb, "pe.nx", haschr(arch, IMAGE_DLL_CHARACTERISTICS_NX_COMPAT), 0);
+	sdb_bool_set (arch->sdb, "pe.isolation", !haschr(arch, IMAGE_DLL_CHARACTERISTICS_FORCE_INTEGRITY), 0);
+	sdb_bool_set (arch->sdb, "pe.seh", !haschr(arch, IMAGE_DLLCHARACTERISTICS_NO_SEH), 0);
+	sdb_bool_set (arch->sdb, "pe.bind", !haschr(arch, IMAGE_DLLCHARACTERISTICS_NO_BIND), 0);
+	sdb_bool_set (arch->sdb, "pe.appcontainer", haschr(arch, IMAGE_DLLCHARACTERISTICS_APPCONTAINER), 0);
+	sdb_bool_set (arch->sdb, "pe.wdmdriver", haschr(arch, IMAGE_DLLCHARACTERISTICS_WDM_DRIVER), 0);
+	sdb_bool_set (arch->sdb, "pe.guardcf", haschr(arch, IMAGE_DLLCHARACTERISTICS_GUARD_CF), 0);
+	sdb_bool_set (arch->sdb, "pe.terminalserveraware", haschr(arch, IMAGE_DLLCHARACTERISTICS_TERMINAL_SERVER_AWARE), 0);
+	sdb_num_set (arch->sdb, "pe.bits", ret->bits, 0);
+
 	ret->has_va = R_TRUE;
 	if (!PE_(r_bin_pe_is_stripped_debug) (arch->o->bin_obj))
-		ret->dbg_info |= 0x01;
+		ret->dbg_info |= R_BIN_DBG_STRIPPED;
 	if (PE_(r_bin_pe_is_stripped_line_nums) (arch->o->bin_obj))
-		ret->dbg_info |= 0x04;
+		ret->dbg_info |= R_BIN_DBG_LINENUMS;
 	if (PE_(r_bin_pe_is_stripped_local_syms) (arch->o->bin_obj))
-		ret->dbg_info |= 0x08;
+		ret->dbg_info |= R_BIN_DBG_SYMS;
 	if (PE_(r_bin_pe_is_stripped_relocs) (arch->o->bin_obj))
-		ret->dbg_info |= 0x10;
+		ret->dbg_info |= R_BIN_DBG_RELOCS;
+
+	if (PE_(r_bin_pe_get_debug_data)(arch->o->bin_obj, &di)) {
+		ret->guid = malloc (GUIDSTR_LEN+1);
+		strncpy (ret->guid, di.guidstr, GUIDSTR_LEN);
+		ret->guid[GUIDSTR_LEN] = 0;
+		ret->debug_file_name = malloc (DBG_FILE_NAME_LEN+1);
+		strncpy (ret->debug_file_name, di.file_name, DBG_FILE_NAME_LEN);
+		ret->debug_file_name[DBG_FILE_NAME_LEN] = 0;
+	}
+
 	return ret;
 }
 
 static ut64 get_vaddr (RBinFile *arch, ut64 baddr, ut64 paddr, ut64 vaddr) {
-	if (!baddr) return vaddr;
 	return baddr + vaddr;
 }
 
 #if !R_BIN_PE64
 static int check(RBinFile *arch) {
-	int idx, ret = R_FALSE;
-	if (!arch || !arch->buf || !arch->buf->buf)
+	const ut8 *bytes = arch ? r_buf_buffer (arch->buf) : NULL;
+	ut64 sz = arch ? r_buf_size (arch->buf): 0;
+	return check_bytes (bytes, sz);
+
+}
+
+static int check_bytes(const ut8 *buf, ut64 length) {
+	unsigned int idx;
+	int ret = R_FALSE;
+	if (!buf)
 		return R_FALSE;
-	idx = (arch->buf->buf[0x3c]|(arch->buf->buf[0x3d]<<8));
-	if (arch->buf->length>idx)
-		if (!memcmp (arch->buf->buf, "\x4d\x5a", 2) &&
-			!memcmp (arch->buf->buf+idx, "\x50\x45", 2) && 
-			!memcmp (arch->buf->buf+idx+0x18, "\x0b\x01", 2))
+	if (length <= 0x3d)
+		return R_FALSE;
+	idx = (buf[0x3c] | (buf[0x3d]<<8));
+	if (length > idx+0x18+2)
+		if (!memcmp (buf, "MZ", 2) &&
+			!memcmp (buf+idx, "PE", 2) &&
+			!memcmp (buf+idx+0x18, "\x0b\x01", 2))
 			ret = R_TRUE;
 	return ret;
 }
@@ -362,9 +475,12 @@ struct r_bin_plugin_t r_bin_plugin_pe = {
 	.license = "LGPL3",
 	.init = NULL,
 	.fini = NULL,
+	.get_sdb = &get_sdb,
 	.load = &load,
+	.load_bytes = &load_bytes,
 	.destroy = &destroy,
 	.check = &check,
+	.check_bytes = &check_bytes,
 	.baddr = &baddr,
 	.boffset = NULL,
 	.binsym = &binsym,
@@ -377,7 +493,7 @@ struct r_bin_plugin_t r_bin_plugin_pe = {
 	.fields = NULL,
 	.libs = &libs,
 	.relocs = &relocs,
-	.meta = NULL,
+	.dbginfo = NULL,
 	.write = NULL,
 	.minstrlen = 4,
 	.create = &create,

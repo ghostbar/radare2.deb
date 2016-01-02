@@ -6,7 +6,13 @@
 #include <r_io.h>
 #include "../config.h"
 
-#define IFDBG if(0)
+#ifdef IFDBG
+#undef IFDBG
+#endif
+
+#define DO_THE_DBG 0
+#define IFDBG  if(DO_THE_DBG)
+#define IFINT  if(0)
 
 R_API RAnalState * r_anal_state_new (ut64 start, ut8* buffer, ut64 len) {
 	RAnalState *state = R_NEW0 (RAnalState);
@@ -31,6 +37,8 @@ R_API void r_anal_state_set_depth(RAnalState *state, ut32 depth) {
 }
 
 R_API void r_anal_state_insert_bb (RAnalState* state, RAnalBlock *bb) {
+	if (!state || !bb)
+		return;
 	if (r_anal_state_search_bb (state, bb->addr) == NULL &&
 		state->current_fcn) {
 		RAnalBlock *tmp_bb;

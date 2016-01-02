@@ -4,8 +4,8 @@
 /*
    Reference Chapter 6:
    "The C++ Programming Language", Special Edition.
-   Bjarne Stroustrup,Addison-Wesley Pub Co; 3 edition (February 15, 2000) 
-    ISBN: 0201700735 
+   Bjarne Stroustrup,Addison-Wesley Pub Co; 3 edition (February 15, 2000)
+    ISBN: 0201700735
  */
 
 #include <r_types.h>
@@ -17,7 +17,7 @@
 /* accessors */
 static inline RNumCalcValue Nset(ut64 v) { RNumCalcValue n; n.d = (double)v; n.n = v; return n; }
 static inline RNumCalcValue Nsetf(double v) { RNumCalcValue n; n.d = v; n.n = (ut64)v; return n; }
-static inline RNumCalcValue Naddf(RNumCalcValue n, double v) { n.d += v; n.n += (ut64)v; return n; }
+//UNUSED static inline RNumCalcValue Naddf(RNumCalcValue n, double v) { n.d += v; n.n += (ut64)v; return n; }
 static inline RNumCalcValue Naddi(RNumCalcValue n, ut64 v) { n.d += (double)v; n.n += v; return n; }
 static inline RNumCalcValue Nsubi(RNumCalcValue n, ut64 v) { n.d -= (double)v; n.n -= v; return n; }
 static inline RNumCalcValue Nneg(RNumCalcValue n) { n.n = ~n.n; return n; }
@@ -82,8 +82,8 @@ static RNumCalcValue term(RNum *num, RNumCalc *nc, int get) {
 		} else
 		if (nc->curr_tok == RNCDIV) {
 			RNumCalcValue d = prim (num, nc, 1);
-			if (!d.d) {
-				//error (num, nc, "divide by 0");
+			if (num != NULL && (!d.d || !d.n)) {
+				num->dbz = 1;
 				return d;
 			}
 			left = Ndiv (left, d);
@@ -105,8 +105,9 @@ static RNumCalcValue prim(RNum *num, RNumCalc *nc, int get) {
 		r_str_chop (nc->string_value);
 		v = Nset (r_num_get (num, nc->string_value));
 		get_token (num, nc);
-		if (nc->curr_tok  == RNCASSIGN) 
+		if (nc->curr_tok  == RNCASSIGN) {
 			v = expr (num, nc, 1);
+		}
 		if (nc->curr_tok == RNCINC) Naddi (v, 1);
 		if (nc->curr_tok == RNCDEC) Nsubi (v, 1);
 		return v;
@@ -120,9 +121,9 @@ static RNumCalcValue prim(RNum *num, RNumCalc *nc, int get) {
 	case RNCMINUS: return Nsub (v, prim (num, nc, 1));
 	case RNCLEFTP:
 		v = expr (num, nc, 1);
-		if (nc->curr_tok == RNCRIGHTP)
+		if (nc->curr_tok == RNCRIGHTP) {
 			get_token (num, nc);
-		else error (num, nc, " ')' expected");
+		} else error (num, nc, " ')' expected");
 	case RNCEND:
 	case RNCXOR:
 	case RNCAND:
@@ -177,12 +178,13 @@ static int cin_get_num(RNum *num, RNumCalc *nc, RNumCalcValue *n) {
 	char c;
 	str[0] = 0;
 	while (cin_get (num, nc, &c)) {
-		if (c!=':' && c!='.' && !isalnum (c)) {
+		if (c!=':' && c!='.' && !isalnum ((unsigned char)c)) {
 			cin_putback (num, nc, c);
 			break;
 		}
-		if (i<R_NUMCALC_STRSZ)
+		if (i<R_NUMCALC_STRSZ) {
 			str[i++] = c;
+		}
 	}
 	str[i] = 0;
 	*n = Nset (r_num_get (num, str));
@@ -217,7 +219,7 @@ static RNumCalcToken get_token(RNum *num, RNumCalc *nc) {
 	char ch = 0, c = 0;
 
 	do { if (!cin_get (num, nc, &ch)) return nc->curr_tok = RNCEND;
-	} while (ch!='\n' && isspace (ch));
+	} while (ch!='\n' && isspace ((unsigned char)ch));
 
 	switch (ch) {
 	case 0:
@@ -260,16 +262,18 @@ static RNumCalcToken get_token(RNum *num, RNumCalc *nc) {
 			return 1;
 		}
 		return nc->curr_tok = RNCNUMBER;
-	default:
+
 #define isvalidchar(x) \
 	(isalnum(x) || x==':' || x=='$' || x=='.' || x=='_' || x=='?' || x=='\\' \
-	|| x==' ' || x=='[' || x==']' || x=='}' || x=='{' || x=='/' || (x>='0'&&x<='9'))
-{
+	|| x==' ' || x=='[' || x==']' || x=='}' || x=='{' || (x>='0'&&x<='9'))
+
+	default:
+		{
 			int i = 0;
 			nc->string_value[i++] = ch;
 			if (ch == '[') {
 				while (cin_get (num, nc, &ch) && ch!=']') {
-					if (i>=R_NUMCALC_STRSZ) {
+					if (i > R_NUMCALC_STRSZ) {
 						error (num, nc, "string too long");
 						return 0;
 					}
@@ -277,7 +281,7 @@ static RNumCalcToken get_token(RNum *num, RNumCalc *nc) {
 				}
 				nc->string_value[i++] = ch;
 			} else {
-				while (cin_get (num, nc, &ch) && isvalidchar (ch)) {
+				while (cin_get (num, nc, &ch) && isvalidchar ((unsigned char)ch)) {
 					if (i>=R_NUMCALC_STRSZ) {
 						error (num, nc, "string too long");
 						return 0;
@@ -289,8 +293,11 @@ static RNumCalcToken get_token(RNum *num, RNumCalc *nc) {
 			cin_putback (num, nc, ch);
 			return nc->curr_tok = RNCNAME;
 		}
+/*
+ * Unreacheable code:
 		error (num, nc, "bad token");
 		return nc->curr_tok = RNCPRINT;
+*/
 	}
 }
 
@@ -306,10 +313,12 @@ R_API ut64 r_num_calc (RNum *num, const char *str, const char **err) {
 	RNumCalc *nc, nc_local;
 	if (!str || !*str)
 		return 0LL;
-
-	if (num == NULL)
+	if (num) {
+		nc = &num->nc;
+		num->dbz = 0;
+	} else {
 		nc = &nc_local;
-	else nc = &num->nc;
+	}
 
 	/* init */
 	nc->curr_tok = RNCPRINT;

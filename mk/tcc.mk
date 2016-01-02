@@ -3,7 +3,6 @@ RANLIB=ranlib
 LINK=
 ONELIB=0
 CC_AR=ar -r ${LIBAR}
-PIC_CFLAGS+=-fPIC
 CC_LIB=${CC} -shared -o ${LIBSO}
 CFLAGS_INCLUDE=-I
 LDFLAGS_LINK=-l
@@ -13,6 +12,18 @@ CFLAGS_OPT1=-O1
 CFLAGS_OPT2=-O2
 CFLAGS_OPT3=-O3
 
+ifeq ($(OSTYPE),auto)
+OSTYPE=$(shell uname | tr 'A-Z' 'a-z')
+endif
+ifneq (,$(findstring cygwin,$(OSTYPE)))
+PIC_CFLAGS=
+else
+ifneq (,$(findstring mingw32,${OSTYPE}))
+PIC_CFLAGS=
+else
+PIC_CFLAGS=-fPIC
+endif
+endif
 ifeq ($(OSTYPE),darwin)
 LDFLAGS_LIB=-dynamiclib
 LDFLAGS_SONAME=-Wl,-install_name,

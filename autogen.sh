@@ -1,12 +1,12 @@
 #!/bin/sh
 #
-# Look for the 'acr' tool here: http://www.nopcode.org/
+# Look for the 'acr' tool here: https://github.com/radare/acr
 # Clone last version of ACR from here:
-#  hg clone http://youterm.com/hg/acr
+#  git clone https://github.com/radare/acr
 #
 # -- pancake
 acr -p
 if [ -n "$1" ]; then
-	echo "./configure $@"
-	./configure $@
+	echo "./configure $*"
+	./configure $*
 fi

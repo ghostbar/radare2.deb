@@ -4,6 +4,7 @@
 /* proc IO is not related to socket io.. this is shitty!! */
 
 #include <r_socket.h>
+#include <r_util.h>
 #include <signal.h>
 
 #if __UNIX__
@@ -12,7 +13,7 @@
 
 #define BUFFER_SIZE 4096
 
-R_API struct r_socket_proc_t *r_socket_proc_open(char *const argv[]) {
+R_API struct r_socket_proc_t *r_socket_proc_open(char* const argv[]) {
 #if __UNIX__
 	RSocketProc *sp = R_NEW (RSocketProc);
 #ifdef O_CLOEXEC
@@ -21,23 +22,28 @@ R_API struct r_socket_proc_t *r_socket_proc_open(char *const argv[]) {
 	const int flags = 0; //O_NONBLOCK|O_CLOEXEC;
 #endif
 
+	if (!sp)
+		return NULL;
+
 	if (pipe (sp->fd0)==-1) {
 		perror ("pipe");
-		free (sp);
-		return NULL;
+		goto error;
 	}
-	fcntl (sp->fd0[0], flags);
-	fcntl (sp->fd0[1], flags);
+	if (fcntl (sp->fd0[0], flags) < 0)
+		goto error;
+	if (fcntl (sp->fd0[1], flags) < 0)
+		goto error;
 
 	if (pipe (sp->fd1)==-1) {
 		perror ("pipe");
-		free (sp);
-		return NULL;
+		goto error;
 	}
-	fcntl (sp->fd1[0], flags);
-	fcntl (sp->fd1[1], flags);
+	if (fcntl (sp->fd1[0], flags) < 0)
+		goto error;
+	if (fcntl (sp->fd1[1], flags) < 0)
+		goto error;
 
-	sp->pid = fork ();
+	sp->pid = r_sys_fork ();
 	switch (sp->pid) {
 	case 0:
 		close (0);
@@ -50,11 +56,13 @@ R_API struct r_socket_proc_t *r_socket_proc_open(char *const argv[]) {
 	case -1:
 		perror ("fork");
 		r_socket_proc_close (sp);
-		free (sp);
-		return NULL;
+		goto error;
 		//r_socket_block_time (sp, R_FALSE, 0);
 	}
 	return sp;
+error:
+	free (sp);
+	return NULL;
 #else
 	return NULL;
 #endif

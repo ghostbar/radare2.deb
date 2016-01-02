@@ -1,22 +1,18 @@
-/* radare - LGPL - Copyright 2010-2013 - pancake, nibble */
+/* radare - LGPL - Copyright 2010-2015 - pancake, nibble */
 
 #include <r_anal.h>
 #include <r_util.h>
 #include <r_list.h>
 
-R_API RAnalOp *r_anal_op_new() {
-	RAnalOp *op = R_NEW (RAnalOp);
+R_API RAnalOp *r_anal_op_new () {
+	RAnalOp *op = R_NEW0 (RAnalOp);
 	if (op) {
-		memset (op, 0, sizeof (RAnalOp));
-		op->mnemonic = NULL;
 		op->addr = -1;
 		op->jump = -1;
 		op->fail = -1;
 		op->ptr = -1;
 		op->val = -1;
 		r_strbuf_init (&op->esil);
-		op->next = NULL;
-		op->switch_op = NULL;
 	}
 	return op;
 }
@@ -28,18 +24,20 @@ R_API RList *r_anal_op_list_new() {
 }
 
 R_API void r_anal_op_fini(RAnalOp *op) {
+	if (!op) // || !op->mnemonic)
+		return;
+	if (((ut64)(size_t)op) == UT64_MAX) {
+		return;
+	}
+	if (((ut64)(size_t)op->mnemonic) == UT64_MAX) {
+		return;
+	}
 	r_anal_value_free (op->src[0]);
 	r_anal_value_free (op->src[1]);
 	r_anal_value_free (op->src[2]);
 	r_anal_value_free (op->dst);
-	if (op->switch_op) r_anal_switch_op_free(op->switch_op);
-	op->src[0] = NULL;
-	op->src[1] = NULL;
-	op->src[2] = NULL;
-	op->dst = NULL;
+	r_anal_switch_op_free (op->switch_op);
 	free (op->mnemonic);
-	op->mnemonic = NULL;
-	//op->src[0] = op->src[1] = op->src[2] = op->dst = NULL;
 	memset (op, 0, sizeof (RAnalOp));
 }
 
@@ -51,9 +49,10 @@ R_API void r_anal_op_free(void *_op) {
 
 R_API int r_anal_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len) {
 	int ret = R_FALSE;
-	memset (op, 0, sizeof (RAnalOp));
-	if (len>0 && anal && op && anal->cur && anal->cur->op) {
+	if (len>0 && anal && memset (op, 0, sizeof (RAnalOp)) &&
+		anal->cur && anal->cur->op) {
 		ret = anal->cur->op (anal, op, addr, data, len);
+		op->addr = addr;
 		if (ret<1) op->type = R_ANAL_OP_TYPE_ILL;
 	}
 	return ret;
@@ -61,7 +60,7 @@ R_API int r_anal_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int le
 
 R_API RAnalOp *r_anal_op_copy (RAnalOp *op) {
 	RAnalOp *nop = R_NEW (RAnalOp);
-	memcpy (nop, op, sizeof (RAnalOp));
+	*nop = *op;
 	nop->mnemonic = strdup (op->mnemonic);
 	nop->src[0] = r_anal_value_copy (op->src[0]);
 	nop->src[1] = r_anal_value_copy (op->src[1]);
@@ -126,10 +125,6 @@ R_API int r_anal_op_execute (RAnal *anal, RAnalOp *op) {
 	}
 
 	if (anal->queued) {
-		if (op && op->delay>0) {
-			eprintf ("Exception! two consecutive delayed instructions\n");
-			return R_FALSE;
-		}
 		anal->queued->delay--;
 		if (anal->queued->delay == 0) {
 			r_anal_op_execute (anal, anal->queued);
@@ -140,47 +135,54 @@ R_API int r_anal_op_execute (RAnal *anal, RAnalOp *op) {
 	return R_TRUE;
 }
 
-R_API char *r_anal_optype_to_string(int t) {
+R_API const char *r_anal_optype_to_string(int t) {
 	switch (t) {
-	case R_ANAL_OP_TYPE_NULL  : return "null";
-	case R_ANAL_OP_TYPE_JMP   : return "jmp";
-	case R_ANAL_OP_TYPE_UJMP  : return "ujmp";
-	case R_ANAL_OP_TYPE_CJMP  : return "cjmp";
-	case R_ANAL_OP_TYPE_CALL  : return "call";
-	case R_ANAL_OP_TYPE_UCALL : return "ucall";
-	case R_ANAL_OP_TYPE_CCALL : return "ccall";
-	case R_ANAL_OP_TYPE_REP   : return "rep";
-	case R_ANAL_OP_TYPE_RET   : return "ret";
-	case R_ANAL_OP_TYPE_CRET  : return "cret";
-	case R_ANAL_OP_TYPE_ILL   : return "ill";
-	case R_ANAL_OP_TYPE_UNK   : return "unk";
-	case R_ANAL_OP_TYPE_NOP   : return "nop";
-	case R_ANAL_OP_TYPE_MOV   : return "mov";
-	case R_ANAL_OP_TYPE_TRAP  : return "trap";
-	case R_ANAL_OP_TYPE_SWI   : return "swi";
-	case R_ANAL_OP_TYPE_UPUSH : return "upush";
-	case R_ANAL_OP_TYPE_PUSH  : return "push";
-	case R_ANAL_OP_TYPE_POP   : return "pop";
-	case R_ANAL_OP_TYPE_CMP   : return "cmp";
+	case R_ANAL_OP_TYPE_IO    : return "io";
+	case R_ANAL_OP_TYPE_ACMP  : return "acmp";
 	case R_ANAL_OP_TYPE_ADD   : return "add";
-	case R_ANAL_OP_TYPE_SUB   : return "sub";
-	case R_ANAL_OP_TYPE_MUL   : return "mul";
-	case R_ANAL_OP_TYPE_DIV   : return "div";
-	case R_ANAL_OP_TYPE_SHR   : return "shr";
-	case R_ANAL_OP_TYPE_SHL   : return "shl";
-	case R_ANAL_OP_TYPE_OR    : return "or";
 	case R_ANAL_OP_TYPE_AND   : return "and";
-	case R_ANAL_OP_TYPE_XOR   : return "xor";
-	case R_ANAL_OP_TYPE_NOT   : return "not";
-	case R_ANAL_OP_TYPE_STORE : return "store";
-	case R_ANAL_OP_TYPE_LOAD  : return "load";
+	case R_ANAL_OP_TYPE_CALL  : return "call";
+	case R_ANAL_OP_TYPE_CCALL : return "ccall";
+	case R_ANAL_OP_TYPE_CJMP  : return "cjmp";
+	case R_ANAL_OP_TYPE_CMP   : return "cmp";
+	case R_ANAL_OP_TYPE_CRET  : return "cret";
+	case R_ANAL_OP_TYPE_DIV   : return "div";
+	case R_ANAL_OP_TYPE_ILL   : return "ill";
+	case R_ANAL_OP_TYPE_JMP   : return "jmp";
 	case R_ANAL_OP_TYPE_LEA   : return "lea";
 	case R_ANAL_OP_TYPE_LEAVE : return "leave";
-	case R_ANAL_OP_TYPE_ROR : return "ror";
-	case R_ANAL_OP_TYPE_ROL : return "rol";
-	case R_ANAL_OP_TYPE_XCHG : return "xchg";
-	case R_ANAL_OP_TYPE_MOD : return "mod";
-	case R_ANAL_OP_TYPE_SWITCH : return "switch";
+	case R_ANAL_OP_TYPE_LOAD  : return "load";
+	case R_ANAL_OP_TYPE_MOD   : return "mod";
+	case R_ANAL_OP_TYPE_MOV   : return "mov";
+	case R_ANAL_OP_TYPE_MUL   : return "mul";
+	case R_ANAL_OP_TYPE_NOP   : return "nop";
+	case R_ANAL_OP_TYPE_NOT   : return "not";
+	case R_ANAL_OP_TYPE_NULL  : return "null";
+	case R_ANAL_OP_TYPE_OR    : return "or";
+	case R_ANAL_OP_TYPE_POP   : return "pop";
+	case R_ANAL_OP_TYPE_PUSH  : return "push";
+	case R_ANAL_OP_TYPE_REP   : return "rep";
+	case R_ANAL_OP_TYPE_RET   : return "ret";
+	case R_ANAL_OP_TYPE_ROL   : return "rol";
+	case R_ANAL_OP_TYPE_ROR   : return "ror";
+	case R_ANAL_OP_TYPE_SAL   : return "sal";
+	case R_ANAL_OP_TYPE_SAR   : return "sar";
+	case R_ANAL_OP_TYPE_SHL   : return "shl";
+	case R_ANAL_OP_TYPE_SHR   : return "shr";
+	case R_ANAL_OP_TYPE_STORE : return "store";
+	case R_ANAL_OP_TYPE_SUB   : return "sub";
+	case R_ANAL_OP_TYPE_SWI   : return "swi";
+	case R_ANAL_OP_TYPE_SWITCH: return "switch";
+	case R_ANAL_OP_TYPE_TRAP  : return "trap";
+	case R_ANAL_OP_TYPE_UCALL : return "ucall";
+	case R_ANAL_OP_TYPE_UCCALL: return "uccall";
+	case R_ANAL_OP_TYPE_UCJMP : return "ucjmp";
+	case R_ANAL_OP_TYPE_UJMP  : return "ujmp";
+	case R_ANAL_OP_TYPE_UNK   : return "unk";
+	case R_ANAL_OP_TYPE_UPUSH : return "upush";
+	case R_ANAL_OP_TYPE_XCHG  : return "xchg";
+	case R_ANAL_OP_TYPE_XOR   : return "xor";
+	case R_ANAL_OP_TYPE_CASE  : return "case";
 	}
 	return "undefined";
 }
@@ -229,12 +231,12 @@ R_API char *r_anal_op_to_string(RAnal *anal, RAnalOp *op) {
 		snprintf (ret, sizeof (ret), "%s()", r0);
 		break;
 	case R_ANAL_OP_TYPE_CALL:
-		f = r_anal_fcn_find (anal, op->jump, R_ANAL_FCN_TYPE_NULL);
+		f = r_anal_get_fcn_in (anal, op->jump, R_ANAL_FCN_TYPE_NULL);
 		if (f) snprintf (ret, sizeof (ret), "%s()", f->name);
 		else  snprintf (ret, sizeof (ret), "0x%"PFMT64x"()", op->jump);
 		break;
 	case R_ANAL_OP_TYPE_CCALL:
-		f = r_anal_fcn_find (anal, op->jump, R_ANAL_FCN_TYPE_NULL);
+		f = r_anal_get_fcn_in (anal, op->jump, R_ANAL_FCN_TYPE_NULL);
 		{
 		RAnalBlock *bb = r_anal_bb_from_offset (anal, op->addr);
 		if (bb) {
@@ -310,8 +312,8 @@ R_API char *r_anal_op_to_string(RAnal *anal, RAnalOp *op) {
 		break;
 	case R_ANAL_OP_TYPE_MOD:
 		if (a1 == NULL || !strcmp (a0, a1))
-			snprintf (ret, sizeof (ret), "%s \%= %s", r0, a0);
-		else snprintf (ret, sizeof (ret), "%s = %s \% %s", r0, a0, a1);
+			snprintf (ret, sizeof (ret), "%s %%= %s", r0, a0);
+		else snprintf (ret, sizeof (ret), "%s = %s %% %s", r0, a0, a1);
 		break;
 	case R_ANAL_OP_TYPE_XCHG:
 		if (a1 == NULL || !strcmp (a0, a1))
@@ -321,6 +323,7 @@ R_API char *r_anal_op_to_string(RAnal *anal, RAnalOp *op) {
 	case R_ANAL_OP_TYPE_ROL:
 	case R_ANAL_OP_TYPE_ROR:
 	case R_ANAL_OP_TYPE_SWITCH:
+	case R_ANAL_OP_TYPE_CASE:
 		eprintf ("Command not implemented.\n");
 		free (r0);
 		free (a0);
@@ -336,4 +339,35 @@ R_API char *r_anal_op_to_string(RAnal *anal, RAnalOp *op) {
 	free (a0);
 	free (a1);
 	return strdup (ret);
+}
+
+R_API const char *r_anal_stackop_tostring (int s) {
+	switch (s) {
+	case R_ANAL_STACK_NULL:
+		return "null";
+	case R_ANAL_STACK_NOP:
+		return "nop";
+	case R_ANAL_STACK_INC:
+		return "inc";
+	case R_ANAL_STACK_GET:
+		return "get";
+	case R_ANAL_STACK_SET:
+		return "set";
+	}
+	return "unk";
+}
+
+R_API const char *r_anal_op_family_to_string (int n) {
+	static char num[32];
+	switch (n) {
+	case R_ANAL_OP_FAMILY_UNKNOWN: return "unknown";
+	case R_ANAL_OP_FAMILY_CPU: return "cpu";
+	case R_ANAL_OP_FAMILY_FPU: return "fpu";
+	case R_ANAL_OP_FAMILY_MMX: return "mmx";
+	case R_ANAL_OP_FAMILY_PRIV: return "priv";
+	default:
+		snprintf (num, sizeof (num), "%d", n);
+		break;
+	}
+	return num;
 }

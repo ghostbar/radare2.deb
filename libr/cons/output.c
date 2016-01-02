@@ -1,6 +1,7 @@
-/* radare - LGPL - Copyright 2009-2012 - pancake */
+/* radare - LGPL - Copyright 2009-2015 - pancake */
 
 #include <r_cons.h>
+#define I r_cons_singleton()
 
 #if __WINDOWS__
 static void fill_tail (int cols, int lines) {
@@ -23,7 +24,12 @@ static void w32_clear() {
 	static CONSOLE_SCREEN_BUFFER_INFO csbi;
 	const COORD startCoords = { 0, 0 };
 	DWORD dummy;
-	
+
+	if (I->is_wine==1) {
+		write (1, "\x1b[0;0H", 6);
+		write (1, "\x1b[0m", 4);
+		write (1, "\x1b[2J", 4);
+	}
 	if (!hStdout) {
 		hStdout = GetStdHandle (STD_OUTPUT_HANDLE);
 		GetConsoleScreenBufferInfo (hStdout, &csbi);
@@ -38,6 +44,9 @@ void w32_gotoxy(int x, int y) {
         COORD coord;
         coord.X = x;
         coord.Y = y;
+	if (I->is_wine==1) {
+		write (1, "\x1b[0;0H", 6);
+	}
         if (!hStdout)
                 hStdout = GetStdHandle (STD_OUTPUT_HANDLE);
         SetConsoleCursorPosition (hStdout, coord);
@@ -55,38 +64,46 @@ static int wrapline (const char *s, int len) {
 	return n;
 }
 
-R_API int r_cons_w32_print(ut8 *ptr, int empty) {
+R_API int r_cons_w32_print(const ut8 *ptr, int len, int vmode) {
 	HANDLE hConsole = GetStdHandle (STD_OUTPUT_HANDLE);
 	int esc = 0;
 	int bg = 0, fg = 1|2|4|8;
-	ut8 *str = ptr;
-	int len = 0;
+	const ut8 *ptr_end, *str = ptr;
+	int ret = 0;
 	int inv = 0;
 	int linelen = 0;
 	int lines, cols = r_cons_get_size (&lines);
+	if (I->is_wine==-1) {
+		I->is_wine = r_file_is_directory ("/proc")? 1: 0;
+	}
 
+	if (len<0)
+		len = strlen ((const char *)ptr);
+	ptr_end = ptr + len;
 	if (ptr && hConsole)
-	for (; *ptr; ptr++) {
+	for (; *ptr && ptr<ptr_end; ptr++) {
 		if (ptr[0] == 0xa) {
 			int ll = (size_t)(ptr-str);
 			lines--;
-			if (lines<0) 
+			if (vmode && lines<0)
 				break; //return 0;
 			if (ll<1)
 				continue;
-			if (empty) {
+			if (vmode) {
 				// TODO: Fix utf8 chop
 				/* only chop columns if necessary */
 				if (linelen+ll>cols) {
 					// chop line if too long
 					ll = (cols-linelen)-1;
+					if (ll<1)
+						continue;
 				}
 			}
 			write (1, str, ll);
 			linelen += ll;
 			esc = 0;
 			str = ptr+1;
-			if (empty) {
+			if (vmode) {
 				int wlen = cols-linelen;
 				char white[1024];
 				//wlen = 5;
@@ -104,7 +121,7 @@ R_API int r_cons_w32_print(ut8 *ptr, int empty) {
 			if (str[0]=='\n') {
 				str++;
 				ll--;
-				if (empty) {
+				if (vmode) {
 					int wlen = cols-linelen-1;
 					char white[1024];
 					//wlen = 5;
@@ -122,7 +139,7 @@ R_API int r_cons_w32_print(ut8 *ptr, int empty) {
 				// chop line if too long
 				ll = (cols-linelen)-1;
 				// fix utf8 len here
-				ll = wrapline (str, cols-linelen-1);
+				ll = wrapline ((const char*)str, cols-linelen-1);
 			}
 			if (ll>0) {
 				write (1, str, ll);
@@ -142,20 +159,20 @@ R_API int r_cons_w32_print(ut8 *ptr, int empty) {
 			}
 			esc = 2;
 			continue;
-		} else 
+		} else
 		if (esc == 2) {
 			{
 				int x, y;
-				char *ptr2 = NULL;
+				const char *ptr2 = NULL;
 				int i, state = 0;
 				for (i=0; ptr[i] && state>=0; i++) {
 					switch (state) {
 					case 0:
 						if (ptr[i]==';') {
-							y = atoi (ptr);
+							y = atoi ((const char *)ptr);
 							state = 1;
-							ptr2 = ptr+i+1;
-						} else 
+							ptr2 = (const char *)ptr+i+1;
+						} else
 						if (ptr[i] >='0' && ptr[i]<='9') {
 							// ok
 						} else state = -1; // END FAIL
@@ -181,7 +198,7 @@ R_API int r_cons_w32_print(ut8 *ptr, int empty) {
 			if (ptr[0]=='0'&&ptr[1]==';'&&ptr[2]=='0') {
 				// \x1b[0;0H
 				/** clear screen if gotoxy **/
-				if (empty) {
+				if (vmode) {
 					// fill row here
 					fill_tail(cols, lines);
 				}
@@ -197,20 +214,6 @@ R_API int r_cons_w32_print(ut8 *ptr, int empty) {
 				w32_clear (); //r_cons_clear ();
 				esc = 0;
 				ptr = ptr + 1;
-				str = ptr + 1;
-				continue;
-			} else
-			if (ptr[0]=='0'&&ptr[1]==';'&&ptr[2]=='0') {
-				// \x1b[0;0H
-				/** clear screen if gotoxy **/
-				if (empty) {
-					// fill row here
-					fill_tail(cols, lines);
-				}
-				w32_gotoxy (0, 0);
-				lines = 0;
-				esc = 0;
-				ptr += 3;
 				str = ptr + 1;
 				continue;
 			} else
@@ -320,10 +323,10 @@ R_API int r_cons_w32_print(ut8 *ptr, int empty) {
 				str = ptr + 1;
 				continue;
 			}
-		} 
-		len++;
+		}
+		ret++;
 	}
-	
+
 	/* the ending padding */ {
 		int ll = (size_t)(ptr-str);
 		if (ll>0) {
@@ -332,7 +335,7 @@ R_API int r_cons_w32_print(ut8 *ptr, int empty) {
 		}
 	}
 
-	if (empty) {
+	if (vmode) {
 		/* fill partial line */
 		int wlen = cols-linelen-1;
 		char white[1024];
@@ -344,6 +347,6 @@ R_API int r_cons_w32_print(ut8 *ptr, int empty) {
 		/* fill tail */
 		fill_tail(cols, lines);
 	}
-	return len;
+	return ret;
 }
 #endif

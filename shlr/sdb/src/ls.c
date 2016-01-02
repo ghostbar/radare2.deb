@@ -14,11 +14,21 @@ SDB_API SdbList *ls_new() {
 	return list;
 }
 
-SDB_API void ls_del (SdbList *list, SdbListIter *iter) {
-	if (iter==NULL) {
-		fprintf (stderr, "ls_del: null iter?\n");
-		return;
+SDB_API void ls_sort(SdbList *list, SdbListComparator cmp) {
+	SdbListIter *it, *it2;
+	for (it = list->head; it && it->data; it = it->n) {
+		for (it2 = it->n; it2 && it2->data; it2 = it2->n) {
+			if (cmp (it->data, it2->data)>0) {
+				void *t = it->data;
+				it->data = it2->data;
+				it2->data = t;
+			}
+		}
 	}
+}
+
+SDB_API void ls_delete (SdbList *list, SdbListIter *iter) {
+	if (!list || !iter) return;
 	ls_split_iter (list, iter);
 	if (list->free && iter->data) {
 		list->free (iter->data);
@@ -29,6 +39,7 @@ SDB_API void ls_del (SdbList *list, SdbListIter *iter) {
 }
 
 SDB_API void ls_split_iter (SdbList *list, SdbListIter *iter) {
+	if (!list || !iter) return;
 	if (list->head == iter) list->head = iter->n;
 	if (list->tail == iter) list->tail = iter->p;
 	if (iter->p) iter->p->n = iter->n;
@@ -37,16 +48,15 @@ SDB_API void ls_split_iter (SdbList *list, SdbListIter *iter) {
 
 SDB_API void ls_destroy (SdbList *list) {
 	SdbListIter *it;
-	if (list) {
-		it = list->head;
-		while (it) {
-			SdbListIter *next = it->n;
-			ls_del (list, it);
-			it = next;
-		}
-		list->head = list->tail = NULL;
-		list->length = 0;
+	if (!list) return;
+	it = list->head;
+	while (it) {
+		SdbListIter *next = it->n;
+		ls_delete (list, it);
+		it = next;
 	}
+	list->head = list->tail = NULL;
+	list->length = 0;
 }
 
 SDB_API void ls_free (SdbList *list) {
@@ -88,4 +98,25 @@ SDB_API SdbListIter *ls_prepend(SdbList *list, void *data) {
 		list->tail = it;
 	list->length++;
 	return it;
+}
+
+SDB_API void *ls_pop(SdbList *list) {
+	void *data = NULL;
+	SdbListIter *iter;
+	if (list){
+		if (list->tail) {
+			iter = list->tail;
+			if (list->head == list->tail) {
+				list->head = list->tail = NULL;
+			} else {
+				list->tail = iter->p;
+				list->tail->n = NULL;
+			}
+			data = iter->data;
+			free (iter);
+			list->length--;
+		}
+		return data;
+	}
+	return NULL;
 }

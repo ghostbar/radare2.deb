@@ -1,7 +1,7 @@
-/* radare - LGPL - Copyright 2009-2013 - pancake, nibble */
+/* radare - LGPL - Copyright 2009-2014 - pancake, nibble */
 
-#ifndef _INCLUDE_R_PARSE_H_
-#define _INCLUDE_R_PARSE_H_
+#ifndef R2_PARSE_H
+#define R2_PARSE_H
 
 #include <r_types.h>
 #include <r_flags.h>
@@ -17,6 +17,8 @@ extern "C" {
 
 R_LIB_VERSION_HEADER(r_parse);
 
+typedef RList* (*RAnalVarList)(RAnal *anal, RAnalFunction *fcn, int kind);
+
 typedef struct r_parse_t {
 	void *user;
 	int flagspace;
@@ -24,6 +26,7 @@ typedef struct r_parse_t {
 	struct r_parse_plugin_t *cur;
 	RAnal *anal; // weak anal ref
 	RList *parsers;
+	RAnalVarList varlist;
 } RParse;
 
 typedef struct r_parse_plugin_t {
@@ -35,11 +38,12 @@ typedef struct r_parse_plugin_t {
 	int (*assemble)(RParse *p, char *data, char *str);
 	int (*filter)(RParse *p, RFlag *f, char *data, char *str, int len);
 	int (*varsub)(RParse *p, RAnalFunction *f, char *data, char *str, int len);
+	int (*replace)(int argc, const char *argv[], char *newstr);
 	struct list_head list;
 } RParsePlugin;
 
 #ifdef R_API
-R_API struct r_parse_t *r_parse_new();
+R_API struct r_parse_t *r_parse_new(void);
 R_API void r_parse_free(RParse *p);
 R_API void r_parse_set_user_ptr(RParse *p, void *user);
 R_API int r_parse_add(RParse *p, struct r_parse_plugin_t *foo);
@@ -57,6 +61,7 @@ R_API int r_parse_is_c_file (const char *file);
 extern struct r_parse_plugin_t r_parse_plugin_dummy;
 extern struct r_parse_plugin_t r_parse_plugin_att2intel;
 extern struct r_parse_plugin_t r_parse_plugin_x86_pseudo;
+extern struct r_parse_plugin_t r_parse_plugin_arm_pseudo;
 extern struct r_parse_plugin_t r_parse_plugin_mips_pseudo;
 extern struct r_parse_plugin_t r_parse_plugin_dalvik_pseudo;
 extern struct r_parse_plugin_t r_parse_plugin_mreplace;

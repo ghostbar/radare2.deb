@@ -1,5 +1,7 @@
-#ifndef _INCLUDE_R_CONFIGURE_H_
-#define _INCLUDE_R_CONFIGURE_H_
+#ifndef R2_CONFIGURE_H
+#define R2_CONFIGURE_H
+
+#include "r_version.h"
 
 #ifdef LIL_ENDIAN
 #undef LIL_ENDIAN
@@ -30,6 +32,10 @@
 #ifndef HAVE_LIB_EWF
 #define HAVE_LIB_EWF @HAVE_LIB_EWF@
 #endif
+
+#define HAVE_FORK @HAVE_FORK@
+
+#define WITH_GPL @WITH_GPL@
 
 #define R2_WWWROOT "@DATADIR@/radare2/@VERSION@/www"
 

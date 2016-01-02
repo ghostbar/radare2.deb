@@ -48,7 +48,7 @@ R_API void r_mem_copybits(ut8 *dst, const ut8 *src, int bits) {
 	ut8 srcmask, dstmask;
 	int bytes = (int)(bits/8);
 	bits = bits%8;
-	
+
 	memcpy (dst, src, bytes);
 	if (bits) {
 		srcmask = dstmask = 0;
@@ -194,6 +194,8 @@ R_API void r_mem_copyendian (ut8 *dest, const ut8 *orig, int size, int endian) {
 //R_UNIT printf("%s\n", r_mem_mem("food is pure lame", 20, "is", 2));
 R_API const ut8 *r_mem_mem(const ut8 *haystack, int hlen, const ut8 *needle, int nlen) {
 	int i, until = hlen-nlen+1;
+	if (hlen<1 || nlen<1)
+		return NULL;
 	for (i=0; i<until; i++) {
 		if (!memcmp (haystack+i, needle, nlen))
 			return haystack+i;
@@ -220,10 +222,10 @@ R_API int r_mem_protect(void *ptr, int size, const char *prot) {
 	if (strchr (prot, 'w')) p |= PROT_WRITE;
 	if (mprotect (ptr, size, p)==-1)
 		return R_FALSE;
-#elif __WINDOWS__
+#elif __WINDOWS__ || __CYGWIN__
 	int r, w, x;
 	DWORD p = PAGE_NOACCESS;
-	r = strchr (prot, 'r')? 1: 0; 
+	r = strchr (prot, 'r')? 1: 0;
 	w = strchr (prot, 'w')? 1: 0;
 	x = strchr (prot, 'x')? 1: 0;;
 	if (w && x) return R_FALSE;
@@ -236,4 +238,11 @@ R_API int r_mem_protect(void *ptr, int size, const char *prot) {
 	#warning Unknown platform
 #endif
 	return R_TRUE;
+}
+
+R_API void *r_mem_dup (void *s, int l) {
+	void *d = malloc (l);
+	if (!d) return NULL;
+	memcpy (d, s, l);
+	return d;
 }

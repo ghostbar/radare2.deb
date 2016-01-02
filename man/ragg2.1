@@ -1,7 +1,8 @@
-.TH RAGG2 1
-.SH NAME
-ragg2 \- radare2 utility to run programs in exotic environments
-.Dd Nov 11, 2013
+.Dd Sep 30, 2014
+.Dt RAGG2 1
+.Sh NAME
+.Nm ragg2
+.Nd radare2 frontend for r_egg, compile programs into tiny binaries for x86-32/64 and arm.
 .Sh SYNOPSIS
 .Nm ragg2
 .Op Fl a Ar arch
@@ -15,11 +16,14 @@ ragg2 \- radare2 utility to run programs in exotic environments
 .Op Fl B Ar hexpairs
 .Op Fl c Ar k=v
 .Op Fl C Ar file
+.Op Fl n Ar num32
+.Op Fl N Ar num64
 .Op Fl d Ar off:dword
 .Op Fl D Ar off:qword
 .Op Fl w Ar off:hexpair
 .Op Fl p Ar padding
-.Op Fl FOLsrxvh
+.Op Fl P Ar pattern
+.Op Fl FOLsrxvhz
 .Sh DESCRIPTION
 ragg2 is a frontend for r_egg, compile programs into tiny binaries for x86-32/64 and arm.
 .Pp
@@ -60,8 +64,14 @@ Patch final buffer with given dword at specified offset
 Patch final buffer with given qword at specified offset
 .It Fl w Ar off:hexpairs
 Patch final buffer with given hexpairs at specified offset
+.It Fl n Ar num32
+Append a 32bit number in little endian
+.It Fl N Ar num64
+Append a 64bit number in little endian
 .It Fl p Ar padding
 Specify generic paddings with a format string.
+.It Fl P Ar size
+Prepend debruijn sequence of given length.
 .It Fl F
 autodetect native file format (osx=mach0, linux=elf, ..)
 .It Fl O
@@ -70,15 +80,19 @@ use default output file (filename without extension or a.out)
 add include path
 .It Fl s
 show assembler code
+.It Fl r
+show raw bytes instead of hexpairs
 .It Fl x
 execute (just-in-time)
+.It Fl z
+output in C string syntax
 .El
 .Sh EXAMPLE
 .Pp
   $ cat hi.r
   /* hello world in r_egg */
-  write@syscall(4);
-  exit@syscall(1);
+  write@syscall(4); //x64 write@syscall(1);
+  exit@syscall(1); //x64 exit@syscall(60);
 .Pp
   main@global(128) {
     .var0 = "hi!\\n";

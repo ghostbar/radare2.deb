@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2013 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2014 pancake<nopcode.org> */
 
 // TODO: use ptr tablez here
 #include "r_hash.h"
@@ -48,7 +48,7 @@ R_API ut8 *r_hash_do_md5(RHash *ctx, const ut8 *input, int len) {
 	if (len>0)
 		MD5Update (&ctx->md5, input, len);
 	if (ctx->rst || len == 0)
-		MD5Final (&ctx->digest, &ctx->md5);
+		MD5Final (ctx->digest, &ctx->md5);
 	return ctx->digest;
 }
 

@@ -5,68 +5,136 @@
 
 #define DB anal->sdb_xrefs
 
-R_API void r_anal_xrefs_load(RAnal *anal, const char *prjfile) {
-        char *path, *db = r_str_newf (R2_HOMEDIR"/projects/%s.d/xrefs", prjfile);
-	path = r_str_home (db);
-	//eprintf ("Open (%s)\n", path);
-	sdb_free (DB);
-	DB = sdb_new (path, "xrefs", 0);
-	sdb_array_set (DB, "types", -1, "code,data", 0);
-	free (db);
+static void XREFKEY(char * const key, const size_t key_len,
+	char const * const kind, const RAnalRefType type, const ut64 addr) {
+	char const * _sdb_type = "unk";
+	switch (type) {
+	case R_ANAL_REF_TYPE_NULL:
+		_sdb_type = "unk";
+		break;
+	case R_ANAL_REF_TYPE_CODE:
+		_sdb_type = "code.jmp";
+		break;
+	case R_ANAL_REF_TYPE_CALL:
+		_sdb_type = "code.call";
+		break;
+	case R_ANAL_REF_TYPE_DATA:
+		_sdb_type = "data.mem";
+		break;
+	case R_ANAL_REF_TYPE_STRING:
+		_sdb_type = "data.string";
+		break;
+	}
+	snprintf (key, key_len, "%s.%s.0x%"PFMT64x, kind, _sdb_type, addr);
 }
 
-#define TODO(x) eprintf(__FUNCTION__"  "x)
+R_API int r_anal_xrefs_load(RAnal *anal, const char *prjfile) {
+	char *path, *db = r_str_newf (R2_HOMEDIR"/projects/%s.d", prjfile);
+	ut8 found = 0;
+	SdbListIter *it;
+	SdbNs *ns;
+	if (!db) return R_FALSE;
+	path = r_str_home (db);
+	if (!path) {
+		free (db);
+		return R_FALSE;
+	}
+
+	ls_foreach (anal->sdb->ns, it, ns){
+		if (ns->sdb == DB){
+			ls_delete (anal->sdb->ns, it);
+			found = 1;
+			break;
+		}
+	}
+	if (!found) sdb_free (DB);
+	DB = sdb_new (path, "xrefs", 0);
+	if (!DB) {
+		free (db);
+		free (path);
+		return R_FALSE;
+	}
+	sdb_ns_set (anal->sdb, "xrefs", DB);
+	free (path);
+	free (db);
+	return R_TRUE;
+}
 
 R_API void r_anal_xrefs_save(RAnal *anal, const char *prjfile) {
 	sdb_sync (anal->sdb_xrefs);
 }
 
-R_API RList *r_anal_xrefs_set (RAnal *anal, const char *type, ut64 from, ut64 to) {
+R_API int r_anal_xrefs_set (RAnal *anal, const RAnalRefType type,
+			     ut64 from, ut64 to) {
 	char key[32];
-	snprintf (key, sizeof (key), "ref.%s.0x%"PFMT64x, type, from);
-	sdb_array_add_num (DB, key, -1, to, 0);
-	snprintf (key, sizeof (key), "xref.%s.0x%"PFMT64x, type, to);
-	sdb_array_add_num (DB, key, -1, from, 0);
-	// (-1)funfor.%d=%d
-	return NULL;
+	if (!anal || !DB)
+		return R_FALSE;
+	// unknown refs should not be stored. seems wrong
+	if (type == R_ANAL_REF_TYPE_NULL) {
+		return R_FALSE;
+	}
+	XREFKEY (key, sizeof (key), "ref", type, from);
+	sdb_array_add_num (DB, key, to, 0);
+	XREFKEY (key, sizeof (key), "xref", type, to);
+	sdb_array_add_num (DB, key, from, 0);
+	return R_TRUE;
 }
 
-R_API RList *r_anal_xrefs_deln (RAnal *anal, const char *type, ut64 from, ut64 to) {
+R_API int r_anal_xrefs_deln (RAnal *anal, const RAnalRefType type, ut64 from, ut64 to) {
 	char key[32];
-	snprintf (key, sizeof (key), "%s.0x%"PFMT64x, type, from);
-	sdb_array_del_num (DB, key, to, 0);
-	return NULL;
+	if (!anal || !DB)
+		return R_FALSE;
+	XREFKEY (key, sizeof (key), "ref", type, from);
+	sdb_array_remove_num (DB, key, to, 0);
+	XREFKEY (key, sizeof (key), "xref", type, to);
+	sdb_array_remove_num (DB, key, from, 0);
+	return R_TRUE;
 }
 
-R_API int r_anal_xrefs_from (RAnal *anal, RList *list, const char *kind, const char *type, ut64 addr) {
-	char *s, *str, *ptr, key[256];
+R_API int r_anal_xrefs_from (RAnal *anal, RList *list, const char *kind, const RAnalRefType type, ut64 addr) {
+	char *next, *s, *str, *ptr, key[256];
 	RAnalRef *ref = NULL;
-	int hasnext = 1;
-	snprintf (key, sizeof (key), "%s.%s.0x%"PFMT64x, kind, type, addr);
+	XREFKEY(key, sizeof (key), kind, type, addr);
 	str = sdb_get (DB, key, 0);
 	if (!str) return R_FALSE;
-	for (ptr=str; hasnext; ptr = (char *)sdb_array_next (s)) {
-		s = sdb_array_string (ptr, &hasnext);
+	for (ptr=str; ; ptr = next) {
+		s = sdb_anext (ptr, &next);
 		if (!(ref = r_anal_ref_new ()))
 			return R_FALSE;
-		ref->addr = addr;
-		ref->at = r_num_get (NULL, s);
-		ref->type = (!strcmp (type, "code"))?'C':'d'; // XXX
+		ref->addr = r_num_get (NULL, s);
+		ref->at = addr;
+		ref->type = type;
 		r_list_append (list, ref);
+		if (!next)
+			break;
 	}
 	free (str);
 	return R_TRUE;
 }
 
-// (in,out)[code,data]
-R_API RList *r_anal_xrefs_get (RAnal *anal, ut64 addr) {
+R_API RList *r_anal_xrefs_get (RAnal *anal, ut64 to) {
 	RList *list = r_list_new ();
 	list->free = NULL; // XXX
-// XXX: not all!
-	//r_anal_xrefs_from (anal, list, "xref", "code", addr);
-	//r_anal_xrefs_from (anal, list, "xref", "data", addr);
-	r_anal_xrefs_from (anal, list, "ref", "code", addr);
-	r_anal_xrefs_from (anal, list, "ref", "data", addr);
+	r_anal_xrefs_from (anal, list, "xref", R_ANAL_REF_TYPE_NULL, to);
+	r_anal_xrefs_from (anal, list, "xref", R_ANAL_REF_TYPE_CODE, to);
+	r_anal_xrefs_from (anal, list, "xref", R_ANAL_REF_TYPE_CALL, to);
+	r_anal_xrefs_from (anal, list, "xref", R_ANAL_REF_TYPE_DATA, to);
+	r_anal_xrefs_from (anal, list, "xref", R_ANAL_REF_TYPE_STRING, to);
+	if (r_list_empty (list)) {
+		r_list_free (list);
+		list = NULL;
+	}
+	return list;
+}
+
+R_API RList *r_anal_xrefs_get_from (RAnal *anal, ut64 to) {
+	RList *list = r_list_new ();
+	list->free = NULL; // XXX
+	r_anal_xrefs_from (anal, list, "ref", R_ANAL_REF_TYPE_NULL, to);
+	r_anal_xrefs_from (anal, list, "ref", R_ANAL_REF_TYPE_CODE, to);
+	r_anal_xrefs_from (anal, list, "ref", R_ANAL_REF_TYPE_CALL, to);
+	r_anal_xrefs_from (anal, list, "ref", R_ANAL_REF_TYPE_DATA, to);
+	r_anal_xrefs_from (anal, list, "ref", R_ANAL_REF_TYPE_STRING, to);
 	if (r_list_length (list)<1) {
 		r_list_free (list);
 		list = NULL;
@@ -74,28 +142,26 @@ R_API RList *r_anal_xrefs_get (RAnal *anal, ut64 addr) {
 	return list;
 }
 
-R_API void r_anal_xrefs_init (RAnal *anal) {
-	DB = NULL;
-	DB = sdb_new (NULL, "xrefs", 0); // TODO
-	sdb_array_set (DB, "types", -1, "code,data", 0);
-#if 0
-	//...
-	r_anal_xrefs_get (anal, "code", 0);
-#endif
+R_API int r_anal_xrefs_init (RAnal *anal) {
+	sdb_reset (DB);
+	if (!DB) return R_FALSE;
+	sdb_array_set (DB, "types", -1, "code.jmp,code.call,data.mem,data.string", 0);
+	return R_TRUE;
 }
 
-static void xrefs_list_cb_rad(RAnal *anal, const char *k, const char *v) {
+static int xrefs_list_cb_rad(RAnal *anal, const char *k, const char *v) {
 	ut64 dst, src = r_num_get (NULL, v);
 	if (!strncmp (k, "ref.", 4)) {
 		char *p = strchr (k+4, '.');
 		if (p) {
 			dst = r_num_get (NULL, p+1);
-			anal->printf ("ar 0x%"PFMT64x" 0x%"PFMT64x"\n", src, dst);
+			anal->printf ("ax 0x%"PFMT64x" 0x%"PFMT64x"\n", src, dst);
 		}
 	}
+	return 1;
 }
 
-static void xrefs_list_cb_json(RAnal *anal, const char *k, const char *v) {
+static int xrefs_list_cb_json(RAnal *anal, const char *k, const char *v) {
 	ut64 dst, src = r_num_get (NULL, v);
 	if (!strncmp (k, "ref.", 4) && (strlen (k)>8)) {
 		char *p = strchr (k+4, '.');
@@ -105,10 +171,12 @@ static void xrefs_list_cb_json(RAnal *anal, const char *k, const char *v) {
 			anal->printf ("%"PFMT64d":%"PFMT64d",", src, dst);
 		}
 	}
+	return 1;
 }
 
-static void xrefs_list_cb_plain(RAnal *anal, const char *k, const char *v) {
+static int xrefs_list_cb_plain(RAnal *anal, const char *k, const char *v) {
 	anal->printf ("%s=%s\n", k, v);
+	return 1;
 }
 
 R_API void r_anal_xrefs_list(RAnal *anal, int rad) {
@@ -127,3 +195,20 @@ R_API void r_anal_xrefs_list(RAnal *anal, int rad) {
 		break;
 	}
 }
+
+R_API const char *r_anal_xrefs_type_tostring (char type) {
+	switch (type) {
+	case R_ANAL_REF_TYPE_CODE:
+		return "JMP";
+	case R_ANAL_REF_TYPE_CALL:
+		return "CALL";
+	case R_ANAL_REF_TYPE_DATA:
+		return "DATA";
+	case R_ANAL_REF_TYPE_STRING:
+		return "STRING";
+	case R_ANAL_REF_TYPE_NULL:
+	default:
+		return "UNKNOWN";
+	}
+}
+

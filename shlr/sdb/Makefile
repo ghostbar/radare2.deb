@@ -4,28 +4,40 @@ VALADIR=bindings/vala
 PWD=$(shell pwd)
 PFX=${DESTDIR}${PREFIX}
 HGFILES=`find sdb-${SDBVER} -type f | grep -v hg | grep -v swp`
+VAPIDIR=$(PFX)/share/vala/vapi/
 MANDIR=${PFX}/share/man/man1
+MKDIR=mkdir
 
-all: src/sdb-version.h
+all: pkgconfig src/sdb-version.h
 	${MAKE} -C src
+ifeq ($(BUILD_MEMCACHE),1)
 	${MAKE} -C memcache
+endif
 ifneq (${HAVE_VALA},)
 	cd ${VALADIR} && ${MAKE}
 	cd ${VALADIR}/types && ${MAKE}
 endif
 
-.PHONY: test
+.PHONY: test sdb.js pkgconfig
 test:
 	${MAKE} -C test
+
+asan:
+	${MAKE} src/sdb-version.h
+	${MAKE} -C src CC="gcc -fsanitize=address" LDFLAGS=-lasan all
+
+pkgconfig:
+	[ -d pkgconfig ] && ${MAKE} -C pkgconfig || true
 
 src/sdb-version.h:
 	echo '#define SDB_VERSION "${SDBVER}"' > src/sdb-version.h
 
-EMCCFLAGS=-O2 -s ASM_JS=1
+CFILES=cdb.c buffer.c cdb_make.c ls.c ht.c sdb.c num.c base64.c
+CFILES+=json.c ns.c lock.c util.c disk.c query.c array.c fmt.c main.c
+EMCCFLAGS=-O2 -s EXPORTED_FUNCTIONS="['_sdb_querys','_sdb_new0']"
 #EMCCFLAGS+=--embed-file sdb.data
 sdb.js: src/sdb-version.h
-	cd src ; emcc ${EMCCFLAGS} -I. -o ../sdb.js *.c 
-#json/api.c json/js0n.c json/json.c json/rangstr.c  
+	cd src ; emcc ${EMCCFLAGS} -I. -o ../sdb.js ${CFILES}
 
 clean:
 	rm -f src/sdb-version.h
@@ -45,6 +57,14 @@ dist:
 	pub sdb-${SDBVER}.tar.gz
 	rm -rf sdb-${SDBVER}
 
+w32dist:
+	rm -f sdb-${SDBVER}.zip
+	rm -rf sdb-${SDBVER}
+	mkdir -p sdb-${SDBVER}
+	cp src/sdb.exe sdb-${SDBVER}
+	zip -r sdb-${SDBVER}.zip sdb-${SDBVER}
+	rm -rf sdb-${SDBVER}
+
 install-dirs:
 	$(INSTALL_DIR) ${MANDIR} ${PFX}/lib/pkgconfig ${PFX}/bin 
 	$(INSTALL_DIR) ${PFX}/share/vala/vapi ${PFX}/include/sdb
@@ -52,26 +72,31 @@ install-dirs:
 INCFILES=src/sdb.h src/sdb-version.h src/cdb.h src/ht.h src/types.h
 INCFILES+=src/ls.h src/cdb_make.h src/buffer.h src/config.h
 
-install: install-dirs
+install: pkgconfig install-dirs
 	$(INSTALL_MAN) src/sdb.1 ${MANDIR}
 	$(INSTALL_LIB) src/libsdb.${SOEXT} ${PFX}/lib
+	$(INSTALL_DATA) src/libsdb.a ${PFX}/lib
 	-if [ "$(SOEXT)" != "$(SOVER)" ]; then \
-	cd $(PFX)/lib ; \
-	mv libsdb.$(SOEXT) libsdb.$(SOVER) ; \
-	ln -s libsdb.$(SOVER) libsdb.$(SOEXT) ; \
-fi
+	  cd $(PFX)/lib ; \
+	  mv libsdb.$(SOEXT) libsdb.$(SOVER) ; \
+	  ln -s libsdb.$(SOVER) libsdb.$(SOEXT) ; \
+	fi
 	$(INSTALL_DATA) $(INCFILES) ${PFX}/include/sdb
 	$(INSTALL_PROGRAM) src/sdb ${PFX}/bin
+ifeq ($(BUILD_MEMCACHE),1)
 	$(INSTALL_DATA) memcache/libmcsdb.a ${PFX}/lib
 	$(INSTALL_DATA) memcache/mcsdb.h ${PFX}/include/sdb
 	$(INSTALL_PROGRAM) memcache/mcsdbd ${PFX}/bin
 	$(INSTALL_PROGRAM) memcache/mcsdbc ${PFX}/bin
-	$(INSTALL_DATA) ${VALADIR}/sdb.pc ${PFX}/lib/pkgconfig
-	$(INSTALL_DATA) ${VALADIR}/mcsdb.pc ${PFX}/lib/pkgconfig
+	$(INSTALL_DATA) pkgconfig/mcsdb.pc ${PFX}/lib/pkgconfig
+endif
+	$(INSTALL_DATA) pkgconfig/sdb.pc ${PFX}/lib/pkgconfig
 ifneq (${HAVE_VALA},)
 	$(INSTALL_DATA) ${VALADIR}/sdb.vapi ${PFX}/share/vala/vapi
-	$(INSTALL_DATA) ${VALADIR}/mcsdb.vapi ${PFX}/share/vala/vapi
 	cd ${VALADIR}/types && ${MAKE} install PFX=${PFX}
+ifeq ($(BUILD_MEMCACHE),1)
+	$(INSTALL_DATA) ${VALADIR}/mcsdb.vapi ${PFX}/share/vala/vapi
+endif
 endif
 
 deinstall uninstall:
@@ -107,19 +132,30 @@ symstall: install-dirs
 	ln -fs ${PWD}/bindings/vala/sdb.pc ${PFX}/lib/pkgconfig
 	ln -fs ${PWD}/bindings/vala/mcsdb.pc ${PFX}/lib/pkgconfig
 ifneq (${HAVE_VALA},)
-	ln -fs ${PWD}/vala/sdb.vapi ${PFX}/share/vala/vapi
-	ln -fs ${PWD}/vala/mcsdb.vapi ${PFX}/share/vala/vapi
-	ln -fs ${PWD}/vala/sdb.vapi ${PFX}/share/vala/vapi
-	ln -fs ${PWD}/vala/mcsdb.vapi ${PFX}/share/vala/vapi
+	$(MKDIR) -p $(VAPIDIR)
+	ln -fs ${PWD}/bindings/vala/sdb.vapi $(VAPIDIR)
+	ln -fs ${PWD}/bindings/vala/mcsdb.vapi $(VAPIDIR)
+	ln -fs ${PWD}/bindings/vala/sdb.vapi $(VAPIDIR)
+	ln -fs ${PWD}/bindings/vala/mcsdb.vapi $(VAPIDIR)
 	cd ${VALADIR}/types && ${MAKE} symstall PFX=${PFX}
 endif
 
 # windows compiler prefix
+# travis/debian
 WCP=i386-mingw32
+# mxe
+#WCP=i686-pc-mingw32
 
 w32: src/sdb-version.h
 	cd src ; \
 	${MAKE} OS=w32 WCP=${WCP} CC=${WCP}-gcc AR=${WCP}-ar RANLIB=${WCP}-ranlib sdb.exe
 
-.PHONY: all ${VALADIR} clean dist w32
+# ios toolchain
+IOS_CC=$(shell xcrun --sdk iphoneos --find clang) -isysroot $(shell xcrun --sdk iphoneos --show-sdk-path) -arch armv7 -arch arm64
+IOS_AR=$(shell xcrun --sdk iphoneos --find ar)
+IOS_RL=$(shell xcrun --sdk iphoneos --find ranlib)
+ios: src/sdb-version.h
+	${MAKE} OS=Darwin ARCH=arm CC="${IOS_CC}" AR="${IOS_AR}" RANLIB="${IOS_RL}" HAVE_VALA= all
+
+.PHONY: all ${VALADIR} clean dist w32 ios
 .PHONY: install-dirs install uninstall deinstall symstall

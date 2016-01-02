@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2014 - pancake */
+/* radare - LGPL - Copyright 2008-2015 - pancake */
 
 #include <r_cons.h>
 #define I r_cons_singleton()
@@ -14,10 +14,11 @@ static int bytes;
 static void setnewline(int old) {
 	snprintf (prompt, sizeof (prompt), "%d: ", _n);
 	r_line_set_prompt (prompt);
-	strcpy (I->line->buffer.data, r_str_word_get0 (lines, _n));
-	I->line->buffer.index = 
-	I->line->buffer.length = strlen (I->line->buffer.data);
-		I->line->contents = I->line->buffer.data;
+	strncpy (I->line->buffer.data, r_str_word_get0 (lines, _n),
+			sizeof (I->line->buffer.data) - 1);
+	I->line->buffer.data[sizeof (I->line->buffer.data) - 1] = '\0';
+	I->line->buffer.index = I->line->buffer.length = strlen (I->line->buffer.data);
+	I->line->contents = I->line->buffer.data;
 }
 
 static void saveline (int n, const char *str) {
@@ -51,7 +52,8 @@ static void filesave () {
 	if (!path) {
 		eprintf ("File: ");
 		buf[0] = 0;
-		fgets (buf, sizeof(buf), stdin);
+		fgets (buf, sizeof(buf)-1, stdin);
+		buf[sizeof(buf)-1] = 0;
 		i = strlen (buf);
 		if (i>0) {
 			buf[i-1] = 0;
@@ -65,23 +67,28 @@ static void filesave () {
 				lines[i]='\n';
 		}
 	}
-	r_file_dump (path, (const ut8*)lines, bytes);
-	eprintf ("File '%s' saved (%d bytes)\n", path, bytes);
+	if (r_file_dump (path, (const ut8*)lines, bytes, 0))
+		eprintf ("File '%s' saved (%d bytes)\n", path, bytes);
+	else eprintf ("Cannot save file\n");
 	// restore back zeroes
 	nlines = r_str_split (lines, '\n');
 }
 
-R_API char *r_cons_editor (const char *file) {
-	char *line;
+R_API char *r_cons_editor (const char *file, const char *str) {
+	const char *line;
 	_n = 0;
+	if (I->editor) {
+		return I->editor (I->user, file, str);
+	}
 	free (path);
 	if (file) {
 		path = strdup (file);
+		bytes = 0;
 		lines = r_file_slurp (file, &bytes);
 		nlines = r_str_split (lines, '\n');
-		eprintf ("Loaded %d lines on %d bytes\n", nlines-1, bytes);
+		eprintf ("Loaded %d lines on %d bytes\n",
+			(nlines?(nlines-1):0), bytes);
 	} else path = NULL;
-	//r_cons_new ();
 	I->line->hist_up = up;
 	I->line->hist_down = down;
 	I->line->contents = I->line->buffer.data;
@@ -98,5 +105,5 @@ R_API char *r_cons_editor (const char *file) {
 	I->line->hist_up = 
 	I->line->hist_down = NULL;
 	I->line->contents = NULL;
-	return NULL;
+	return lines;
 }

@@ -1,8 +1,8 @@
 /* radare - LGPL - Copyright 2013 - pancake */
 /* sliced list */
 
-#ifndef _INCLUDE_RSLIST_H_
-#define _INCLUDE_RSLIST_H_
+#ifndef R2_SLIST_H
+#define R2_SLIST_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,7 +26,7 @@ typedef struct r_slist_t {
 	void **alloc;
 } RSList;
 
-R_API RSList *r_slist_new ();
+R_API RSList *r_slist_new (void);
 R_API void r_slist_free (RSList *s);
 R_API int r_slist_get_slot(RSList *s, ut64 addr);
 R_API RSList *r_slist_add (RSList *s, void *data, ut64 from, ut64 to);

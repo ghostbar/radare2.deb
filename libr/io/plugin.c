@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2012 - pancake */
+/* radare - LGPL - Copyright 2008-2014 - pancake */
 
 /* TODO: write li->fds setter/getter helpers */
 // TODO: return true/false everywhere,, not -1 or 0
@@ -9,8 +9,10 @@
 #include "list.h"
 #include <stdio.h>
 
-static RIOPlugin *io_static_plugins[] = 
+volatile static RIOPlugin *DEFAULT = NULL;
+static RIOPlugin *io_static_plugins[] =
 	{ R_IO_STATIC_PLUGINS };
+
 
 R_API int r_io_plugin_add(RIO *io, RIOPlugin *plugin) {
 	struct r_io_list_t *li;
@@ -35,9 +37,21 @@ R_API int r_io_plugin_init(RIO *io) {
 		static_plugin = R_NEW (RIOPlugin);
 		// memory leak here: static_plugin never freed
 		memcpy (static_plugin, io_static_plugins[i], sizeof (RIOPlugin));
+		if (!strncmp (static_plugin->name, "default", 7)) {
+			if (DEFAULT) free ((void*)DEFAULT);
+			DEFAULT = static_plugin;
+			continue;
+		}
 		r_io_plugin_add (io, static_plugin);
 	}
 	return R_TRUE;
+}
+
+R_API RIOPlugin *r_io_plugin_get_default(RIO *io, const char *filename, ut8 many) {
+	if (!DEFAULT ||
+		!DEFAULT->plugin_open ||
+		!DEFAULT->plugin_open (io, filename, many) ) return NULL;
+	return (RIOPlugin*) DEFAULT;
 }
 
 R_API RIOPlugin *r_io_plugin_resolve(RIO *io, const char *filename, ut8 many) {

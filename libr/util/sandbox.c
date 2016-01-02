@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2012-2013 - pancake */
+/* radare - LGPL - Copyright 2012-2015 - pancake */
 
 #include <r_util.h>
 #include <signal.h>
@@ -6,12 +6,44 @@
 static int enabled = 0;
 static int disabled = 0;
 
+/**
+ * This function verifies that the given path is allowed. Paths are allowed only if they don't
+ * contain .. components (which would indicate directory traversal) and they are relative.
+ * Paths pointing into the webroot are an exception: For reaching the webroot, .. and absolute
+ * path are ok.
+ */
 R_API int r_sandbox_check_path (const char *path) {
+	size_t root_len;
 	char ch;
+	char *p;
 	/* XXX: the sandbox can be bypassed if a directory is symlink */
-	if (!memcmp (path, R2_WWWROOT, strlen (R2_WWWROOT)))
-		return R_TRUE;
-	if (strstr (path, "../")) return 0;
+
+	if (!path) return 0;
+
+	root_len = strlen (R2_LIBDIR"/radare2");
+	if (!strncmp (path, R2_LIBDIR"/radare2", root_len))
+		return 1;
+	root_len = strlen (R2_DATDIR"/radare2");
+	if (!strncmp (path, R2_DATDIR"/radare2", root_len))
+		return 1;
+	// Accessing stuff inside the webroot is ok even if we need .. or leading / for that
+	root_len = strlen (R2_WWWROOT);
+	if (R2_WWWROOT[0] && !strncmp (path, R2_WWWROOT, root_len) && (
+			R2_WWWROOT[root_len-1] == '/' || path[root_len] == '/' || path[root_len] == '\0')) {
+		path += strlen (R2_WWWROOT);
+		while (*path == '/') path++;
+	}
+
+	// ./ path is not allowed
+        if (path[0]=='.' && path[1]=='/') return 0;
+	// Properly check for directrory traversal using "..". First, does it start with a .. part?
+        if (path[0]=='.' && path[1]=='.' && (path[2]=='\0' || path[2]=='/')) return 0;
+
+	// Or does it have .. in some other position?
+	for (p = strstr (path, "/.."); p; p = strstr(p, "/.."))
+		if (p[3] == '\0' || p[3] == '/') return 0;
+
+	// Absolute paths are forbidden.
 	if (*path == '/') return 0;
 #if __UNIX__
 	if (readlink (path, &ch, 1) != -1) return 0;
@@ -45,10 +77,13 @@ R_API int r_sandbox_system (const char *x, int n) {
 
 R_API int r_sandbox_creat (const char *path, int mode) {
 	if (enabled) {
+		return -1;
+#if 0
 		if (mode & O_CREAT) return -1;
 		if (mode & O_RDWR) return -1;
 		if (!r_sandbox_check_path (path))
 			return -1;
+#endif
 	}
 	return creat (path, mode);
 }
@@ -75,9 +110,6 @@ R_API int r_sandbox_open (const char *path, int mode, int perm) {
 			return -1;
 		}
 	}
-#if __WINDOWS__
-	perm = 0;
-#endif
 	ret = open (epath, mode, perm);
 	free (epath);
 	return ret;
@@ -126,7 +158,22 @@ R_API int r_sandbox_kill(int pid, int sig) {
 }
 
 R_API DIR* r_sandbox_opendir (const char *path) {
-	if (!path || (r_sandbox_enable (0) && !r_sandbox_check_path (path)))
+	if (!path)
 		return NULL;
+	if (r_sandbox_enable (0)) {
+		if (path && !r_sandbox_check_path (path))
+			return NULL;
+	}
 	return opendir (path);
+}
+
+R_API int r_sys_stop () {
+	if (enabled) return R_FALSE;
+	int pid = r_sys_getpid ();
+#ifndef SIGSTOP
+#define SIGSTOP 19
+#endif
+	if (!r_sandbox_kill (pid, SIGSTOP))
+		return R_TRUE;
+	return R_FALSE;
 }

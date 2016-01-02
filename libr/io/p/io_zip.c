@@ -55,6 +55,8 @@ typedef struct r_io_zfo_t {
 	RIO * io_backref;
 } RIOZipFileObj;
 
+static int r_io_zip_realloc_buf(RIOZipFileObj *zfo, int count);
+static int r_io_zip_truncate_buf(RIOZipFileObj *zfo, int size);
 int r_io_zip_slurp_file(RIOZipFileObj *zfo);
 //static int r_io_zip_check_file(const char *file);
 int r_io_zip_open_zip_file(RIOZipFileObj * zfo);
@@ -75,6 +77,7 @@ static char * r_io_zip_get_by_file_idx(const char * archivename, const char *idx
 static RIODesc * r_io_zip_open(RIO *io, const char *file, int rw, int mode);
 static RList *r_io_zip_open_many(RIO *io, const char *file, int rw, int mode);
 static int r_io_zip_check_uri_many(const char *file);
+static int r_io_zip_resize(RIO *io, RIODesc *fd, ut64 size);
 
 static int r_io_zip_init(RIO *io) {
 	return R_TRUE;
@@ -239,7 +242,7 @@ int r_io_zip_flush_file(RIOZipFileObj *zfo) {
 	}
 	// s (zip_source) is freed when the archive is closed, i think - dso
 	zip_close (zipArch);
-	//if (res) zip_source_free (s);
+	if (s) zip_source_free (s);
 	return res;
 }
 
@@ -378,6 +381,7 @@ static RIODesc *r_io_zip_open(RIO *io, const char *file, int rw, int mode) {
 			r_list_free (files);
 		}
 		eprintf ("\n");
+		free (zip_uri);
 		return res;
 	}
 	//eprintf("After parsing the given uri: %s\n", file);
@@ -409,7 +413,7 @@ static ut64 r_io_zip_lseek(RIO *io, RIODesc *fd, ut64 offset, int whence) {
 	RIOZipFileObj *zfo;
 	ut64 seek_val = 0;
 
-	if (fd == NULL || fd->data == NULL)
+	if (!fd || !fd->data)
 		return -1;
 
 	zfo = fd->data;
@@ -436,7 +440,7 @@ static ut64 r_io_zip_lseek(RIO *io, RIODesc *fd, ut64 offset, int whence) {
 
 static int r_io_zip_read(RIO *io, RIODesc *fd, ut8 *buf, int count) {
 	RIOZipFileObj *zfo = NULL;
-	if (fd == NULL || fd->data == NULL || buf == NULL)
+	if (!fd || !fd->data || !buf)
 		return -1;
 	zfo = fd->data;
 	if (zfo->b->length < io->off)
@@ -444,12 +448,67 @@ static int r_io_zip_read(RIO *io, RIODesc *fd, ut8 *buf, int count) {
 	return r_buf_read_at (zfo->b, io->off, buf, count);
 }
 
+static int r_io_zip_truncate_buf(RIOZipFileObj *zfo, int size) {
+	if (zfo->b->length < size)
+		return r_io_zip_realloc_buf(zfo, size - zfo->b->length);
+
+	if (size > 0){
+		ut8 *buf = malloc (size);
+		memcpy(buf, zfo->b->buf, size);
+		free (zfo->b->buf);
+		zfo->b->buf = buf;
+		zfo->b->length = size;
+	} else {
+		memset (zfo->b->buf, 0, zfo->b->length);
+		zfo->b->length = 0;
+	}
+	return R_TRUE;
+}
+
+static int r_io_zip_realloc_buf(RIOZipFileObj *zfo, int count) {
+	int res = R_FALSE;
+	if (zfo->b->cur + count > zfo->b->length) {
+		RBuffer *buffer = r_buf_new();
+		buffer->buf = malloc (zfo->b->cur + count );
+		buffer->length = zfo->b->cur + count;
+		memcpy (buffer->buf, zfo->b->buf, zfo->b->length);
+		memset (buffer->buf+zfo->b->length, 0, count);
+		buffer->cur = zfo->b->cur;
+		r_buf_free (zfo->b);
+		zfo->b = buffer;
+		res = R_TRUE;
+	}
+	return res;
+}
+
+static int r_io_zip_resize(RIO *io, RIODesc *fd, ut64 size) {
+	RIOZipFileObj *zfo;
+	int res = R_FALSE;
+	ut64 cur_off = io->off;
+	if (!fd || !fd->data)
+		return -1;
+	zfo = fd->data;
+	res = r_io_zip_truncate_buf(zfo, size);
+	if (res == R_TRUE) {
+		// XXX - Implement a flush of some sort, but until then, lets
+		// just write through
+		zfo->modified = 1;
+		r_io_zip_flush_file (zfo);
+	}
+	io->off = cur_off;
+	return res;
+}
+
 static int r_io_zip_write(RIO *io, RIODesc *fd, const ut8 *buf, int count) {
 	RIOZipFileObj *zfo;
 	int ret = 0;
-	if (fd == NULL || fd->data == NULL || buf == NULL)
+	if ( !fd || !fd->data || !buf)
 		return -1;
 	zfo = fd->data;
+	if ( !(zfo->flags & R_IO_WRITE)) return -1;
+	if (zfo->b->cur + count >= zfo->b->length)
+		r_io_zip_realloc_buf (zfo, count);
+
 	if (zfo->b->length < io->off)
 		io->off = zfo->b->length;
 	zfo->modified = 1;
@@ -464,7 +523,7 @@ static int r_io_zip_close(RIODesc *fd) {
 	RIOZipFileObj *zfo = NULL;
 	//eprintf("Am I called 2x?\n");
 	// this api will be called multiple times :/
-	if (fd == NULL || fd->data)
+	if (!fd || !fd->data)
 		return -1;
 	zfo = fd->data;
 	r_io_zip_free_zipfileobj (zfo);
@@ -519,12 +578,14 @@ RIOZipFileObj* r_io_zip_alloc_zipfileobj(const char *archivename, const char *fi
 	for (i=0; i < num_entries; i++) {
 		zip_stat_init (&sb);
 		zip_stat_index (zipArch, i, 0, &sb);
-		if (strcmp (sb.name, filename) == 0) {
-			zfo = r_io_zip_create_new_file (
-				archivename, filename, &sb,
-				flags, mode, rw);
-			r_io_zip_slurp_file (zfo);
-			break;
+		if (sb.name != NULL) {
+			if (strcmp (sb.name, filename) == 0) {
+				zfo = r_io_zip_create_new_file (
+					archivename, filename, &sb,
+					flags, mode, rw);
+				r_io_zip_slurp_file (zfo);
+				break;
+			}
 		}
 	}
 	if (!zfo)
@@ -554,7 +615,6 @@ static int r_io_zip_plugin_open(RIO *io, const char *file, ut8 many) {
 	return (io && file) && (r_io_zip_check_uri (file));
 }
 
-
 RIOPlugin r_io_plugin_zip = {
 	.name = "zip",
 	.desc = "Open zip files apk://foo.apk//MANIFEST or zip://foo.apk//theclass/fun.class, show files with: zip://foo.apk/, open all files with zipall://",
@@ -566,8 +626,7 @@ RIOPlugin r_io_plugin_zip = {
 	.close = r_io_zip_close,
 	.lseek = r_io_zip_lseek,
 	.plugin_open = r_io_zip_plugin_open,
-	.system = NULL,
-	.debug = NULL,
+	.resize = r_io_zip_resize,
 	.init = r_io_zip_init
 };
 

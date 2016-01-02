@@ -1,6 +1,10 @@
-/* radare - LGPL - Copyright 2007-2014 - pancake */
+/* radare - LGPL - Copyright 2007-2015 - pancake */
 
-#include "r_util.h"
+#if __WINDOWS__ && MINGW32 && !__CYGWIN__
+#include <stdlib.h>
+#endif
+
+#include <r_util.h>
 #define R_NUM_USE_CALC 1
 
 R_API ut16 r_num_ntohs (ut16 foo) {
@@ -68,6 +72,10 @@ R_API RNum *r_num_new(RNumCallback cb, void *ptr) {
 	return num;
 }
 
+R_API void r_num_free(RNum *num) {
+	free (num);
+}
+
 #define KB (1024)
 #define MB (1024*KB)
 #define GB (1024*MB)
@@ -75,14 +83,20 @@ R_API RNum *r_num_new(RNumCallback cb, void *ptr) {
 
 R_API char *r_num_units(char *buf, ut64 num) {
 	char unit;
-	double fnum;
+	int tnum;
+	double fnum = num;
 	if (!buf) buf = malloc (32);
 	//if (num>TB) { unit = 'T'; fnum = num/TB; } else
-	if (num>GB) { unit = 'G'; fnum = num/GB; } else
-	if (num>MB) { unit = 'M'; fnum = num/MB; } else
-	if (num>KB) { unit = 'K'; fnum = num/KB; } else
+	if (num>GB) { unit = 'G'; fnum = fnum/GB; } else
+	if (num>MB) { unit = 'M'; fnum = fnum/MB; } else
+	if (num>KB) { unit = 'K'; fnum = fnum/KB; } else
 		{ unit = 0; fnum = num; }
-	snprintf (buf, 32, "%.1f%c", fnum, unit);
+	tnum = (int)((double)(fnum - (int)fnum)*10);
+	if (tnum) {
+		snprintf (buf, 31, "%.1f%c", fnum, unit);
+	} else {
+		snprintf (buf, 31, "%.0f%c", fnum, unit);
+	}
 	return buf;
 }
 
@@ -128,7 +142,11 @@ R_API ut64 r_num_get(RNum *num, const char *str) {
 		sscanf (str, "0x%"PFMT64x, &ret);
 	} else
 	if (str[0]=='0' && str[1]=='x') {
+#if __WINDOWS__ && MINGW32 && !__CYGWIN__
+		ret = _strtoui64 (str+2, NULL, 16);
+#else
 		ret = strtoull (str+2, NULL, 16);
+#endif
 		//sscanf (str+2, "%"PFMT64x, &ret);
 	} else {
 		lch = str[len>0?len-1:0];
@@ -162,7 +180,11 @@ R_API ut64 r_num_get(RNum *num, const char *str) {
 			break;
 		default:
 			//sscanf (str, "%"PFMT64d, &ret);
+#if __WINDOWS__ && MINGW32 && !__CYGWIN__
+			ret = _strtoui64 (str, NULL, 10);
+#else
 			ret = strtoull (str, NULL, 10);
+#endif
 			break;
 		}
 	}
@@ -171,12 +193,15 @@ R_API ut64 r_num_get(RNum *num, const char *str) {
 	return ret;
 }
 
-R_API ut64 r_num_op(char op, ut64 a, ut64 b) {
+#if !R_NUM_USE_CALC
+static ut64 r_num_op(RNum *num, char op, ut64 a, ut64 b) {
 	switch (op) {
 	case '+': return a+b;
 	case '-': return a-b;
 	case '*': return a*b;
-	case '/': return b?a/b:0;
+	case '/':
+		if (!b && num) num->dbz = 1;
+		return b?a/b:0;
 	case '&': return a&b;
 	case '|': return a|b;
 	case '^': return a^b;
@@ -184,22 +209,21 @@ R_API ut64 r_num_op(char op, ut64 a, ut64 b) {
 	return b;
 }
 
-#if !R_NUM_USE_CALC
 R_API static ut64 r_num_math_internal(RNum *num, char *s) {
 	ut64 ret = 0LL;
 	char *p = s;
 	int i, nop, op = 0;
 	for (i=0; s[i]; i++) {
 		switch (s[i]) {
+		case '/':
 		case '+':
 		case '-':
 		case '*':
-		case '/':
 		case '&':
 		case '^':
 		case '|':
 			nop = s[i]; s[i] = '\0';
-			ret = r_num_op (op, ret, r_num_get (num, p));
+			ret = r_num_op (num, op, ret, r_num_get (num, p));
 			op = s[i] = nop; p = s + i + 1;
 			break;
 		}
@@ -214,6 +238,9 @@ R_API ut64 r_num_math(RNum *num, const char *str) {
 	const char *err = NULL;
 	if (!str) return 0LL;
 	//if (!str || !*str) return 0LL;
+	if (num) {
+		num->dbz = 0;
+	}
 	ret = r_num_calc (num, str, &err);
 	if (err) eprintf ("r_num_calc error: (%s) in (%s)\n", err, str);
 	else if (num) num->value = ret;
@@ -302,7 +329,7 @@ R_API int r_num_to_bits (char *out, ut64 num) {
 		for (i=0; i<size; i++) {
 			char bit = ((num>>(size-i-1))&1)? '1': '0';
 			if (hasbit || bit=='1') {
-				out[pos++] = bit;//size-1-i] = bit; 
+				out[pos++] = bit;//size-1-i] = bit;
 			}
 			if (!hasbit && bit=='1') {
 				hasbit=1;
@@ -317,9 +344,25 @@ R_API int r_num_to_bits (char *out, ut64 num) {
 	return size;
 }
 
+static const char *trit_c = "012";
+
+R_API int r_num_to_trits (char *out, ut64 num) {
+	int i = 63, j;
+	while (i>=0 && num) {
+		out[i] = trit_c[num % 3];
+		num = num/3;
+		i--;
+	}
+	j = 63 - i;
+	i++;
+	memmove (out, &out[i], j);
+	out[j] = '\0';
+	return R_TRUE;
+}
+
 R_API ut64 r_num_chs (int cylinder, int head, int sector, int sectorsize) {
 	if (sectorsize<1) sectorsize = 512;
-	return cylinder * head * sector * sectorsize;
+	return (ut64)cylinder * (ut64)head * (ut64)sector * (ut64)sectorsize;
 }
 
 R_API int r_num_conditional(RNum *num, const char *str) {
@@ -377,4 +420,47 @@ R_API int r_num_conditional(RNum *num, const char *str) {
 fail:
 	free (s);
 	return res;
+}
+
+R_API int r_num_is_valid_input(RNum *num, const char *input_value) {
+	ut64 value = input_value ? r_num_math (num, input_value) : 0;
+	return !(value == 0 && input_value && *input_value != '0') || !(value == 0 && input_value && *input_value != '@');
+}
+
+R_API ut64 r_num_get_input_value(RNum *num, const char *input_value) {
+	ut64 value = input_value ? r_num_math (num, input_value) : 0;
+	return value;
+}
+
+R_API char* r_num_as_string(RNum *___, ut64 n) {
+	char str[10];
+	int stri, ret = 0;
+	int len = sizeof (ut64);
+	ut64 num = n;
+	str[stri=0] = 0;
+	while (len--) {
+		char ch = (num & 0xff);
+		if (ch>=33 && ch <127) {
+			str[stri++] = ch;
+			str[stri] = 0;
+		} else {
+			if (ch)
+				return NULL;
+		}
+		ret |= (num&0xff);
+		num >>= 8;
+	}
+	if (ret)
+		return strdup (str);
+	return NULL;
+}
+
+R_API int r_is_valid_input_num_value(RNum *num, const char *input_value){
+	ut64 value = input_value ? r_num_math (num, input_value) : 0;
+	return !(value == 0 && input_value && *input_value == '0');
+}
+
+R_API ut64 r_get_input_num_value(RNum *num, const char *input_value){
+	ut64 value = input_value ? r_num_math (num, input_value) : 0;
+	return value;
 }

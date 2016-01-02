@@ -7,7 +7,13 @@
 #include <r_io.h>
 #include "../config.h"
 
-#define IFDBG if(0)
+#ifdef IFDBG
+#undef IFDBG
+#endif
+
+#define DO_THE_DBG 0
+#define IFDBG  if(DO_THE_DBG)
+#define IFINT  if(0)
 
 
 static void r_anal_ex_perform_pre_anal(RAnal *anal, RAnalState *state, ut64 addr);
@@ -104,15 +110,16 @@ R_API void r_anal_ex_clone_op_switch_to_bb (RAnalBlock *bb, RAnalOp *op) {
 	RListIter *iter;
 	RAnalCaseOp *caseop = NULL;
 
-	if ( op->switch_op ) {
+	if (op->switch_op) {
 
 		bb->switch_op = r_anal_switch_op_new (op->switch_op->addr,
 											op->switch_op->min_val,
 											op->switch_op->max_val);
-
-		r_list_foreach (op->switch_op->cases, iter, caseop) {
-			r_anal_switch_op_add_case (bb->switch_op, caseop->addr,
+		if (bb->switch_op){
+			r_list_foreach (op->switch_op->cases, iter, caseop) {
+				r_anal_switch_op_add_case (bb->switch_op, caseop->addr,
 													caseop->value, caseop->jump);
+			}
 		}
 	}
 }
@@ -166,13 +173,20 @@ R_API RAnalBlock * r_anal_ex_get_bb(RAnal *anal, RAnalState *state, ut64 addr) {
 	current_bb = r_anal_bb_new ();
 	r_anal_ex_op_to_bb(anal, state, current_bb, op);
 
-	if (op->eob) current_bb->type |= R_ANAL_BB_TYPE_LAST;
+	if (r_anal_op_is_eob (op))
+		current_bb->type |= R_ANAL_BB_TYPE_LAST;
 
 	if (current_bb->op_bytes == NULL) {
 		current_bb->op_sz = state->current_op->size;
 		current_bb->op_bytes = malloc(current_bb->op_sz);
 		if (current_bb->op_bytes) {
-			memcpy(current_bb->op_bytes, r_anal_state_get_buf_by_addr(state, addr), current_bb->op_sz);
+			int buf_len = r_anal_state_get_len( state, addr);
+			if (current_bb->op_sz <buf_len) {
+				eprintf ("Oops\n");
+				r_anal_bb_free (current_bb);
+				return NULL;
+			}
+			memcpy (current_bb->op_bytes, r_anal_state_get_buf_by_addr(state, addr), current_bb->op_sz);
 		}
 	}
 	state->current_bb = current_bb;
@@ -268,7 +282,9 @@ R_API RList * r_anal_ex_analysis_driver( RAnal *anal, RAnalState *state, ut64 ad
 
 		if ( state->current_bb_head == NULL ) {
 			state->current_bb_head = state->current_bb;
-			state->current_bb_head->type |= R_ANAL_BB_TYPE_HEAD;
+			if (state->current_bb_head) {
+				state->current_bb_head->type |= R_ANAL_BB_TYPE_HEAD;
+			}
 		}
 
 		if (past_bb) {
@@ -287,7 +303,9 @@ R_API RList * r_anal_ex_analysis_driver( RAnal *anal, RAnalState *state, ut64 ad
 			break;
 		}
 
-		bytes_consumed += state->current_bb->op_sz;
+		if (state->current_bb) {
+			bytes_consumed += state->current_bb->op_sz;
+		}
 		state->current_addr = state->next_addr;
 		r_anal_op_free (state->current_op);
 
@@ -316,57 +334,43 @@ R_API void r_anal_ex_op_to_bb(RAnal *anal, RAnalState *state, RAnalBlock *bb, RA
 	bb->jump = op->jump;
 
 	bb->conditional = R_ANAL_EX_COND_OP & op->type2 ? R_ANAL_OP_TYPE_COND : 0;
-
-	if (op->eob) bb->type |= R_ANAL_BB_TYPE_LAST;
+	if (r_anal_op_is_eob (op))
+		bb->type |= R_ANAL_BB_TYPE_LAST;
 	r_anal_ex_clone_op_switch_to_bb (bb, op);
 }
 
 R_API ut64 r_anal_ex_map_anal_ex_to_anal_bb_type (ut64 ranal2_op_type) {
 	ut64 bb_type = 0;
-	ut64 conditional = R_ANAL_EX_COND_OP & ranal2_op_type ? R_ANAL_OP_TYPE_COND : 0;
+	ut64 conditional = (R_ANAL_EX_COND_OP & ranal2_op_type)?
+		R_ANAL_OP_TYPE_COND : 0;
 	ut64 code_op_val = ranal2_op_type & (R_ANAL_EX_CODE_OP | 0x1FF);
 
-	if (conditional) {
+	if (conditional)
 		bb_type |= R_ANAL_BB_TYPE_COND;
-	}
-
-	if (ranal2_op_type & R_ANAL_EX_LOAD_OP) {
+	if (ranal2_op_type & R_ANAL_EX_LOAD_OP)
 		bb_type |= R_ANAL_BB_TYPE_LD;
-	}
-
-	if (ranal2_op_type & R_ANAL_EX_BIN_OP) {
+	if (ranal2_op_type & R_ANAL_EX_BIN_OP)
 		bb_type |= R_ANAL_BB_TYPE_BINOP;
-	}
-
-	if (ranal2_op_type & R_ANAL_EX_LOAD_OP) {
+	if (ranal2_op_type & R_ANAL_EX_LOAD_OP)
 		bb_type |= R_ANAL_BB_TYPE_LD;
-	}
-
-	if (ranal2_op_type & R_ANAL_EX_STORE_OP) {
+	if (ranal2_op_type & R_ANAL_EX_STORE_OP)
 		bb_type |= R_ANAL_BB_TYPE_ST;
-	}
 	/* mark bb with a comparison */
-	if (ranal2_op_type & R_ANAL_EX_BINOP_CMP) {
+	if (ranal2_op_type & R_ANAL_EX_BINOP_CMP)
 		bb_type |= R_ANAL_BB_TYPE_CMP;
-	}
 
 	/* change in control flow here */
 	if (code_op_val & R_ANAL_EX_CODEOP_JMP) {
 		bb_type |= R_ANAL_BB_TYPE_JMP;
 		bb_type |= R_ANAL_BB_TYPE_TAIL;
-
 	} else if (code_op_val & R_ANAL_EX_CODEOP_CALL) {
 		bb_type |= R_ANAL_BB_TYPE_CALL;
 		bb_type |= R_ANAL_BB_TYPE_TAIL;
-
 	} else if ( code_op_val & R_ANAL_EX_CODEOP_SWITCH) {
-
 		bb_type |= R_ANAL_BB_TYPE_SWITCH;
 		bb_type |= R_ANAL_BB_TYPE_TAIL;
-
 	} else if (code_op_val & R_ANAL_EX_CODEOP_LEAVE ||
 				code_op_val & R_ANAL_EX_CODEOP_RET ) {
-
 		bb_type |= R_ANAL_BB_TYPE_RET;
 		bb_type |= R_ANAL_BB_TYPE_LAST;
 		bb_type |= R_ANAL_BB_TYPE_TAIL;
@@ -429,7 +433,7 @@ ut64 extract_unknown_op(ut64 ranal2_op_type) {
 
 ut64 extract_bin_op(ut64 ranal2_op_type) {
 
-	ut64 bin_op_val = ranal2_op_type & (R_ANAL_EX_BIN_OP | 0x7FFFF);
+	ut64 bin_op_val = ranal2_op_type & (R_ANAL_EX_BIN_OP | 0x80000);
 	switch (bin_op_val) {
 		case R_ANAL_EX_BINOP_XCHG:return R_ANAL_OP_TYPE_XCHG;
 		case R_ANAL_EX_BINOP_CMP: return R_ANAL_OP_TYPE_CMP;

@@ -30,19 +30,16 @@ R_API void r_anal_bb_free(RAnalBlock *bb) {
 		r_anal_diff_free (bb->diff);
 		bb->diff = NULL;
 	}
-	if (bb->op_bytes)
-		free (bb->op_bytes);
-	if (bb->switch_op) {
+	free (bb->op_bytes);
+	if (bb->switch_op)
 		r_anal_switch_op_free (bb->switch_op);
-	}
 #if R_ANAL_BB_HAS_OPS
-	if (bb->ops)
-		r_list_free (bb->ops);
+	r_list_free (bb->ops);
 	bb->ops = NULL;
 #endif
 	bb->fingerprint = NULL;
 	bb->cond = NULL;
-	free(bb->label);
+	free (bb->label);
 	free (bb);
 }
 
@@ -60,7 +57,8 @@ R_API int r_anal_bb(RAnal *anal, RAnalBlock *bb, ut64 addr, ut8 *buf, ut64 len, 
 		bb->addr = addr;
 	len -= 16; // XXX: hack to avoid segfault by x86im
 	while (idx < len) {
-		if (!(op = r_anal_op_new ())) { // TODO: too slow object construction
+		// TODO: too slow object construction
+		if (!(op = r_anal_op_new ())) {
 			eprintf ("Error: new (op)\n");
 			return R_ANAL_RET_ERROR;
 		}
@@ -111,7 +109,7 @@ R_API int r_anal_bb(RAnal *anal, RAnalBlock *bb, ut64 addr, ut8 *buf, ut64 len, 
 		case R_ANAL_OP_TYPE_LEA:
 {
 			RAnalValue *src = op->src[0];
-			if (src && src->reg && anal->reg && anal->reg->name) {
+			if (src && src->reg && anal->reg) {
 				const char *pc = anal->reg->name[R_REG_NAME_PC];
 				RAnalValue *dst = op->dst;
 				if (dst && dst->reg && !strcmp (src->reg->name, pc)) {
@@ -143,7 +141,6 @@ R_API RAnalBlock *r_anal_bb_from_offset(RAnal *anal, ut64 off) {
 	r_list_foreach (anal->fcns, iter, fcn)
 		r_list_foreach (fcn->bbs, iter2, bb)
 			if (r_anal_bb_is_in_offset (bb, off))
-			//if (off >= bb->addr && off < bb->addr + bb->size)
 				return bb;
 	return NULL;
 }

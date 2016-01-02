@@ -1,14 +1,11 @@
-/* radare - LGPL - Copyright 2007-2014 - pancake */
+/* radare - LGPL - Copyright 2007-2015 - pancake */
 
 #include <r_io.h>
 #include <r_lib.h>
 #include <r_util.h>
 #include <r_debug.h> /* only used for BSD PTRACE redefinitions */
 
-static void my_io_redirect (RIO *io, const char *file) {
-	free (io->redirect);
-	io->redirect = file? strdup (file): NULL;
-}
+#define USE_RARUN 0
 
 #if __linux__ ||  __APPLE__ || __WINDOWS__ || \
 	__NetBSD__ || __KFBSD__ || __OpenBSD__
@@ -18,6 +15,13 @@ static void my_io_redirect (RIO *io, const char *file) {
 #endif
 
 #if DEBUGGER && DEBUGGER_SUPPORTED
+
+static void my_io_redirect (RIO *io, const char *ref, const char *file) {
+	free (io->referer);
+	io->referer = ref? strdup (ref): NULL;
+	free (io->redirect);
+	io->redirect = file? strdup (file): NULL;
+}
 
 #define MAGIC_EXIT 123
 
@@ -29,6 +33,7 @@ static void my_io_redirect (RIO *io, const char *file) {
 #endif
 
 #if __APPLE__
+#include <spawn.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -90,7 +95,7 @@ err_enable:
         return err;
 }
 
-static int fork_and_ptraceme(int bits, const char *cmd) {
+static int fork_and_ptraceme(RIO *io, int bits, const char *cmd) {
 	PROCESS_INFORMATION pi;
         STARTUPINFO si = { sizeof (si) };
         DEBUG_EVENT de;
@@ -99,14 +104,56 @@ static int fork_and_ptraceme(int bits, const char *cmd) {
 	if (!*cmd)
 		return -1;
 	setup_tokens ();
-        /* TODO: with args */
-        if (!CreateProcess (cmd, NULL,
+
+	char **argv = r_str_argv (cmd, NULL);
+	// We need to build a command line with quoted argument and escaped quotes
+	int cmd_len = 0;
+	int i = 0;
+	while (argv[i]) {
+		char *current = argv[i];
+		int quote_count = 0;
+		while ((current = strchr (current, '"')))
+			quote_count ++;
+		cmd_len += strlen (argv[i]);
+		cmd_len += quote_count; // The quotes will add one backslash each
+		cmd_len += 2; // Add two enclosing quotes;
+		i++;
+	}
+	cmd_len += i-1; // Add argc-1 spaces
+
+	char *cmdline = malloc ((cmd_len + 1) * sizeof (char));
+	int cmd_i = 0; // Next character to write in cmdline
+	i = 0;
+	while (argv[i]) {
+		if (i != 0)
+			cmdline[cmd_i++] = ' ';
+
+		cmdline[cmd_i++] = '"';
+		
+		int arg_i = 0; // Index of current character in orginal argument
+		while (argv[i][arg_i]) {
+			char c = argv[i][arg_i];
+			if (c == '"') {
+				cmdline[cmd_i++] = '\\';
+			}
+			cmdline[cmd_i++] = c;
+			arg_i++;
+		}
+
+		cmdline[cmd_i++] = '"';
+		i++;
+	}
+	cmdline[cmd_i] = '\0';
+
+        if (!CreateProcess (argv[0], cmdline,
                         NULL, NULL, FALSE,
                         CREATE_NEW_CONSOLE | DEBUG_ONLY_THIS_PROCESS,
                         NULL, NULL, &si, &pi)) {
                 r_sys_perror ("CreateProcess");
                 return -1;
         }
+	free (cmdline);
+	r_str_argv_free (argv);
 
         /* get process id and thread id */
         pid = pi.dwProcessId;
@@ -167,11 +214,12 @@ err_fork:
 		CloseHandle (th);
         return -1;
 }
-#else
+#else // windows
 
-static int fork_and_ptraceme(int bits, const char *cmd) {
+// __UNIX__ (not windows)
+static int fork_and_ptraceme(RIO *io, int bits, const char *cmd) {
 	char **argv;
-	int ret, status, pid = fork ();
+	int ret, status, pid = r_sys_fork ();
 	switch (pid) {
 	case -1:
 		perror ("fork_and_ptraceme");
@@ -187,70 +235,118 @@ static int fork_and_ptraceme(int bits, const char *cmd) {
 #else
 		if (ptrace (PTRACE_TRACEME, 0, NULL, NULL) != 0) {
 #endif
-			eprintf ("ptrace-traceme failed\n");
+			r_sys_perror ("ptrace-traceme");
 			exit (MAGIC_EXIT);
 		}
-		// TODO: Add support to redirect filedescriptors
-		// TODO: Configure process environment
-		argv = r_str_argv (cmd, NULL);
-#if __APPLE__ 
-		#include <spawn.h>
-		{
-			posix_spawnattr_t attr = {0};
-			size_t copied = 1;
-			cpu_type_t cpu;
-			int ret;
-			pid_t p = -1;
-
-			posix_spawnattr_init (&attr);
-			posix_spawnattr_setflags (&attr, POSIX_SPAWN_SETEXEC);
-#if __i386__ || __x86_64__
-			cpu = CPU_TYPE_I386;
-			if (bits == 64) 
-				cpu |= CPU_ARCH_ABI64;
-#else
-			cpu = CPU_TYPE_ANY;
-#endif
-			posix_spawnattr_setbinpref_np (&attr, 1, &cpu, &copied);
-
-			ret = posix_spawnp (&p, argv[0], NULL, &attr, argv, NULL);
-			switch (ret) {
-			case 0:
-				eprintf ("Success\n");
-				break;
-			case 22:
-				eprintf ("posix_spawnp: Invalid argument\n");
-				break;
-			case 86:
-				eprintf ("Unsupported architecture\n");
-				break;
-			default:
-				eprintf ("posix_spawnp: unknown error %d\n", ret);
-				perror ("posix_spawnp");
-				break;
+		if (io->runprofile && *(io->runprofile)) {
+			char *expr = NULL;
+			int i;
+			RRunProfile *rp = r_run_new (NULL);
+			argv = r_str_argv (cmd, NULL);
+			for (i=0; argv[i]; i++) {
+				rp->_args[i] = argv[i];
 			}
-/* only required if no SETEXEC called
-			if (p != -1)
-				wait (p);
-*/
-			exit (MAGIC_EXIT); /* error */
-		}
-#else
-		execvp (argv[0], argv);
-#endif
-		r_str_argv_free (argv);
+			rp->_args[i] = NULL;
+			rp->_program = argv[0];
+			if (io->runprofile && *io->runprofile) {
+				if (!r_run_parsefile (rp, io->runprofile)) {
+					eprintf ("Can't find profile '%s'\n", io->runprofile);
+					exit (MAGIC_EXIT);
+				}
+			}
+			if (bits==64)
+				r_run_parseline (rp, expr=strdup ("bits=64"));
+			else if (bits==32)
+				r_run_parseline (rp, expr=strdup ("bits=32"));
+			free (expr);
+			r_run_start (rp);
+			r_run_free (rp);
+			// double free wtf
+			//	r_str_argv_free (argv);
+			exit (1);
+		} else {
+			// TODO: Add support to redirect filedescriptors
+			// TODO: Configure process environment
+			char *_cmd = strdup (cmd);
+			argv = r_str_argv (_cmd, NULL);
+			if (!argv) {
+				free (_cmd);
+				return -1;
+			}
+#if __APPLE__
+			 {
+#define _POSIX_SPAWN_DISABLE_ASLR 0x0100
+				ut32 ps_flags = POSIX_SPAWN_SETEXEC;
+				posix_spawnattr_t attr = {0};
+				size_t copied = 1;
+				cpu_type_t cpu;
+				pid_t p = -1;
+				int ret;
 
+				int useASLR = 1;
+				posix_spawnattr_init (&attr);
+				if (useASLR != -1) {
+					if (useASLR) {
+						// enable aslr if not enabled? really?
+					} else {
+						ps_flags |= _POSIX_SPAWN_DISABLE_ASLR;
+					}
+				}
+				(void)posix_spawnattr_setflags (&attr, ps_flags);
+#if __i386__ || __x86_64__
+				cpu = CPU_TYPE_I386;
+				if (bits == 64)
+					cpu |= CPU_ARCH_ABI64;
+#else
+				cpu = CPU_TYPE_ANY;
+#endif
+				posix_spawnattr_setbinpref_np (&attr, 1, &cpu, &copied);
+				ret = posix_spawnp (&p, argv[0], NULL, &attr, argv, NULL);
+				switch (ret) {
+				case 0:
+					eprintf ("Success\n");
+					break;
+				case 22:
+					eprintf ("posix_spawnp: Invalid argument\n");
+					break;
+				case 86:
+					eprintf ("Unsupported architecture\n");
+					break;
+				default:
+					eprintf ("posix_spawnp: unknown error %d\n", ret);
+					perror ("posix_spawnp");
+					break;
+				}
+				/* only required if no SETEXEC called
+				   if (p != -1)
+				   wait (p);
+				 */
+				exit (MAGIC_EXIT); /* error */
+			 }
+#else
+			 if (argv && *argv) {
+				 execvp (argv[0], argv);
+			 } else {
+				 eprintf ("Invalid execvp\n");
+			 }
+#endif
+			free (_cmd);
+		}
 		perror ("fork_and_attach: execv");
 		//printf(stderr, "[%d] %s execv failed.\n", getpid(), ps.filename);
 		exit (MAGIC_EXIT); /* error */
 		return 0; // invalid pid // if exit is overriden.. :)
 	default:
 		/* XXX: clean this dirty code */
-                ret = wait (&status);
-		if (ret != pid)
-			eprintf ("Wait event received by different pid %d\n", ret);
-                if (WIFSTOPPED (status))
-                        eprintf ("Process with PID %d started...\n", (int)pid);
+		do {
+                	ret = wait (&status);
+			if (ret == -1)
+				return -1;
+			if (ret != pid)
+				eprintf ("Wait event received by different pid %d\n", ret);
+		} while (ret!=pid);
+		if (WIFSTOPPED (status))
+			eprintf ("Process with PID %d started...\n", (int)pid);
 		if (WEXITSTATUS (status) == MAGIC_EXIT)
 			pid = -1;
 		// XXX kill (pid, SIGSTOP);
@@ -272,7 +368,7 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 	if (__plugin_open (io, file,  0)) {
 		int pid = atoi (file+6);
 		if (pid == 0) {
-			pid = fork_and_ptraceme (io->bits, file+6);
+			pid = fork_and_ptraceme (io, io->bits, file+6);
 			if (pid==-1)
 				return NULL;
 #if __WINDOWS__
@@ -283,19 +379,18 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 			// TODO: use io_procpid here? faster or what?
 			sprintf (uri, "ptrace://%d", pid);
 #endif
-			my_io_redirect (io, uri);
+			my_io_redirect (io, file, uri);
 		} else {
 			sprintf (uri, "attach://%d", pid);
-			my_io_redirect (io, uri);
+			my_io_redirect (io, file, uri);
 		}
 		return NULL;
 	}
-	my_io_redirect (io, NULL);
+	my_io_redirect (io, file, NULL);
 	return NULL;
 }
 
 RIOPlugin r_io_plugin_debug = {
-        //void *plugin;
 	.name = "debug",
         .desc = "Debug a program or pid. dbg:///bin/ls, dbg://1388",
 	.license = "LGPL3",
@@ -303,21 +398,14 @@ RIOPlugin r_io_plugin_debug = {
         .plugin_open = __plugin_open,
 	.lseek = NULL,
 	.system = NULL,
-	.debug = (void *)(size_t)1,
-        //void *widget;
-/*
-        struct debug_t *debug;
-        ut32 (*write)(int fd, const ut8 *buf, ut32 count);
-	int fds[R_IO_NFDS];
-*/
+	.isdbg = R_TRUE,
 };
-#else // DEBUGGER
+#else
 struct r_io_plugin_t r_io_plugin_debug = {
 	.name = "debug",
         .desc = "Debug a program or pid. (NOT SUPPORTED FOR THIS PLATFORM)",
-	.debug = (void *)1,
 };
-#endif // DEBUGGER
+#endif
 
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {

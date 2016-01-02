@@ -16,7 +16,12 @@ R_API void r_strbuf_init(RStrBuf *sb) {
 
 R_API int r_strbuf_set(RStrBuf *sb, const char *s) {
 	int l;
-	if (!sb || !s) return R_FALSE;
+	if (!sb)
+		return R_FALSE;
+	if (!s) {
+		r_strbuf_init (sb);
+		return R_TRUE;
+	}
 	l = strlen (s);
 	if (l>=sizeof (sb->buf)) {
 		char *ptr = malloc (l+1);
@@ -42,7 +47,10 @@ R_API int r_strbuf_setf(RStrBuf *sb, const char *fmt, ...) {
 	ret = vsnprintf (string, sizeof (string), fmt, ap);
 	if (ret>=sizeof (string)) {
 		char *p = malloc (ret+2);
-		if (!p) return R_FALSE;
+		if (!p) {
+			va_end (ap);
+			return R_FALSE;
+		}
 		vsnprintf (p, ret+1, fmt, ap);
 		ret = r_strbuf_set (sb, p);
 		free (p);
@@ -54,13 +62,15 @@ R_API int r_strbuf_setf(RStrBuf *sb, const char *fmt, ...) {
 R_API int r_strbuf_append(RStrBuf *sb, const char *s) {
 	int l = strlen (s);
 	if ((sb->len+l+1)<sizeof (sb->buf)) {
-		strcpy (sb->buf+sb->len, s);
+		memcpy (sb->buf+sb->len, s, l);
 		sb->ptr = NULL;
 	} else {
-		char *p = malloc (sb->len+l+1);
+		char *d, *p;
+		d = sb->ptr?sb->ptr:sb->buf;
+		p = malloc (sb->len+l);
 		if (!p) return R_FALSE;
-		strcpy (p, sb->ptr?sb->ptr:sb->buf);
-		strcpy (p+sb->len, s);
+		memcpy (p, d, sb->len);
+		memcpy (p+sb->len, s, l);
 		free (sb->ptr);
 		sb->ptr = p;
 	}
@@ -68,6 +78,28 @@ R_API int r_strbuf_append(RStrBuf *sb, const char *s) {
 	return R_TRUE;
 }
 
+R_API int r_strbuf_appendf(RStrBuf *sb, const char *fmt, ...) {
+	int ret;
+	char string[4096];
+	va_list ap;
+
+	va_start (ap, fmt);
+	ret = vsnprintf (string, sizeof (string), fmt, ap);
+	if (ret>=sizeof (string)) {
+		char *p = malloc (ret+2);
+		if (!p) {
+			va_end (ap);
+			return R_FALSE;
+		}
+		vsnprintf (p, ret+1, fmt, ap);
+		ret = r_strbuf_append (sb, p);
+		free (p);
+	} else ret = r_strbuf_append (sb, string);
+	va_end (ap);
+	return ret;
+}
+
+// TODO: rename to tostring()
 R_API char *r_strbuf_get(RStrBuf *sb) {
 	if (sb) {
 		if (sb->ptr)

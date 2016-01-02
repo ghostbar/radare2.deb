@@ -1,5 +1,5 @@
-#ifndef _INCLUDE_R_TYPES_H_
-#define _INCLUDE_R_TYPES_H_
+#ifndef R2_TYPES_H
+#define R2_TYPES_H
 
 // TODO: fix this to make it crosscompile-friendly: R_SYS_OSTYPE ?
 /* operating system */
@@ -7,6 +7,16 @@
 #undef __KFBSD__
 #undef __UNIX__
 #undef __WINDOWS__
+
+// HACK to fix capstone-android-mips build
+#undef mips
+#define mips mips
+
+#ifdef __GNUC__
+#  define UNUSED_FUNCTION(x) __attribute__((__unused__)) UNUSED_ ## x
+#else
+#  define UNUSED_FUNCTION(x) UNUSED_ ## x
+#endif
 
 #ifdef __HAIKU__
 # define __UNIX__ 1
@@ -16,6 +26,11 @@
 #define __KFBSD__ 1
 #else
 #define __KFBSD__ 0
+#endif
+
+#if __MINGW32__ || __MINGW64__
+#undef MINGW32
+#define MINGW32 1
 #endif
 
 #if defined(EMSCRIPTEN) || defined(__linux__) || defined(__APPLE__) || defined(__GNU__) || defined(__ANDROID__) || defined(__QNX__)
@@ -29,11 +44,44 @@
 #if __WIN32__ || __CYGWIN__ || MINGW32
   #define __addr_t_defined
   #include <windows.h>
+#endif
+#if __WIN32__ || MINGW32
   #include <winsock.h>
+  typedef int socklen_t;
+#if __WIN32__ || __CYGWIN__ || MINGW32
   #undef USE_SOCKETS
   #define __WINDOWS__ 1
   #undef __UNIX__
   #undef __BSD__
+#endif
+#endif
+
+#ifdef __GNUC__
+  #define FUNC_ATTR_MALLOC __attribute__((malloc))
+  #define FUNC_ATTR_ALLOC_SIZE(x) __attribute__((alloc_size(x)))
+  #define FUNC_ATTR_ALLOC_SIZE_PROD(x,y) __attribute__((alloc_size(x,y)))
+  #define FUNC_ATTR_ALLOC_ALIGN(x) __attribute__((alloc_align(x)))
+  #define FUNC_ATTR_PURE __attribute__ ((pure))
+  #define FUNC_ATTR_CONST __attribute__((const))
+  #define FUNC_ATTR_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
+  #define FUNC_ATTR_ALWAYS_INLINE __attribute__((always_inline))
+
+  #ifdef __clang__
+    // clang only
+  #elif defined(__INTEL_COMPILER)
+    // intel only
+  #else
+    // gcc only
+  #endif
+#else
+  #define FUNC_ATTR_MALLOC
+  #define FUNC_ATTR_ALLOC_SIZE(x)
+  #define FUNC_ATTR_ALLOC_SIZE_PROD(x,y)
+  #define FUNC_ATTR_ALLOC_ALIGN(x)
+  #define FUNC_ATTR_PURE
+  #define FUNC_ATTR_CONST
+  #define FUNC_ATTR_WARN_UNUSED_RESULT
+  #define FUNC_ATTR_ALWAYS_INLINE
 #endif
 
 #include <r_userconf.h>
@@ -60,9 +108,11 @@ extern "C" {
 #endif
 
 #define R_LIB_VERSION_HEADER(x) \
-const char *x##_version();
+const char *x##_version()
 #define R_LIB_VERSION(x) \
-const char *x##_version() { return ""GIT_TAP; }
+const char *x##_version () { return "" GIT_TAP; }
+
+#define TODO(x) eprintf(__FUNCTION__"  " x)
 
 // TODO: FS or R_SYS_DIR ??
 #undef FS
@@ -105,6 +155,10 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #define CTI(x,y,z) (*((size_t*)(CTA(x,y,z))))
 #define CTS(x,y,z,t,v) {t* _=(t*)CTA(x,y,z);*_=v;}
 
+#ifdef R_IPI
+#undef R_IPI
+#endif
+
 #ifdef R_API
 #undef R_API
 #endif
@@ -120,12 +174,12 @@ typedef void (*PrintfCallback)(const char *str, ...);
   #endif
 #endif
 
-#define BITS2BYTES(x) ((x/8)+((x%8)?1:0))
+#define BITS2BYTES(x) (((x)/8)+(((x)%8)?1:0))
 #define ZERO_FILL(x) memset (&x, 0, sizeof (x))
-#define R_NEWS0(x,y) (x*)memset (malloc(sizeof(x)*y), 0, sizeof(x)*y);
+#define R_NEWS0(x,y) (x*)calloc(sizeof(x),y)
 #define R_NEWS(x,y) (x*)malloc(sizeof(x)*y)
-#define R_NEW(x) (x*)malloc(sizeof(x))
 #define R_NEW0(x) (x*)calloc(1,sizeof(x))
+#define R_NEW(x) (x*)malloc(sizeof(x))
 // TODO: Make R_NEW_COPY be 1 arg, not two
 #define R_NEW_COPY(x,y) x=(void*)malloc(sizeof(y));memcpy(x,y,sizeof(y))
 #define IS_PRINTABLE(x) (x>=' '&&x<='~')
@@ -139,9 +193,10 @@ typedef void (*PrintfCallback)(const char *str, ...);
 	((char *)(((size_t)(v) + (t - 1)) \
 	& ~(t - 1))) 
 
-#define R_BIT_SET(x,y) (x[y>>4] |= (1<<(y&0xf)))
-#define R_BIT_UNSET(x,y) (x[y>>4] &= ~(1<<(y&0xf)))
-#define R_BIT_CHK(x,y) ((x[y>>4] & (1<<(y&0xf))))
+#define R_BIT_SET(x,y) (((ut8*)x)[y>>4] |= (1<<(y&0xf)))
+#define R_BIT_UNSET(x,y) (((ut8*)x)[y>>4] &= ~(1<<(y&0xf)))
+//#define R_BIT_CHK(x,y) ((((const ut8*)x)[y>>4] & (1<<(y&0xf))))
+#define R_BIT_CHK(x,y) (*(x) & (1<<(y)))
 
 #if __UNIX__
 #include <sys/types.h>
@@ -156,12 +211,24 @@ typedef void (*PrintfCallback)(const char *str, ...);
   { char buf[128];snprintf(buf,sizeof(buf),"%s:%d %s",file,line,str);perror(buf); }
 #define perror(x) _perror(x,__FILE__,__LINE__)
 
+#ifndef HAVE_EPRINTF
 #define eprintf(x,y...) fprintf(stderr,x,##y)
+#define HAVE_EPRINTF 1
+#endif
 
+#define r_offsetof(type, member) ((unsigned long) &((type*)0)->member)
+
+#define R_BETWEEN(x,y,z) (((y)>=(x)) && ((y)<=(z)))
 #define R_ROUND(x,y) ((x)%(y))?(x)+((y)-((x)%(y))):(x)
 #define R_DIM(x,y,z) (((x)<(y))?(y):((x)>(z))?(z):(x))
+#ifndef R_MAX_DEFINED
 #define R_MAX(x,y) (((x)>(y))?(x):(y))
+#define R_MAX_DEFINED
+#endif
+#ifndef R_MIN_DEFINED
 #define R_MIN(x,y) (((x)>(y))?(y):(x))
+#define R_MIN_DEFINED
+#endif
 #define R_ABS(x) (((x)<0)?-(x):(x))
 #define R_BTW(x,y,z) (((x)>=(y))&&((y)<=(z)))?y:x
 
@@ -257,7 +324,15 @@ enum {
 	R_SYS_ARCH_8051 = 0x40000,
 	R_SYS_ARCH_TMS320 = 0x80000,
 	R_SYS_ARCH_EBC = 0x100000,
-	R_SYS_ARCH_H8300 = 0x8300,
+	R_SYS_ARCH_H8300 = 0x200000,
+	R_SYS_ARCH_CR16 = 0x400000,
+	R_SYS_ARCH_V850 = 0x800000,
+	R_SYS_ARCH_SYSZ = 0x1000000,
+	R_SYS_ARCH_XCORE = 0x2000000,
+	R_SYS_ARCH_PROPELLER = 0x4000000,
+	R_SYS_ARCH_MSP430 = 0x8000000, // 1<<27
+	R_SYS_ARCH_CRIS =  0x10000000, // 1<<28
+	R_SYS_ARCH_HPPA =  0x20000000, // 1<<29
 };
 
 /* os */

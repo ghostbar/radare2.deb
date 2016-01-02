@@ -1,31 +1,21 @@
-   ____  ___  ___  ___ ____  ___  _____   ____
-  |  _ \/   \|   \/   \  _ \/ _ \ \__  \ /    \
-  |    (  V  \ |  ) V  \   (  __/ .-` _/|  ()  |
-  |__\__|_|__|___/__|__|_\__\___\ |____(_)____/
+     ____  ___  ___  ___ ____  ___  _____   ____
+    |  _ \/   \|   \/   \  _ \/ _ \ \__  \ /    \
+    |    (  V  \ |  ) V  \   (  __/ .-` _/|  ()  |
+    |__\__|_|__|___/__|__|_\__\___\ |____(_)____/
 
 
-0.9.8
-=====
---> add test * pdr doesnt works well with antidisasm tricks
-* option to disable aslr in rarun2?
-* rafind2 : add support for unicode/widestring search
-* .dr- # documented... but not working
 * libr/debug/p/drx.c <- not used .. debug must have a hw reg api for drx and gpio
 * ah -> add hint to define calls that do not return
-* continue execution until condition happen (reg, mem, ..)
 * rabin2 -x should not work on non-fatmach0 files
 * foldable stuff .. was in r1..redo?
 * cmp rip+xx -> not resolved wtf
 * search for CALL instructions in text segment.
   - analyze the destination address of each call destination
-* analysis: assume there is a function at the end of each function
 * integrate dwarf parser with disassembler and debugger
 * step back .. log all state changes on every debugger stop
-* show analized functions in 'aa' -> discuss
 * timeout for code analysis (check timestamp)
   - add analysis points continuation, so 'aa' can be used progressively
 * Allow to seek to branch N like in visual, but from cmdline
-* Colorize multiple ranges of chars in hexdump -- cparse
 * refactor vmenus.c -> refresh function must be redefined for each menu
 // show hints for
     0x100005eca     ff2540130000     jmp qword [rip+0x1340] [1]             
@@ -43,16 +33,13 @@
 
 BUGS
 ----
-* If [0-9] keybindings in visual point to same address use same reference
 * RBinCreate:
   - mach0 create for darwin-ppc
   - mz
-  - pe <- must be fixed
   - pe64
   - plan9 bins
 * Implement support for args in 'oo' (like in r1s !load debugger..)
 * opening a file from inside r2 doesnt clears internal data (strings..)
-* 'ao' must be for opcodes, not bytes
 * backtrace for linux or osx at least
 * implement 'ax' to get/set xrefs (better than afl <addr>) .. or afx?
 * shell encoder - get x86-64 one from twitter
@@ -60,9 +47,8 @@ BUGS
   - shellforge.. and review current shellcodes :?
 * rasm2 must support binary creation help message or so..
   - rabin2 integration must be easier
-* rabin2 -z /dev/sda1 TAKES TOO LONG. opening r2 /tmp/fs is SLOW as shit.
 
-* Add support for classes in c++, objc binaries
+* Add support for classes in c++, objc, java, swift binaries
   - command to add new classes
 * Tracing support for the debugger
   - "e cmd.trace=dr=;.dr*;pd 2@eip"
@@ -84,8 +70,6 @@ BUGS
 * Add r_cons_prompt () ... calling set_prompt + fgets -- this api needs cleanup
   - set prompt, set line, fgets
   - strict width in visual
-* REFACTOR of disasm loop XDDDDD -1 (r2<1.0 plzz)
-  - arch dependent anal code must be removed from disasm loop +1
 
 nibble
 ------
@@ -106,8 +90,6 @@ nibble
   - Search every possible function by searching typical prologs and put them in a queue.
   - Perform the same actions as in the previous steps with the entry points.
 * detect strings in code analysis
-* implement aoe = anal op exec
-  - sync regs or what?
 * register renaming (per-instruction or ranges)
   - r_parser fun? a specific asm.parser plugin that does all this tricks?
 * Display getsym() stuff in rabin2, not only legit syms
@@ -142,14 +124,7 @@ Assembler
   - So one can change from one arch to another with a pointer
   - Cool for defining ranges of memory
 
-* r_io
-  - We need a way to get the underlying file which responds
-    to the read call (this way we can know which library
-    lives at a specified offset. (is this already done?)
-
 * radare2
-  - Use r_bin with r_io to get symbols
-    - The offset to read will define the module to analyze and retrieve syms
   - Import msdn doc as comments
 
 RDB
@@ -170,7 +145,7 @@ RSearch
   - Enable/disable nested hits? (discuss+ implement in parent app?)
     - Just skip bytes until end of keyword
 * AES/RSA Key finding
-  http://citp.princeton.edu/memory/code/ <- implement this stuff in r2
+  http://citp.princeton.edu/memory/code/ <- implement this
 
 
 Binaries
@@ -227,7 +202,6 @@ pancake
 * fork/clone child . inject code to create new threads or pids
 * Functions in r_util to get lil/big ut8,16,32 from ut8*
   - already done..must find better names probably
-* rarc2 allows to compile invalid code like calling puts() out of context
 * Implement RAnalCall (analyze function arguments, return values, propagate types..)
   - define number of arguments for given function
   - warn if signature and analysis differs in number of args or so..
@@ -255,7 +229,6 @@ To think
 * radare2.c:217 . find name for maxfilesize to hash
 * r_list_foreach_prev is buggy, review and remove..
 * make symstall in r2-bindings/ ?
-* What about rsc2 ? deprecate, maintain? cleanup from 1? build? install?
 * Add deltified offset in PC? +10, +30 ... asm.reladdr
 * regio not implemented // it is really necessary? imho no..
 * distribute 'spp' with 'rarc2' ? imho no
@@ -263,11 +236,7 @@ To think
 
 Refactoring
 -----------
-* move r_th into r_util
-* Merge javasm code (asm, bin -> shlr)
 * Rename r_hashtable -> r_ht
-* Remove/deprecate libr/vm
-  - Make ht64.c include ht.c
 * Review the r_flags api
 * Add pipe_to_buffer..not only file descriptors
 * r_config set_int and so..simplify
@@ -320,8 +289,6 @@ Future
 * asm.pseudo for brainfuck
 * code analysis for msil
 * rax2 -k by default?
-* Merge libr/db inside libr/util ?
-* implement code analysis using udis86.. is this necessary.. x86im works fine?
 * r_cons_visual_write_tail() -> fill end of screen with spaces \o/
 * Add support for 'expect' like foo in rarun2
   - make rarun live in a lib.. or at least be usable from r2
@@ -330,7 +297,6 @@ Future
   - mmap if supported - add r_file_mmap ?  - read file in blocks instead of the whole file in a single syscall
 * Realign flags when using project in debug mode
 * FileDescriptors: dd -- copy from !fd in r1
-* acr -ldl check must be fixed for kfreebsd
 * metaflags? support to define relations between flags
     (flag hirearchies)
 	r_flagtree

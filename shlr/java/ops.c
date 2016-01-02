@@ -1,12 +1,11 @@
-/* radare - LGPL - Copyright 2007-2012 - pancake */
+/* radare - LGPL - Copyright 2007-2014 - pancake */
 
 #include <r_anal_ex.h>
 #include <stdio.h>
 #include "code.h"
 
-struct java_op JAVA_OPS[] = {
+R_IPI struct java_op JAVA_OPS[JAVA_OPS_COUNT] = {
 	{ "nop"            , 0x00, 1, R_ANAL_EX_NOP},
-
 	{ "aconst_null"    , 0x01, 1, R_ANAL_EX_LDST_LOAD_FROM_CONST_REF_TO_STACK},
 	{ "iconst_m1"      , 0x02, 1, R_ANAL_EX_LDST_LOAD_FROM_CONST_TO_STACK},
 	{ "iconst_0"       , 0x03, 1, R_ANAL_EX_LDST_LOAD_FROM_CONST_TO_STACK},
@@ -302,5 +301,5 @@ struct java_op JAVA_OPS[] = {
 	{ "UNDEFINED"         , 0xfd, 1, R_ANAL_EX_UNK_OP},
 	{ "impdep1"        , 0xfe, 1, R_ANAL_EX_ILL_OP},
 	{ "impdep2"        , 0xff, 1, R_ANAL_EX_ILL_OP},
+	{ NULL, 0, 0, 0 }
 };
-

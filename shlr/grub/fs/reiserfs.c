@@ -39,15 +39,8 @@
 #include <grub/types.h>
 #include <grub/fshelp.h>
 
-#define MIN(a, b) \
-  ({ typeof (a) _a = (a); \
-     typeof (b) _b = (b); \
-     _a < _b ? _a : _b; })
-
-#define MAX(a, b) \
-  ({ typeof (a) _a = (a); \
-     typeof (b) _b = (b); \
-     _a > _b ? _a : _b; })
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 #define REISERFS_SUPER_BLOCK_OFFSET 0x10000
 #define REISERFS_MAGIC_LEN 12
@@ -658,7 +651,8 @@ grub_reiserfs_read_symlink (grub_fshelp_node_t node)
 
   block_size = grub_le_to_cpu16 (node->data->superblock.block_size);
   len = grub_le_to_cpu16 (found.header.item_size);
-  block = found.block_number * (block_size  >> GRUB_DISK_SECTOR_BITS);
+  block = (grub_disk_addr_t)found.block_number \
+		  * ((grub_disk_addr_t)block_size  >> GRUB_DISK_SECTOR_BITS);
   offset = grub_le_to_cpu16 (found.header.item_location);
 
   symlink_buffer = grub_malloc (len + 1);
@@ -781,7 +775,7 @@ grub_reiserfs_iterate_dir (grub_fshelp_node_t item,
             {
               grub_fshelp_node_t entry_item;
               struct grub_reiserfs_key entry_key;
-              enum grub_reiserfs_item_type entry_type;
+	      enum grub_fshelp_filetype entry_type;
               char *entry_name;
 
               entry_name = (((char *) directory_headers)
@@ -1106,7 +1100,8 @@ grub_reiserfs_read (grub_file_t file, char *buf, grub_size_t len)
       switch (found.type)
         {
         case GRUB_REISERFS_DIRECT:
-          block = found.block_number * (block_size  >> GRUB_DISK_SECTOR_BITS);
+          block = (grub_disk_addr_t)found.block_number \
+				  * ((grub_disk_addr_t)block_size  >> GRUB_DISK_SECTOR_BITS);
           grub_dprintf ("reiserfs_blocktype", "D: %u\n", (unsigned) block);
           if (initial_position < current_position + item_size)
             {

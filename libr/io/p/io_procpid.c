@@ -31,7 +31,8 @@ static int __waitpid(int pid) {
 }
 
 static int debug_os_read_at(int fdn, void *buf, int sz, ut64 addr) {
-	lseek (fdn, addr, 0);
+	if (lseek (fdn, addr, 0) < 0)
+		return -1;
 	return read (fdn, buf, sz);
 }
 
@@ -42,7 +43,8 @@ static int __read(struct r_io_t *io, RIODesc *fd, ut8 *buf, int len) {
 }
 
 static int procpid_write_at(int fd, const ut8 *buf, int sz, ut64 addr) {
-	lseek (fd, addr, 0);
+	if ( lseek (fd, addr, 0) < 0)
+		return -1;
 	return write (fd, buf, sz);
 }
 

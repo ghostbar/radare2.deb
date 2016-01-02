@@ -38,6 +38,9 @@ ST_DATA void **sym_pools;
 ST_DATA int nb_sym_pools;
 static int arraysize = 0;
 
+static const char *global_symname = NULL;
+static const char *global_type = NULL;
+
 ST_DATA Sym *global_stack;
 ST_DATA Sym *local_stack;
 ST_DATA Sym *scope_stack_bottom;
@@ -137,7 +140,7 @@ ST_INLN void sym_free(Sym *sym)
 }
 
 /* push, without hashing */
-ST_FUNC Sym *sym_push2(Sym **ps, int v, int t, long c)
+ST_FUNC Sym *sym_push2(Sym **ps, int v, int t, long long c)
 {
     Sym *s;
     if (ps == &local_stack) {
@@ -195,7 +198,7 @@ ST_INLN Sym *sym_find(int v)
 }
 
 /* push a given symbol on the symbol stack */
-ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
+ST_FUNC Sym *sym_push(int v, CType *type, int r, long long c)
 {
     Sym *s, **ps;
     TokenSym *ts;
@@ -223,7 +226,7 @@ ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
 }
 
 /* push a global identifier */
-ST_FUNC Sym *global_identifier_push(int v, int t, int c)
+ST_FUNC Sym *global_identifier_push(int v, int t, long long c)
 {
     Sym *s, **ps;
     s = sym_push2(&global_stack, v, t, c);
@@ -303,7 +306,7 @@ void vpush(CType *type)
 /* push integer constant */
 ST_FUNC void vpushi(int v)
 {
-    CValue cval;
+    CValue cval = {0};
     cval.i = v;
     vsetc(&int_type, VT_CONST, &cval);
 }
@@ -390,8 +393,6 @@ static void gaddrof(void)
     /* tricky: if saved lvalue, then we can go back to lvalue */
     if ((vtop->r & VT_VALMASK) == VT_LLOCAL)
         vtop->r = (vtop->r & ~(VT_VALMASK | VT_LVAL_TYPE)) | VT_LOCAL | VT_LVAL;
-
-
 }
 
 static int pointed_size(CType *type)
@@ -400,6 +401,7 @@ static int pointed_size(CType *type)
     return type_size(pointed_type(type), &align);
 }
 
+#if 0
 static inline int is_null_pointer(SValue *p)
 {
     if ((p->r & (VT_VALMASK | VT_LVAL | VT_SYM)) != VT_CONST)
@@ -408,6 +410,7 @@ static inline int is_null_pointer(SValue *p)
         ((p->type.t & VT_BTYPE) == VT_LLONG && p->c.ll == 0) ||
 	((p->type.t & VT_BTYPE) == VT_PTR && p->c.ptr == 0);
 }
+#endif
 
 static inline int is_integer_btype(int bt)
 {
@@ -818,12 +821,14 @@ static void parse_attribute(AttributeDef *ad)
 static void struct_decl(CType *type, int u)
 {
     int a, v, size, align, maxalign, offset;
-	long long c;
+	long long c = 0;
     int bit_size, bit_pos, bsize, bt, lbit_pos, prevbt;
     Sym *s, *ss, *ass, **ps;
     AttributeDef ad;
     CType type1, btype;
 	const char *name = NULL;
+
+	memset (&type1, 0, sizeof (type1));
 
     a = tok; /* save decl type */
     next();
@@ -857,15 +862,15 @@ static void struct_decl(CType *type, int u)
         if (s->c != -1)
             tcc_error("struct/union/enum already defined");
         /* cannot be empty */
-        c = 0;
+        c = 0LL;
         /* non empty enums are not allowed */
         if (a == TOK_ENUM) {
-			if (!strcmp (name, "{")) {
-				// UNNAMED
-				fprintf (stderr, "anonymous enums are ignored\n");
-			} else {
-				tcc_appendf ("%s=enum\n", name);
-			}
+		if (!strcmp (name, "{")) {
+			// UNNAMED
+			fprintf (stderr, "anonymous enums are ignored\n");
+		} else {
+			tcc_appendf ("%s=enum\n", name);
+		}
             for(;;) {
                 v = tok;
                 if (v < TOK_UIDENT)
@@ -875,10 +880,13 @@ static void struct_decl(CType *type, int u)
                     next();
                     c = expr_const();
                 }
-				if (strcmp (name, "{")) {
-					char *varstr = get_tok_str (v, NULL);
-					tcc_appendf ("%s.%s=%d\n", name, varstr, c);
-				}
+		if (strcmp (name, "{")) {
+			char *varstr = get_tok_str (v, NULL);
+			tcc_appendf ("%s.%s=0x%"PFMT64x"\n", name, varstr, c);
+			tcc_appendf ("%s.0x%"PFMT64x"=%s\n", name, c, varstr);
+// TODO: if token already defined throw an error
+//  if (varstr isInside (arrayOfvars)) { erprintf ("ERROR: DUP VAR IN ENUM\n"); }
+		}
                 /* enum symbols have static storage */
                 ss = sym_push(v, &llong_type, VT_CONST, c);
                 ss->type.t |= VT_STATIC;
@@ -1260,6 +1268,8 @@ static void post_type(CType *type, AttributeDef *ad)
     Sym **plast, *s, *first;
     AttributeDef ad1;
     CType pt;
+char *symname = NULL;
+int narg  =0;
 
     if (tok == '(') {
         /* function declaration */
@@ -1267,6 +1277,14 @@ static void post_type(CType *type, AttributeDef *ad)
         l = 0;
         first = NULL;
         plast = &first;
+{
+const char *ret_type = global_type;
+free (symname);
+symname = strdup (global_symname);
+tcc_appendf ("func.%s.ret=%s\n", symname, ret_type);
+tcc_appendf ("func.%s.cc=%s\n", symname, "cdecl"); // TODO
+tcc_appendf ("%s=func\n", symname);
+}
         arg_size = 0;
         if (tok != ')') {
             for(;;) {
@@ -1297,6 +1315,13 @@ static void post_type(CType *type, AttributeDef *ad)
                 }
                 convert_parameter_type(&pt);
                 s = sym_push(n | SYM_FIELD, &pt, 0, 0);
+{
+	    char kind[1024];
+	    type_to_str (kind, sizeof (kind), &pt, NULL);
+	    tcc_appendf ("func.%s.arg.%d=%s,%s\n",
+		symname, narg, kind, global_symname);
+	    narg++;
+}
                 *plast = s;
                 plast = &s->next;
                 if (tok == ')')
@@ -1309,6 +1334,7 @@ static void post_type(CType *type, AttributeDef *ad)
                 }
             }
         }
+	tcc_appendf ("func.%s.args=%d\n", symname, narg);
         /* if no parameters, then old type prototype */
         if (l == 0)
             l = FUNC_OLD;
@@ -1330,6 +1356,8 @@ static void post_type(CType *type, AttributeDef *ad)
         s->next = first;
         type->t = VT_FUNC;
         type->ref = s;
+free(symname);
+symname = NULL;
     } else if (tok == '[') {
         /* array definition */
         next();
@@ -1438,10 +1466,20 @@ static void type_decl(CType *type, AttributeDef *ad, int *v, int td)
     if (storage & VT_STATIC) {
         int saved_nocode_wanted = nocode_wanted;
         nocode_wanted = 1;
+//eprintf ("STATIC %s\n", get_tok_str(*v, NULL));
         post_type(type, ad);
         nocode_wanted = saved_nocode_wanted;
-    } else
+    } else {
+{
+	    char kind[1024];
+	    char *name = get_tok_str (*v, NULL);
+	    type_to_str (kind, sizeof(kind), type, NULL);
+	    //eprintf ("---%d %s STATIC %s\n", td, kind, name);
+	    global_symname = name;
+	    global_type = kind;
+}
         post_type(type, ad);
+}
     type->t |= storage;
     if (tok == TOK_ATTRIBUTE1 || tok == TOK_ATTRIBUTE2)
         parse_attribute(ad);
@@ -1452,6 +1490,7 @@ static void type_decl(CType *type, AttributeDef *ad, int *v, int td)
     type2 = &type1;
     for(;;) {
         s = type2->ref;
+//eprintf ("ARG:\n");
         type2 = &s->type;
         if (!type2->t) {
             *type2 = *type;
@@ -1790,6 +1829,9 @@ ST_FUNC void unary(void)
             if (tok != '(')
                 tcc_error("'%s' undeclared", get_tok_str(t, NULL));
         }
+        if (!s) {
+           tcc_error("invalid declaration '%s'", get_tok_str(t, NULL));
+        }
         if ((s->type.t & (VT_STATIC | VT_INLINE | VT_BTYPE)) ==
             (VT_STATIC | VT_INLINE | VT_FUNC)) {
             /* if referencing an inline function, then we generate a
@@ -2075,7 +2117,7 @@ static void expr_const1(void)
 /* parse an integer constant and return its value. */
 ST_FUNC long long expr_const(void)
 {
-    long long c;
+    long long c = 0LL;
     expr_const1();
     if ((vtop->r & (VT_VALMASK | VT_LVAL | VT_SYM)) != VT_CONST)
         expect("constant expression");
@@ -2627,7 +2669,7 @@ static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r,
             vtop->sym = sym;
         }
         /* patch symbol weakness */
-        if (type->t & VT_WEAK)
+        if ((type->t & VT_WEAK) && sym)
             weaken_symbol(sym);
     }
     no_alloc: ;
@@ -2704,7 +2746,7 @@ static int decl0(int l, int is_for_loop_init)
                 (tok == TOK_ASM1 || tok == TOK_ASM2 || tok == TOK_ASM3)) {
                 /* global asm block */
 #if 1
-printf ("global asm not supported\n");
+eprintf ("global asm not supported\n");
 return 1;
 #endif
                 //asm_global_instr();

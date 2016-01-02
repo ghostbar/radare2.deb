@@ -9,20 +9,71 @@
 #include "te.h"
 
 ut64 r_bin_te_get_stripped_delta(struct r_bin_te_obj_t *bin) {
-	return bin->header->StrippedSize - sizeof(TE_image_file_header);
+	if (bin && bin->header)
+		return bin->header->StrippedSize - sizeof(TE_image_file_header);
+	return 0LL;
 }
 
-ut64 r_bin_te_get_main_offset(struct r_bin_te_obj_t *bin) {
-	struct r_bin_te_addr_t *entry = r_bin_te_get_entrypoint (bin);
+static int r_bin_te_init_hdr(struct r_bin_te_obj_t *bin) {
+	if (!bin)
+		return R_FALSE;
+	if (!(bin->header = malloc(sizeof(TE_image_file_header)))) {
+		r_sys_perror ("malloc (header)");
+		return R_FALSE;
+	}
+	if (r_buf_read_at (bin->b, 0, (ut8*)bin->header, sizeof(TE_image_file_header)) == -1) {
+		eprintf("Error: read (header)\n");
+		return R_FALSE;
+	}
+	if (!bin->kv) {
+		eprintf("Error: sdb instance is empty\n");
+		return R_FALSE;
+	}
+
+	sdb_set (bin->kv, "te_machine.cparse", "enum te_machine { TE_IMAGE_FILE_MACHINE_UNKNOWN=0x0, TE_IMAGE_FILE_MACHINE_ALPHA=0x184, "
+	"TE_IMAGE_FILE_MACHINE_ALPHA64=0x284, TE_IMAGE_FILE_MACHINE_AM33=0x1d3, TE_IMAGE_FILE_MACHINE_AMD64=0x8664, "
+	"TE_IMAGE_FILE_MACHINE_ARM=0x1c0, TE_IMAGE_FILE_MACHINE_AXP64=0x184, TE_IMAGE_FILE_MACHINE_CEE=0xc0ee, "
+	"TE_IMAGE_FILE_MACHINE_CEF=0x0cef, TE_IMAGE_FILE_MACHINE_EBC=0x0ebc, TE_IMAGE_FILE_MACHINE_I386=0x014c, "
+	"TE_IMAGE_FILE_MACHINE_IA64=0x0200, TE_IMAGE_FILE_MACHINE_M32R=0x9041, TE_IMAGE_FILE_MACHINE_M68K=0x0268, "
+	"TE_IMAGE_FILE_MACHINE_MIPS16=0x0266, TE_IMAGE_FILE_MACHINE_MIPSFPU=0x0366, TE_IMAGE_FILE_MACHINE_MIPSFPU16=0x0466, "
+	"TE_IMAGE_FILE_MACHINE_POWERPC=0x01f0, TE_IMAGE_FILE_MACHINE_POWERPCFP=0x01f1, TE_IMAGE_FILE_MACHINE_R10000=0x0168, "
+	"TE_IMAGE_FILE_MACHINE_R3000=0x0162, TE_IMAGE_FILE_MACHINE_R4000=0x0166, TE_IMAGE_FILE_MACHINE_SH3=0x01a2, "
+	"TE_IMAGE_FILE_MACHINE_SH3DSP=0x01a3, TE_IMAGE_FILE_MACHINE_SH3E=0x01a4, TE_IMAGE_FILE_MACHINE_SH4=0x01a6, "
+	"TE_IMAGE_FILE_MACHINE_SH5=0x01a8, TE_IMAGE_FILE_MACHINE_THUMB=0x01c2, TE_IMAGE_FILE_MACHINE_TRICORE=0x0520, "
+	"TE_IMAGE_FILE_MACHINE_WCEMIPSV2=0x0169};", 0);
+	sdb_set (bin->kv, "te_subsystem.cparse", "enum te_subsystem { TE_IMAGE_SUBSYSTEM_UNKNOWN=0, TE_IMAGE_SUBSYSTEM_NATIVE=1, "
+	"TE_IMAGE_SUBSYSTEM_WINDOWS_GUI=2, TE_IMAGE_SUBSYSTEM_WINDOWS_CUI=3, "
+	"TE_IMAGE_SUBSYSTEM_POSIX_CUI=7, TE_IMAGE_SUBSYSTEM_WINDOWS_CE_GU=9, "
+	"TE_IMAGE_SUBSYSTEM_EFI_APPLICATION=10, TE_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER=11, TE_IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER=12, "
+	"TE_IMAGE_SUBSYSTEM_EFI_ROM=13, TE_IMAGE_SUBSYSTEM_XBOX=14};", 0);
+	sdb_num_set (bin->kv, "te_header.offset", 0, 0);
+	sdb_set (bin->kv, "te_header.format", "[2]z[2]Eb[1]Ewxxq"
+		" Signature (te_machine)Machine NumberOfSections (te_subsystem)Subsystem StrippedSize AddressOfEntryPoint BaseOfCode ImageBase", 0);
+	sdb_num_set (bin->kv, "te_directory1_header.offset", 24, 0);
+	sdb_set (bin->kv, "te_directory1_header.format", "xx"
+		" VirtualAddress Size", 0);
+	sdb_num_set (bin->kv, "te_directory2_header.offset", 32, 0);
+	sdb_set (bin->kv, "te_directory2_header.format", "xx"
+		" VirtualAddress Size", 0);
+
+	if (strncmp ((char*)&bin->header->Signature, "VZ", 2))
+			return R_FALSE;
+	return R_TRUE;
+}
+
+ut64 r_bin_te_get_main_paddr(struct r_bin_te_obj_t *bin) {
+	RBinAddr *entry = r_bin_te_get_entrypoint (bin);
 	ut64 addr = 0LL;
 	ut8 buf[512];
+	if (!bin)
+		return 0LL;
 
-	if (r_buf_read_at (bin->b, entry->offset, buf, sizeof (buf)) == -1) {
+	if (r_buf_read_at (bin->b, entry->paddr, buf, sizeof (buf)) == -1) {
 		eprintf ("Error: read (entry)\n");
 	} else {
 		if (buf[367] == 0xe8) {
 			int delta = (buf[368] | buf[369]<<8 | buf[370]<<16 | buf[371]<<24);
-			addr = entry->rva + 367 + 5 + delta;
+			addr = entry->vaddr + 367 + 5 + delta;
 		}
 	}
 	free (entry);
@@ -30,31 +81,17 @@ ut64 r_bin_te_get_main_offset(struct r_bin_te_obj_t *bin) {
 	return addr;
 }
 
-static TE_DWord r_bin_te_rva_to_offset(struct r_bin_te_obj_t* bin, TE_DWord rva) {
+static TE_DWord r_bin_te_vaddr_to_paddr(struct r_bin_te_obj_t* bin, TE_DWord vaddr) {
 	TE_DWord section_base;
 	int i, section_size;
 
 	for (i = 0; i < bin->header->NumberOfSections; i++) {
 		section_base = bin->section_header[i].VirtualAddress;
 		section_size = bin->section_header[i].VirtualSize;
-		if (rva >= section_base && rva < section_base + section_size)
-			return bin->section_header[i].PointerToRawData + (rva - section_base);
+		if (vaddr >= section_base && vaddr < section_base + section_size)
+			return bin->section_header[i].PointerToRawData + (vaddr - section_base);
 	}
 	return 0;
-}
-
-static int r_bin_te_init_hdr(struct r_bin_te_obj_t* bin) {
-	if (!(bin->header = malloc(sizeof(TE_image_file_header)))) {
-		perror ("malloc (header)");
-		return R_FALSE;
-	}
-	if (r_buf_read_at (bin->b, 0, (ut8*)bin->header, sizeof(TE_image_file_header)) == -1) {
-		eprintf("Error: read (header)\n");
-		return R_FALSE;
-	}
-	if (strncmp ((char*)&bin->header->Signature, "VZ", 2))
-		return R_FALSE;
-	return R_TRUE;
 }
 
 static int r_bin_te_init_sections(struct r_bin_te_obj_t* bin) {
@@ -92,6 +129,7 @@ static int r_bin_te_init(struct r_bin_te_obj_t* bin) {
 
 char* r_bin_te_get_arch(struct r_bin_te_obj_t* bin) {
 	char *arch;
+	if (!bin) return NULL;
 	switch (bin->header->Machine) {
 	case TE_IMAGE_FILE_MACHINE_ALPHA:
 	case TE_IMAGE_FILE_MACHINE_ALPHA64:
@@ -125,28 +163,32 @@ int r_bin_te_get_bits(struct r_bin_te_obj_t* bin) {
 }
 
 
-struct r_bin_te_addr_t* r_bin_te_get_entrypoint(struct r_bin_te_obj_t* bin) {
-	struct r_bin_te_addr_t *entry = NULL;
+RBinAddr* r_bin_te_get_entrypoint(struct r_bin_te_obj_t* bin) {
+	RBinAddr *entry = NULL;
 
-	if ((entry = malloc(sizeof(struct r_bin_te_addr_t))) == NULL) {
+	if (!bin || !bin->header)
+		return NULL;
+	if ((entry = malloc(sizeof(RBinAddr))) == NULL) {
 		perror("malloc (entrypoint)");
 		return NULL;
 	}
-	entry->rva = bin->header->AddressOfEntryPoint - r_bin_te_get_stripped_delta(bin);
-	if (entry->rva == 0) // in TE if EP = 0 then EP = baddr
-		entry->rva = bin->header->ImageBase;
-	entry->offset = r_bin_te_rva_to_offset(bin, entry->rva);
+	entry->vaddr = bin->header->AddressOfEntryPoint - r_bin_te_get_stripped_delta(bin);
+	if (entry->vaddr == 0) // in TE if EP = 0 then EP = baddr
+		entry->vaddr = bin->header->ImageBase;
+	entry->paddr = r_bin_te_vaddr_to_paddr(bin, entry->vaddr);
 	return entry;
 }
 
 ut64 r_bin_te_get_image_base(struct r_bin_te_obj_t* bin)
 {
-	return (ut64)bin->header->ImageBase;
+	if (bin && bin->header)
+		return (ut64)bin->header->ImageBase;
+	return 0LL;
 }
 
 char* r_bin_te_get_machine(struct r_bin_te_obj_t* bin) {
 	char *machine;
-
+	if (!bin) return NULL;
 	switch (bin->header->Machine) {
 	case TE_IMAGE_FILE_MACHINE_ALPHA:
 		machine = strdup("Alpha");
@@ -240,6 +282,7 @@ char* r_bin_te_get_machine(struct r_bin_te_obj_t* bin) {
 
 char* r_bin_te_get_os(struct r_bin_te_obj_t* bin) {
 	char *os;
+	if (!bin) return NULL;
 
 	switch (bin->header->Subsystem) {
 	case TE_IMAGE_SUBSYSTEM_NATIVE:
@@ -271,8 +314,11 @@ char* r_bin_te_get_os(struct r_bin_te_obj_t* bin) {
 
 struct r_bin_te_section_t* r_bin_te_get_sections(struct r_bin_te_obj_t* bin) {
 	struct r_bin_te_section_t *sections = NULL;
-	TE_image_section_header *shdr = bin->section_header;
-	int i, sections_count = bin->header->NumberOfSections;
+	TE_image_section_header *shdr;
+	int i, sections_count;
+	if (!bin) return NULL;
+	shdr = bin->section_header;
+	sections_count = bin->header->NumberOfSections;
 
 	if ((sections = malloc((sections_count + 1) * sizeof(struct r_bin_te_section_t))) == NULL) {
 		perror ("malloc (sections)");
@@ -282,10 +328,10 @@ struct r_bin_te_section_t* r_bin_te_get_sections(struct r_bin_te_obj_t* bin) {
 		memcpy (sections[i].name, shdr[i].Name, TE_IMAGE_SIZEOF_NAME);
 		// not a null terminated string if len==buflen
 		//sections[i].name[TE_IMAGE_SIZEOF_NAME] = '\0';
-		sections[i].rva = shdr[i].VirtualAddress - r_bin_te_get_stripped_delta(bin);
+		sections[i].vaddr = shdr[i].VirtualAddress - r_bin_te_get_stripped_delta(bin);
 		sections[i].size = shdr[i].SizeOfRawData;
 		sections[i].vsize = shdr[i].VirtualSize;
-		sections[i].offset = shdr[i].PointerToRawData - r_bin_te_get_stripped_delta(bin);
+		sections[i].paddr = shdr[i].PointerToRawData - r_bin_te_get_stripped_delta(bin);
 		sections[i].flags = shdr[i].Characteristics;
 		sections[i].last = 0;
 	}
@@ -296,6 +342,7 @@ struct r_bin_te_section_t* r_bin_te_get_sections(struct r_bin_te_obj_t* bin) {
 char* r_bin_te_get_subsystem(struct r_bin_te_obj_t* bin) {
 	char *subsystem;
 
+	if (!bin) return NULL;
 	switch (bin->header->Subsystem) {
 	case TE_IMAGE_SUBSYSTEM_NATIVE:
 		subsystem = strdup("Native");
@@ -350,8 +397,10 @@ struct r_bin_te_obj_t* r_bin_te_new(const char* file) {
 	if (!(buf = (ut8*)r_file_slurp(file, &bin->size)))
 		return r_bin_te_free(bin);
 	bin->b = r_buf_new ();
-	if (!r_buf_set_bytes (bin->b, buf, bin->size))
+	if (!r_buf_set_bytes (bin->b, buf, bin->size)) {
+		free (buf);
 		return r_bin_te_free(bin);
+	}
 	free (buf);
 	if (!r_bin_te_init(bin))
 		return r_bin_te_free(bin);
@@ -361,8 +410,12 @@ struct r_bin_te_obj_t* r_bin_te_new(const char* file) {
 struct r_bin_te_obj_t* r_bin_te_new_buf(struct r_buf_t *buf) {
 	struct r_bin_te_obj_t *bin = R_NEW0 (struct r_bin_te_obj_t);
 	if (!bin) return NULL;
-	bin->b = buf;
+	bin->kv = sdb_new0 ();
+	bin->b = r_buf_new ();
 	bin->size = buf->length;
+	if (!r_buf_set_bytes (bin->b, buf->buf, bin->size)){
+		return r_bin_te_free(bin);
+	}
 	if (!r_bin_te_init(bin))
 		return r_bin_te_free(bin);
 	return bin;

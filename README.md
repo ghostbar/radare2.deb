@@ -9,6 +9,10 @@
                                   --pancake
 </pre>
 
+[![Build Status](http://ci.rada.re/buildStatus/icon?job=radare2)](http://ci.rada.re/job/radare2/)
+
+[![Build Status](https://scan.coverity.com/projects/416/badge.svg)](https://scan.coverity.com/projects/416)
+
 # Introduction
 
 r2 is a rewrite from scratch of radare in order to provide
@@ -27,15 +31,16 @@ radare2 is portable.
 
 Architectures:
 
-  6502, 8051, arm, arc, avr, bf, tms320 (c54x, c55x, c55+), gameboy
-  csr, dcpu16, dalvik, i8080, mips, m68k, mips, msil, snes, nios II,
-  sh, sparc, rar, powerpc, i386, x86-64, H8/300, malbolge, T8200
+6502, 8051, CRIS, H8/300, LH5801, LH5801, T8200, arc, arm, avr, bf, blackfin,
+csr, dalvik, dcpu16, gameboy, i386, i4004, i8080, m68k, malbolge, mips, mips,
+msil, nios II, powerpc, rar, sh, snes, sparc, tms320 (c54x c55x c55+), x86-64,
+zimg.
 
 File Formats:
 
   bios, dex, elf, elf64, filesystem, java, fatmach0, mach0,
   mach0-64, MZ, PE, PE+, TE, COFF, plan9, bios, dyldcache,
-  Gameboy ROMs
+  Gameboy and Nintendo DS ROMs
 
 Operating Systems:
 
@@ -58,14 +63,14 @@ To build the bindings you need latest valabind, g++ and swig2.
 
 # Install
 
-Easiest way to install radare2 from git is by running
+The easiest way to install radare2 from git is by running
 the following command:
 
     $ sys/install.sh
 
 # Uninstall
 
-In case of poluted filesystem you can uninstall current
+In case of a polluted filesystem you can uninstall the current
 version or remove all previous installations:
 
     $ make uninstall
@@ -80,7 +85,7 @@ build the bindings for Python, LUA, etc..
 APIs are defined in vapi files which are then translated
 to swig interfaces, nodejs-ffi or other and then compiled.
 
-Easiest way to install the python bindings is to run:
+The easiest way to install the python bindings is to run:
 
     $ sys/python.sh
 
@@ -88,7 +93,7 @@ If you want to use the NodeJS bindings just do:
 
     $ npm install radare2.js
 
-You may like to specify the installed version of radare2:
+To specify the installed version of radare2:
 
     $ npm install radare2.js@0.9.2
 
@@ -103,7 +108,7 @@ There is a test suite that can be retrieved by running:
 There is no formal documentation of r2 yet. Not all commands
 are compatible with radare1, so the best way to learn how to
 do stuff in r2 is by reading the examples from the web and
-appending '?' to every command you are interested on.
+appending '?' to every command you are interested in.
 
 Commands are small mnemonics of few characters and there is
 some extra syntax sugar that makes the shell much more pleasant
@@ -116,6 +121,12 @@ html/js interface that sends ajax queries to the core and
 aims to implement an usable UI for phones, tablets and desktops.
 
     $ r2 -c=H /bin/ls
+    
+To use the webserver on Windows, you require a cmd instance 
+with administrator rights. To start the webserver use command
+in the project root.
+
+    radare2.exe -c=H rax2.exe
 
 # Pointers
 

@@ -25,7 +25,7 @@
 #include "sysdep.h"
 
 #include "dis-asm.h"
-#include "arm.h"
+#include "gnu-arm.h"
 #include "opintl.h"
 
 /* FIXME: This shouldn't be done here.  */
@@ -2188,7 +2188,11 @@ print_insn_coprocessor (bfd_vma pc,
 			      is_unpredictable = TRUE;
 			    u_reg = value;
 			  }
-			func (stream, "%s", arm_regnames[value]);
+			    if (value<= get_arm_regname_num_options ()) {
+				    func (stream, "%s", arm_regnames[value]);
+			    } else {
+				    func (stream, "r%d", (int)value);
+			    }
 			break;
 		      case 'D':
 			func (stream, "d%ld", value);
@@ -2467,10 +2471,6 @@ print_insn_coprocessor (bfd_vma pc,
 	    func (stream, "%c", *c);
 	}
 
-#if COMMENTS
-      if (value_in_comment > 64 || value_in_comment < -16)
-	func (stream, " ; 0x%lx", (value_in_comment & 0xffffffffUL));
-#endif
 
       if (is_unpredictable)
 	func (stream, UNPREDICTABLE_INSTRUCTION);
@@ -2609,7 +2609,6 @@ print_insn_neon (struct disassemble_info *info, long given, bfd_boolean thumb)
     {
       if ((given & insn->mask) == insn->value)
 	{
-	  signed long value_in_comment = 0;
 	  bfd_boolean is_unpredictable = FALSE;
 	  const char *c;
 
@@ -2900,10 +2899,9 @@ print_insn_neon (struct disassemble_info *info, long given, bfd_boolean thumb)
                           case 32:
                             if (isfloat)
                               {
-                                unsigned char valbytes[4];
 #if HAVE_FLOAT
+                                unsigned char valbytes[4];
                                 double fvalue;
-#endif
                                 
                                 /* Do this a byte at a time so we don't have to
                                    worry about the host's endianness.  */
@@ -2912,7 +2910,6 @@ print_insn_neon (struct disassemble_info *info, long given, bfd_boolean thumb)
                                 valbytes[2] = (value >> 16) & 0xff;
                                 valbytes[3] = (value >> 24) & 0xff;
                                 
-#if HAVE_FLOAT
                                 floatformat_to_double 
                                   (& floatformat_ieee_single_little, valbytes,
                                   & fvalue);
@@ -2975,7 +2972,6 @@ print_insn_neon (struct disassemble_info *info, long given, bfd_boolean thumb)
 			    break;
 			  case 'd':
 			    func (stream, "%ld", value);
-			    value_in_comment = value;
 			    break;
 			  case 'e':
 			    func (stream, "%ld", (1ul << width) - value);
@@ -3048,11 +3044,6 @@ print_insn_neon (struct disassemble_info *info, long given, bfd_boolean thumb)
 	      else
 		func (stream, "%c", *c);
 	    }
-
-#if 0
-	  if (value_in_comment > 32 || value_in_comment < -16)
-	    func (stream, " ; 0x%lx", value_in_comment);
-#endif
 
 	  if (is_unpredictable)
 	    func (stream, UNPREDICTABLE_INSTRUCTION);
@@ -3527,7 +3518,11 @@ print_insn_arm (bfd_vma pc, struct disassemble_info *info, long given)
 				  is_unpredictable = TRUE;
 				U_reg = value;
 			      }
-			    func (stream, "%s", arm_regnames[value]);
+			    if (value<= get_arm_regname_num_options ()) {
+				    func (stream, "%s", arm_regnames[value]);
+			    } else {
+				    func (stream, "r%d", (int)value);
+			    }
 			    break;
 			  case 'd':
 			    func (stream, "%ld", value);
@@ -3662,7 +3657,6 @@ print_insn_thumb16 (bfd_vma pc, struct disassemble_info *info, long given)
   for (insn = thumb_opcodes; insn->assembler; insn++)
     if ((given & insn->mask) == insn->value)
       {
-	signed long value_in_comment = 0;
 	const char *c = insn->assembler;
 
 	for (; *c; c++)
@@ -3845,17 +3839,14 @@ print_insn_thumb16 (bfd_vma pc, struct disassemble_info *info, long given)
 
 			  case 'd':
 			    func (stream, "%ld", (long) reg);
-			    value_in_comment = reg;
 			    break;
 
 			  case 'H':
 			    func (stream, "%ld", (long) (reg << 1));
-			    value_in_comment = reg << 1;
 			    break;
 
 			  case 'W':
 			    func (stream, "%ld", (long) (reg << 2));
-			    value_in_comment = reg << 2;
 			    break;
 
 			  case 'a':
@@ -3864,7 +3855,6 @@ print_insn_thumb16 (bfd_vma pc, struct disassemble_info *info, long given)
 			       before the calculation.  */
 			    info->print_address_func
 			      (((pc + 4) & ~3) + (reg << 2), info);
-			    value_in_comment = 0;
 			    break;
 
 			  case 'x':
@@ -3874,7 +3864,6 @@ print_insn_thumb16 (bfd_vma pc, struct disassemble_info *info, long given)
 			  case 'B':
 			    reg = ((reg ^ (1 << bitend)) - (1 << bitend));
 			    info->print_address_func (reg * 2 + pc + 4, info);
-			    value_in_comment = 0;
 			    break;
 
 			  case 'c':
@@ -3912,11 +3901,6 @@ print_insn_thumb16 (bfd_vma pc, struct disassemble_info *info, long given)
 	      }
 	  }
 
-#if 0
-	if (value_in_comment > 64|| value_in_comment < -16) {
-	  func (stream, " ; 0x%lx", value_in_comment);
-	}
-#endif
 	return;
       }
 
@@ -4617,10 +4601,10 @@ parse_disassembler_options (char *options)
     {
       parse_arm_disassembler_option (options);
 
-      /* Skip forward to next seperator.  */
+      /* Skip forward to next separator.  */
       while ((*options) && (! ISSPACE (*options)) && (*options != ','))
 	++ options;
-      /* Skip forward past seperators.  */
+      /* Skip forward past separators.  */
       while (ISSPACE (*options) || (*options == ','))
 	++ options;      
     }

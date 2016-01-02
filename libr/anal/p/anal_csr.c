@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2010 - pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2008-2015 - pancake */
 
 #include <string.h>
 #include <r_types.h>
@@ -54,8 +54,8 @@ static inline ut16 i2ut16(struct instruction *in) {
 static int csr_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *bytes, int len) {
 	struct instruction *in = (struct instruction *)bytes;
 	ut16 lol, ins;
-	struct directive d;
-	struct state s;
+	struct directive d = {{0}};
+	struct state s = {0};
 
 	if (op == NULL)
 		return 2;
@@ -65,6 +65,7 @@ static int csr_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *bytes, int len
 	s.s_buf = (void *)bytes;
 	s.s_off = addr;
 	s.s_out = NULL;
+	s.s_prefix = 0;
 	memset (&d, '\0', sizeof (struct directive));
 	memcpy (&d.d_inst, s.s_buf, sizeof (d.d_inst));
 	d.d_off = (s.s_off+=2);
@@ -145,7 +146,6 @@ static int csr_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *bytes, int len
 				op->fail = addr+2;
 				op->eob = 1;
 				break;
-				
 			}
 			break;
 		case 0xb:

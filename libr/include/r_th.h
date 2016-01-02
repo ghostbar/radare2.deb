@@ -1,14 +1,11 @@
-#ifndef _INCLUDE_R_TH_H_
-#define _INCLUDE_R_TH_H_
+#ifndef R2_TH_H
+#define R2_TH_H
 
 #include "r_types.h"
 
 #define HAVE_PTHREAD 1
 
 #if __WINDOWS__
-
-#include <windows.h>
-
 #undef HAVE_PTHREAD
 #define HAVE_PTHREAD 0
 #define R_TH_TID HANDLE
@@ -60,13 +57,25 @@ R_API int r_th_wait_async(RThread *th);
 R_API void r_th_break(RThread *th);
 R_API int r_th_wait(RThread *th);
 R_API void *r_th_free(RThread *th);
+R_API int r_th_kill(struct r_th_t *th, int force);
 
-R_API RThreadLock *r_th_lock_new();
+R_API RThreadLock *r_th_lock_new(void);
 R_API int r_th_lock_wait(RThreadLock *th);
 R_API int r_th_lock_check(RThreadLock *thl);
 R_API int r_th_lock_enter(RThreadLock *thl);
 R_API int r_th_lock_leave(RThreadLock *thl);
 R_API void *r_th_lock_free(RThreadLock *thl);
+
+typedef struct r_thread_msg_t {
+	char *text;
+	char done;
+	char *res;
+	RThread *th;
+} RThreadMsg;
+
+R_API RThreadMsg* r_th_msg_new (const char *cmd, void *cb);
+R_API void r_th_msg_free (RThreadMsg* msg);
+
 #endif
 
 #ifdef __cplusplus

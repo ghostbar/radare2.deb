@@ -2,7 +2,6 @@ enyo.kind ({
   name: "LeftPanel",
   classes: "onyx-toolbar",
   kind: "Scroller",
-  fit: true,
   /* touch:true, */
   style: "width: 200px;height:100%;margin:0px;",
   accelerated: true,
@@ -14,7 +13,7 @@ enyo.kind ({
   },
   components: [
     {tag: "center", components:[
-      {tag: "h3", ontap: "openPanel2", content: "radare2", style: "margin:0px;margin-bottom:20px;" },
+      {tag: "img", ontap: "openRoot",src: "rlogo-tr.png", style: "margin:0px;margin-bottom:20px;cursor:pointer" },
     {kind: "Group", onActivate:"buttonActivated", classes: "enyo-border-box group", defaultKind: "onyx.Button", highlander: true, components: [
       {content: "Disassembler", classes: "onyx-dark menu-button", ontap:"openPanel", name: "Disassembler", active: true},
       {content: "Assembler", classes: "onyx-dark menu-button", ontap:"openPanel", name: "Assembler" },
@@ -30,6 +29,9 @@ enyo.kind ({
     ]}
     ]},
   ],
+  openRoot: function() {
+    window.location = "..";
+  },
   openPanel2: function() {
     this.ra.setIndex (2);
   },
@@ -39,6 +41,9 @@ enyo.kind ({
     if (x.name == this.oname)
       this.ra.setIndex (1);
     this.oname = x.name;
+    r2ui.selected_panel = this.oname;
+    if (this.oname === "Logs")
+       r2ui._log.connect();
     if (this.openCallback)
       this.openCallback (x.name);
   },

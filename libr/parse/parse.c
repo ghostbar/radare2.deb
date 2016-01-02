@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2013 - nibble, pancake */
+/* radare - LGPL - Copyright 2009-2015 - nibble, pancake */
 
 #include <stdio.h>
 
@@ -106,20 +106,38 @@ static int filter(RParse *p, RFlag *f, char *data, char *str, int len) {
 	ut64 off;
 	int x86 = (p&&p->cur&&p->cur->name)?
 		(strstr (p->cur->name, "x86")? 1: 0): 0;
-
+	if (!data || !p) return 0;
+#if FILTER_DWORD
+	ptr2 = strstr (ptr, "dword ");
+	if (ptr2)
+		memmove (ptr2, ptr2+6, strlen (ptr2+6)+1);
+#endif
 	ptr2 = NULL;
+// remove "dword" ?
 	while ((ptr = strstr (ptr, "0x"))) {
 		if (x86) for (ptr2 = ptr; *ptr2 && !isx86separator (*ptr2); ptr2++);
 		else for (ptr2 = ptr; *ptr2 && ((*ptr2=='\x1b')||!isseparator (*ptr2)); ptr2++);
 		off = r_num_math (NULL, ptr);
+		// small numbers should not be replaced by flags
+		if (off <0xff) {
+			ptr = ptr2;
+			continue;
+		}
+#if 0
+		// old behaviour: only hide flags at 0
 		if (!off) {
 			ptr = ptr2;
 			continue;
 		}
-		fcn = r_anal_fcn_find (p->anal, off, 0);
+#endif
+		fcn = r_anal_get_fcn_in (p->anal, off, 0);
 		if (fcn) {
 			if (fcn->addr == off) {
 				*ptr = 0;
+				// hack to realign pointer for colours
+				ptr2--;
+				if (*ptr2!=0x1b)
+					ptr2++;
 				snprintf (str, len, "%s%s%s", data, fcn->name,
 						(ptr!=ptr2)? ptr2: "");
 				return R_TRUE;
@@ -127,8 +145,9 @@ static int filter(RParse *p, RFlag *f, char *data, char *str, int len) {
 		}
 		if (f) {
 			flag = r_flag_get_i2 (f, off);
-			if (!flag)
+			if (!flag) {
 				flag = r_flag_get_i (f, off);
+			}
 			if (isvalidflag (flag)) {
 				if (p->notin_flagspace != -1) {
 					if (p->flagspace == flag->space)
@@ -140,6 +159,10 @@ static int filter(RParse *p, RFlag *f, char *data, char *str, int len) {
 					continue;
 				}
 				*ptr = 0;
+				// hack to realign pointer for colours
+				ptr2--;
+				if (*ptr2!=0x1b)
+					ptr2++;
 				snprintf (str, len, "%s%s%s", data, flag->name,
 					(ptr!=ptr2)? ptr2: "");
 				return R_TRUE;

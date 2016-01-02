@@ -10,12 +10,12 @@ static int arcompact_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, in
 	const ut8 *b = (ut8 *)data;
 	//ut8 subopcode = ((b[1]&0xf)>>2) << 1;
 	ut8 basecode = (b[3] & 0xf8) >> 3;
-	int lowbyte, highbyte;
+	int lowbyte;
 
 	/* ARCompact ISA */
 	lowbyte = anal->big_endian? 0: 1;
-	highbyte = anal->big_endian? 1: 0;
 
+	op->delay = 0;
 	if (((b[lowbyte]&0xf8) >0x38) && ((b[lowbyte]&0xf8) != 0x48)) {
 		op->size = 2;
 	} else {
@@ -152,15 +152,7 @@ struct r_anal_plugin_t r_anal_plugin_arc = {
 	.license = "LGPL3",
 	.bits = 16|32,
 	.desc = "ARC code analysis plugin",
-	.init = NULL,
-	.fini = NULL,
-	.op = &arc_op,
-	.set_reg_profile = NULL,
-	.fingerprint_bb = NULL,
-	.fingerprint_fcn = NULL,
-	.diff_bb = NULL,
-	.diff_fcn = NULL,
-	.diff_eval = NULL
+	.op = &arc_op
 };
 
 #ifndef CORELIB

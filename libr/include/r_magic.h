@@ -1,7 +1,7 @@
-/* radare - LGPL - Copyright 2011-2013 - pancake */
+/* radare - LGPL - Copyright 2011-2014 - pancake */
 
-#ifndef R_MAGIC_H
-#define R_MAGIC_H
+#ifndef R2_MAGIC_H
+#define R2_MAGIC_H
 
 #include <r_types.h>
 
@@ -15,7 +15,7 @@ R_LIB_VERSION_HEADER(r_magic);
 #define MAGICFILE "/etc/magic"
 #endif
 
-#define R_MAGIC_PATH R2_LIBDIR"/radare2/"R2_VERSION"/magic"
+#define R_MAGIC_PATH R2_LIBDIR "/radare2/" R2_VERSION "/magic"
 
 #if USE_LIB_MAGIC
 

@@ -1,30 +1,34 @@
-/* radare - LGPL - Copyright 2009-2013 - pancake */
+/* radare - LGPL - Copyright 2009-2015 - pancake */
 
 #include <r_lang.h>
 #include <r_util.h>
 
 R_LIB_VERSION(r_lang);
 
+#include "p/pipe.c" // hardcoded
 #include "p/vala.c" // hardcoded
-#include "p/c.c" // hardcoded
+#include "p/c.c"    // hardcoded
 
 
-RLang *__lang = NULL;
+static RLang *__lang = NULL;
+
 R_API void r_lang_plugin_free (RLangPlugin *p) {
 	if (p && p->fini)
 		p->fini (__lang);
 }
 
 R_API RLang *r_lang_new() {
-	RLang *lang = R_NEW (RLang);
+	RLang *lang = R_NEW0 (RLang);
 	if (lang) {
 		lang->user = NULL;
 		lang->langs = r_list_new ();
 		lang->langs->free = (RListFree)r_lang_plugin_free;
 		lang->defs = r_list_new ();
 		lang->defs->free = (RListFree)r_lang_def_free;
+		lang->printf = (PrintfCallback)printf;
 		r_lang_add (lang, &r_lang_plugin_c);
 		r_lang_add (lang, &r_lang_plugin_vala);
+		r_lang_add (lang, &r_lang_plugin_pipe);
 	}
 	return lang;
 }
@@ -75,17 +79,20 @@ R_API void r_lang_def_free (RLangDef *def) {
 }
 
 R_API void r_lang_undef(RLang *lang, const char *name) {
-	if (name != NULL && *name) {
+	if (name && *name) {
 		RLangDef *def;
 		RListIter *iter;
 		/* No _safe loop necessary because we return immediately after the delete. */
 		r_list_foreach (lang->defs, iter, def) {
-			if (!strcasecmp (name, def->name)) {
+			if (!name || !strcasecmp (name, def->name)) {
 				r_list_delete (lang->defs, iter);
 				break;
 			}
 		}
-	} else r_list_destroy (lang->defs);
+	} else {
+		r_list_purge (lang->defs);
+		lang->defs = NULL;
+	}
 }
 
 R_API int r_lang_setup(RLang *lang) {
@@ -107,10 +114,12 @@ R_API int r_lang_add(RLang *lang, RLangPlugin *foo) {
 R_API int r_lang_list(RLang *lang) {
 	RListIter *iter;
 	RLangPlugin *h;
+	if (!lang)
+		return R_FALSE;
 	r_list_foreach (lang->langs, iter, h) {
-		printf (" %s: %s\n", h->name, h->desc);
+		lang->printf ("%s: %s\n", h->name, h->desc);
 	}
-	return R_FALSE;
+	return R_TRUE;
 }
 
 R_API RLangPlugin *r_lang_get_by_extension (RLang *lang, const char *ext) {
@@ -178,6 +187,7 @@ R_API int r_lang_run_file(RLang *lang, const char *file) {
 /* TODO: deprecate or make it more modular .. reading from stdin in a lib?!? wtf */
 R_API int r_lang_prompt(RLang *lang) {
 	char buf[1024];
+	const char *p;
 
 	if (lang->cur == NULL)
 		return R_FALSE;
@@ -192,12 +202,13 @@ R_API int r_lang_prompt(RLang *lang) {
 	RLineCompletion oc = line->completion;
 	RLineCompletion ocnull = {0};
 	char *prompt = strdup (line->prompt);  
+
 	line->completion = ocnull;
 	line->history = histnull;
 	/* foo */
 	for (;;) {
 	snprintf (buf, sizeof (buf)-1, "%s> ", lang->cur->name);
-	r_line_set_prompt (buf);
+		r_line_set_prompt (buf);
 #if 0
 		printf ("%s> ", lang->cur->name);
 		fflush (stdout);
@@ -205,12 +216,23 @@ R_API int r_lang_prompt(RLang *lang) {
 		if (feof (stdin)) break;
 		if (*buf) buf[strlen (buf)-1]='\0';
 #endif
-		char *p = r_line_readline ();
+		p = r_line_readline ();
 		if (!p) break;
 		r_line_hist_add (p);
-		strcpy (buf, p);
+		strncpy (buf, p, sizeof (buf) - 1);
 		if (*buf == '!') {
-			r_sandbox_system (buf+1, 1);
+			if (buf[1]) {
+				r_sandbox_system (buf+1, 1);
+			} else {
+				char *foo, *code = NULL;
+				do {
+					foo = r_cons_editor (NULL, code);
+					r_lang_run (lang, foo, 0);
+					free (code);
+					code = foo;
+				} while (r_cons_yesno ('y', "Edit again? (Y/n)"));
+				free (foo);
+			}
 			continue;
 		}
 		if (!memcmp (buf, ". ", 2)) {
@@ -221,20 +243,21 @@ R_API int r_lang_prompt(RLang *lang) {
 			}
 			continue;
 		}
-		if (!strcmp (buf, "q"))
+		if (!strcmp (buf, "q")) {
+			free (prompt);
 			return R_TRUE;
+		}
 		if (!strcmp (buf, "?")) {
 			RLangDef *def;
 			RListIter *iter;
 			eprintf("  ?        - show this help message\n"
+				"  !        - run $EDITOR\n"
 				"  !command - run system command\n"
 				"  . file   - interpret file\n"
 				"  q        - quit prompt\n");
-			if (lang->cur) {
-				eprintf ("%s example:\n", lang->cur->name);
-				if (lang->cur->help)
-					eprintf ("%s", *lang->cur->help);
-			} else eprintf ("no selected r_lang plugin\n");
+			eprintf ("%s example:\n", lang->cur->name);
+			if (lang->cur->help)
+				eprintf ("%s", *lang->cur->help);
 			if (!r_list_empty (lang->defs))
 				eprintf ("variables:\n");
 			r_list_foreach (lang->defs, iter, def) {
@@ -249,5 +272,6 @@ R_API int r_lang_prompt(RLang *lang) {
 
 	clearerr (stdin);
 	printf ("\n");
+	free(prompt);
 	return R_TRUE;
 }

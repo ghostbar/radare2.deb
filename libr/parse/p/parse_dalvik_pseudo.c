@@ -165,11 +165,6 @@ static int parse(RParse *p, const char *data, char *str) {
 	char w3[64];
 	char w4[64];
 
-	// malloc can be slow here :?
-	if ((buf = malloc (len+1)) == NULL)
-		return R_FALSE;
-	memcpy (buf, data, len+1);
-
 	if (!strcmp (data, "invalid")
 	||  !strcmp (data, "nop")
 	||  !strcmp (data, "DEPRECATED")) {
@@ -177,6 +172,11 @@ static int parse(RParse *p, const char *data, char *str) {
 		return R_TRUE;
 	}
 	
+	// malloc can be slow here :?
+	if ((buf = malloc (len+1)) == NULL)
+		return R_FALSE;
+	memcpy (buf, data, len+1);
+
 	r_str_chop (buf);
 
 	if (*buf) {
@@ -191,8 +191,10 @@ static int parse(RParse *p, const char *data, char *str) {
 		if (ptr) {
 			*ptr = '\0';
 			for (++ptr; *ptr==' '; ptr++);
-			strcpy (w0, buf);
-			strcpy (w1, ptr);
+			strncpy (w0, buf, sizeof (w0) - 1);
+			w0[sizeof(w0)-1] = '\0';
+			strncpy (w1, ptr, sizeof (w1) - 1);
+			w1[sizeof(w1)-1] = '\0';
 
 			optr=ptr;
 			ptr2 = strchr (ptr, '}');
@@ -201,23 +203,29 @@ static int parse(RParse *p, const char *data, char *str) {
 			if (ptr) {
 				*ptr = '\0';
 				for (++ptr; *ptr==' '; ptr++);
-				strcpy (w1, optr);
-				strcpy (w2, ptr);
+				strncpy (w1, optr, sizeof (w1) - 1);
+				w1[sizeof(w1)-1] = '\0';
+				strncpy (w2, ptr, sizeof (w2) - 1);
+				w2[sizeof(w2)-1] = '\0';
 				optr=ptr;
 				ptr = strchr (ptr, ',');
 				if (ptr) {
 					*ptr = '\0';
 					for (++ptr; *ptr==' '; ptr++);
-					strcpy (w2, optr);
-					strcpy (w3, ptr);
+					strncpy (w2, optr, sizeof (w2) - 1);
+					w2[sizeof(w2)-1] = '\0';
+					strncpy (w3, ptr, sizeof (w3) - 1);
+					w3[sizeof(w3)-1] = '\0';
 					optr=ptr;
 // bonus
 					ptr = strchr (ptr, ',');
 					if (ptr) {
 						*ptr = '\0';
 						for (++ptr; *ptr==' '; ptr++);
-						strcpy (w3, optr);
-						strcpy (w4, ptr);
+						strncpy (w3, optr, sizeof (w3) - 1);
+						w3[sizeof(w3)-1] = '\0';
+						strncpy (w4, ptr, sizeof (w4) - 1);
+						w4[sizeof(w4)-1] = '\0';
 					}
 				}
 			}
@@ -262,46 +270,12 @@ static int parse(RParse *p, const char *data, char *str) {
 	return R_TRUE;
 }
 
-static int assemble(RParse *p, char *data, char *str) {
-	char *ptr;
-	printf ("assembling '%s' to generate real asm code\n", str);
-	ptr = strchr (str, '=');
-	if (ptr) {
-		*ptr = '\0';
-		// TODO not yet implemented
-		sprintf (data, "move %s, %s", str, ptr+1);
-	} else strcpy (data, str);
-	return R_TRUE;
-}
-
-static int varsub(RParse *p, RAnalFunction *f, char *data, char *str, int len) {
-#if USE_VARSUBS
-	char *ptr, *ptr2;
-	int i;
-
-	strncpy (str, data, len);
-	for (i = 0; i < R_ANAL_VARSUBS; i++)
-		if (f->varsubs[i].pat[0] != '\0' && f->varsubs[i].sub[0] != '\0' &&
-			(ptr = strstr (data, f->varsubs[i].pat))) {
-				*ptr = '\0';
-				ptr2 = ptr + strlen (f->varsubs[i].pat);
-				snprintf (str, len, "%s%s%s", data, f->varsubs[i].sub, ptr2);
-		}
-	return R_TRUE;
-#else
-	strncpy (str, data, len);
-	return R_FALSE;
-#endif
-}
-
 struct r_parse_plugin_t r_parse_plugin_dalvik_pseudo = {
 	.name = "dalvik.pseudo",
 	.desc = "DALVIK pseudo syntax",
 	.init = NULL,
 	.fini = NULL,
 	.parse = parse,
-	.assemble = &assemble,
-	.varsub = &varsub,
 };
 
 #ifndef CORELIB

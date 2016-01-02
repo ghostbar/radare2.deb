@@ -1,8 +1,9 @@
-/* radare - LGPL - Copyright 2011-2013 - pancake */
+/* radare - LGPL - Copyright 2011-2015 - pancake */
 
 #include <r_egg.h>
 #include <r_bin.h>
 #include <getopt.c>
+#include "../blob/version.c"
 
 static int usage (int v) {
 	printf ("Usage: ragg2 [-FOLsrxvh] [-a arch] [-b bits] [-k os] [-o file] [-I /] [-i sc]\n"
@@ -10,29 +11,34 @@ static int usage (int v) {
 	if (v) printf (
 	" -a [arch]       select architecture (x86, mips, arm)\n"
 	" -b [bits]       register size (32, 64, ..)\n"
-	" -k [os]         operating system's kernel (linux,bsd,osx,w32)\n"
-	" -f [format]     output format (raw, pe, elf, mach0)\n"
-	" -F              output native format (osx=mach0, linux=elf, ..)\n"
-	" -o [file]       output file\n"
-	" -O              use default output file (filename without extension or a.out)\n"
-	" -I [path]       add include path\n"
-	" -L              list all plugins (shellcodes and encoders)\n"
-	" -i [shellcode]  include shellcode plugin, uses options. see -L\n"
-	" -e [encoder]    use specific encoder. see -L\n"
 	" -B [hexpairs]   append some hexpair bytes\n"
 	" -c [k=v]        set configuration options\n"
 	" -C [file]       append contents of file\n"
 	" -d [off:dword]  patch dword (4 bytes) at given offset\n"
 	" -D [off:qword]  patch qword (8 bytes) at given offset\n"
-	" -w [off:hex]    patch hexpairs at given offset\n"
+	" -e [encoder]    use specific encoder. see -L\n"
+	" -f [format]     output format (raw, pe, elf, mach0)\n"
+	" -F              output native format (osx=mach0, linux=elf, ..)\n"
+	" -h              show this help\n"
+	" -i [shellcode]  include shellcode plugin, uses options. see -L\n"
+	" -I [path]       add include path\n"
+	" -k [os]         operating system's kernel (linux,bsd,osx,w32)\n"
+	" -L              list all plugins (shellcodes and encoders)\n"
+	" -n [dword]      append 32bit number (4 bytes)\n"
+	" -N [dword]      append 64bit number (8 bytes)\n"
+	" -o [file]       output file\n"
+	" -O              use default output file (filename without extension or a.out)\n"
 	" -p [padding]    add padding after compilation (padding=n10s32)\n"
 	"                 ntas : begin nop, trap, 'a', sequence\n"
 	"                 NTAS : same as above, but at the end\n"
-	" -s              show assembler\n"
+	" -P [size]       prepend debrujn pattern\n"
 	" -r              show raw bytes instead of hexpairs\n"
-	" -x              execute\n"
+	" -s              show assembler\n"
 	" -v              show version\n"
-	" -h              show this help\n");
+	" -w [off:hex]    patch hexpairs at given offset\n"
+	" -x              execute\n"
+	" -z              output in C string syntax\n"
+	);
 	return 1;
 }
 
@@ -56,6 +62,7 @@ static int create (const char *format, const char *arch, int bits, const ut8 *co
 	RBuffer *b;
 	if (!r_bin_use_arch (bin, arch, bits, format)) {
 		eprintf ("Cannot set arch\n");
+		r_bin_free (bin);
 		return 1;
 	}
 	b = r_bin_create (bin, code, codelen, NULL, 0); //data, datalen);
@@ -86,7 +93,8 @@ static int openfile (const char *f, int x) {
 int main(int argc, char **argv) {
 	const char *file = NULL;
 	const char *padding = NULL;
-	const char *bytes = NULL;
+	const char *pattern = NULL;
+	char *bytes = NULL;
 	const char *contents = NULL;
 	const char *arch = R_SYS_ARCH;
 	const char *os = R_EGG_OS_NAME;
@@ -95,9 +103,11 @@ int main(int argc, char **argv) {
 	int show_hex = 1;
 	int show_asm = 0;
 	int show_raw = 0;
+	int append = 0;
+	int show_str = 0;
 	char *shellcode = NULL;
 	char *encoder = NULL;
-	int bits = 32;
+	int bits = (R_SYS_BITS & R_SYS_BITS_64)? 64: 32;
 	int fmt = 0;
 	const char *ofile = NULL;
 	int ofileauto = 0;
@@ -105,7 +115,9 @@ int main(int argc, char **argv) {
 	int c, i;
 	REgg *egg = r_egg_new ();
 
-        while ((c = getopt (argc, argv, "he:a:b:f:o:sxrk:FOI:Li:c:p:B:C:vd:D:w:")) != -1) {
+	//egg->bin = r_buf_new ();
+
+        while ((c = getopt (argc, argv, "n:N:he:a:b:f:o:sxrk:FOI:Li:c:p:P:B:C:vd:D:w:z")) != -1) {
                 switch (c) {
 		case 'a':
 			arch = optarg;
@@ -121,32 +133,47 @@ int main(int argc, char **argv) {
 			bits = atoi (optarg);
 			break;
 		case 'B':
-			bytes = optarg;
+			bytes = r_str_concat (bytes, optarg);
 			break;
 		case 'C':
 			contents = optarg;
 			break;
 		case 'w':
 			{
-				char *p = strchr (optarg, ':');
+				char *arg = strdup (optarg);
+				char *p = strchr (arg, ':');
 				if (p) {
-					int len, off = r_num_math (NULL, optarg);
-					ut8 *b = malloc (strlen (optarg)+1);
-					len = r_hex_str2bin (p+1, b);
+					int len, off;
+					ut8 *b;
+					*p++ = 0;
+					off = r_num_math (NULL, arg);
+					b = malloc (strlen (optarg)+1);
+					len = r_hex_str2bin (p, b);
 					if (len>0) r_egg_patch (egg, off, (const ut8*)b, len);
 					else eprintf ("Invalid hexstr for -w\n");
 					free (b);
 				} else eprintf ("Missing colon in -w\n");
+				free (arg);
 			}
 			break;
+		case 'n': {
+			ut32 n = r_num_math (NULL, optarg);
+			append = 1;
+			r_egg_patch (egg, -1, (const ut8*)&n, 4);
+			} break;
+		case 'N': {
+			ut64 n = r_num_math (NULL, optarg);
+			r_egg_patch (egg, -1, (const ut8*)&n, 8);
+			append = 1;
+			} break;
 		case 'd':
 			{
 			ut32 off, n;
 			char *p = strchr (optarg, ':');
 			if (p) {
 				*p = 0;
-				off = r_num_get (NULL, optarg);
-				n = r_num_get (NULL, p+1);
+				off = r_num_math (NULL, optarg);
+				n = r_num_math (NULL, p+1);
 				*p = ':';
 				// TODO: honor endianness here
 				r_egg_patch (egg, off, (const ut8*)&n, 4);
@@ -158,8 +185,8 @@ int main(int argc, char **argv) {
 			ut64 off, n;
 			char *p = strchr (optarg, ':');
 			if (p) {
-				off = r_num_get (NULL, optarg);
-				n = r_num_get (NULL, p+1);
+				off = r_num_math (NULL, optarg);
+				n = r_num_math (NULL, p+1);
 				// TODO: honor endianness here
 				r_egg_patch (egg, off, (const ut8*)&n, 8);
 			} else eprintf ("Missing colon in -d\n");
@@ -179,6 +206,9 @@ int main(int argc, char **argv) {
 			break;
 		case 'p':
 			padding = optarg;
+			break;
+		case 'P':
+			pattern = optarg;
 			break;
 		case 'c':
 			{
@@ -223,14 +253,16 @@ int main(int argc, char **argv) {
 		case 'h':
 			return usage (1);
 		case 'v':
-			printf ("ragg2 "R2_VERSION" "R2_INCDIR"/sflib\n");
-			return 0;
+			return blob_version("ragg2");
+		case 'z':
+			show_str = 1;
+			break;
 		default:
 			return 1;
 		}
 	}
 
-	if (optind == argc && !shellcode && !bytes && !contents && !encoder && !padding) {
+	if (optind == argc && !shellcode && !bytes && !contents && !encoder && !padding && !pattern && !append) {
 		return usage (0);
 	} else file = argv[optind];
 
@@ -241,6 +273,7 @@ int main(int argc, char **argv) {
 			format = "elf64";
 	}
 
+	// initialize egg
 	r_egg_setup (egg, arch, bits, 0, os);
 	if (file) {
 		if (!strcmp (file, "-")) {
@@ -260,25 +293,34 @@ int main(int argc, char **argv) {
 			}
 		}
 	}
+
+	// compile source code to assembly
 	if (!r_egg_compile (egg)) {
 		if (!fmt) {
 			eprintf ("r_egg_compile: fail\n");
 			return 1;
 		}
 	}
-	if (shellcode) {
-		if (!r_egg_shellcode (egg, shellcode)) {
-			eprintf ("Unknown shellcode '%s'\n", shellcode);
-			return 1;
-		}
-	}
+
+	// add raw file
 	if (contents) {
 		int l;
 		char *buf = r_file_slurp (contents, &l);
 		if (buf && l>0) {
 			r_egg_raw (egg, (const ut8*)buf, l);
 		} else eprintf ("Error loading '%s'\n", contents);
+		free (buf);
 	}
+
+	// add shellcode
+	if (shellcode) {
+		if (!r_egg_shellcode (egg, shellcode)) {
+			eprintf ("Unknown shellcode '%s'\n", shellcode);
+			return 1;
+		}
+	}
+
+	// add raw bytes
 	if (bytes) {
 		ut8 *b = malloc (strlen (bytes)+1);
 		int len = r_hex_str2bin (bytes, b);
@@ -289,8 +331,11 @@ int main(int argc, char **argv) {
 			}
 		} else eprintf ("Invalid hexpair string for -B\n");
 		free (b);
+		free (bytes);
+		bytes = NULL;
 	}
-	/* create output file if needed */
+
+	/* set output (create output file if needed) */
 	if (ofileauto) {
 		int fd;
 		if (file) {
@@ -315,39 +360,56 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	//printf ("src (%s)\n", r_egg_get_source (egg));
+	// assemble to binary
+	if (!r_egg_assemble (egg)) {
+		eprintf ("r_egg_assemble: invalid assembly\n");
+		goto fail;
+	}
+	if (encoder)
+		if (!r_egg_encode (egg, encoder))
+			eprintf ("Invalid encoder '%s'\n", encoder);
+
+	// add padding
+	if (padding)
+		r_egg_padding (egg, padding);
+
+	// add pattern
+	if (pattern)
+		r_egg_pattern (egg, r_num_math (NULL, pattern));
+
+	// apply patches
+	if (!egg->bin) {
+		egg->bin = r_buf_new ();
+	}
+	if (!(b = r_egg_get_bin (egg))) {
+		eprintf ("r_egg_get_bin: invalid egg :(\n");
+		goto fail;
+	}
+	r_egg_finalize (egg);
+
 	if (show_asm)
 		printf ("%s\n", r_egg_get_assembly (egg));
-	if (show_raw || show_hex || show_execute) {
-		if (!r_egg_assemble (egg)) {
-			eprintf ("r_egg_assemble: invalid assembly\n");
-			goto fail;
-		}
-		if (encoder)
-			if (!r_egg_encode (egg, encoder))
-				eprintf ("Invalid encoder '%s'\n", encoder);
-		if (padding)
-			r_egg_padding (egg, padding);
 
-		if (!(b = r_egg_get_bin (egg))) {
-			eprintf ("r_egg_get_bin: invalid egg :(\n");
-			goto fail;
-		}
-		r_egg_finalize (egg); // apply patches
+	if (show_raw || show_hex || show_execute) {
+
 		if (show_execute)
 			return r_egg_run (egg);
-
+		b = r_egg_get_bin (egg);
 		if (show_raw) {
 			write (1, b->buf, b->length);
 		} else {
 			if (!format) {
 				eprintf ("No format specified wtf\n");
-				r_egg_free (egg);
-				return 1;
+				goto fail;
 			}
 			switch (*format) { //*format) {
 			case 'r':
-				if (show_hex) {
+				if (show_str) {
+					printf ("\"");
+					for (i=0; i<b->length; i++)
+						printf ("\\x%02x", b->buf[i]);
+					printf ("\"\n");
+				} else if (show_hex) {
 					for (i=0; i<b->length; i++)
 						printf ("%02x", b->buf[i]);
 					printf ("\n");

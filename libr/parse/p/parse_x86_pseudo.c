@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2012 - nibble, pancake */
+/* radare - LGPL - Copyright 2009-2015 - nibble, pancake */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,25 +19,80 @@ static int replace(int argc, const char *argv[], char *newstr) {
 		char *op;
 		char *str;
 	} ops[] = {
+		{ "adc",  "1 += 2"},
+		{ "add",  "1 += 2"},
+		{ "and",  "1 &= 2"},
+		{ "call", "1 ()"},
+		{ "cmove", "1 = 2"},
+		{ "cmovl","ifnot zf,1 = 2"},
+		{ "cmp", "if (1 == 2"},
+		{ "cmpsq", "if (1 == 2"},
+		{ "cmsb", "if (1 == 2"},
+		{ "cmsw", "if (1 == 2"},
+		{ "dec",  "1--"},
+		{ "div",  "1 /= 2"},
+		{ "fabs",  "abs(1)"},
+		{ "fadd",  "1 = 1 + 2"},
+		{ "fcomp",  "if (1 == 2"},
+		{ "fcos",  "1 = cos(1)"},
+		{ "fdiv",  "1 = 1 / 2"},
+		{ "fiadd",  "1 = 1 / 2"},
+		{ "ficom",  "if (1 == 2"},
+		{ "fidiv",  "1 = 1 / 2"},
+		{ "fidiv",  "1 = 1 * 2"},
+		{ "fisub",  "1 = 1 - 2"},
+		{ "fnul",  "1 = 1 * 2"},
+		{ "fnop",  " "},
+		{ "frndint",  "1 = (int) 1"},
+		{ "fsin",  "1 = sin(1)"},
+		{ "fsqrt",  "1 = sqrt(1)"},
+		{ "fsub",  "1 = 1 - 2"},
+		{ "fxch",  "1,2 = 2,1"},
+		{ "idiv",  "1 /= 2"},
+		{ "imul",  "1 *= 2"},
 		{ "in",   "1 = io[2]"},
-		{ "out",  "io[1] = 2"},
-		{ "cmp",  "cmp 1, 2"},
-		{ "test", "cmp 1, 2"},
+		{ "inc",  "1++"},
+		{ "ja", "isAbove 1)"},
+		{ "jbe", "isBelowOrEqual 1)"},
+		{ "je", "isZero 1)"},
+		{ "jg", "isGreater 1)"},
+		{ "jge", "isGreaterOrEqual 1)"},
+		{ "jle", "isLessOrEqual 1)"},
+		{ "jmp",  "goto 1"},
+		{ "jne", "notZero 1)"},
 		{ "lea",  "1 = 2"},
 		{ "mov",  "1 = 2"},
-		{ "cmovl","ifnot zf,1 = 2"},
-		{ "xor",  "1 ^= 2"},
-		{ "and",  "1 &= 2"},
-		{ "or",   "1 |= 2"},
-		{ "add",  "1 += 2"},
-		{ "sub",  "1 -= 2"},
+		{ "movsd",  "1 = 2"},
+		{ "movsx","1 = 2"},
+		{ "movsxd","1 = 2"},
+		{ "movzx", "1 = 2"},
+		{ "movntdq", "1 = 2"},
+		{ "movnti", "1 = 2"},
+		{ "movntpd", "1 = 2"},
 		{ "mul",  "1 *= 2"},
-		{ "div",  "1 /= 2"},
-		{ "call", "call 1"},
-		{ "jmp",  "goto 1"},
-		{ "je",   "je 1"},
-		{ "push", "push 1"},
+		{ "neg",  "1 ~= 1"},
+		{ "nop",  ""},
+		{ "not",  "1 = !1"},
+		{ "or",   "1 |= 2"},
+		{ "out",  "io[1] = 2"},
 		{ "pop",  "pop 1"},
+		{ "push", "push 1"},
+		{ "sal",  "1 <<= 2"},
+		{ "sar",  "1 >>= 2"},
+		{ "sete",  "1 = e"},
+		{ "setne",  "1 = ne"},
+		{ "shl",  "1 <<<= 2"},
+		{ "shld",  "1 <<<= 2"},
+		{ "sbb",  "1 = 1 - 2"},
+		{ "shr",  "1 >>>= 2"},
+		{ "shlr",  "1 >>>= 2"},
+		//{ "strd",  "1 = 2 - 3"},
+		{ "sub",  "1 -= 2"},
+		{ "swap", "swap 1, 2"},
+		{ "test", "if (1 == 2"},
+		{ "xchg",  "1,2 = 2,1"},
+		{ "xadd",  "1,2 = 2,1+2"},
+		{ "xor",  "1 ^= 2"},
 		{ NULL }
 	};
 
@@ -54,7 +109,7 @@ static int replace(int argc, const char *argv[], char *newstr) {
 					if (ops[i].str[j]>='0' && ops[i].str[j]<='9') {
 						const char *w = argv[ ops[i].str[j]-'0' ];
 						if (w != NULL) {
-							strcpy(newstr+k, w);
+							strcpy (newstr+k, w);
 							k += strlen(w)-1;
 						}
 					} else newstr[k] = ops[i].str[j];
@@ -96,23 +151,23 @@ static int parse(RParse *p, const char *data, char *str) {
 		if (ptr) {
 			*ptr = '\0';
 			for (++ptr; *ptr==' '; ptr++);
-			strcpy (w0, buf);
-			strcpy (w1, ptr);
+			strncpy (w0, buf, sizeof (w0) - 1);
+			strncpy (w1, ptr, sizeof (w1) - 1);
 
 			optr = ptr;
 			ptr = strchr (ptr, ',');
 			if (ptr) {
 				*ptr = '\0';
 				for (++ptr; *ptr==' '; ptr++);
-				strcpy (w1, optr);
-				strcpy (w2, ptr);
+				strncpy (w1, optr, sizeof (w1) - 1);
+				strncpy (w2, ptr, sizeof (w2) - 1);
 				optr = ptr;
 				ptr = strchr (ptr, ',');
 				if (ptr) {
 					*ptr = '\0';
 					for (++ptr; *ptr==' '; ptr++);
-					strcpy (w2, optr);
-					strcpy (w3, ptr);
+					strncpy (w2, optr, sizeof (w2) - 1);
+					strncpy (w3, ptr, sizeof (w3) - 1);
 				}
 			}
 		}
@@ -130,17 +185,7 @@ static int parse(RParse *p, const char *data, char *str) {
 	return R_TRUE;
 }
 
-static int assemble(RParse *p, char *data, char *str) {
-	char *ptr;
-	printf ("assembling '%s' to generate real asm code\n", str);
-	ptr = strchr (str, '=');
-	if (ptr) {
-		*ptr = '\0';
-		sprintf (data, "mov %s, %s", str, ptr+1);
-	} else strcpy (data, str);
-	return R_TRUE;
-}
-
+#if 0
 static inline int ishexch (char c) {
 	if (c>=0 && c<=9) return 1;
 	if (c>='a' && c<='f') return 1;
@@ -153,17 +198,16 @@ static inline int issegoff (const char *w) {
 	if (!ishexch (w[1])) return 0;
 	if (!ishexch (w[2])) return 0;
 	if (!ishexch (w[3])) return 0;
-	// : 
+	// :
 	if (!ishexch (w[5])) return 0;
 	if (!ishexch (w[6])) return 0;
 	if (!ishexch (w[7])) return 0;
 	if (!ishexch (w[8])) return 0;
 	return 1;
 }
-
+#endif
 
 static int varsub(RParse *p, RAnalFunction *f, char *data, char *str, int len) {
-	strncpy (str, data, len);
 #if USE_VARSUBS
 	int i;
 	char *ptr, *ptr2;
@@ -178,7 +222,55 @@ static int varsub(RParse *p, RAnalFunction *f, char *data, char *str, int len) {
 		}
 	return R_TRUE;
 #else
-	return R_FALSE;
+	RAnalVar *var;
+	RListIter *iter;
+	char oldstr[64], newstr[64];
+	char *tstr = strdup (data);
+	RList *vars, *args;
+
+	if (!p->varlist) {
+                free(tstr);
+		return R_FALSE;
+        }
+
+	vars = p->varlist (p->anal, f, 'v');
+	args = p->varlist (p->anal, f, 'a');
+	r_list_join (vars, args);
+	r_list_foreach (vars, iter, var) {
+		if (var->delta < 10) snprintf (oldstr, sizeof (oldstr)-1,
+			"[%s - %d]",
+			p->anal->reg->name[R_REG_NAME_BP],
+			var->delta);
+		else snprintf (oldstr, sizeof (oldstr)-1,
+			"[%s - 0x%x]",
+			p->anal->reg->name[R_REG_NAME_BP],
+			var->delta);
+		snprintf (newstr, sizeof (newstr)-1, "[%s-%s]",
+			p->anal->reg->name[R_REG_NAME_BP],
+			var->name);
+		if (strstr (tstr, oldstr) != NULL) {
+			tstr = r_str_replace (tstr, oldstr, newstr, 1);
+			break;
+		}
+		// Try with no spaces
+		snprintf (oldstr, sizeof (oldstr)-1, "[%s-0x%x]",
+			p->anal->reg->name[R_REG_NAME_BP],
+			var->delta);
+		if (strstr (tstr, oldstr) != NULL) {
+			tstr = r_str_replace (tstr, oldstr, newstr, 1);
+			break;
+		}
+	}
+	if (len > strlen (tstr)) {
+		strncpy (str, tstr, strlen(tstr));
+		str[strlen (tstr)] = 0;
+	} else {
+		// TOO BIG STRING CANNOT REPLACE HERE
+		free (tstr);
+		return R_FALSE;
+	}
+	free (tstr);
+	return R_TRUE;
 #endif
 }
 
@@ -187,8 +279,7 @@ struct r_parse_plugin_t r_parse_plugin_x86_pseudo = {
 	.desc = "X86 pseudo syntax",
 	.init = NULL,
 	.fini = NULL,
-	.parse = parse,
-	.assemble = &assemble,
+	.parse = &parse,
 	.filter = NULL,
 	.varsub = &varsub,
 };

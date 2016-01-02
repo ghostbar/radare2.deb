@@ -119,7 +119,6 @@ typedef enum
 	  is_limm++;				\
 	  field##isReg = 0;			\
 	  PUT_NEXT_WORD_IN (field);		\
-	  limm_value = field;			\
 	}					\
       else if (field > 60)			\
 	{					\
@@ -159,7 +158,7 @@ typedef enum
     }						\
   while (0)
 
-#define IS_SMALL(x)                 (((field##x) < 256) && ((field##x) > -257))
+#define IS_SMALL(x)                 (((field##x) < 10) && ((field##x) >= 0))
 #define IS_REG(x)                    (field##x##isReg)
 #define WRITE_FORMAT_LB_Rx_RB(x)     WRITE_FORMAT (x, "[","]","","")
 #define WRITE_FORMAT_x_COMMA_LB(x)   WRITE_FORMAT (x, "",", [","",", [")
@@ -421,7 +420,7 @@ write_instr_name_(struct arcDisState * state,
 		  int addrWriteBack,
 		  int directMem)
 {
-  strcpy (state->instrBuffer, instrName);
+  strncpy (state->instrBuffer, instrName, sizeof (state->instrBuffer)-1);
   if (cond > 0)
     {
       const char *cc = 0;
@@ -486,7 +485,6 @@ dsmOneArcInst (bfd_vma addr, struct arcDisState * state)
   int fieldAisReg = 1, fieldBisReg = 1, fieldCisReg = 1;
   int fieldA, fieldB, fieldC = 0;
   int flag = 0, cond = 0, is_shimm = 0, is_limm = 0;
-  long limm_value = 0;
   int signExtend = 0, addrWriteBack = 0, directMem = 0;
   int is_linked = 0;
   int offset = 0;

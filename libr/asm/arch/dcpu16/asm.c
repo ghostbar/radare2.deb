@@ -50,7 +50,7 @@ static void clean_line(char* oline, const char* line) {
 			
 			/* Convert to upper case */
 			if (current_char >= 'a' && current_char <= 'z')
-				current_char = toupper (current_char);
+				current_char = toupper ((unsigned char)current_char);
 				
 			/* Place in cleaned line */
 			oline[n] = current_char;
@@ -213,7 +213,7 @@ int dcpu16_assemble (ut8* out, const char* unoline) {
 	clean_line (line, unoline);
 	
 	if (!(*line)) return 0;
-	if (!strlen (line)<4) return 0;
+	if (strlen (line)<4) return 0;
 	param = line + 3; /* Cut off first 3 characters */
 	
 	/* Basic instructions */
@@ -250,9 +250,10 @@ int dcpu16_assemble (ut8* out, const char* unoline) {
 		
 		/* Find comma */
 		int cn = 0;
-		while (param[cn] != ','
+		while (cn < 256
+                        && param[cn] != ','
 			&& param[cn] != '\n'
-			&& param[cn] != 0 && cn < 256)
+			&& param[cn] != 0)
 			cn++;
 			
 		if (param[cn] == ',') {

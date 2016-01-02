@@ -1,17 +1,33 @@
-/* radare - LGPL - Copyright 2009-2013 - nibble */
+/* radare - LGPL - Copyright 2009-2015 - pancake, nibble */
 
 #define R_BIN_ELF64 1
 #include "bin_elf.c"
 
+static int check(RBinFile *arch);
+static int check_bytes(const ut8 *buf, ut64 length);
+
 static int check(RBinFile *arch) {
-	if (arch && arch->buf && arch->buf->buf)
-	if (!memcmp (arch->buf->buf, "\x7F\x45\x4c\x46\x02", 5))
-		return R_TRUE;
+	const ut8 *bytes = arch ? r_buf_buffer (arch->buf) : NULL;
+	ut64 sz = arch ? r_buf_size (arch->buf): 0;
+	return check_bytes (bytes, sz);
+}
+
+static int check_bytes(const ut8 *buf, ut64 length) {
+	if (buf && length >= 5)
+		if (!memcmp (buf, "\x7F\x45\x4c\x46\x02", 5))
+			return R_TRUE;
 	return R_FALSE;
 }
 
-extern struct r_bin_meta_t r_bin_meta_elf64;
+extern struct r_bin_dbginfo_t r_bin_dbginfo_elf64;
 extern struct r_bin_write_t r_bin_write_elf64;
+
+static ut64 get_elf_vaddr64 (RBinFile *arch, ut64 baddr, ut64 paddr, ut64 vaddr) {
+	//NOTE(aaSSfxxx): since RVA is vaddr - "official" image base, we just need to add imagebase to vaddr
+	struct Elf_(r_bin_elf_obj_t)* obj = arch->o->bin_obj;
+	return obj->baddr - obj->boffset + vaddr;
+
+}
 
 static RBuffer* create(RBin* bin, const ut8 *code, int codelen, const ut8 *data, int datalen) {
 	ut32 p_start, p_phoff, p_phdr;
@@ -100,9 +116,12 @@ RBinPlugin r_bin_plugin_elf64 = {
 	.license = "LGPL3",
 	.init = NULL,
 	.fini = NULL,
+	.get_sdb = &get_sdb,
 	.load = &load,
+	.load_bytes = &load_bytes,
 	.destroy = &destroy,
 	.check = &check,
+	.check_bytes = &check_bytes,
 	.baddr = &baddr,
 	.boffset = &boffset,
 	.binsym = &binsym,
@@ -110,14 +129,17 @@ RBinPlugin r_bin_plugin_elf64 = {
 	.sections = &sections,
 	.symbols = &symbols,
 	.imports = &imports,
+	.minstrlen = 4,
 	.strings = NULL,
 	.info = &info,
 	.fields = &fields,
+	.size = &size,
 	.libs = &libs,
 	.relocs = &relocs,
-	.meta = &r_bin_meta_elf64,
+	.dbginfo = &r_bin_dbginfo_elf64,
 	.create = &create,
 	.write = &r_bin_write_elf64,
+	.get_vaddr = &get_elf_vaddr64,
 };
 
 #ifndef CORELIB

@@ -7,20 +7,22 @@ all:
 	rm -f librz.a
 else
 
-all: librz.a
 
 LIBAR=librz.a
-librz.a: zip/libr_zip.a
-	${CC_AR} librz.a zlib/*.o zip/*.o
+
+all: $(LIBAR)
+
+$(LIBAR): zip/libr_zip.a
+	${CC_AR} zlib/*.o zip/*.o
 
 zip/libr_zip.a: zlib/libr_z.a
-	${MAKE} -C zip
+	$(MAKE) -C zip
 
 zlib/libr_z.a:
-	${MAKE} -C zlib
+	$(MAKE) -C zlib
 
 clean:
-	${MAKE} -C zlib clean
-	${MAKE} -C zip clean
+	$(MAKE) -C zlib clean
+	$(MAKE) -C zip clean
 	rm -f *.a *.${EXT_SO}
 endif

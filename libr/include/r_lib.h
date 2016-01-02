@@ -1,5 +1,5 @@
-#ifndef _LIB_R_LIB_H_
-#define _LIB_R_LIB_H_
+#ifndef R2_LIB_H
+#define R2_LIB_H
 
 // TODO: rename type from int to 4 byte string
 // TODO: use 4 chars to idnetify plugin type
@@ -51,6 +51,7 @@ typedef struct r_lib_struct_t {
 	void *data; /* pointer to data handled by plugin handler */
 } RLibStruct;
 
+// order matters because of libr/util/lib.c
 enum {
 	R_LIB_TYPE_IO,      /* io layer */
 	R_LIB_TYPE_DBG,     /* debugger */
@@ -64,7 +65,7 @@ enum {
 	R_LIB_TYPE_SYSCALL, /* syscall */
 	R_LIB_TYPE_FASTCALL,/* fastcall */
 	R_LIB_TYPE_CRYPTO,  /* cryptography */
-	R_LIB_TYPE_CMD,     /* commands */
+	R_LIB_TYPE_CORE,    /* RCore commands */
 	R_LIB_TYPE_EGG,     /* r_egg plugin */
 	R_LIB_TYPE_LAST
 };
@@ -92,6 +93,7 @@ R_API int r_lib_run_handler(RLib *lib, RLibPlugin *plugin, RLibStruct *symbol);
 R_API RLibHandler *r_lib_get_handler(RLib *lib, int type);
 R_API int r_lib_open(RLib *lib, const char *file);
 R_API int r_lib_opendir(RLib *lib, const char *path);
+R_API int r_lib_open_ptr (RLib *lib, const char *file, void *handler, RLibStruct *stru);
 R_API char *r_lib_path(const char *libname);
 R_API void r_lib_list(RLib *lib);
 R_API int r_lib_add_handler(RLib *lib, int type, const char *desc,
@@ -100,6 +102,9 @@ R_API int r_lib_add_handler(RLib *lib, int type, const char *desc,
 	void *user );
 R_API int r_lib_del_handler(RLib *lib, int type);
 R_API int r_lib_close(RLib *lib, const char *file);
+
+R_API const char *r_lib_types_get(int idx);
+R_API int r_lib_types_get_i(const char *str);
 #endif
 
 #ifdef __cplusplus

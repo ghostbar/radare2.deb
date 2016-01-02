@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2014 - pancake, nibble */
+/* radare - LGPL - Copyright 2009-2015 - pancake, nibble */
 
 #include <stdio.h>
 #include <r_types.h>
@@ -26,7 +26,7 @@ static int r_asm_pseudo_string(RAsmOp *op, char *input, int zero) {
 		input++;
 	len = r_str_unescape (input)+zero;
 	r_hex_bin2str ((ut8*)input, len, op->buf_hex);
-	strncpy ((char*)op->buf, input, R_ASM_BUFSIZE);
+	strncpy ((char*)op->buf, input, R_ASM_BUFSIZE-1);
 	return len;
 }
 
@@ -53,7 +53,7 @@ static inline int r_asm_pseudo_org(RAsm *a, char *input) {
 
 static inline int r_asm_pseudo_hex(RAsmOp *op, char *input) {
 	int len = r_hex_str2bin (input, op->buf);
-	strncpy (op->buf_hex, r_str_trim (input), R_ASM_BUFSIZE);
+	strncpy (op->buf_hex, r_str_trim (input), R_ASM_BUFSIZE-1);
 	return len;
 }
 
@@ -129,6 +129,7 @@ R_API RAsm *r_asm_new() {
 	a->num = NULL;
 	a->user = NULL;
 	a->cur = NULL;
+	a->features = NULL;
 	a->binb.bin = NULL;
 	a->bits = 32;
 	a->cpu = NULL;
@@ -180,19 +181,24 @@ R_API int r_asm_filter_output(RAsm *a, const char *f) {
 	return R_TRUE;
 }
 
-R_API void r_asm_free(RAsm *a) {
-	if (!a) return;
-	free (a->cpu);
-	// TODO: any memory leak here?
-	r_pair_free (a->pair);
-	a->pair = NULL;
-	// XXX: segfault, plugins cannot be freed
-	if (a->plugins) {
-		a->plugins->free = NULL;
-		r_list_free (a->plugins);
-		a->plugins = NULL;
+R_API RAsm *r_asm_free(RAsm *a) {
+	if (a) {
+		if (a->cur && a->cur->fini) {
+			a->cur->fini (a->cur->user);
+		}
+		if (a->plugins) {
+			a->plugins->free = NULL;
+			r_list_free (a->plugins);
+			a->plugins = NULL;
+		}
+		free (a->cpu);
+		// TODO: any memory leak here?
+		sdb_free (a->pair);
+		a->pair = NULL;
+		// XXX: segfault, plugins cannot be freed
+		free (a);
 	}
-	free (a);
+	return NULL;
 }
 
 R_API void r_asm_set_user_ptr(RAsm *a, void *user) {
@@ -223,6 +229,8 @@ R_API int r_asm_del(RAsm *a, const char *name) {
 R_API int r_asm_is_valid(RAsm *a, const char *name) {
 	RAsmPlugin *h;
 	RListIter *iter;
+	if (!name || !*name)
+		return R_FALSE;
 	r_list_foreach (a->plugins, iter, h) {
 		if (!strcmp (h->name, name))
 			return R_TRUE;
@@ -235,19 +243,21 @@ R_API int r_asm_use(RAsm *a, const char *name) {
 	char file[1024];
 	RAsmPlugin *h;
 	RListIter *iter;
+	if (!a || !name)
+		return R_FALSE;
 	r_list_foreach (a->plugins, iter, h)
 		if (!strcmp (h->name, name)) {
 			if (!a->cur || (a->cur && strcmp (a->cur->arch, h->arch))) {
 				//const char *dop = r_config_get (core->config, "dir.opcodes");
 				// TODO: allow configurable path for sdb files
 				snprintf (file, sizeof (file), R_ASM_OPCODES_PATH"/%s.sdb", h->arch);
-				r_pair_free (a->pair);
-				a->pair = r_pair_new_from_file (file);
+				sdb_free (a->pair);
+				a->pair = sdb_new (NULL, file, 0);
 			}
 			a->cur = h;
 			return R_TRUE;
 		}
-	r_pair_free (a->pair);
+	sdb_free (a->pair);
 	a->pair = NULL;
 	return R_FALSE;
 }
@@ -285,8 +295,10 @@ R_API int r_asm_set_big_endian(RAsm *a, int b) {
 
 R_API int r_asm_set_syntax(RAsm *a, int syntax) {
 	switch (syntax) {
+	case R_ASM_SYNTAX_REGNUM:
 	case R_ASM_SYNTAX_INTEL:
 	case R_ASM_SYNTAX_ATT:
+	case R_ASM_SYNTAX_JZ:
 		a->syntax = syntax;
 		return R_TRUE;
 	default:
@@ -302,8 +314,15 @@ R_API int r_asm_set_pc(RAsm *a, ut64 pc) {
 R_API int r_asm_disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	int oplen, ret = op->payload = 0;
 	op->size = 4;
+	if (len<1)
+		return 0;
+	// on mips/arm/sparc .. use word size
+	sprintf (op->buf_asm,".byte 0x%02x %d", buf[0], len);
 	if (a->cur && a->cur->disassemble)
 		ret = a->cur->disassemble (a, op, buf, len);
+	// avoid undefined behaviour
+	if (ret<0)
+		ret = 0;
 	oplen = r_asm_op_get_size (op);
 	oplen = op->size;
 	if (oplen>len) oplen = len;
@@ -315,6 +334,8 @@ R_API int r_asm_disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	} else ret = 0;
 	r_mem_copyendian (op->buf, buf, oplen, !a->big_endian);
 	*op->buf_hex = 0;
+	if ((oplen*4)>=sizeof(op->buf_hex))
+		oplen = (sizeof(op->buf_hex)/4)-1;
 	r_hex_bin2str (buf, oplen, op->buf_hex);
 	return ret;
 }
@@ -345,7 +366,7 @@ R_API int r_asm_assemble(RAsm *a, RAsmOp *op, const char *buf) {
 		r_hex_bin2str (op->buf, ret, op->buf_hex);
 		op->size = ret;
 		op->buf_hex[ret*2] = 0;
-		strncpy (op->buf_asm, b, R_ASM_BUFSIZE);
+		strncpy (op->buf_asm, b, R_ASM_BUFSIZE-1);
 	}
 	free (b);
 	return ret;
@@ -367,13 +388,17 @@ R_API RAsmCode* r_asm_mdisassemble(RAsm *a, const ut8 *buf, int len) {
 	r_hex_bin2str (buf, len, acode->buf_hex);
 	if (!(acode->buf_asm = malloc (4)))
 		return r_asm_code_free (acode);
-	
+
 	for (idx = ret = slen = 0, acode->buf_asm[0] = '\0'; idx < len; idx+=ret) {
 		r_asm_set_pc (a, a->pc + ret);
 		ret = r_asm_disassemble (a, &op, buf+idx, len-idx);
 		if (ret<1) {
-			eprintf ("disassemble error at offset %"PFMT64d"\n", idx);
-			return acode;
+// TODO: this warning is sometimes useful
+//			eprintf ("disassemble error at offset %"PFMT64d"\n", idx);
+			//ret = 1;
+			ret = 1;
+			//acode->buf_asm[0] = 0;
+			//return acode;
 		}
 		if (a->ofilter)
 			r_parse_parse (a->ofilter, op.buf_asm, op.buf_asm);
@@ -435,7 +460,7 @@ R_API RAsmCode* r_asm_massemble(RAsm *a, const char *buf) {
 	if (!(acode->buf = malloc (64)))
 		return r_asm_code_free (acode);
 	lbuf = strdup (buf);
-
+	memset (&op, 0, sizeof (op));
 
 	/* accept ';' as comments when input is multiline */
 	{
@@ -476,9 +501,10 @@ R_API RAsmCode* r_asm_massemble(RAsm *a, const char *buf) {
 
 	/* Tokenize */
 	for (tokens[0] = lbuf, ctr = 0;
-		(ptr = strchr (tokens[ctr], ';')) || 
+		ctr < R_ASM_BUFSIZE - 1 &&
+		((ptr = strchr (tokens[ctr], ';')) ||
 		(ptr = strchr (tokens[ctr], '\n')) ||
-		(ptr = strchr (tokens[ctr], '\r'));
+		(ptr = strchr (tokens[ctr], '\r')));
 		tokens[++ctr] = ptr+1) {
 			*ptr = '\0';
 	}
@@ -495,7 +521,7 @@ R_API RAsmCode* r_asm_massemble(RAsm *a, const char *buf) {
 		for (idx = ret = i = j = 0, off = a->pc, acode->buf_hex[0] = '\0';
 				i <= ctr; i++, idx += ret) {
 			memset (buf_token, 0, R_ASM_BUFSIZE);
-			strncpy (buf_token, tokens[i], R_ASM_BUFSIZE);
+			strncpy (buf_token, tokens[i], R_ASM_BUFSIZE-1);
 			for (ptr_start = buf_token; *ptr_start &&
 				isseparator (*ptr_start); ptr_start++);
 			ptr = strchr (ptr_start, '#'); /* Comments */
@@ -521,12 +547,12 @@ R_API RAsmCode* r_asm_massemble(RAsm *a, const char *buf) {
 			}
 			if (*ptr_start == '\0') {
 				ret = 0;
-				continue;	
+				continue;
 			} else if (*ptr_start == '.') { /* pseudo */
 				ptr = ptr_start;
-				if (!strncmp (ptr, ".intel_syntax", 13)) 
+				if (!strncmp (ptr, ".intel_syntax", 13))
 					a->syntax = R_ASM_SYNTAX_INTEL;
-				else if (!strncmp (ptr, ".att_syntax", 10)) 
+				else if (!strncmp (ptr, ".att_syntax", 10))
 					a->syntax = R_ASM_SYNTAX_ATT;
 				else if (!strncmp (ptr, ".string ", 8)) {
 					r_str_chop (ptr+8);
@@ -573,10 +599,14 @@ R_API RAsmCode* r_asm_massemble(RAsm *a, const char *buf) {
 					continue;
 				} else if (!strncmp (ptr, ".equ ", 5)) {
 					ptr2 = strchr (ptr+5, ',');
+					if (!ptr2)
+						ptr2 = strchr (ptr+5, '=');
+					if (!ptr2)
+						ptr2 = strchr (ptr+5, ' ');
 					if (ptr2) {
 						*ptr2 = '\0';
 						r_asm_code_set_equ (acode, ptr+5, ptr2+1);
-					} else eprintf ("TODO: undef equ\n");
+					} else eprintf ("Invalid syntax for '.equ': Use '.equ <word> <word>'\n");
 				} else if (!strncmp (ptr, ".org ", 5)) {
 					ret = r_asm_pseudo_org (a, ptr+5);
 					off = a->pc;
@@ -626,6 +656,7 @@ R_API RAsmCode* r_asm_massemble(RAsm *a, const char *buf) {
 			}
 		}
 	}
+	free (lbuf);
 	return acode;
 }
 
@@ -660,6 +691,10 @@ R_API int r_asm_get_offset(RAsm *a, int type, int idx) { // link to rbin
 
 R_API char *r_asm_describe(RAsm *a, const char* str) {
 	if (a->pair)
-		return r_pair_get (a->pair, str);
+		return sdb_get (a->pair, str, 0);
 	return NULL;
+}
+
+R_API RList* r_asm_get_plugins(RAsm *a) {
+	return a->plugins;
 }

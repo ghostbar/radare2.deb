@@ -561,7 +561,7 @@ const t_cmddata cmddata[] = {
   { 0x00FFFF, 0x00610F, 2,00,  RMX,MR8,NNN, C_MMX+2,        "PUNPCKLWD" },
   { 0x00FFFF, 0x00620F, 2,00,  RMX,MR8,NNN, C_MMX+4,        "PUNPCKLDQ" },
   { 0x00FFFF, 0x00EF0F, 2,00,  RMX,MR8,NNN, C_MMX+0,        "PXOR" },
-  // AMD extentions to MMX command set (including Athlon/PIII extentions).
+  // AMD extensions to MMX command set (including Athlon/PIII extensions).
   { 0x00FFFF, 0x000E0F, 2,00,  NNN,NNN,NNN, C_MMX+0,        "FEMMS" },
   { 0x38FFFF, 0x000D0F, 2,00,  MD8,NNN,NNN, C_MMX+0,        "PREFETCH" },
   { 0x38FFFF, 0x080D0F, 2,00,  MD8,NNN,NNN, C_MMX+0,        "PREFETCHW" },
@@ -584,7 +584,7 @@ const t_cmddata cmddata[] = {
   { 0x00FFFF, 0x00F60F, 2,00,  RMX,MR8,NNN, C_MMX+1,        "PSADBW" },
   { 0x00FFFF, 0x00700F, 2,00,  RMX,MR8,IM1, C_MMX+2,        "PSHUFW" },
   { 0xFFFFFF, 0xF8AE0F, 2,00,  NNN,NNN,NNN, C_MMX+0,        "SFENCE" },
-  // AMD 3DNow! instructions (including Athlon extentions).
+  // AMD 3DNow! instructions (including Athlon extensions).
   { 0x00FFFF, 0xBF0F0F, 2,00,  RMX,MR8,NNN, C_NOW+1,        "PAVGUSB" },
   { 0x00FFFF, 0x9E0F0F, 2,00,  R3D,MRD,NNN, C_NOW+4,        "PFADD" },
   { 0x00FFFF, 0x9A0F0F, 2,00,  R3D,MRD,NNN, C_NOW+4,        "PFSUB" },
@@ -705,15 +705,16 @@ int Decodeaddress(ulong addr,char *symb,int nsymb,char *comment) {
 // Decodes and prints 32-bit float f into string s (which must be at least 16
 // bytes long). Returns resulting length of the string.
 int Printfloat4(char *s,float f) {
+  void *F = &f;
   int k;
-  if (*(ulong *)&f==0x7F800000L)
+  if (*(ulong *)F==(ulong)0x7F800000L)
     k=sprintf(s,"+INF 7F800000");
-  else if (*(ulong *)&f==0xFF800000L)
+  else if (*(ulong *)F==0xFF800000L)
     k=sprintf(s,"-INF FF800000");
-  else if ((*(ulong *)&f & 0xFF800000L)==0x7F800000L)
-    k=sprintf(s,"+NAN "LFMT08,*(ulong *)&f);
-  else if ((*(ulong *)&f & 0xFF800000L)==0xFF800000L)
-    k=sprintf(s,"-NAN "LFMT08,*(ulong *)&f);
+  else if ((*(ulong *)F & 0xFF800000L)==0x7F800000L)
+    k=sprintf(s,"+NAN "LFMT08,*(ulong *)F);
+  else if ((*(ulong *)F & 0xFF800000L)==0xFF800000L)
+    k=sprintf(s,"-NAN "LFMT08,*(ulong *)F);
 #if 0
   else if (f==0.0)                     // By default, 0 is printed without
     k=sprintf(s,"0.0");                // decimal point, which I don't want.
@@ -727,9 +728,10 @@ int Printfloat4(char *s,float f) {
 // Returns resulting length of the string.
 int Printfloat8(char *s,double d) {
   int k;
+  void *D = &d;
   ulong lod,hid;
-  lod=((ulong *)&d)[0];
-  hid=((ulong *)&d)[1];
+  lod=((ulong *)D)[0];
+  hid=((ulong *)D)[1];
   if (lod==0 && hid==0x7F800000L)
     k=sprintf(s,"+INF 7F800000 00000000");
   else if (lod==0 && hid==0xFF800000L)

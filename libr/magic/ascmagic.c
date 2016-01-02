@@ -67,6 +67,7 @@ static int ascmatch(const ut8 *, const unichar *, size_t);
 static ut8 *encode_utf8(ut8 *, size_t, unichar *, size_t);
 
 int file_ascmagic(RMagic *ms, const ut8 *buf, size_t nbytes) {
+return 0;
 	size_t i;
 	ut8 *nbuf = NULL, *utf8_buf = NULL, *utf8_end;
 	unichar *ubuf = NULL;	
@@ -132,6 +133,10 @@ int file_ascmagic(RMagic *ms, const ut8 *buf, size_t nbytes) {
 		type = "character data";
 		code_mime = "utf-16";    /* is this defined? */
 	} else if (looks_latin1(buf, nbytes, ubuf, &ulen)) {
+		if (!memcmp (buf, "\xff\xff\xff\xff", 4)) {
+			// uninitialized memory is not iso-8859!!
+			goto done;
+		}
 		code = "ISO-8859";
 		type = "text";
 		code_mime = "iso-8859-1"; 

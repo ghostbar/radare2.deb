@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2013 - pancake */
+/* radare - LGPL - Copyright 2008-2014 - pancake */
 
 #include <r_userconf.h>
 
@@ -23,7 +23,7 @@ typedef struct {
 #define R_IO_NFDS 2
 
 static int debug_os_read_at(RIOW32Dbg *dbg, void *buf, int len, ut64 addr) {
-	size_t ret;
+	DWORD ret;
         ReadProcessMemory (dbg->pi.hProcess, (void*)(size_t)addr, buf, len, &ret);
 //	if (len != ret)
 //		eprintf ("Cannot read 0x%08llx\n", addr);
@@ -36,10 +36,9 @@ static int __read(struct r_io_t *io, RIODesc *fd, ut8 *buf, int len) {
 	return debug_os_read_at (fd->data, buf, len, io->off);
 }
 
-static int w32dbg_write_at(RIODesc *fd, const ut8 *buf, int len, ut64 addr) {
-	size_t ret;
-	RIOW32Dbg *dbg = fd->data;
-        return 0 != WriteProcessMemory (dbg->pi.hProcess, (void *)(size_t)addr, buf, len, &ret)? len: 0;
+static int w32dbg_write_at(RIOW32Dbg *dbg, const ut8 *buf, int len, ut64 addr) {
+	DWORD ret;
+    return 0 != WriteProcessMemory (dbg->pi.hProcess, (void *)(size_t)addr, buf, len, &ret)? len: 0;
 }
 
 static int __write(struct r_io_t *io, RIODesc *fd, const ut8 *buf, int len) {
@@ -73,7 +72,7 @@ static RIODesc *__open(struct r_io_t *io, const char *file, int rw, int mode) {
 		}
 		pidpath = r_sys_pid_to_path (dbg->pid);
 		RETURN_IO_DESC_NEW (&r_io_plugin_w32dbg, -1,
-			pidpath, R_TRUE, 0, dbg);
+			pidpath, rw | R_IO_EXEC, mode, dbg);
 	}
 	return NULL;
 }
@@ -110,7 +109,7 @@ static int __init(struct r_io_t *io) {
 // TODO: rename w32dbg to io_w32dbg .. err io.w32dbg ??
 RIOPlugin r_io_plugin_w32dbg = {
         //void *plugin;
-	.name = "io_w32dbg",
+	.name = "w32dbg",
         .desc = "w32dbg io",
 	.license = "LGPL3",
         .open = __open,
@@ -121,13 +120,7 @@ RIOPlugin r_io_plugin_w32dbg = {
 	.system = __system,
 	.init = __init,
 	.write = __write,
-	.debug = (void*)(size_t)1
-        //void *widget;
-/*
-        struct debug_t *debug;
-        ut32 (*write)(int fd, const ut8 *buf, ut32 count);
-	int fds[R_IO_NFDS];
-*/
+	.isdbg = R_TRUE
 };
 #else
 struct r_io_plugin_t r_io_plugin_w32dbg = {

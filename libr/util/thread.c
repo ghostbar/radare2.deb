@@ -35,9 +35,7 @@ R_API int r_th_push_task(struct r_th_t *th, void *user) {
 }
 
 R_API struct r_th_t *r_th_new(R_TH_FUNCTION(fun), void *user, int delay) {
-	RThread *th;
-	
-	th = R_NEW (RThread);
+	RThread *th = R_NEW0 (RThread);
 	if (th) {
 		th->lock = r_th_lock_new();
 		th->running = R_FALSE;
@@ -48,7 +46,7 @@ R_API struct r_th_t *r_th_new(R_TH_FUNCTION(fun), void *user, int delay) {
 		th->ready = R_FALSE;
 #if HAVE_PTHREAD
 		pthread_create(&th->tid, NULL, _r_th_launcher, th);
-#elif __WIN32__
+#elif __WIN32__ || __WINDOWS__ && !defined(__CYGWIN__)
 		th->tid = CreateThread(NULL, 0, _r_th_launcher, th, 0, &th->tid);
 #endif
 	}
@@ -114,3 +112,17 @@ R_API void *r_th_free(struct r_th_t *th) {
 	free (th);
 	return NULL;
 }
+
+#if 0
+
+// Thread Pipes
+typedef struct r_th_pipe_t {
+	RList *msglist;
+	RThread *th;
+	//RThreadLock *lock;
+} RThreadPipe;
+
+r_th_pipe_new();
+
+#endif
+

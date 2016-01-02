@@ -140,6 +140,9 @@ static RIODesc *rap__open(struct r_io_t *io, const char *pathname, int rw, int m
 	}
 	listenmode = (*ptr==':');
 	*port++ = 0;
+	if (!*port) {
+		return NULL;
+	}
 	p = atoi (port);
 	if ((file = strchr (port+1, '/'))) {
 		*file = 0;
@@ -163,9 +166,14 @@ static RIODesc *rap__open(struct r_io_t *io, const char *pathname, int rw, int m
 			return NULL;
 		if (is_ssl) {
 			if (file && *file) {
-				if (!r_socket_listen (rior->fd, port, file))
+				if (!r_socket_listen (rior->fd, port, file)) {
+					free (rior);
 					return NULL;
-			} else return NULL;
+				}
+			} else {
+				free (rior);
+				return NULL;
+			}
 		} else {
 			if (!r_socket_listen (rior->fd, port, NULL))
 				return NULL;
@@ -206,7 +214,6 @@ static RIODesc *rap__open(struct r_io_t *io, const char *pathname, int rw, int m
 		}
 		r_mem_copyendian ((ut8 *)&i, (ut8*)buf+1, 4, ENDIAN);
 		if (i>0) eprintf ("ok\n");
-
 #if 0
 		/* Read meta info */
 		r_socket_read (rap_fd, (ut8 *)&buf, 4);
@@ -219,11 +226,12 @@ static RIODesc *rap__open(struct r_io_t *io, const char *pathname, int rw, int m
 			n = r_socket_read (rap_fd, (ut8 *)&buf, 4);
 			if (n<1) break;
 			r_mem_copyendian ((ut8 *)&i, (ut8*)buf, 4, ENDIAN);
-			i -= n; 
+			i -= n;
 		}
 #endif
 	} else {
 		r_socket_free (rap_fd);
+		free (rior);
 		return NULL;
 	}
 	//r_socket_free (rap_fd);
@@ -241,7 +249,8 @@ static int rap__system(RIO *io, RIODesc *fd, const char *command) {
 	RSocket *s = RIORAP_FD (fd);
 	ut8 buf[RMT_MAX];
 	char *ptr;
-	int op, ret, i, j = 0;
+	int op, ret;
+	unsigned int i, j = 0;
 
 	// send
 	if (*command=='!') {
@@ -251,7 +260,7 @@ static int rap__system(RIO *io, RIODesc *fd, const char *command) {
 		op = RMT_CMD;
 	buf[0] = op;
 	i = strlen (command)+1;
-	if (i>RMT_MAX) {
+	if (i>RMT_MAX-5) {
 		eprintf ("Command too long\n");
 		return -1;
 	}
@@ -268,13 +277,13 @@ static int rap__system(RIO *io, RIODesc *fd, const char *command) {
 		eprintf ("Unexpected system reply\n");
 		return -1;
 	}
+
 	r_mem_copyendian ((ut8*)&i, buf+1, 4, ENDIAN);
-	if (i == -1)
-		return -1;
 	ret = 0;
-	ptr = (char *)malloc (i);
+	ptr = (char *)malloc (i+1);
 	if (ptr) {
-		int ir, tr = 0;
+		int ir;
+		unsigned int tr = 0;
 		do {
 			ir = r_socket_read_block (s, (ut8*)ptr+tr, i-tr);
 			if (ir>0) tr += ir;
