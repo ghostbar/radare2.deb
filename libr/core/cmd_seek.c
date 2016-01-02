@@ -1,5 +1,28 @@
 /* radare - LGPL - Copyright 2009-2013 - pancake */
 
+// XXX DUP
+#define OPDELTA 32
+static int prevopsz (RCore *core, ut64 addr) {
+	ut64 target = addr;
+	ut64 base = target-OPDELTA;
+	int len, ret, i;
+	ut8 buf[OPDELTA*2];
+	RAnalOp op;
+
+	r_core_read_at (core, base, buf, sizeof (buf));
+	for (i=0; i<sizeof (buf); i++) {
+		ret = r_anal_op (core->anal, &op, base+i,
+			buf+i, sizeof (buf)-i);
+		if (!ret) continue;
+		len = op.size;
+		r_anal_op_fini (&op); // XXX
+		if (len<1) continue;
+		i += len-1;
+		if (target == base+i+1)
+			return len;
+	}
+	return 4;
+}
 static int cmd_seek(void *data, const char *input) {
 	RCore *core = (RCore *)data;
 	char *cmd, *p;
@@ -12,7 +35,7 @@ static int cmd_seek(void *data, const char *input) {
 				r_io_sundo_push (core->io, core->offset);
 				r_core_seek (core, off, 1);
 			}// else eprintf ("cfg.debug is false\n");
-		} else eprintf ("Usage: 'sr pc' ; seek to register\n");
+		} else eprintf ("|Usage| 'sr pc' seek to program counter register\n");
 	} else
 	if (*input) {
 		const char *inputnum = strchr (input+1, ' ');
@@ -41,9 +64,9 @@ static int cmd_seek(void *data, const char *input) {
 			if (input[1]==' ') {
 				int n = 0;
 				RListIter *iter;
-				RMetaItem *d, *item = NULL;
+				RAnalMetaItem *d, *item = NULL;
 				/* seek to comment */
-				r_list_foreach (core->anal->meta->data, iter, d) {
+				r_list_foreach (core->anal->meta, iter, d) {
 					if (d->type == R_META_TYPE_COMMENT) {
 						if (strstr (d->str, input+2)) {
 							if (n==1) {
@@ -169,33 +192,68 @@ static int cmd_seek(void *data, const char *input) {
 		case 'o':
 			{
 			RAnalOp op;
-			int ret = r_anal_op (core->anal, &op,
-				core->offset, core->block, core->blocksize);
-			r_core_seek_delta (core, ret);
+			int val=0, ret, i, n = r_num_math (core->num, input+1);
+			if (n==0) n = 1;
+			if (n<0) {
+				int ret = prevopsz (core, n);
+				ret = r_anal_op (core->anal, &op,
+						core->offset, core->block, core->blocksize);
+				val += ret;
+			} else
+			for (val=i=0; i<n; i++) {
+				ret = r_anal_op (core->anal, &op,
+						core->offset, core->block, core->blocksize);
+				if (ret<1) 
+					break;
+				r_core_seek_delta (core, ret);
+				val += ret;
+			}
+			core->num->value = val;
+			}
+			break;
+		case 'g':
+			{
+			RIOSection *s = r_io_section_get (core->io, 
+				r_io_section_vaddr_to_offset (core->io,
+				core->offset));
+			if (s) r_core_seek (core, s->vaddr, 1);
+			else r_core_seek (core, 0, 1);
+			}
+			break;
+		case 'G':
+			{
+			RIOSection *s = r_io_section_get (core->io, 
+				r_io_section_vaddr_to_offset (core->io,
+				core->offset));
+			// XXX: this +2 is a hack. must fix gap between sections
+			if (s) r_core_seek (core, s->vaddr+s->size+2, 1);
+			else r_core_seek (core, core->file->size, 1);
 			}
 			break;
 		case '?':
 			r_cons_printf (
-			"Usage: s[+-] [addr]\n"
-			" s 0x320    ; seek to this address\n"
-			" s-         ; undo seek\n"
-			" s+         ; redo seek\n"
-			" s*         ; list undo seek history\n"
-			" s++        ; seek blocksize bytes forward\n"
-			" s--        ; seek blocksize bytes backward\n"
-			" s+ 512     ; seek 512 bytes forward\n"
-			" s- 512     ; seek 512 bytes backward\n"
-			" s.hexoff   ; Seek honoring a base from core->offset\n"
-			" sa [[+-]a] [asz] ; seek asz (or bsize) aligned to addr\n"
-			" sn/sp      ; seek next/prev scr.nkey\n"
-			" s/ DATA    ; search for next occurrence of 'DATA'\n"
-			" s/x 9091   ; search for next occurrence of \\x90\\x91\n"
-			" sb         ; seek aligned to bb start\n"
-			//" sp [page]  ; seek page N (page = block)\n"
-			" so         ; seek to next opcode\n"
-			" sf         ; seek to next function (f->addr+f->size)\n"
-			" sC str     ; seek to comment matching given string\n"
-			" sr pc      ; seek to register\n");
+			"|Usage: s[+-] [addr]\n"
+			"| s                 print current address\n"
+			"| s 0x320           seek to this address\n"
+			"| s-                undo seek\n"
+			"| s+                redo seek\n"
+			"| s*                list undo seek history\n"
+			"| s++               seek blocksize bytes forward\n"
+			"| s--               seek blocksize bytes backward\n"
+			"| s+ 512            seek 512 bytes forward\n"
+			"| s- 512            seek 512 bytes backward\n"
+			"| sg/sG             seek begin (sg) or end (sG) of section or file\n"
+			"| s.hexoff          Seek honoring a base from core->offset\n"
+			"| sa [[+-]a] [asz]  seek asz (or bsize) aligned to addr\n"
+			"| sn/sp             seek next/prev scr.nkey\n"
+			"| s/ DATA           search for next occurrence of 'DATA'\n"
+			"| s/x 9091          search for next occurrence of \\x90\\x91\n"
+			"| sb                seek aligned to bb start\n"
+			//"| sp [page]  seek page N (page = block)\n"
+			"| so [num]          seek to N next opcode(s)\n"
+			"| sf                seek to next function (f->addr+f->size)\n"
+			"| sC str            seek to comment matching given string\n"
+			"| sr pc             seek to register\n");
 			break;
 		}
 	} else r_cons_printf ("0x%"PFMT64x"\n", core->offset);

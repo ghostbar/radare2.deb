@@ -12,7 +12,7 @@
 #include <execinfo.h>
 # ifndef PROC_PIDPATHINFO_MAXSIZE
 #  define PROC_PIDPATHINFO_MAXSIZE 1024
-int proc_pidpath(int pid, void * buffer, uint32_t  buffersize);
+int proc_pidpath(int pid, void * buffer, ut32 buffersize);
 //#  include <libproc.h>
 # endif
 #endif
@@ -40,7 +40,7 @@ struct {const char* name; ut64 bit;} const static arch_bit_array[] = {
     {"mips", R_SYS_ARCH_MIPS},
     {"sparc", R_SYS_ARCH_SPARC},
     {"csr", R_SYS_ARCH_CSR},
-    {"c55+", R_SYS_ARCH_C55PLUS},
+    {"tms320", R_SYS_ARCH_TMS320},
     {"msil", R_SYS_ARCH_MSIL},
     {"objd", R_SYS_ARCH_OBJD},
     {"bf", R_SYS_ARCH_BF},
@@ -61,8 +61,8 @@ R_API ut64 r_sys_now(void) {
 	struct timeval now;
 	gettimeofday (&now, NULL);
 	ret = now.tv_sec;
-	ret <<= 32;
-	ret += now.tv_usec;
+	ret <<= 20;
+	ret |= now.tv_usec;
 	//(sizeof (now.tv_sec) == 4
 	return ret;
 }
@@ -241,23 +241,30 @@ R_API int r_sys_crash_handler(const char *cmd) {
 R_API char *r_sys_getenv(const char *key) {
 #if __WINDOWS__
 	static char envbuf[1024];
+	if (!key) return NULL;
 	envbuf[0] = 0;
 	GetEnvironmentVariable (key, (LPSTR)&envbuf, sizeof (envbuf));
 	// TODO: handle return value of GEV
 	return *envbuf? strdup (envbuf): NULL;
 #else
-	char *b = getenv (key);
+	char *b;
+	if (!key) return NULL;
+	b = getenv (key);
 	return b? strdup (b): NULL;
 #endif
 }
 
 R_API char *r_sys_getdir(void) {
+	char *ret;
 #if __WINDOWS__
 	char *cwd = _getcwd (NULL, 0);
 #else
 	char *cwd = getcwd (NULL, 0);
 #endif
-	return cwd? strdup (cwd): NULL;
+	ret = cwd ? strdup (cwd) : NULL;
+	if (cwd)
+		free (cwd);
+	return ret;
 }
 
 R_API int r_sys_chdir(const char *s) {
@@ -278,14 +285,14 @@ R_API int r_sys_cmd_str_full(const char *cmd, const char *input, char **output, 
 		if (pipe (sh_out)) {
 			close (sh_in[0]);
 			close (sh_in[1]);
+			close (sh_out[0]);
+			close (sh_out[1]);
 			return R_FALSE;
 		}
 	}
 	if (pipe (sh_err)) {
 		close (sh_in[0]);
 		close (sh_in[1]);
-		close (sh_out[0]);
-		close (sh_out[1]);
 		return R_FALSE;
 	}
 
@@ -355,18 +362,17 @@ R_API int r_sys_cmd_str_full(const char *cmd, const char *input, char **output, 
 		close (sh_in[1]);
 		waitpid (pid, &status, 0);
 		if (status != 0) {
-			eprintf ("%s: command '%s' returned !0\n", __func__, cmd);
+			char *escmd = r_str_escape (cmd);
+			eprintf ("%s: failed command '%s'\n", __func__, escmd);
+			free (escmd);
 			return R_FALSE;
 		}
 
-		if (output) {
-			*output = outputptr;
-		} else if (outputptr) {
-			free(outputptr);
-		}
+		if (output) *output = outputptr;
+		else free (outputptr);
 		return R_TRUE;
 	}
-	free(outputptr);
+	free (outputptr);
 	return R_FALSE;
 }
 #elif __WINDOWS__
@@ -584,11 +590,30 @@ R_API char *r_sys_pid_to_path(int pid) {
 #else
 	int ret;
 	char buf[128], pathbuf[1024];
+#if __FreeBSD__
+	snprintf (buf, sizeof (buf), "/proc/%d/file", pid);
+#else
 	snprintf (buf, sizeof (buf), "/proc/%d/exe", pid);
-	ret = readlink (buf, pathbuf, sizeof (pathbuf));
+#endif
+	ret = readlink (buf, pathbuf, sizeof (pathbuf)-1);
 	if (ret<1)
 		return NULL;
 	pathbuf[ret] = 0;
 	return strdup (pathbuf);
 #endif
+}
+
+static char** env = NULL;
+
+R_API char **r_sys_get_environ () {
+	// return environ if available??
+	if (!env) {
+		env = r_lib_dl_sym (NULL, "environ");
+eprintf ("SET %p\n", env);
+}
+	return env;
+}
+
+R_API void r_sys_set_environ (char **e) {
+	env = e;
 }

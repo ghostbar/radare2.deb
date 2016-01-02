@@ -2,12 +2,12 @@ include ../config.mk
 include ../../global.mk
 
 NAME=r_bin
-DEPS=r_lib r_util
+DEPS=r_util r_db
 
 .PHONY: pre
 
 pre: $(LIBSO) $(LIBAR)
-	@${MAKE} -C p all
+	$(MAKE) -C p
 
 CFLAGS+=-DCORELIB -Iformat -Imangling
 

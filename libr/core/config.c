@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2013 - pancake */
+/* radare - LGPL - Copyright 2009-2014 - pancake */
 
 #include <r_core.h>
 
@@ -31,6 +31,7 @@ static int asm_profile(RConfig *cfg, const char *profile) {
 		r_config_set (cfg, "asm.xrefs", "true");
 		r_config_set (cfg, "asm.functions", "true");
 		r_config_set (cfg, "scr.color", "true");
+		r_config_set (cfg, "asm.syntax", "intel");
 	} else if (!strcmp(profile, "compact")) {
 		asm_profile (cfg, "simple");
 		r_config_set (cfg, "asm.lines", "true");
@@ -38,6 +39,7 @@ static int asm_profile(RConfig *cfg, const char *profile) {
 		r_config_set (cfg, "scr.color", "false");
 	} else if (!strcmp(profile, "gas")) {
 		asm_profile (cfg, "default");
+		r_config_set (cfg, "asm.syntax", "att");
 		r_config_set (cfg, "asm.lines", "false");
 		r_config_set (cfg, "asm.comments", "false");
 		r_config_set (cfg, "asm.trace", "false");
@@ -51,6 +53,7 @@ static int asm_profile(RConfig *cfg, const char *profile) {
 		r_config_set (cfg, "asm.trace", "false");
 		r_config_set (cfg, "asm.bytes", "false");
 		r_config_set (cfg, "asm.stackptr", "false");
+		r_config_set (cfg, "asm.cycles", "false");
 	} else if (!strcmp (profile, "graph")) {
 		asm_profile (cfg, "default");
 		r_config_set (cfg, "asm.bytes", "false");
@@ -80,11 +83,12 @@ static int asm_profile(RConfig *cfg, const char *profile) {
 		r_config_set (cfg, "asm.flags", "false");
 		r_config_set (cfg, "asm.xrefs", "false");
 		r_config_set (cfg, "asm.stackptr", "false");
+		r_config_set (cfg, "asm.cycles", "false");
 	}
 	return R_TRUE;
 }
 
-static int cb_analplugin(void *user, void *data) {
+static int cb_analarch(void *user, void *data) {
 	RCore *core = (RCore*) user;
 	RConfigNode *node = (RConfigNode*) data;
 	if (*node->value == '?') {
@@ -93,9 +97,16 @@ static int cb_analplugin(void *user, void *data) {
 	} else if (!r_anal_use (core->anal, node->value)) {
 		const char *aa = r_config_get (core->config, "asm.arch");
 		if (!aa || strcmp (aa, node->value))
-			eprintf ("anal.plugin: cannot find '%s'\n", node->value);
+			eprintf ("anal.arch: cannot find '%s'\n", node->value);
 		return R_FALSE;
 	}
+	return R_TRUE;
+}
+
+static int cb_analcpu(void *user, void *data) {
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	r_anal_set_cpu (core->anal, node->value);
 	return R_TRUE;
 }
 
@@ -119,11 +130,11 @@ static int cb_asmarch(void *user, void *data) {
 
 		r_config_set (core->config, "asm.parser", asmparser);
 	}
-	if (!r_config_set (core->config, "anal.plugin", node->value)) {
+	if (!r_config_set (core->config, "anal.arch", node->value)) {
 		char *p, *s = strdup (node->value);
 		p = strchr (s, '.');
 		if (p) *p = 0;
-		r_config_set (core->config, "anal.plugin", s);
+		r_config_set (core->config, "anal.arch", s);
 		free (s);
 	}
 	if (!r_syscall_setup (core->anal->syscall, node->value,
@@ -272,6 +283,13 @@ static int cb_cmdrepeat(void *user, void *data) {
 	return R_TRUE;
 }
 
+static int cb_scrnull(void *user, void *data) {
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	core->cons->null = node->i_value;
+	return R_TRUE;
+}
+
 static int cb_color(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
@@ -295,15 +313,21 @@ static int cb_dbgbackend(void *user, void *data) {
 	return R_TRUE;
 }
 
-static int cb_fixheight(void *user, void *data) {
+static int cb_fixrows(void *user, void *data) {
 	RConfigNode *node = (RConfigNode *) data;
-	r_cons_singleton ()->heightfix = node->i_value;
+	r_cons_singleton ()->fix_rows = node->i_value;
 	return R_TRUE;
 }
 
-static int cb_fixwidth(void *user, void *data) {
+static int cb_fixcolumns(void *user, void *data) {
 	RConfigNode *node = (RConfigNode *) data;
-	r_cons_singleton ()->widthfix = node->i_value;
+	r_cons_singleton ()->fix_columns = node->i_value;
+	return R_TRUE;
+}
+
+static int cb_rows(void *user, void *data) {
+	RConfigNode *node = (RConfigNode *) data;
+	r_cons_singleton ()->force_rows = node->i_value;
 	return R_TRUE;
 }
 
@@ -322,6 +346,12 @@ static int cb_fsview(void *user, void *data) {
 	if (!strstr (node->value, "spe"))
 		type |= R_FS_VIEW_SPECIAL;
 	r_fs_view (core->fs, type);
+	return R_TRUE;
+}
+
+static int cb_cmddepth(void *user, void *data) {
+	int c = R_MAX (((RConfigNode*)data)->i_value, 0);
+	((RCore *)user)->cmd_depth = c;
 	return R_TRUE;
 }
 
@@ -393,6 +423,12 @@ static int cb_pager(void *user, void *data) {
 
 	/* Let cons know we have a new pager. */
 	core->cons->pager = node->value;
+	return R_TRUE;
+}
+
+static int cb_fps(void *user, void *data) {
+	RConfigNode *node = (RConfigNode *) data;
+	r_cons_singleton ()->fps = node->i_value;
 	return R_TRUE;
 }
 
@@ -540,18 +576,33 @@ static int cb_zoombyte(void *user, void *data) {
 	return R_TRUE;
 }
 
+static int cb_binminstr(void *user, void *data) {
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	if (core->bin) {
+		int v = node->i_value;
+		if (v<1) v = 4; // HACK
+		core->bin->minstrlen = v;
+	// TODO: Do not refresh if nothing changed (minstrlen ?)
+		r_core_bin_refresh_strings (core);
+		return R_TRUE;
+	}
+	return R_TRUE;
+}
+
 #define SLURP_LIMIT (10*1024*1024)
 R_API int r_core_config_init(RCore *core) {
 	int i;
 	char buf[128], *p, *tmpdir;
-	RConfig *cfg = cfg = core->config = r_config_new (core);
+	RConfig *cfg = core->config = r_config_new (core);
 	cfg->printf = r_cons_printf;
 	cfg->num = core->num;
 
 	/* anal */
 	SETI("anal.depth", 50, "Max depth at code analysis"); // XXX: warn if depth is > 50 .. can be problematic
 	SETPREF("anal.hasnext", "true", "Continue analysis after each function");
-	SETCB("anal.plugin", R_SYS_ARCH, &cb_analplugin, "Specify the anal plugin to use");
+	SETCB("anal.arch", R_SYS_ARCH, &cb_analarch, "Specify the anal.arch to use");
+	SETCB("anal.cpu", R_SYS_ARCH, &cb_analcpu, "Specify the anal.cpu to use");
 	SETPREF("anal.prelude", "", "Specify an hexpair to find preludes in code");
 	SETCB("anal.split", "true", &cb_analsplit, "Split functions into basic blocks in analysis.");
 	SETI("anal.ptrdepth", 3, "Maximum number of nested pointers to follow in analysis");
@@ -565,6 +616,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF("asm.comments", "true", "Show comments in disassembly view");
 	SETPREF("asm.decode", "false", "Use code analysis as a disassembler");
 	SETPREF("asm.dwarf", "false", "Show dwarf comment at disassembly");
+	SETPREF("asm.esil", "false", "Show ESIL instead of mnemonic");
 	SETPREF("asm.filter", "true", "Replace numbers in disassembly using flags containing a dot in the name in disassembly");
 	SETPREF("asm.flags", "true", "Show flags");
 	SETPREF("asm.lbytes", "true", "Align disasm bytes to left");
@@ -579,7 +631,8 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF("asm.pseudo", "false", "Enable pseudo syntax"); // DEPRECATED ?
 	SETPREF("asm.size", "false", "Show size of opcodes in disassembly (pd)");
 	SETPREF("asm.stackptr", "false", "Show stack pointer at disassembly");
-	SETPREF("asm.tabs", "false", "Use tabs in disassembly");
+	SETPREF("asm.cycles", "false", "Show cpu-cycles taken by instruction at disassembly");
+	SETI("asm.tabs", 0, "Use tabs in disassembly");
 	SETPREF("asm.trace", "true", "Show execution traces for each opcode");
 	SETPREF("asm.ucase", "false", "Use uppercase syntax at disassembly");
 	SETPREF("asm.varsub", "true", "Substitute variables in disassembly");
@@ -590,6 +643,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB("asm.segoff", "false", &cb_segoff, "Show segmented address in prompt (x86-16)");
 	SETCB("asm.syntax", "intel", &cb_asmsyntax, "Select assembly syntax");
 	SETI("asm.nbytes", 6, "Number of bytes for each opcode at disassembly");
+	SETPREF("asm.bytespace", "false", "Separate hex bytes with a whitespace");
 	SETICB("asm.bits", 32, &cb_asmbits, "Word size in bits at assembler");
 	SETICB("asm.lineswidth", 7, &cb_asmlineswidth, "Number of columns for program flow arrows");
 	SETPREF("asm.functions", "true", "Show functions in disassembly");
@@ -602,7 +656,7 @@ R_API int r_core_config_init(RCore *core) {
 	/* bin */
 	SETI("bin.baddr", 0, "Set base address for loading binaries ('o')");
 	SETPREF("bin.dwarf", "false", "Load dwarf information on startup if available");
-	SETI("bin.minstr", 0, "Minimum string length for r_bin");
+	SETICB("bin.minstr", 0, &cb_binminstr, "Minimum string length for r_bin");
 	SETPREF("bin.rawstr", "false", "Load strings from raw binaries");
 	SETPREF("bin.strings", "true", "Load strings from rbin on startup");
 
@@ -637,7 +691,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF("dir.plugins", R2_LIBDIR"/radare2/"R2_VERSION"/", "Path to plugin files to be loaded at startup");
 	SETPREF("dir.source", "", "Path to find source files");
 	SETPREF("dir.types", "/usr/include", "Default path to look for cparse type files");
-	SETPREF("dir.projects", R2_HOMEDIR"/rdb", "Default path for projects");
+	SETPREF("dir.projects", "~/"R2_HOMEDIR"/projects", "Default path for projects");
 
 	/* debug */
 	SETCB("dbg.backend", "native", &cb_dbgbackend, "Select the debugger backend");
@@ -669,6 +723,7 @@ R_API int r_core_config_init(RCore *core) {
 					else
 						r_config_set (cfg, "cmd.graph", "?e cannot find a valid picture viewer");
 	r_config_desc (cfg, "cmd.graph", "Command executed by 'agv' command to view graphs");
+	SETICB("cmd.depth", 10, &cb_cmddepth, "Maximum command depth");
 	SETPREF("cmd.bp", "", "Command to executed every breakpoint hit");
 	SETPREF("cmd.cprompt", "", "Column visual prompt commands");
 	SETPREF("cmd.hit", "", "Command to execute on every search hit");
@@ -690,7 +745,9 @@ R_API int r_core_config_init(RCore *core) {
 #if __WINDOWS__
 	r_config_set (cfg, "http.browser", "start");
 #else
-	if (r_file_exists ("/system/bin/toolbox"))
+	if (r_file_exists ("/usr/bin/openURL")) // iOS ericautils
+		r_config_set (cfg, "http.browser", "/usr/bin/openURL");
+	else if (r_file_exists ("/system/bin/toolbox"))
 		r_config_set (cfg, "http.browser",
 				"LD_LIBRARY_PATH=/system/lib am start -a android.intent.action.VIEW -d");
 	else if (r_file_exists ("/usr/bin/xdg-open"))
@@ -730,9 +787,11 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_desc (cfg, "scr.fgets", "Use fgets instead of dietline for prompt input");
 	SETPREF("scr.colorops", "true", "Colorize in numbers/registers in opcodes");
 	SETI("scr.colpos", 80, "Column position of cmd.cprompt in visual");
-	SETCB("scr.columns", "0", &cb_scrcolumns, "Set the columns number");
-	SETCB("scr.fixheight", "false", &cb_fixheight, "Workaround for Linux TTY");
-	SETCB("scr.fixwidth", "false", &cb_fixwidth, "Workaround for Prompt iOS ssh client");
+	SETICB("scr.columns", 0, &cb_scrcolumns, "Set the columns number");
+	SETICB("scr.rows", 0, &cb_rows, "Force specific console rows (height)");
+	SETCB("scr.fps", "false", &cb_fps, "Show FPS indicator in Visual");
+	SETICB("scr.fix_rows", 0, &cb_fixrows, "Workaround for Linux TTY");
+	SETICB("scr.fix_columns", 0, &cb_fixcolumns, "Workaround for Prompt iOS ssh client");
 	SETCB("scr.interactive", "true", &cb_scrint, "Start in interractive mode");
 	SETCB("scr.html", "false", &cb_scrhtml, "If enabled disassembly uses HTML syntax");
 	SETCB("scr.nkey", "hit", &cb_scrnkey, "Select the seek mode in visual");
@@ -750,6 +809,7 @@ R_API int r_core_config_init(RCore *core) {
 	r_config_desc (cfg, "scr.rgbcolor", "Use RGB colors (no available on windows)");
 	SETCB("scr.truecolor", "false", &cb_truecolor, "Manage color palette (0: ansi 16, 1: 256, 2: 16M)");
 	SETCB("scr.color", (core->print->flags&R_PRINT_FLAGS_COLOR)?"true":"false", &cb_color, "Enable/Disable colors");
+	SETCB("scr.null", "false", &cb_scrnull, "if set shows no output (disable console)");
 #if 0
 	{
 		const char *val;
@@ -792,7 +852,9 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF("file.project", "", "Name of current project");
 	SETPREF("file.sha1", "", "sha1 hash of current file");
 	SETPREF("file.type", "", "Type of current file");
-
+	SETPREF("file.loadmethod", "fail", "What to do when load addresses overlap: fail, overwrite, or append (next available)");
+	SETI("file.loadalign", 1024, "Alignment of load addresses");
+	SETPREF("file.nowarn", "false", "Suppress file loading warning messages");
 	/* magic */
 	SETI("magic.depth", 100, "Recursivity depth in magic description strings");
 

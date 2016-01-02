@@ -1,25 +1,40 @@
-/* sdb - LGPLv3 - Copyright 2011-2013 - pancake */
+/* sdb - LGPLv3 - Copyright 2011-2014 - pancake */
 
 #include "sdb.h"
 
-SDB_VISIBLE void sdb_ns_free(Sdb *s) {
-	SdbNs *ns;
+SDB_API void sdb_ns_free(Sdb *s) {
+	SdbListIter next;
 	SdbListIter *it;
+	SdbNs *ns;
+	// TODO: Implement and use ls_foreach_safe
 	ls_foreach (s->ns, it, ns) {
+		next.n = it->n;
 		sdb_ns_free (ns->sdb);
 		sdb_free (ns->sdb);
-		ls_delete (s->ns, it);
+		ls_del (s->ns, it); // free (it)
+		it = &next;
 	}
 }
 
-SdbNs *sdb_ns_new (const char *name, ut32 hash) {
-	SdbNs *ns = malloc (sizeof (SdbNs));
+static SdbNs *sdb_ns_new (Sdb *s, const char *name, ut32 hash) {
+	char dir[SDB_MAX_PATH];
+	SdbNs *ns;
+	if (s->dir && *s->dir && name && *name) {
+		int dir_len = strlen (s->dir);
+		int name_len = strlen (name);
+		if ((dir_len+name_len+3)>SDB_MAX_PATH)
+			return NULL;
+		memcpy (dir, s->dir, dir_len);
+		memcpy (dir+dir_len, ".", 1);
+		memcpy (dir+dir_len+1, name, name_len);
+	}
+	ns = malloc (sizeof (SdbNs));
 	ns->hash = hash;
-	ns->sdb = sdb_new (name, 0);
+	ns->sdb = sdb_new (dir, name, 0);
 	return ns;
 }
 
-SDB_VISIBLE Sdb *sdb_ns(Sdb *s, const char *name) {
+SDB_API Sdb *sdb_ns(Sdb *s, const char *name) {
 	SdbNs *ns;
 	SdbListIter *it;
 	ut32 hash = sdb_hashstr (name);
@@ -27,12 +42,12 @@ SDB_VISIBLE Sdb *sdb_ns(Sdb *s, const char *name) {
 		if (ns->hash == hash)
 			return ns->sdb;
 	}
-	ns = sdb_ns_new (name, hash);
+	ns = sdb_ns_new (s, name, hash);
 	ls_append (s->ns, ns);
 	return ns->sdb;
 }
 
-SDB_VISIBLE void sdb_ns_sync (Sdb *s) {
+SDB_API void sdb_ns_sync (Sdb *s) {
 	SdbNs *ns;
 	SdbListIter *it;
 	ls_foreach (s->ns, it, ns) {

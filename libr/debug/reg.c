@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2013 - pancake */
+/* radare - LGPL - Copyright 2009-2014 - pancake */
 
 #include <r_debug.h>
 #include <r_cons.h>
@@ -6,14 +6,20 @@
 
 R_API int r_debug_reg_sync(RDebug *dbg, int type, int write) {
 	ut8 buf[4096]; // XXX hacky!
-	int size, ret = R_FALSE;
+	int next, size, ret = R_FALSE;
 	if (!dbg || !dbg->reg || dbg->pid == -1)
 		return R_FALSE;
+	if (type == -1) {
+		type = R_REG_TYPE_GPR;
+		next = R_REG_TYPE_DRX;
+	} else next = 0;
+repeat:
 	if (write) {
 		if (dbg && dbg->h && dbg->h->reg_write) {
 			ut8 *buf = r_reg_get_bytes (dbg->reg, type, &size);
 			if (!dbg->h->reg_write (dbg, type, buf, sizeof (buf)))
 				eprintf ("r_debug_reg: error writing registers\n");
+			else ret = R_TRUE;
 		} //else eprintf ("r_debug_reg: cannot set registers\n");
 	} else {
 		/* read registers from debugger backend to dbg->regs */
@@ -25,6 +31,15 @@ R_API int r_debug_reg_sync(RDebug *dbg, int type, int write) {
 				ret = r_reg_set_bytes (dbg->reg, type, buf, size);
 			}
 		} //else eprintf ("r_debug_reg: cannot read registers\n");
+	}
+	if (next) {
+		type = next;
+		switch (next) {
+		case R_REG_TYPE_FPU: next = R_REG_TYPE_DRX; break;
+		case R_REG_TYPE_DRX: next = 0; break;
+		default: next = 0; break;
+		}
+		goto repeat;
 	}
 	return ret;
 }
@@ -80,11 +95,12 @@ R_API int r_debug_reg_list(RDebug *dbg, int type, int size, int rad) {
 			switch (rad) {
 			case 'j':
 				dbg->printf ("%s\"%s\":%"PFMT64d,
-					n?",":"",item->name, value);
+					n?",":"", item->name, value);
 				break;
 			case 1:
 			case '*':
-				dbg->printf ("f %s 1 0x%"PFMT64x"\n", item->name, value);
+				dbg->printf ("f %s 1 0x%"PFMT64x"\n",
+					item->name, value);
 				break;
 			case 'd':
 			case 2:
@@ -97,7 +113,7 @@ R_API int r_debug_reg_list(RDebug *dbg, int type, int size, int rad) {
 						char *str = r_reg_get_bvalue (dbg->reg, item);
 						int len = strlen (str);
 						strcpy (whites, "        ");
-						if (len>9)len=9;
+						if (len>9) len=9;
 						else len = 9-len;
 						whites[len] = 0;
 						dbg->printf (" %s = %s%s", item->name,

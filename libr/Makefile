@@ -9,10 +9,10 @@ IFX=${DESTDIR}/${INCLUDEDIR}
 PWD=$(shell pwd)
 
 LIBS0=util hash
-LIBS1=reg cons db magic lib diff bp search config socket
+LIBS1=reg cons db magic diff bp search config socket
 LIBS2=syscall cmd lang io crypto flags bin
 LIBS3=fs anal
-LIBS4=parse sign
+LIBS4=parse
 LIBS5=asm debug
 LIBS6=egg
 #LIBS6+=print
@@ -108,7 +108,7 @@ install: install-includes install-pkgconfig
 	# TODO :Use INSTALL_DATA_DIR instead of mkdir
 	# libraries
 	@${INSTALL_DIR} ${LFX}
-	@for a in `find * -type f | grep -e '\.${EXT_SO}$$' | grep -v lib/t | grep lib | grep -v /p/` ; do \
+	@for a in `find * -type f | grep -e '\.${EXT_SO}$$' | grep -Ev '(lib|parse)/t/' | grep lib | grep -v /bin/ | grep -v /p/` ; do \
 	  b=`echo $$a|cut -d / -f 2`; \
 	  echo " ${LFX}/$$b.${LIBVERSION}"; \
 	  ${INSTALL_LIB} $$a ${LFX}/$$b.${LIBVERSION} ; \
@@ -122,9 +122,10 @@ install: install-includes install-pkgconfig
 	@for a in `find */p -perm -u+x -type f | grep -v exe | grep -v dll | grep ${EXT_SO}`; \
 	  do echo " ${LFX}/radare2/${VERSION}/$$a"; \
 	${INSTALL_DATA} $$a ${LFX}/radare2/${VERSION} ; done
-	@echo "lang/p/radare.* ${DESTDIR}/${PFX}/${LIBDIR}/radare2/${VERSION}"
-	${INSTALL_DATA} lang/p/radare.* ${LFX}/radare2/${VERSION}
 	cd ${LFX}/radare2 ; ln -fs ${VERSION} last
+
+#@echo "lang/p/radare.* ${DESTDIR}/${PFX}/${LIBDIR}/radare2/${VERSION}"
+#${INSTALL_DATA} lang/p/radare.* ${LFX}/radare2/${VERSION}
 
 deinstall uninstall:
 	# libraries

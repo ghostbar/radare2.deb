@@ -1,6 +1,8 @@
 -include config-user.mk
 include global.mk
 
+R2R=radare2-regressions
+R2R_URL=$(shell doc/repo REGRESSIONS)
 DLIBDIR=$(DESTDIR)/$(LIBDIR)
 R2BINS=$(shell cd binr ; echo r*2)
 DATADIRS=libr/cons/d libr/asm/d libr/syscall/d libr/magic/d
@@ -20,9 +22,9 @@ PWD=$(shell pwd)
 
 all: plugins.cfg
 	${MAKE} -C libr/util
-	${MAKE} -C shlr
-	${MAKE} -C libr
-	${MAKE} -C binr
+	${MAKE} -j$(MAKE_JOBS) -C shlr
+	${MAKE} -j$(MAKE_JOBS) -C libr
+	${MAKE} -j$(MAKE_JOBS) -C binr
 
 plugins.cfg:
 	@if [ ! -e config-user.mk ]; then echo ; \
@@ -32,7 +34,6 @@ plugins.cfg:
 w32:
 	sys/mingw32.sh
 
-.PHONY: depgraph.png
 depgraph.png:
 	cd libr ; perl depgraph.pl | dot -Tpng -odepgraph.png
 
@@ -101,7 +102,7 @@ install: install-doc install-man install-www
 	done
 	mkdir -p ${DLIBDIR}/radare2/${VERSION}/hud
 	cp -f doc/hud ${DLIBDIR}/radare2/${VERSION}/hud/main
-	cp ${PWD}/libr/lang/p/radare.lua ${DLIBDIR}/radare2/${VERSION}/radare.lua
+	#cp ${PWD}/libr/lang/p/radare.lua ${DLIBDIR}/radare2/${VERSION}/radare.lua
 	sys/ldconfig.sh
 
 install-www:
@@ -161,6 +162,7 @@ purge-dev:
 purge: purge-doc purge-dev
 	for a in ${R2BINS} ; do rm -f ${DESTDIR}/${BINDIR}/$$a ; done
 	rm -f ${DESTDIR}/${BINDIR}/ragg2-cc
+	rm -f ${DESTDIR}/${BINDIR}/r2
 	rm -f ${DESTDIR}/${LIBDIR}/libr_*
 	rm -rf ${DESTDIR}/${LIBDIR}/radare2
 	rm -rf ${DESTDIR}/${INCLUDEDIR}/libr
@@ -186,14 +188,14 @@ shot:
 		radare.org:/srv/http/radareorg/get/shot
 
 tests:
-	@if [ -d r2-regressions ]; then \
-		cd r2-regressions ; git clean -xdf ; git pull ; \
+	@if [ -d $(R2R) ]; then \
+		cd $(R2R) ; git clean -xdf ; git pull ; \
 	else \
-		git clone git://github.com/radare/r2-regressions.git ; \
+		git clone ${R2R_URL} $(R2R); \
 	fi
-	cd r2-regressions ; ${MAKE}
+	cd $(R2R) ; ${MAKE}
 
 include ${MKPLUGINS}
 
-.PHONY: all clean distclean mrproper install symstall uninstall deinstall dist shot pkgcfg
-.PHONY: r2-bindings r2-bindings-dist libr binr install-man w32dist tests
+.PHONY: all clean distclean mrproper install symstall uninstall deinstall
+.PHONY: libr binr install-man w32dist tests dist shot pkgcfg depgraph.png

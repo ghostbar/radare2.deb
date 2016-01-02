@@ -12,13 +12,14 @@
 
 static unsigned long Offset = 0;
 static char *buf_global = NULL;
+static int buf_len = 0;
 static unsigned char bytes[32];
 
 static int arc_buffer_read_memory (bfd_vma memaddr, bfd_byte *myaddr, unsigned int length, struct disassemble_info *info) {
 	int delta = (memaddr - Offset);
 	if (delta<0) return -1; // disable backward reads
 	if ((delta+length)>sizeof (bytes)) return -1;
-	memcpy (myaddr, bytes+delta, length);
+	memcpy (myaddr, bytes+delta, R_MIN (buf_len, length));
 	return 0;
 }
 
@@ -56,16 +57,17 @@ int ARCompact_decodeInstr (bfd_vma address, disassemble_info * info);
 
 static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	static struct disassemble_info disasm_obj;
-	if (len<4) return -1;
+	if (len<2) return -1;
 	buf_global = op->buf_asm;
 	Offset = a->pc;
 	if (len>sizeof (bytes))
 		len = sizeof (bytes);
 	memcpy (bytes, buf, len); // TODO handle compact
-
+	buf_len = len;
 	/* prepare disassembler */
 	memset (&disasm_obj,'\0', sizeof (struct disassemble_info));
 	disasm_obj.buffer = bytes;
+	disasm_obj.buffer_length = len;
 	disasm_obj.read_memory_func = &arc_buffer_read_memory;
 	disasm_obj.symbol_at_address_func = &symbol_at_address;
 	disasm_obj.memory_error_func = &memory_error_func;
@@ -77,23 +79,24 @@ static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 
 	op->buf_asm[0]='\0';
 	if (a->bits==16)
-		op->inst_len = ARCompact_decodeInstr ((bfd_vma)Offset, &disasm_obj);
-	else op->inst_len = ARCTangent_decodeInstr ((bfd_vma)Offset, &disasm_obj);
+		op->size = ARCompact_decodeInstr ((bfd_vma)Offset, &disasm_obj);
+	else op->size = ARCTangent_decodeInstr ((bfd_vma)Offset, &disasm_obj);
 
-	if (op->inst_len == -1)
+	if (op->size == -1)
 		strncpy (op->buf_asm, " (data)", R_ASM_BUFSIZE);
-	return op->inst_len;
+	return op->size;
 }
 
 RAsmPlugin r_asm_plugin_arc = {
 	.name = "arc",
 	.arch = "arc",
-	.bits = (int[]){ 16, 32, 0 },
-	.desc = "ARC disassembler",
+	.bits = 16|32,
+	.desc = "Argonaut RISC Core",
 	.init = NULL,
 	.fini = NULL,
 	.disassemble = &disassemble,
-	.assemble = NULL
+	.assemble = NULL,
+	.license = "GPL3"
 };
 
 #ifndef CORELIB

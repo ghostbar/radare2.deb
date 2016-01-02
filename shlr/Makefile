@@ -2,7 +2,10 @@ include ../config-user.mk
 include ../mk/${COMPILER}.mk
 
 HOST_CC?=gcc
-MODS=udis86 java tcc
+SHLR?=$(shell pwd)
+AR?=ar
+RANLIB?=ranlib
+MODS=sdb udis86 java tcc zip grub
 URL=git://github.com/radare/sdb
 PWD=$(shell pwd)
 SDB_CONFIG=${PWD}/sdb-config.mk
@@ -10,7 +13,7 @@ SDB_CONFIG=${PWD}/sdb-config.mk
 all: sdb/sdb
 	@for a in ${MODS} ; do \
 		echo ${MAKE} -C $$a ; \
-		${MAKE} -C $$a HAVE_VALA= ROOT=${PWD}/../ ; \
+		${MAKE} -C $$a RANLIB="$(RANLIB)" CC_AR="$(CC_AR)" HAVE_VALA= ROOT="${PWD}/../" CC="${CC}" ; \
 	done
 
 clean mrproper:
@@ -23,7 +26,7 @@ $(SDBLIB) sdb/sdb:
 	cd sdb ; ${MAKE} clean
 	cd sdb ; \
 		${MAKE} clean && \
-		${MAKE} CC=${HOST_CC} && \
+		${MAKE} CC=${HOST_CC} CFLAGS="${HOST_CFLAGS} -g" && \
 		cp -f src/sdb src/.sdb
 	cd sdb ; ${MAKE} clean
 	cd sdb ; ${MAKE} src/sdb-version.h
@@ -32,9 +35,8 @@ $(SDBLIB) sdb/sdb:
 	${RANLIB} sdb/src/libsdb.a
 	cp -f sdb/src/.sdb sdb/sdb
 
-
 .PHONY: sdb-sync sync-sdb sdbclean
-F=README.md config.mk src Makefile
+F=README.md config.mk src Makefile Jamroot
 SYNCFILES=$(addprefix sdb.vc/,${F})
 I=../libr/include
 
@@ -84,13 +86,15 @@ tcc-sync sync-tcc:
 
 D=${DESTDIR}/${PREFIX}
 install:
-	mkdir -p ${D}/lib
-	cp -f tcc/libr_tcc* ${D}/lib
+	#mkdir -p ${D}/lib
+	#cp -f tcc/libr_tcc* ${D}/lib
+	#cp -f zip/libr_z* ${D}/lib
 
 install-symlink symstall:
 	mkdir -p ${D}/lib
-	cd tcc ; for a in libr_tcc* ; do \
-		ln -fs `pwd`/$$a ${D}/lib/$$a ; done
+	#cd tcc ; for a in libr_tcc* ; do \
+	#	ln -fs `pwd`/$$a ${D}/lib/$$a ; done
 
 uninstall deinstall:
-	rm -f ${D}/lib/libr_tcc*
+	#rm -f ${D}/lib/libr_tcc*
+	#rm -f ${D}/lib/libr_z*

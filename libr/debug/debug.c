@@ -72,6 +72,7 @@ R_API struct r_debug_t *r_debug_free(struct r_debug_t *dbg) {
 	//r_bp_free(&dbg->bp);
 	//r_reg_free(&dbg->reg);
 	//r_debug_plugin_free();
+	r_debug_trace_free (dbg);
 	r_graph_free (dbg->graph);
 	free (dbg);
 	return NULL;
@@ -275,7 +276,7 @@ R_API int r_debug_step_soft(RDebug *dbg) {
 	dbg->iob.read_at (dbg->iob.io, pc0, buf, sizeof (buf));
 	ret = r_anal_op (dbg->anal, &op, pc0, buf, sizeof (buf));
 //eprintf ("read from pc0 = 0x%llx\n", pc0);
-	pc1 = pc0 + op.length;
+	pc1 = pc0 + op.size;
 //eprintf ("oplen = %d\n", op.length);
 //eprintf ("breakpoint at pc1 = 0x%llx\n", pc1);
 	// XXX: Does not works for 'ret'
@@ -346,7 +347,7 @@ R_API int r_debug_step_over(RDebug *dbg, int steps) {
 		r_anal_op (dbg->anal, &op, pc, buf, sizeof (buf));
 		if (op.type & R_ANAL_OP_TYPE_CALL
 		   || op.type & R_ANAL_OP_TYPE_UCALL) {
-			ut64 bpaddr = pc + op.length;
+			ut64 bpaddr = pc + op.size;
 			r_bp_add_sw (dbg->bp, bpaddr, 1, R_BP_PROT_EXEC);
 			ret = r_debug_continue (dbg);
 			r_bp_del (dbg->bp, bpaddr);
@@ -515,5 +516,22 @@ R_API int r_debug_is_dead (RDebug *dbg) {
 R_API int r_debug_map_protect (RDebug *dbg, ut64 addr, int size, int perms) {
 	if (dbg && dbg->h && dbg->h->map_protect)
 		return dbg->h->map_protect (dbg, addr, size, perms);
+	return R_FALSE;
+}
+
+R_API void r_debug_drx_list (RDebug *dbg) {
+	if (dbg && dbg->h && dbg->h->drx)
+		dbg->h->drx (dbg, 0, 0, 0, 0, 0);
+}
+
+R_API int r_debug_drx_set (RDebug *dbg, int idx, ut64 addr, int len, int rwx, int g) {
+	if (dbg && dbg->h && dbg->h->drx)
+		return dbg->h->drx (dbg, idx, addr, len, rwx, g);
+	return R_FALSE;
+}
+
+R_API int r_debug_drx_unset (RDebug *dbg, int idx) {
+	if (dbg && dbg->h && dbg->h->drx)
+		return dbg->h->drx (dbg, idx, 0, -1, 0, 0);
 	return R_FALSE;
 }

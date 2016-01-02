@@ -19,11 +19,24 @@ R_API const char *r_file_basename (const char *path) {
 	return path;
 }
 
-R_API boolt r_file_is_directory(const char *str) {
+R_API boolt r_file_is_regular(const char *str) {
 	struct stat buf = {0};
+	if (!str||!*str)
+		return R_FALSE;
 	if (stat (str, &buf)==-1)
 		return R_FALSE;
-	return ((S_IFDIR &buf.st_mode))? R_TRUE: R_FALSE;
+	return ((S_IFREG & buf.st_mode)==S_IFREG)? R_TRUE: R_FALSE;
+}
+
+R_API boolt r_file_is_directory(const char *str) {
+	struct stat buf = {0};
+	if (!str||!*str)
+		return R_FALSE;
+	if (stat (str, &buf)==-1)
+		return R_FALSE;
+	if ((S_IFBLK & buf.st_mode) == S_IFBLK)
+		return R_FALSE;
+	return (S_IFDIR==(S_IFDIR & buf.st_mode))? R_TRUE: R_FALSE;
 }
 
 R_API boolt r_file_fexists(const char *fmt, ...) {
@@ -58,10 +71,10 @@ R_API char *r_file_abspath(const char *file) {
 		return r_str_home (file+2);
 #if __UNIX__
 	if (cwd && *file != '/')
-		ret = r_str_dup_printf ("%s/%s", cwd, file);
+		ret = r_str_newf ("%s/%s", cwd, file);
 #elif __WINDOWS__
 	if (cwd && !strchr (file, ':'))
-		ret = r_str_dup_printf ("%s\\%s", cwd, file);
+		ret = r_str_newf ("%s\\%s", cwd, file);
 #endif
 	free (cwd);
 // TODO: remove // and ./
@@ -486,6 +499,10 @@ R_API char *r_file_tmpdir() {
 	char *path = strdup ("/data/data/org.radare.installer/radare2/tmp");
 #else
 	char *path = r_sys_getenv ("TMPDIR");
+	if (path && !*path) {
+		free (path);
+		path = NULL;
+	}
 	if (!path) path = strdup ("/tmp");
 #endif
 	if (!r_file_is_directory (path)) {
