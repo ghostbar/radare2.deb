@@ -1,0 +1,13 @@
+diff --git a/shlr/Makefile b/shlr/Makefile
+index e795a115ea19..3d7ad61527d1 100644
+--- a/shlr/Makefile
++++ b/shlr/Makefile
+@@ -17,7 +17,7 @@ CS_TIP=3722c74f69ffa5b705d36cd49c19acdf958a9b7a
+ # REVERT THIS COMMIT BECAUSE ITS WRONG
+ CS_REV=
+ #21b9b25e9dae4af0ef309d4089a54e53b8f5b479
+-CS_PATCHES=1
++CS_PATCHES=0
+ 
+ .PHONY: capstone-sync capstone-build all clean mrproper libgdbr libwind
+ 
