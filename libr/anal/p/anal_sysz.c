@@ -110,9 +110,9 @@ static int analop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len) {
 RAnalPlugin r_anal_plugin_sysz = {
 	.name = "systemz.cs",
 	.desc = "Capstone SystemZ microanalysis",
-	.esil = R_TRUE,
+	.esil = false,
 	.license = "BSD",
-	.arch = R_SYS_ARCH_SYSZ,
+	.arch = "sysz",
 	.bits = 32|64,
 	.op = &analop,
 	//.set_reg_profile = &set_reg_profile,
@@ -121,6 +121,7 @@ RAnalPlugin r_anal_plugin_sysz = {
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_ANAL,
-	.data = &r_anal_plugin_sysz
+	.data = &r_anal_plugin_sysz,
+	.version = R2_VERSION
 };
 #endif

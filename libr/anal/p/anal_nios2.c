@@ -92,23 +92,16 @@ struct r_anal_plugin_t r_anal_plugin_nios2 = {
 	.name = "nios2",
 	.desc = "NIOS II code analysis plugin",
 	.license = "LGPL3",
-	.arch = R_SYS_ARCH_BF,
-	.esil = R_TRUE,
+	.arch = "nios2",
+	.esil = false,
 	.bits = 32,
-	.init = NULL,
-	.fini = NULL,
 	.op = &nios2_op,
-	.set_reg_profile = NULL,
-	.fingerprint_bb = NULL,
-	.fingerprint_fcn = NULL,
-	.diff_bb = NULL,
-	.diff_fcn = NULL,
-	.diff_eval = NULL
 };
 
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_ANAL,
-	.data = &r_anal_plugin_nios2
+	.data = &r_anal_plugin_nios2,
+	.version = R2_VERSION
 };
 #endif

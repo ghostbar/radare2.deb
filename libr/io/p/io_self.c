@@ -13,7 +13,7 @@
 #include <mach/mach_interface.h>
 #include <mach/mach_traps.h>
 #include <mach/mach_types.h>
-#include <mach/mach_vm.h>
+//#include <mach/mach_vm.h>
 #include <mach/mach_error.h>
 #include <mach/task.h>
 #include <mach/task_info.h>
@@ -44,10 +44,10 @@ static int self_in_section(ut64 addr, int *left, int *perm) {
 					*left = self_sections[i].to-addr;
 				if (perm)
 					*perm = self_sections[i].perm;
-				return R_TRUE;
+				return true;
 			}
 	}
-	return R_FALSE;
+	return false;
 }
 
 static int update_self_regions(int pid) {
@@ -59,11 +59,11 @@ static int update_self_regions(int pid) {
 	rc = task_for_pid (mach_task_self(),pid, &task);
 	if (rc) {
 		eprintf ("task_for_pid failed\n");
-		return R_FALSE;
+		return false;
 	}
 	macosx_debug_regions (task, (size_t)1, 1000);
 
-	return R_TRUE;
+	return true;
 #elif __linux__
 	char *pos_c;
 	int i, l, perm;
@@ -73,7 +73,7 @@ static int update_self_regions(int pid) {
 	snprintf (path, sizeof (path)-1, "/proc/%d/maps", pid);
 	FILE *fd = fopen (path, "r");
 	if (!fd)
-		return R_FALSE;
+		return false;
 
 	while (!feof (fd)) {
 		line[0]='\0';
@@ -113,12 +113,13 @@ static int update_self_regions(int pid) {
 	}
 	fclose (fd);
 
-	return R_TRUE;
+	return true;
 #else
 	#warning not yet implemented for this platform
-	return R_FALSE;
+	return false;
 #endif
 }
+
 static int __plugin_open(RIO *io, const char *file, ut8 many) {
 	return (!strncmp (file, "self://", 7));
 }
@@ -127,7 +128,7 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 	int ret, pid = getpid ();
 	if (r_sandbox_enable (0))
 		return NULL;
-	io->va = R_TRUE; // nop
+	io->va = true; // nop
 	ret = update_self_regions (pid);
 	if (ret) {
 		return r_io_desc_new (&r_io_plugin_self,
@@ -180,7 +181,7 @@ static int __close(RIODesc *fd) {
 static int __system(RIO *io, RIODesc *fd, const char *cmd) {
 	if (!strcmp (cmd, "pid")) {
 		eprintf ("%d\n", fd->fd);
-	}else if (!strcmp (cmd, "maps")) {
+	} else if (!strcmp (cmd, "maps")) {
 		int i;
 		for (i =0; i<self_sections_count ;i++) {
 			eprintf ("0x%08"PFMT64x" - 0x%08"PFMT64x" %s %s\n",
@@ -212,11 +213,23 @@ struct r_io_plugin_t r_io_plugin_self = {
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_IO,
-	.data = &r_io_plugin_mach
+	.data = &r_io_plugin_mach,
+	.version = R2_VERSION
 };
 #endif
 
 #if __APPLE__
+// mach/mach_vm.h not available for iOS
+kern_return_t mach_vm_region
+(
+        vm_map_t target_task,
+        mach_vm_address_t *address,
+        mach_vm_size_t *size,
+        vm_region_flavor_t flavor,
+        vm_region_info_t info,
+        mach_msg_type_number_t *infoCnt,
+        mach_port_t *object_name
+);
 // taken from vmmap.c ios clone
 // XXX. this code is dupped in libr/debug/p/debug_native.c
 // but this one looks better, the other one seems to work too.
@@ -367,7 +380,8 @@ struct r_io_plugin_t r_io_plugin_self = {
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_IO,
-	.data = &r_io_plugin_mach
+	.data = &r_io_plugin_mach,
+	.version = R2_VERSION
 };
 #endif
 #endif

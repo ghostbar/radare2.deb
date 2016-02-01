@@ -33,7 +33,6 @@ static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	if (n<1) {
 		strcpy (op->buf_asm, "invalid");
 		op->size = 4;
-		ret = -1;
 		goto beach;
 	} else ret = 4;
 	if (insn->size<1)
@@ -73,6 +72,7 @@ RAsmPlugin r_asm_plugin_mips_cs = {
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_ASM,
-	.data = &r_asm_plugin_mips_cs
+	.data = &r_asm_plugin_mips_cs,
+	.version = R2_VERSION
 };
 #endif

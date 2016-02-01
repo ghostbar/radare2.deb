@@ -34,6 +34,9 @@ enum {
 	TYPE_MEM = 9,
 	TYPE_BKP = 10,
 	TYPE_SWP = 11,
+	TYPE_MOVW = 12,
+	TYPE_MOVT = 13,
+	TYPE_UDF = 14,
 };
 
 static int strcmpnull(const char *a, const char *b) {
@@ -59,6 +62,8 @@ static ArmOp ops[] = {
 	{ "rsc", 0xe000, TYPE_ARI },
 	{ "rscs", 0xf000, TYPE_ARI },
 
+	{ "udf", 0xf000f000, TYPE_UDF },
+
 	{ "push", 0x2d09, TYPE_IMM },
 	{ "pop", 0xbd08, TYPE_IMM },
 
@@ -82,6 +87,8 @@ static ArmOp ops[] = {
 
 	//{ "mov", 0x3, TYPE_MOV },
 	//{ "mov", 0x0a3, TYPE_MOV },
+	{ "movw", 0x3, TYPE_MOVW },
+	{ "movt", 0x4003, TYPE_MOVT },
 	{ "mov", 0xa001, TYPE_MOV },
 	{ "mvn", 0xe000, TYPE_MOV },
 	{ "svc", 0xf, TYPE_SWI }, // ???
@@ -343,6 +350,11 @@ static int thumb_assemble(ArmOpcode *ao, const char *str) {
 		ao->o = 0x10bf;
 		return 2;
 	} else
+	if (!strcmpnull (ao->op, "udf")) {
+		ao->o = 0xde;
+		ao->o |= getnum (ao->a[0])<<8;
+		return 2;
+	} else
 	if (!strcmpnull (ao->op, "wfe")) {
 		ao->o = 0x20bf;
 		return 2;
@@ -373,13 +385,13 @@ static int thumb_assemble(ArmOpcode *ao, const char *str) {
 		return 2;
 	} else
 	if (!strcmpnull (ao->op, "b") || !strcmpnull (ao->op, "b.n")) {
-			//uncond branch : PC += 4 + (delta*2)
-		int delta = getnum (ao->a[0]) - 4;
+		//uncond branch : PC += 4 + (delta*2)
+		int delta = getnum (ao->a[0]) - 4 - ao->off;
 		if ((delta < -2048) || (delta > 2046) || (delta & 1)) {
 			eprintf("branch out of range or not even\n");
 			return 0;
 		}
-		ut16 opcode = 0xe000 | ((delta / 2) & 0x7ff);	//11bit offset>>1 
+		ut16 opcode = 0xe000 | ((delta / 2) & 0x7ff);	//11bit offset>>1
 		ao->o = opcode >>8;
 		ao->o |= (opcode & 0xff)<<8;	// (ut32) ao->o holds the opcode in little-endian format !?
 		return 2;
@@ -423,10 +435,11 @@ static int thumb_assemble(ArmOpcode *ao, const char *str) {
 		}
 		return 2;
 	} else
-	if (!memcmp (ao->op, "ldr", 3)) {
+	if (!strncmp (ao->op, "ldr", 3)) {
 		getrange (ao->a[1]);
 		getrange (ao->a[2]);
-		if (ao->op[3]=='h') {
+		switch (ao->op[3]) {
+		case 'h': {
 			int a0 = getreg (ao->a[0]);
 			int a1 = getreg (ao->a[1]);
 			int a2 = getreg (ao->a[2]);
@@ -437,9 +450,8 @@ static int thumb_assemble(ArmOpcode *ao, const char *str) {
 				ao->o |= (7&a1)<<11;
 				ao->o += (7&a2);
 				return 2;
-			} else return 0;
-		} else
-		if (ao->op[3]=='b') {
+			} else return 0; }
+		case 'b': {
 			int a0 = getreg (ao->a[0]);
 			int a1 = getreg (ao->a[1]);
 			int a2 = getreg (ao->a[2]);
@@ -450,8 +462,8 @@ static int thumb_assemble(ArmOpcode *ao, const char *str) {
 				ao->o |= (7&a1)<<11;
 				ao->o |= (7&a2);
 				return 2;
-			} else return 0;
-		} else {
+			} else return 0; }
+		default: {
 			if (!strcmpnull (ao->a[1], "sp")) {
 				// ldr r0, [sp, n] = a[r0-7][nn]
 				if (getreg (ao->a[2]) == -1) {
@@ -479,9 +491,9 @@ static int thumb_assemble(ArmOpcode *ao, const char *str) {
 				ao->o |= (7&a2)<<14;
 				return 2;
 			}
-		}
+		} }
 	} else
-	if (!memcmp (ao->op, "str", 3)) {
+	if (!strncmp (ao->op, "str", 3)) {
 		getrange (ao->a[1]);
 		getrange (ao->a[2]);
 		if (ao->op[3]=='h') {
@@ -676,7 +688,7 @@ static int findyz(int x, int *y, int *z) {
 static int arm_assemble(ArmOpcode *ao, const char *str) {
 	int i, j, ret, reg, a, b;
 	for (i=0; ops[i].name; i++) {
-		if (!memcmp (ao->op, ops[i].name, strlen (ops[i].name))) {
+		if (!strncmp (ao->op, ops[i].name, strlen (ops[i].name))) {
 			ao->o = ops[i].code;
 			arm_opcode_cond (ao, strlen(ops[i].name));
 			if (ao->a[0] || ops[i].type == TYPE_BKP)
@@ -685,15 +697,22 @@ static int arm_assemble(ArmOpcode *ao, const char *str) {
 				getrange (ao->a[0]);
 				getrange (ao->a[1]);
 				getrange (ao->a[2]);
-				ao->o |= getreg (ao->a[0])<<20;
-				ao->o |= getreg (ao->a[1])<<8; // delta
+				{
+					char rn[8];
+					strncpy (rn, ao->a[1], 2);
+					rn[2] = 0;
+					ao->o |= getreg (ao->a[0])<<20;
+					ao->o |= getreg (rn)<<8; // delta
+				}
 				ret = getreg (ao->a[2]);
 				if (ret != -1) {
 					ao->o |= (strstr (str,"],"))?6:7;
-					ao->o |= (ret&0x0f)<<24;//(getreg(ao->a[2])&0x0f);
+					ao->o |= (ret & 0x0f) << 24;
 				} else {
-					ao->o |= (strstr (str,"],"))?4:5;
-					ao->o |= (getnum (ao->a[2])&0x7f)<<24; // delta
+					int num = getnum (ao->a[2]) & 0xfff;
+					ao->o |= (strstr (str, "],"))? 4: 5;
+					ao->o |= (num & 0xff) << 24;
+					ao->o |= ((num >> 8) & 0xf) << 16;
 				}
 				break;
 			case TYPE_IMM:
@@ -757,6 +776,17 @@ static int arm_assemble(ArmOpcode *ao, const char *str) {
 				ao->o |= ((getnum (ao->a[0])>>8)&0xff)<<16;
 				ao->o |= ((getnum (ao->a[0])>>16)&0xff)<<8;
 				break;
+			case TYPE_UDF:
+				{
+					// e7f000f0 = udf 0
+					// e7ffffff = udf 0xffff
+					ut32 n = getnum (ao->a[0]);
+					ao->o |= 0xe7;
+					ao->o |= (n & 0xf) << 24;
+					ao->o |= ((n>>4) & 0xff) << 16;
+					ao->o |= ((n>>12) & 0xf) << 8;
+				}
+				break;
 			case TYPE_ARI:
 				if (!ao->a[2]) {
 					ao->a[2] = ao->a[1];
@@ -784,6 +814,22 @@ static int arm_assemble(ArmOpcode *ao, const char *str) {
 				ret = getreg (ao->a[1]);
 				if (ret!=-1) ao->o |= ret<<24;
 				else ao->o |= 0xa003 | getnum (ao->a[1])<<24;
+				break;
+			case TYPE_MOVW:
+				ao->o |= getreg (ao->a[0])<<20;
+				ret = getnum (ao->a[1]);
+
+				ao->o |= 0x3 | ret << 24;
+				ao->o |= (ret & 0xf000) >> 4;
+				ao->o |= (ret & 0xf00) << 8;
+				break;
+			case TYPE_MOVT:
+				ao->o |= getreg (ao->a[0])<<20;
+				ret = getnum (ao->a[1]);
+
+				ao->o |= 0x4003 | ret << 24;
+				ao->o |= (ret & 0xf000) >> 4;
+				ao->o |= (ret & 0xf00) << 8;
 				break;
 			case TYPE_TST:
 				a = getreg (ao->a[0]);

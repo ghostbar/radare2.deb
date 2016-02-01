@@ -1,5 +1,14 @@
 #!/bin/sh
 # android gcc wrapper
+
+if [ -z "${NDK}" ]; then
+	NDK=~/Downloads/android-ndk-r10e
+	if [ ! -d "${NDK}" ]; then
+		echo "Invalid path in NDK environment"
+		exit 1
+	fi
+fi
+
 if [ -n "${NDK_ARCH}" ]; then
 	ARCH=${NDK_ARCH}
 else
@@ -10,13 +19,15 @@ fi
 
 #------------------------------------------#
 
-PROGDIR=`dirname $0`
-PROGDIR=`cd $PROGDIR && pwd`
+PROGDIR="$(dirname "$0")"
+PROGDIR="$(cd "$PROGDIR" && pwd)"
 
 ANDROID_KITKAT=19
 ANDROID_LOLIPOP=21
 
-OS=`uname | tr 'A-Z' 'a-z'`
+# shellcheck disable=SC2019
+# shellcheck disable=SC2018
+OS="$(uname | tr 'A-Z' 'a-z')"
 [ "${OS}" = macos ] && OS=darwin
 
 ARCH2=${ARCH}
@@ -64,18 +75,20 @@ PROGDIR=${NDK}
 PLATFORM=android-${ANDROID_SDK_VERSION}
 PLATFORM_ROOT=${PROGDIR}/platforms/${PLATFORM}/arch-${ARCH2}
 PLATFORM_PATH=${PLATFORM_ROOT}/usr
-NDK_BINS=`ls ${PROGDIR}/toolchains/*/prebuilt/${OS}*/bin |grep prebuilt | grep "/${ARCH}-" |sort |tail -n 1`
+# shellcheck disable=SC2010
+NDK_BINS=$(ls "${PROGDIR}"/toolchains/*/prebuilt/"${OS}"*/bin |grep prebuilt | grep "/${ARCH}-" |sort |tail -n 1)
+# shellcheck disable=SC2010
 [ -z "${NDK_BINS}" ] && \
-NDK_BINS=`ls ${PROGDIR}/toolchains/*/prebuilt/${OS}*/bin |grep prebuilt | grep "/${ARCH}" |sort |tail -n 1`
+NDK_BINS=$(ls "${PROGDIR}"/toolchains/*/prebuilt/"${OS}"*/bin |grep prebuilt | grep "/${ARCH}" |sort |tail -n 1)
 #echo "ls ${PROGDIR}/toolchains/*/prebuilt/linux*/bin |grep prebuilt | grep "/${ARCH}-" |sort |tail -n 1"
 #echo NDKBINS=${NDK_BINS}
 if [ -z "${NDK_BINS}" ]; then
 	echo "Cant find NDK_BINS"
 	exit 1
 fi
-CFLAGS="--sysroot=${PLATFORM_ROOT}"
+CFLAGS="${CFLAGS} --sysroot=${PLATFORM_ROOT}"
 CFLAGS="${CFLAGS} -I${PLATFORM_PATH}/include"
-CFLAGS="${CFLAGS} -pie -fPIC"
+CFLAGS="${CFLAGS} -fPIC -fPIE"
 
 case "${ARCH}" in
 mips64)
@@ -94,11 +107,14 @@ LDFLAGS="${LDFLAGS} --sysroot=${PLATFORM_ROOT}"
 #if [ -z "`echo $*" | grep shared`" ]; then
 #LDFLAGS="${LDFLAGS} ${PLATFORM_PATH}/lib/crtbegin_dynamic.o"
 #fi
-CC=${NDKPFX}-gcc
-AR=${NDKPFX}-ar
+CC="${NDKPFX}-gcc"
+AR="${NDKPFX}-ar"
 EXT_SO=so
 
-export PATH=${NDK_BINS}:$PATH
+export PATH="${NDK_BINS}:$PATH"
 export EXT_SO AR CC CFLAGS LDFLAGS PATH
-# echo ${CC} ${CFLAGS} ${LDFLAGS} $*"
-${CC} ${CFLAGS} ${LDFLAGS} $*
+
+#shellcheck disable=SC2048
+#shellcheck disable=SC2086
+echo ${CC} ${LDFLAGS} ${CFLAGS} $*
+${CC} ${LDFLAGS} ${CFLAGS} $*

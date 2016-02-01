@@ -121,7 +121,7 @@ static void run_state(	SStateInfo *state_info,
 int copy_string(STypeCodeStr *type_code_str, char *str_for_copy, unsigned int copy_len)
 {
 	int res = 1; // all is OK
-	int str_for_copy_len = (copy_len == 0) ? strlen(str_for_copy) : copy_len;
+	int str_for_copy_len = (copy_len == 0 && str_for_copy) ? strlen (str_for_copy) : copy_len;
 	int free_space = type_code_str->type_str_len - type_code_str->curr_pos - 1;
 	char *dst = 0;
 
@@ -241,6 +241,7 @@ int get_namespace_and_name(	char *buf, STypeCodeStr *type_code_str,
 
 #define SET_OPERATOR_CODE(str) { \
 	str_info = (SStrInfo *) malloc(sizeof(SStrInfo)); \
+	if (!str_info) break; \
 	str_info->len = strlen(str); \
 	str_info->str_ptr = str; \
 	r_list_append(names_l, str_info); \
@@ -410,7 +411,7 @@ int get_namespace_and_name(	char *buf, STypeCodeStr *type_code_str,
 		r_list_append(names_l, str_info);
 
 		read_len += len;
-		if ((len == 1)) {
+		if (len == 1) {
 			if (*(prev_pos + 1) == '@') {
 				prev_pos = curr_pos;
 			} else {

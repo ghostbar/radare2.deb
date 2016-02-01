@@ -63,17 +63,66 @@ static void set_mem_access(MCInst *MI, bool status)
 
 static void printopaquemem(MCInst *MI, unsigned OpNo, SStream *O)
 {
-	SStream_concat0(O, "ptr ");
+	// FIXME: do this with autogen
+	switch(MI->flat_insn->id) {
+		default:
+			SStream_concat0(O, "ptr ");
+			break;
+		case X86_INS_SGDT:
+		case X86_INS_SIDT:
+		case X86_INS_LGDT:
+		case X86_INS_LIDT:
+			// do not print "ptr"
+			break;
+	}
 
 	switch(MI->csh->mode) {
 		case CS_MODE_16:
-			MI->x86opsize = 2;
+			switch(MI->flat_insn->id) {
+				default:
+					MI->x86opsize = 2;
+					break;
+				case X86_INS_LJMP:
+				case X86_INS_LCALL:
+					MI->x86opsize = 4;
+					break;
+				case X86_INS_SGDT:
+				case X86_INS_SIDT:
+				case X86_INS_LGDT:
+				case X86_INS_LIDT:
+					MI->x86opsize = 6;
+					break;
+			}
 			break;
 		case CS_MODE_32:
-			MI->x86opsize = 4;
+			switch(MI->flat_insn->id) {
+				default:
+					MI->x86opsize = 4;
+					break;
+				case X86_INS_LJMP:
+				case X86_INS_LCALL:
+				case X86_INS_SGDT:
+				case X86_INS_SIDT:
+				case X86_INS_LGDT:
+				case X86_INS_LIDT:
+					MI->x86opsize = 6;
+					break;
+			}
 			break;
 		case CS_MODE_64:
-			MI->x86opsize = 8;
+			switch(MI->flat_insn->id) {
+				default:
+					MI->x86opsize = 8;
+					break;
+				case X86_INS_LJMP:
+				case X86_INS_LCALL:
+				case X86_INS_SGDT:
+				case X86_INS_SIDT:
+				case X86_INS_LGDT:
+				case X86_INS_LIDT:
+					MI->x86opsize = 10;
+					break;
+			}
 			break;
 		default:	// never reach
 			break;
@@ -134,8 +183,19 @@ static void printi512mem(MCInst *MI, unsigned OpNo, SStream *O)
 
 static void printf32mem(MCInst *MI, unsigned OpNo, SStream *O)
 {
-	SStream_concat0(O, "dword ptr ");
-	MI->x86opsize = 4;
+	switch(MCInst_getOpcode(MI)) {
+		default:
+			SStream_concat0(O, "dword ptr ");
+			MI->x86opsize = 4;
+			break;
+		case X86_FBSTPm:
+		case X86_FBLDm:
+			// TODO: fix this in tablegen instead
+			SStream_concat0(O, "tbyte ptr ");
+			MI->x86opsize = 10;
+			break;
+	}
+
 	printMemReference(MI, OpNo, O);
 }
 
@@ -267,6 +327,91 @@ static void printRegName(SStream *OS, unsigned RegNo)
 	SStream_concat0(OS, getRegisterName(RegNo));
 }
 
+// for MASM syntax, 0x123 = 123h, 0xA123 = 0A123h
+// this function tell us if we need to have prefix 0 in front of a number
+static bool need_zero_prefix(uint64_t imm)
+{
+	// find the first hex letter representing imm
+	while(imm >= 0x10)
+		imm >>= 4;
+
+	if (imm < 0xa)
+		return false;
+	else	// this need 0 prefix
+		return true;
+}
+
+static void printImm(int syntax, SStream *O, int64_t imm, bool positive)
+{
+	if (positive) {
+		// always print this number in positive form
+		if (syntax == CS_OPT_SYNTAX_MASM) {
+			if (imm < 0) {
+				if (imm == 0x8000000000000000)  // imm == -imm
+					SStream_concat0(O, "8000000000000000h");
+				else if (need_zero_prefix(imm))
+					SStream_concat(O, "0%"PRIx64"h", imm);
+				else
+					SStream_concat(O, "%"PRIx64"h", imm);
+			} else {
+				if (imm > HEX_THRESHOLD) {
+					if (need_zero_prefix(imm))
+						SStream_concat(O, "0%"PRIx64"h", imm);
+					else
+						SStream_concat(O, "%"PRIx64"h", imm);
+				} else
+					SStream_concat(O, "%"PRIu64, imm);
+			}
+		} else {	// Intel syntax
+			if (imm < 0) {
+				SStream_concat(O, "0x%"PRIx64, imm);
+			} else {
+				if (imm > HEX_THRESHOLD)
+					SStream_concat(O, "0x%"PRIx64, imm);
+				else
+					SStream_concat(O, "%"PRIu64, imm);
+			}
+		}
+	} else {
+		if (syntax == CS_OPT_SYNTAX_MASM) {
+			if (imm < 0) {
+				if (imm == 0x8000000000000000)  // imm == -imm
+					SStream_concat0(O, "8000000000000000h");
+				else if (imm < -HEX_THRESHOLD) {
+					if (need_zero_prefix(imm))
+						SStream_concat(O, "-0%"PRIx64"h", -imm);
+					else
+						SStream_concat(O, "-%"PRIx64"h", -imm);
+				} else
+					SStream_concat(O, "-%"PRIu64, -imm);
+			} else {
+				if (imm > HEX_THRESHOLD) {
+					if (need_zero_prefix(imm))
+						SStream_concat(O, "0%"PRIx64"h", imm);
+					else
+						SStream_concat(O, "%"PRIx64"h", imm);
+				} else
+					SStream_concat(O, "%"PRIu64, imm);
+			}
+		} else {	// Intel syntax
+			if (imm < 0) {
+				if (imm == 0x8000000000000000)  // imm == -imm
+					SStream_concat0(O, "0x8000000000000000");
+				else if (imm < -HEX_THRESHOLD)
+					SStream_concat(O, "-0x%"PRIx64, -imm);
+				else
+					SStream_concat(O, "-%"PRIu64, -imm);
+
+			} else {
+				if (imm > HEX_THRESHOLD)
+					SStream_concat(O, "0x%"PRIx64, imm);
+				else
+					SStream_concat(O, "%"PRIu64, imm);
+			}
+		}
+	}
+}
+
 // local printOperand, without updating public operands
 static void _printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 {
@@ -275,18 +420,7 @@ static void _printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 		printRegName(O, MCOperand_getReg(Op));
 	} else if (MCOperand_isImm(Op)) {
 		int64_t imm = MCOperand_getImm(Op);
-		if (imm < 0) {
-			if (imm < -HEX_THRESHOLD)
-				SStream_concat(O, "-0x%"PRIx64, -imm);
-			else
-				SStream_concat(O, "-%"PRIu64, -imm);
-
-		} else {
-			if (imm > HEX_THRESHOLD)
-				SStream_concat(O, "0x%"PRIx64, imm);
-			else
-				SStream_concat(O, "%"PRIu64, imm);
-		}
+		printImm(MI->csh->syntax, O, imm, false);
 	}
 }
 
@@ -488,14 +622,11 @@ static void printMemOffset(MCInst *MI, unsigned Op, SStream *O)
 		int64_t imm = MCOperand_getImm(DispSpec);
 		if (MI->csh->detail)
 			MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].mem.disp = imm;
-		if (imm < 0) {
-			SStream_concat(O, "0x%"PRIx64, arch_masks[MI->csh->mode] & imm);
-		} else {
-			if (imm > HEX_THRESHOLD)
-				SStream_concat(O, "0x%"PRIx64, imm);
-			else
-				SStream_concat(O, "%"PRIu64, imm);
-		}
+
+		if (imm < 0)
+			printImm(MI->csh->syntax, O, arch_masks[MI->csh->mode] & imm, true);
+		else
+			printImm(MI->csh->syntax, O, imm, true);
 	}
 
 	SStream_concat0(O, "]");
@@ -512,10 +643,7 @@ static void printU8Imm(MCInst *MI, unsigned Op, SStream *O)
 {
 	uint8_t val = MCOperand_getImm(MCInst_getOperand(MI, Op)) & 0xff;
 
-	if (val > HEX_THRESHOLD)
-		SStream_concat(O, "0x%x", val);
-	else
-		SStream_concat(O, "%u", val);
+	printImm(MI->csh->syntax, O, val, true);
 
 	if (MI->csh->detail) {
 #ifndef CAPSTONE_DIET
@@ -625,18 +753,32 @@ static void printPCRelImm(MCInst *MI, unsigned OpNo, SStream *O)
 	MCOperand *Op = MCInst_getOperand(MI, OpNo);
 	if (MCOperand_isImm(Op)) {
 		int64_t imm = MCOperand_getImm(Op) + MI->flat_insn->size + MI->address;
-		if (imm < 0) {
-			SStream_concat(O, "0x%"PRIx64, imm);
-		} else {
-			// handle 16bit segment bound
-			if (MI->csh->mode == CS_MODE_16 && imm > 0x100000)
-				imm -= 0x10000;
+		int opsize = X86_immediate_size(MI->Opcode);
 
-			if (imm > HEX_THRESHOLD)
-				SStream_concat(O, "0x%"PRIx64, imm);
-			else
-				SStream_concat(O, "%"PRIu64, imm);
+		// truncat imm for non-64bit
+		if (MI->csh->mode != CS_MODE_64) {
+			imm = imm & 0xffffffff;
 		}
+
+		if (MI->csh->mode == CS_MODE_16 &&
+				(MI->Opcode != X86_JMP_4 && MI->Opcode != X86_CALLpcrel32))
+			imm = imm & 0xffff;
+
+		// Hack: X86 16bit with opcode X86_JMP_4
+		if (MI->csh->mode == CS_MODE_16 &&
+				(MI->Opcode == X86_JMP_4 && MI->x86_prefix[2] != 0x66))
+			imm = imm & 0xffff;
+
+		// CALL/JMP rel16 is special
+		if (MI->Opcode == X86_CALLpcrel16 || MI->Opcode == X86_JMP_2)
+			imm = imm & 0xffff;
+
+		if (MI->csh->mode == CS_MODE_16) {
+			imm |= (MI->address >> 16) << 16;
+		}
+
+		printImm(MI->csh->syntax, O, imm, true);
+
 		if (MI->csh->detail) {
 #ifndef CAPSTONE_DIET
 			uint8_t access[6];
@@ -646,6 +788,8 @@ static void printPCRelImm(MCInst *MI, unsigned OpNo, SStream *O)
 			// if op_count > 0, then this operand's size is taken from the destination op
 			if (MI->flat_insn->detail->x86.op_count > 0)
 				MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = MI->flat_insn->detail->x86.operands[0].size;
+			else if (opsize > 0)
+				MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = opsize;
 			else
 				MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = MI->imm_size;
 			MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].imm = imm;
@@ -665,7 +809,6 @@ static void printPCRelImm(MCInst *MI, unsigned OpNo, SStream *O)
 
 static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 {
-	int opsize = 0;
 	MCOperand *Op  = MCInst_getOperand(MI, OpNo);
 
 	if (MCOperand_isReg(Op)) {
@@ -697,118 +840,37 @@ static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 			MI->op1_size = MI->csh->regsize_map[reg];
 	} else if (MCOperand_isImm(Op)) {
 		int64_t imm = MCOperand_getImm(Op);
+		int opsize = X86_immediate_size(MCInst_getOpcode(MI));
+		if (opsize == 1)    // print 1 byte immediate in positive form
+			imm = imm & 0xff;
 
-		switch(MCInst_getOpcode(MI)) {
-			default:
-				break;
-
-			case X86_AAD8i8:
-			case X86_AAM8i8:
-			case X86_ADC8i8:
-			case X86_ADD8i8:
-			case X86_AND8i8:
-			case X86_CMP8i8:
-			case X86_OR8i8:
-			case X86_SBB8i8:
-			case X86_SUB8i8:
-			case X86_TEST8i8:
-			case X86_XOR8i8:
-			case X86_ROL8ri:
-			case X86_ADC8ri:
-			case X86_ADC8ri8:
-			case X86_ADD8ri:
-			case X86_ADD8ri8:
-			case X86_AND8ri:
-			case X86_AND8ri8:
-			case X86_CMP8ri:
-			case X86_CMP8ri8:
-			case X86_IN8ri:
-			case X86_MOV8ri:
-			case X86_MOV8ri_alt:
-			case X86_OR8ri:
-			case X86_OR8ri8:
-			case X86_RCL8ri:
-			case X86_RCR8ri:
-			case X86_ROR8ri:
-			case X86_SAL8ri:
-			case X86_SAR8ri:
-			case X86_SBB8ri:
-			case X86_SBB8ri8:
-			case X86_SHL8ri:
-			case X86_SHR8ri:
-			case X86_SUB8ri:
-			case X86_SUB8ri8:
-			case X86_TEST8ri:
-			case X86_TEST8ri_NOREX:
-			case X86_TEST8ri_alt:
-			case X86_XOR8ri:
-			case X86_XOR8ri8:
-			case X86_OUT8ir:
-
-			case X86_ADC8mi:
-			case X86_ADC8mi8:
-			case X86_ADD8mi:
-			case X86_ADD8mi8:
-			case X86_AND8mi:
-			case X86_AND8mi8:
-			case X86_CMP8mi:
-			case X86_CMP8mi8:
-			case X86_LOCK_ADD8mi:
-			case X86_LOCK_AND8mi:
-			case X86_LOCK_OR8mi:
-			case X86_LOCK_SUB8mi:
-			case X86_LOCK_XOR8mi:
-			case X86_MOV8mi:
-			case X86_OR8mi:
-			case X86_OR8mi8:
-			case X86_RCL8mi:
-			case X86_RCR8mi:
-			case X86_ROL8mi:
-			case X86_ROR8mi:
-			case X86_SAL8mi:
-			case X86_SAR8mi:
-			case X86_SBB8mi:
-			case X86_SBB8mi8:
-			case X86_SHL8mi:
-			case X86_SHR8mi:
-			case X86_SUB8mi:
-			case X86_SUB8mi8:
-			case X86_TEST8mi:
-			case X86_TEST8mi_alt:
-			case X86_XOR8mi:
-			case X86_XOR8mi8:
-			case X86_PUSH64i8:
-			case X86_CMP32ri8:
-			case X86_CMP64ri8:
-
-				imm = imm & 0xff;
-				opsize = 1;	// immediate of 1 byte
-				break;
-		}
-
+		// printf(">>> id = %u\n", MI->flat_insn->id);
 		switch(MI->flat_insn->id) {
 			default:
-				if (imm >= 0) {
-					if (imm > HEX_THRESHOLD)
-						SStream_concat(O, "0x%"PRIx64, imm);
-					else
-						SStream_concat(O, "%"PRIu64, imm);
-				} else {
-					if (imm < -HEX_THRESHOLD)
-						SStream_concat(O, "-0x%"PRIx64, -imm);
-					else
-						SStream_concat(O, "-%"PRIu64, -imm);
-				}
-
+				printImm(MI->csh->syntax, O, imm, false);
 				break;
 
+			case X86_INS_MOVABS:
+				// do not print number in negative form
+				printImm(MI->csh->syntax, O, imm, true);
+				break;
+
+			case X86_INS_IN:
+			case X86_INS_OUT:
 			case X86_INS_INT:
 				// do not print number in negative form
 				imm = imm & 0xff;
-				if (imm >= 0 && imm <= HEX_THRESHOLD)
-					SStream_concat(O, "%u", imm);
-				else
-					SStream_concat(O, "0x%x", imm);
+				printImm(MI->csh->syntax, O, imm, true);
+				break;
+
+			case X86_INS_LCALL:
+			case X86_INS_LJMP:
+				// always print address in positive form
+				if (OpNo == 1) {	// ptr16 part
+					imm = imm & 0xffff;
+					opsize = 2;
+				}
+				printImm(MI->csh->syntax, O, imm, true);
 				break;
 
 			case X86_INS_AND:
@@ -816,20 +878,20 @@ static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 			case X86_INS_XOR:
 				// do not print number in negative form
 				if (imm >= 0 && imm <= HEX_THRESHOLD)
-					SStream_concat(O, "%u", imm);
+					printImm(MI->csh->syntax, O, imm, true);
 				else {
-					imm = arch_masks[MI->op1_size? MI->op1_size : MI->imm_size] & imm;
-					SStream_concat(O, "0x%"PRIx64, imm);
+					imm = arch_masks[opsize? opsize : MI->imm_size] & imm;
+					printImm(MI->csh->syntax, O, imm, true);
 				}
 				break;
 
 			case X86_INS_RET:
 				// RET imm16
 				if (imm >= 0 && imm <= HEX_THRESHOLD)
-					SStream_concat(O, "%u", imm);
+					printImm(MI->csh->syntax, O, imm, true);
 				else {
 					imm = 0xffff & imm;
-					SStream_concat(O, "0x%x", 0xffff & imm);
+					printImm(MI->csh->syntax, O, imm, true);
 				}
 				break;
 		}
@@ -845,9 +907,13 @@ static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 				MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].type = X86_OP_IMM;
 				if (opsize > 0)
 					MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = opsize;
-				else if (MI->flat_insn->detail->x86.op_count > 0)
-					MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = MI->flat_insn->detail->x86.operands[0].size;
-				else
+				else if (MI->flat_insn->detail->x86.op_count > 0) {
+					if (MI->flat_insn->id != X86_INS_LCALL && MI->flat_insn->id != X86_INS_LJMP) {
+						MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size =
+							MI->flat_insn->detail->x86.operands[0].size;
+					} else
+						MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = MI->imm_size;
+				} else
 					MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = MI->imm_size;
 				MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].imm = imm;
 
@@ -859,9 +925,6 @@ static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 				MI->flat_insn->detail->x86.op_count++;
 			}
 		}
-
-		//if (MI->op1_size == 0)
-		//	MI->op1_size = MI->imm_size;
 	}
 }
 
@@ -926,25 +989,18 @@ static void printMemReference(MCInst *MI, unsigned Op, SStream *O)
 		if (DispVal) {
 			if (NeedPlus) {
 				if (DispVal < 0) {
-					if (DispVal <  -HEX_THRESHOLD)
-						SStream_concat(O, " - 0x%"PRIx64, -DispVal);
-					else
-						SStream_concat(O, " - %"PRIu64, -DispVal);
+					SStream_concat0(O, " - ");
+					printImm(MI->csh->syntax, O, -DispVal, true);
 				} else {
-					if (DispVal > HEX_THRESHOLD)
-						SStream_concat(O, " + 0x%"PRIx64, DispVal);
-					else
-						SStream_concat(O, " + %"PRIu64, DispVal);
+					SStream_concat0(O, " + ");
+					printImm(MI->csh->syntax, O, DispVal, true);
 				}
 			} else {
 				// memory reference to an immediate address
 				if (DispVal < 0) {
-					SStream_concat(O, "0x%"PRIx64, arch_masks[MI->csh->mode] & DispVal);
+					printImm(MI->csh->syntax, O, arch_masks[MI->csh->mode] & DispVal, true);
 				} else {
-					if (DispVal > HEX_THRESHOLD)
-						SStream_concat(O, "0x%"PRIx64, DispVal);
-					else
-						SStream_concat(O, "%"PRIu64, DispVal);
+					printImm(MI->csh->syntax, O, DispVal, true);
 				}
 			}
 

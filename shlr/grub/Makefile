@@ -1,8 +1,16 @@
-LIBAR=libgrubfs.a
+NAME=grubfs
 
 include ../../config-user.mk
+include ../../global.mk
+include ../../mk/platform.mk
+NAME=grubfs
+_INCLUDE_MK_GCC_=
+include ../../libr/config.mk
+include ../../mk/${COMPILER}.mk
+
+EXT_AR?=a
+LIBAR=libgrubfs.${EXT_AR}
 CC?=gcc
-CC_AR?=ar q
 RANLIB?=ranlib
 OSTYPE=$(shell uname | tr 'A-Z' 'a-z')
 ifeq (${OSTYPE},)
@@ -57,13 +65,20 @@ CFLAGS+=-Iinclude
 CFLAGS+=-I../../libr/include -DGRUB_TARGET_NO_MODULES
 CFLAGS+=-g
 
-ifeq (,$(findstring cygwin,${OSTYPE}))
-ifeq (,$(findstring mingw32,${OSTYPE}))
-CFLAGS+=-fPIC
+ifneq (,$(findstring cygwin,${OSTYPE}))
+CFLAGS+=-D__CYGWIN__=1
 else
+ifneq (,$(findstring mingw32,${OSTYPE}))
 CFLAGS+=-DMINGW32=1
+else
+ifneq (,$(findstring mingw64,${OSTYPE})$(findstring msys,${OSTYPE}))
+LFDLAGS_SHARE?=-shared
+else
+CFLAGS+=${PIC_CFLAGS}
 endif
 endif
+endif
+
 # This fixes a silly GNU gcc build problem in OSX - BLAME! :D
 ifeq (${OSTYPE},darwin)
 CFLAGS+=-DAPPLE_CC
@@ -81,8 +96,11 @@ lib: $(LIBAR)
 
 $(LIBAR): ${KERNOBJS}
 	rm -f $(LIBAR)
-	$(CC_AR) $(LIBAR) ${KERNOBJS}
+	${CC_AR} ${KERNOBJS}
 	${RANLIB} $(LIBAR)
+ifneq ($(LIBAR),libgrubfs.a)
+	cp -f $(LIBAR) libgrubfs.a
+endif
 
 clean:
 	rm -f ${KERNOBJS} ${BIN} main.o $(LIBAR)

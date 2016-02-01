@@ -101,7 +101,7 @@ Unk, unk, unk, unk
 Experts agree, security holes suck, and we fixed some of them!
 This is just an existentialist experiment.
 Nothing to see here. Move along.
-Select your character: RBin Wizard, Master Anal Paladin, or Assembly Wizard
+Select your character: RBin Wizard, Master Anal Paladin, or Assembly Warrior
 I accidentally radared my filesystem today.
 No fix, no sleep
 You see it, you fix it!
@@ -161,3 +161,24 @@ What has been executed cannot be unexecuted
 What about taking a break? Here, have this nice 0xCC.
 r2 is meant to be read by machines.
 prove you are a robot to continue...
+This is fine.
+Using radare2 to generate intelligence...
+taking the file and moving it
+It's the year of desktop on radare2
+💺
+It's the year of radare2 on the desktop
+SSAbotage from ISIL
+"a collection of garbage" -- an r2 pro user
+A git pull a day keeps the segfault away
+Are you a wizard?
+Learn pancake as if you were radare!
+r2 is a great OS, but a terrible hex editor
+THE CAKE IS A PIE
+radare2 0.9.7 is so old, my grandfarther was using it with his enigma in WWII
+Have you seen the latest radare2 TV spot?
+scp ~/.idapro/ida.key radare.org:/var/www/radare.org/pub/losers/
+Too bad there is no gif support in r2. Yet. -- @r2gif
+Almost 5am, maybe you should go to bed.
+Jingle sploits, jingle sploits, ropchain all the way.
+Mind that the 'g' in radare is silent
+256 colors ought to be enough for anybody

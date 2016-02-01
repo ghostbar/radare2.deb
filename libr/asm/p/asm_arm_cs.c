@@ -6,17 +6,22 @@
 #include "../arch/arm/asm-arm.h"
 
 static int check_features(RAsm *a, cs_insn *insn);
-static csh cd;
+static csh cd = 0;
 
 static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
+	static int omode = -1;
+	static int obits = 32;
 	cs_insn* insn = NULL;
 	cs_mode mode = 0;
 	int ret, n = 0;
-	mode = (a->bits==16)? CS_MODE_THUMB: CS_MODE_ARM;
-	if (a->big_endian)
-		mode |= CS_MODE_BIG_ENDIAN;
-	else
-		mode |= CS_MODE_LITTLE_ENDIAN;
+	mode |= (a->bits==16)? CS_MODE_THUMB: CS_MODE_ARM;
+	mode |= (a->big_endian)? CS_MODE_BIG_ENDIAN: CS_MODE_LITTLE_ENDIAN;
+	if (mode != omode || a->bits != obits) {
+		cs_close (&cd);
+		cd = 0; // unnecessary
+		omode = mode;
+		obits = a->bits;
+	}
 
 	// replace this with the asm.features?
 	if (a->cpu && strstr (a->cpu, "mclass"))
@@ -25,12 +30,14 @@ static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 		mode |= CS_MODE_V8;
 	op->size = 4;
 	op->buf_asm[0] = 0;
-	ret = (a->bits==64)?
-		cs_open (CS_ARCH_ARM64, mode, &cd):
-		cs_open (CS_ARCH_ARM, mode, &cd);
-	if (ret) {
-		ret = -1;
-		goto beach;
+	if (cd == 0) {
+		ret = (a->bits==64)?
+			cs_open (CS_ARCH_ARM64, mode, &cd):
+			cs_open (CS_ARCH_ARM, mode, &cd);
+		if (ret) {
+			ret = -1;
+			goto beach;
+		}
 	}
 	if (a->syntax == R_ASM_SYNTAX_REGNUM) {
 		cs_option (cd, CS_OPT_SYNTAX, CS_OPT_SYNTAX_NOREGNAME);
@@ -67,21 +74,40 @@ static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	}
 	cs_free (insn, n);
 	beach:
-	cs_close (&cd);
+	//cs_close (&cd);
 	if (!op->buf_asm[0])
 		strcpy (op->buf_asm, "invalid");
 	return op->size;
 }
 
-static int assemble(RAsm *a, RAsmOp *op, const char *buf) {
-	const int is_thumb = a->bits==16? 1: 0;
-	int opsize;
-	ut32 opcode = armass_assemble (buf, a->pc, is_thumb);
-	if (a->bits != 32 && a->bits != 16) {
-		eprintf ("Error: ARM assembler only supports 16 or 32 bits\n");
-		return -1;
+static bool arm64ass(const char *str, ut64 addr, ut32 *op) {
+	if (!strcmp (str, "movz w0, 0")) {
+		*op = 0x00008052;
+		return true;
 	}
-	if (opcode==UT32_MAX)
+	if (!strcmp (str, "ret")) {
+		*op = 0xc0035fd6;
+		return true;
+	}
+	return false;
+}
+
+static int assemble(RAsm *a, RAsmOp *op, const char *buf) {
+	const bool is_thumb = a->bits==16? true: false;
+	int opsize;
+	ut32 opcode;
+	if (a->bits == 64) {
+		if (!arm64ass (buf, a->pc, &opcode)) {
+			return -1;
+		}
+	} else {
+		opcode = armass_assemble (buf, a->pc, is_thumb);
+		if (a->bits != 32 && a->bits != 16) {
+			eprintf ("Error: ARM assembler only supports 16 or 32 bits\n");
+			return -1;
+		}
+	}
+	if (opcode == UT32_MAX)
 		return -1;
 	if (is_thumb) {
 		const int o = opcode>>16;
@@ -102,7 +128,7 @@ RAsmPlugin r_asm_plugin_arm_cs = {
 	.cpus = "v8,cortex-m",
 	.license = "BSD",
 	.arch = "arm",
-	.bits = 16|32|64,
+	.bits = 16 | 32 | 64,
 	.init = NULL,
 	.fini = NULL,
 	.disassemble = &disassemble,
@@ -144,6 +170,7 @@ static int check_features(RAsm *a, cs_insn *insn) {
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_ASM,
-	.data = &r_asm_plugin_arm_cs
+	.data = &r_asm_plugin_arm_cs,
+	.version = R2_VERSION
 };
 #endif

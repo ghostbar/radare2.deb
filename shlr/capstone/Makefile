@@ -20,10 +20,10 @@ AR ?= ar
 RANLIB ?= ranlib
 STRIP ?= strip
 else
-CC ?= $(CROSS)gcc
-AR ?= $(CROSS)ar
-RANLIB ?= $(CROSS)ranlib
-STRIP ?= $(CROSS)strip
+CC = $(CROSS)gcc
+AR = $(CROSS)ar
+RANLIB = $(CROSS)ranlib
+STRIP = $(CROSS)strip
 endif
 
 ifneq (,$(findstring yes,$(CAPSTONE_DIET)))
@@ -45,6 +45,12 @@ endif
 
 ifeq ($(CAPSTONE_HAS_OSXKERNEL), yes)
 CFLAGS += -DCAPSTONE_HAS_OSXKERNEL
+SDKROOT ?= $(shell xcodebuild -version -sdk macosx Path)
+CFLAGS += -mmacosx-version-min=10.5 \
+		  -isysroot$(SDKROOT) \
+		  -I$(SDKROOT)/System/Library/Frameworks/Kernel.framework/Headers \
+		  -mkernel \
+		  -fno-builtin
 endif
 
 CFLAGS += $(foreach arch,$(LIBARCHS),-arch $(arch))
@@ -59,7 +65,7 @@ else
 BLDIR = $(abspath $(BUILDDIR))
 OBJDIR = $(BLDIR)/obj
 endif
-INCDIR ?= $(DESTDIR)$(PREFIX)/include
+INCDIR ?= $(PREFIX)/include
 
 UNAME_S := $(shell uname -s)
 
@@ -67,14 +73,20 @@ LIBDIRARCH ?= lib
 # Uncomment the below line to installs x86_64 libs to lib64/ directory.
 # Or better, pass 'LIBDIRARCH=lib64' to 'make install/uninstall' via 'make.sh'.
 #LIBDIRARCH ?= lib64
-LIBDIR ?= $(DESTDIR)$(PREFIX)/$(LIBDIRARCH)
+LIBDIR ?= $(PREFIX)/$(LIBDIRARCH)
 
 LIBDATADIR ?= $(LIBDIR)
+
+# Don't redefine $LIBDATADIR when global environment variable
+# USE_GENERIC_LIBDATADIR is set. This is used by the pkgsrc framework.
+
+ifndef USE_GENERIC_LIBDATADIR
 ifeq ($(UNAME_S), FreeBSD)
-LIBDATADIR = $(DESTDIR)$(PREFIX)/libdata
+LIBDATADIR = $(PREFIX)/libdata
 endif
 ifeq ($(UNAME_S), DragonFly)
-LIBDATADIR = $(DESTDIR)$(PREFIX)/libdata
+LIBDATADIR = $(PREFIX)/libdata
+endif
 endif
 
 INSTALL_BIN ?= install
@@ -120,6 +132,18 @@ ifneq (,$(findstring aarch64,$(CAPSTONE_ARCHS)))
 	LIBOBJ_ARM64 += $(OBJDIR)/arch/AArch64/AArch64Module.o
 endif
 
+
+DEP_M68K =
+DEP_M68K += arch/M68K/M68KDisassembler.h
+DEP_M68K += arch/M68K/M68KInstPrinter.h
+
+LIBOBJ_M68K =
+ifneq (,$(findstring m68k,$(CAPSTONE_ARCHS)))
+	CFLAGS += -DCAPSTONE_HAS_M68K
+	LIBOBJ_M68K += $(OBJDIR)/arch/M68K/M68KInstPrinter.o
+	LIBOBJ_M68K += $(OBJDIR)/arch/M68K/M68KDisassembler.o
+	LIBOBJ_M68K += $(OBJDIR)/arch/M68K/M68KModule.o
+endif
 
 DEP_MIPS =
 DEP_MIPS += arch/Mips/MipsGenAsmWriter.inc
@@ -207,10 +231,9 @@ DEP_X86 += arch/X86/X86GenAsmWriter1$(X86_REDUCE).inc
 DEP_X86 += arch/X86/X86GenDisassemblerTables$(X86_REDUCE).inc
 DEP_X86 += arch/X86/X86GenInstrInfo$(X86_REDUCE).inc
 DEP_X86 += arch/X86/X86GenRegisterInfo.inc
-DEP_X86 += arch/X86/X86MappingInsn.inc
-DEP_X86 += arch/X86/X86MappingInsn_reduce.inc
-DEP_X86 += arch/X86/X86MappingInsnOp.inc
-DEP_X86 += arch/X86/X86MappingInsnOp_reduce.inc
+DEP_X86 += arch/X86/X86MappingInsn$(X86_REDUCE).inc
+DEP_X86 += arch/X86/X86MappingInsnOp$(X86_REDUCE).inc
+DEP_X86 += arch/X86/X86ImmSize.inc
 
 LIBOBJ_X86 =
 ifneq (,$(findstring x86,$(CAPSTONE_ARCHS)))
@@ -248,7 +271,7 @@ endif
 
 LIBOBJ =
 LIBOBJ += $(OBJDIR)/cs.o $(OBJDIR)/utils.o $(OBJDIR)/SStream.o $(OBJDIR)/MCInstrDesc.o $(OBJDIR)/MCRegisterInfo.o
-LIBOBJ += $(LIBOBJ_ARM) $(LIBOBJ_ARM64) $(LIBOBJ_MIPS) $(LIBOBJ_PPC) $(LIBOBJ_SPARC) $(LIBOBJ_SYSZ) $(LIBOBJ_X86) $(LIBOBJ_XCORE)
+LIBOBJ += $(LIBOBJ_ARM) $(LIBOBJ_ARM64) $(LIBOBJ_M68K) $(LIBOBJ_MIPS) $(LIBOBJ_PPC) $(LIBOBJ_SPARC) $(LIBOBJ_SYSZ) $(LIBOBJ_X86) $(LIBOBJ_XCORE)
 LIBOBJ += $(OBJDIR)/MCInst.o
 
 
@@ -261,7 +284,7 @@ endif
 API_MAJOR=$(shell echo `grep -e CS_API_MAJOR include/capstone/capstone.h | grep -v = | awk '{print $$3}'` | awk '{print $$1}')
 VERSION_EXT =
 
-IS_APPLE := $(shell $(CC) -dM -E - < /dev/null | grep __apple_build_version__ | wc -l | tr -d " ")
+IS_APPLE := $(shell $(CC) -dM -E - < /dev/null 2> /dev/null | grep __apple_build_version__ | wc -l | tr -d " ")
 ifeq ($(IS_APPLE),1)
 EXT = dylib
 VERSION_EXT = $(API_MAJOR).$(EXT)
@@ -278,7 +301,7 @@ endif
 else
 $(LIBNAME)_LDFLAGS += -shared
 # Cygwin?
-IS_CYGWIN := $(shell $(CC) -dumpmachine | grep -i cygwin | wc -l)
+IS_CYGWIN := $(shell $(CC) -dumpmachine 2>/dev/null | grep -i cygwin | wc -l)
 ifeq ($(IS_CYGWIN),1)
 EXT = dll
 AR_EXT = lib
@@ -287,7 +310,7 @@ CFLAGS := $(CFLAGS:-fPIC=)
 # On Windows we need the shared library to be executable
 else
 # mingw?
-IS_MINGW := $(shell $(CC) --version | grep -i mingw | wc -l)
+IS_MINGW := $(shell $(CC) --version 2>/dev/null | grep -i mingw | wc -l)
 ifeq ($(IS_MINGW),1)
 EXT = dll
 AR_EXT = lib
@@ -299,7 +322,7 @@ else
 EXT = so
 VERSION_EXT = $(EXT).$(API_MAJOR)
 AR_EXT = a
-$(LIBNAME)_LDFLAGS += -Wl,-soname,lib$(LIBNAME).$(VERSION_EXT)
+#$(LIBNAME)_LDFLAGS += -Wl,-soname,lib$(LIBNAME).$(VERSION_EXT)
 endif
 endif
 endif
@@ -355,6 +378,7 @@ $(LIBOBJ): config.mk
 
 $(LIBOBJ_ARM): $(DEP_ARM)
 $(LIBOBJ_ARM64): $(DEP_ARM64)
+$(LIBOBJ_M68K): $(DEP_M68K)
 $(LIBOBJ_MIPS): $(DEP_MIPS)
 $(LIBOBJ_PPC): $(DEP_PPC)
 $(LIBOBJ_SPARC): $(DEP_SPARC)
@@ -382,27 +406,27 @@ else
 endif
 
 install: $(PKGCFGF) $(ARCHIVE) $(LIBRARY)
-	mkdir -p $(LIBDIR)
+	mkdir -p $(DESTDIR)/$(LIBDIR)
 ifeq ($(CAPSTONE_SHARED),yes)
-	$(INSTALL_LIB) $(LIBRARY) $(LIBDIR)
+	$(INSTALL_LIB) $(LIBRARY) $(DESTDIR)/$(LIBDIR)
 ifneq ($(VERSION_EXT),)
-	cd $(LIBDIR) && \
+	cd $(DESTDIR)/$(LIBDIR) && \
 	mv lib$(LIBNAME).$(EXT) lib$(LIBNAME).$(VERSION_EXT) && \
 	ln -s lib$(LIBNAME).$(VERSION_EXT) lib$(LIBNAME).$(EXT)
 endif
 endif
 ifeq ($(CAPSTONE_STATIC),yes)
-	$(INSTALL_DATA) $(ARCHIVE) $(LIBDIR)
+	$(INSTALL_DATA) $(ARCHIVE) $(DESTDIR)/$(LIBDIR)
 endif
-	mkdir -p $(INCDIR)/$(LIBNAME)
-	$(INSTALL_DATA) include/capstone/*.h $(INCDIR)/$(LIBNAME)
-	mkdir -p $(PKGCFGDIR)
-	$(INSTALL_DATA) $(PKGCFGF) $(PKGCFGDIR)/
+	mkdir -p $(DESTDIR)/$(INCDIR)/$(LIBNAME)
+	$(INSTALL_DATA) include/capstone/*.h $(DESTDIR)/$(INCDIR)/$(LIBNAME)
+	mkdir -p $(DESTDIR)/$(PKGCFGDIR)
+	$(INSTALL_DATA) $(PKGCFGF) $(DESTDIR)/$(PKGCFGDIR)
 
 uninstall:
-	rm -rf $(INCDIR)/$(LIBNAME)
-	rm -f $(LIBDIR)/lib$(LIBNAME).*
-	rm -f $(PKGCFGDIR)/$(LIBNAME).pc
+	rm -rf $(DESTDIR)/$(INCDIR)/$(LIBNAME)
+	rm -f $(DESTDIR)/$(LIBDIR)/lib$(LIBNAME).*
+	rm -f $(DESTDIR)/$(PKGCFGDIR)/$(LIBNAME).pc
 
 clean:
 	rm -f $(LIBOBJ)
@@ -437,10 +461,10 @@ dist:
 	git archive --format=zip --prefix=capstone-$(DIST_VERSION)/ $(TAG) > capstone-$(DIST_VERSION).zip
 
 
-TESTS = test test_detail test_arm test_arm64 test_mips test_ppc test_sparc
+TESTS = test test_detail test_arm test_arm64 test_m68k test_mips test_ppc test_sparc
 TESTS += test_systemz test_x86 test_xcore test_iter
 TESTS += test.static test_detail.static test_arm.static test_arm64.static
-TESTS += test_mips.static test_ppc.static test_sparc.static
+TESTS += test_m68k.static test_mips.static test_ppc.static test_sparc.static
 TESTS += test_systemz.static test_x86.static test_xcore.static
 TESTS += test_skipdata test_skipdata.static test_iter.static
 check:
@@ -481,4 +505,3 @@ define generate-pkgcfg
 	echo 'Libs: -L$${libdir} -lcapstone' >> $(PKGCFGF)
 	echo 'Cflags: -I$${includedir}' >> $(PKGCFGF)
 endef
-

@@ -152,6 +152,8 @@ typedef struct
 /* Conglomeration of the identification bytes, for easy testing as a word.  */
 #define	ELFMAG		"\177ELF"
 #define	SELFMAG		4
+#define	CGCMAG		"\177CGC"
+#define	SCGCMAG		4
 
 #define EI_CLASS	4		/* File class byte index */
 #define ELFCLASSNONE	0		/* Invalid class */
@@ -286,6 +288,7 @@ typedef struct
 #define EM_XTENSA	94		/* Tensilica Xtensa Architecture */
 #define EM_NUM		95
 #define EM_BLACKFIN	106		/* Analog Devices Blackfin */
+#define EM_MCST_ELBRUS  175
 #define EM_AARCH64      183		/* ARMv8 */
 #define EM_PROPELLER	0x5072
 
@@ -294,6 +297,8 @@ typedef struct
    chances of collision with official or non-GNU unofficial values.  */
 
 #define EM_ALPHA	0x9026
+#define EM_MICROBLAZE 0xbd
+#define EM_RISCV 243
 
 /* Legal values for e_version (version).  */
 

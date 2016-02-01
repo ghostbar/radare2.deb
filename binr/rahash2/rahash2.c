@@ -65,7 +65,7 @@ static void do_hash_print(RHash *ctx, int hash, int dlen, int rad, int ule) {
 	case 0:
 		if (!quiet)
 			printf ("0x%08"PFMT64x"-0x%08"PFMT64x" %s: ",
-				from, to-1, hname);
+				from, to>0?to-1:0, hname);
 		do_hash_hexprint (c, dlen, ule, rad);
 		break;
 	case 1:
@@ -87,7 +87,7 @@ static void do_hash_print(RHash *ctx, int hash, int dlen, int rad, int ule) {
 
 static int do_hash_internal(RHash *ctx, int hash, const ut8 *buf, int len, int rad, int print, int le) {
 	int dlen;
-	if (len<1)
+	if (len<0)
 		return 0;
 	dlen = r_hash_calculate (ctx, hash, buf, len);
 	if (!dlen) return 0;
@@ -98,7 +98,7 @@ static int do_hash_internal(RHash *ctx, int hash, const ut8 *buf, int len, int r
 			eprintf ("entropy: %10f\n", e);
 		} else {
 			printf ("0x%08"PFMT64x"-0x%08"PFMT64x" %10f: ",
-					from, to-1, e);
+					from, to>0?to-1:0, e);
 			r_print_progressbar (NULL, 12.5 * e, 60);
 			printf ("\n");
 		}
@@ -109,7 +109,6 @@ static int do_hash_internal(RHash *ctx, int hash, const ut8 *buf, int len, int r
 	}
 	return 1;
 }
-
 
 static int do_hash(const char *file, const char *algo, RIO *io, int bsize, int rad, int ule) {
 	ut64 j, fsize, algobit = r_hash_name_to_bits (algo);
@@ -161,11 +160,8 @@ static int do_hash(const char *file, const char *algo, RIO *io, int bsize, int r
 						hashbit, s.buf, s.len, rad, 0, ule);
 				}
 				for (j=from; j<to; j+=bsize) {
-					int len = ((j+bsize)<fsize)?  bsize:
-						(bsize>j)?(fsize-j):0;
-					if (j+len>to)
-						len = to-j;
-					r_io_pread (io, j, buf, bsize);
+					int len = ((j+bsize)>to)? (to-j): bsize;
+					r_io_pread (io, j, buf, len);
 					do_hash_internal (ctx, hashbit, buf,
 						len, rad, 0, ule);
 				}
@@ -266,7 +262,7 @@ int main(int argc, char **argv) {
 	const char *algo = "sha256"; /* default hashing algorithm */
 	const char *seed = NULL;
 	char *hashstr = NULL;
-	int hashstr_len = 0;
+	int hashstr_len = -1;
 	int hashstr_hex = 0;
 	ut64 algobit;
 	RHash *ctx;
@@ -275,7 +271,9 @@ int main(int argc, char **argv) {
 	while ((c = getopt (argc, argv, "jdDrvea:i:S:s:x:b:nBhf:t:kLq")) != -1) {
 		switch (c) {
 		case 'q': quiet = 1; break;
-		case 'i': iterations = atoi (optarg);
+		case 'i':
+			if (!optarg) return 1;
+			iterations = atoi (optarg);
 			if (iterations<0) {
 				eprintf ("error: -i argument must be positive\n");
 				return 1;
@@ -331,6 +329,7 @@ int main(int argc, char **argv) {
 			if (hashstr_len<1) {
 				eprintf ("Invalid hex string\n");
 				free (out);
+				return 1;
 			}
 			hashstr = (char *)out;
 			/* out memleaks here, hashstr can't be freed */
@@ -351,8 +350,10 @@ int main(int argc, char **argv) {
 		} else {
 			to = hashstr_len;
 		}
-		hashstr = hashstr+from;
-		hashstr_len = to-from;
+		hashstr = hashstr + from;
+		hashstr_len = to - from;
+		hashstr[hashstr_len] = '\0';
+		hashstr_len = r_str_unescape (hashstr);
 		switch (b64mode) {
 		case 1: // encode
 			{
@@ -462,13 +463,27 @@ int main(int argc, char **argv) {
 			}
 			break;
 		default:
-			if (r_file_is_directory (argv[i])) {
-				eprintf ("rahash2: Cannot hash directories\n");
-				return 1;
-			}
-			if (!r_io_open_nomap (io, argv[i], 0, 0)) {
-				eprintf ("rahash2: Cannot open '%s'\n", argv[i]);
-				return 1;
+			if (!strcmp (argv[i], "-")) {
+				int sz = 0;
+				ut8 *buf = (ut8*)r_stdin_slurp (&sz);
+				char *uri = r_str_newf ("malloc://%d", sz);
+				if (sz>0) {
+					if (!r_io_open_nomap (io, uri, 0, 0)) {
+						eprintf ("rahash2: Cannot open malloc://1024\n");
+						return 1;
+					}
+					r_io_pwrite (io, 0, buf, sz);
+				}
+				free (uri);
+			} else {
+				if (r_file_is_directory (argv[i])) {
+					eprintf ("rahash2: Cannot hash directories\n");
+					return 1;
+				}
+				if (!r_io_open_nomap (io, argv[i], 0, 0)) {
+					eprintf ("rahash2: Cannot open '%s'\n", argv[i]);
+					return 1;
+				}
 			}
 			ret |= do_hash (argv[i], algo, io, bsize, rad, ule);
 		}

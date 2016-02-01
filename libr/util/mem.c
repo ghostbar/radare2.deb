@@ -46,8 +46,8 @@ R_API int r_mem_cmp_mask(const ut8 *dest, const ut8 *orig, const ut8 *mask, int 
 
 R_API void r_mem_copybits(ut8 *dst, const ut8 *src, int bits) {
 	ut8 srcmask, dstmask;
-	int bytes = (int)(bits/8);
-	bits = bits%8;
+	int bytes = (int)(bits / 8);
+	bits = bits % 8;
 
 	memcpy (dst, src, bytes);
 	if (bits) {
@@ -61,7 +61,7 @@ R_API void r_mem_copybits(ut8 *dst, const ut8 *src, int bits) {
 		case 6: srcmask = 0xfc; dstmask = 0x03; break;
 		case 7: srcmask = 0xfe; dstmask = 0x01; break;
 		}
-		dst[bytes] = ((dst[bytes]&dstmask) | (src[bytes]&srcmask));
+		dst[bytes] = ((dst[bytes] & dstmask) | (src[bytes] & srcmask));
 	}
 }
 
@@ -152,41 +152,42 @@ R_API int r_mem_set_num (ut8 *dest, int dest_size, ut64 num, int endian) {
 // TODO: rename to r_mem_swap() */
 R_API void r_mem_copyendian (ut8 *dest, const ut8 *orig, int size, int endian) {
 	ut8 buffer[8];
-        if (endian) {
+	if (endian) {
 		if (dest != orig)
 			memmove (dest, orig, size);
-        } else
-	switch (size) {
-	case 1:
-		*dest = *orig;
-		break;
-	case 2:
-		*buffer = *orig;
-		dest[0] = orig[1];
-		dest[1] = buffer[0];
-		break;
-	case 4:
-		memcpy (buffer, orig, 4);
-		dest[0] = buffer[3];
-		dest[1] = buffer[2];
-		dest[2] = buffer[1];
-		dest[3] = buffer[0];
-		break;
-	case 8:
-		memcpy (buffer, orig, 8);
-		dest[0] = buffer[7];
-		dest[1] = buffer[6];
-		dest[2] = buffer[5];
-		dest[3] = buffer[4];
-		dest[4] = buffer[3];
-		dest[5] = buffer[2];
-		dest[6] = buffer[1];
-		dest[7] = buffer[0];
-		break;
-	default:
-		if (dest != orig)
-			memmove (dest, orig, size);
-		//eprintf ("Invalid endian copy of size: %d\n", size);
+	} else {
+		switch (size) {
+		case 1:
+			*dest = *orig;
+			break;
+		case 2:
+			*buffer = *orig;
+			dest[0] = orig[1];
+			dest[1] = buffer[0];
+			break;
+		case 4:
+			memcpy (buffer, orig, 4);
+			dest[0] = buffer[3];
+			dest[1] = buffer[2];
+			dest[2] = buffer[1];
+			dest[3] = buffer[0];
+			break;
+		case 8:
+			memcpy (buffer, orig, 8);
+			dest[0] = buffer[7];
+			dest[1] = buffer[6];
+			dest[2] = buffer[5];
+			dest[3] = buffer[4];
+			dest[4] = buffer[3];
+			dest[5] = buffer[2];
+			dest[6] = buffer[1];
+			dest[7] = buffer[0];
+			break;
+		default:
+			if (dest != orig)
+				memmove (dest, orig, size);
+			//eprintf ("Invalid endian copy of size: %d\n", size);
+		}
 	}
 }
 

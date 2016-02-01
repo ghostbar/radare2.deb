@@ -6,19 +6,19 @@
 
 R_API RAnalOp *r_anal_op_new () {
 	RAnalOp *op = R_NEW0 (RAnalOp);
-	if (op) {
-		op->addr = -1;
-		op->jump = -1;
-		op->fail = -1;
-		op->ptr = -1;
-		op->val = -1;
-		r_strbuf_init (&op->esil);
-	}
+	if (!op) return NULL;
+	op->addr = UT64_MAX;
+	op->jump = UT64_MAX;
+	op->fail = UT64_MAX;
+	op->ptr = UT64_MAX;
+	op->val = UT64_MAX;
+	r_strbuf_init (&op->esil);
 	return op;
 }
 
 R_API RList *r_anal_op_list_new() {
 	RList *list = r_list_new ();
+	if (!list) return NULL;
 	list->free = &r_anal_op_free;
 	return list;
 }
@@ -48,20 +48,47 @@ R_API void r_anal_op_free(void *_op) {
 }
 
 R_API int r_anal_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len) {
-	int ret = R_FALSE;
-	if (len>0 && anal && memset (op, 0, sizeof (RAnalOp)) &&
-		anal->cur && anal->cur->op) {
+	int ret = 0;
+
+	if (!anal) return -1;
+	if (anal->pcalign) {
+		if (addr % anal->pcalign) {
+			memset (op, 0, sizeof (RAnalOp));
+			op->type = R_ANAL_OP_TYPE_ILL;
+			op->addr = addr;
+			op->size = 1;
+			return -1;
+		}
+	}
+	if (len > 0 && anal && memset (op, 0, sizeof (RAnalOp)) &&
+		anal->cur && anal->cur->op && strcmp (anal->cur->name, "null")) {
 		ret = anal->cur->op (anal, op, addr, data, len);
 		op->addr = addr;
-		if (ret<1) op->type = R_ANAL_OP_TYPE_ILL;
+		if (ret < 1) op->type = R_ANAL_OP_TYPE_ILL;
+	} else {
+		if (!memcmp (data, "\xff\xff\xff\xff", R_MIN(4, len))) {
+			op->type = R_ANAL_OP_TYPE_ILL;
+			ret = 2; // HACK
+		} else {
+			op->type = R_ANAL_OP_TYPE_MOV;
+		}
 	}
 	return ret;
 }
 
 R_API RAnalOp *r_anal_op_copy (RAnalOp *op) {
 	RAnalOp *nop = R_NEW (RAnalOp);
+	if (!nop) return NULL;
 	*nop = *op;
-	nop->mnemonic = strdup (op->mnemonic);
+	if (op->mnemonic) {
+		nop->mnemonic = strdup (op->mnemonic);
+		if (!nop->mnemonic) {
+			free (nop);
+			return NULL;
+		}
+	} else {
+		nop->mnemonic = NULL;
+	}
 	nop->src[0] = r_anal_value_copy (op->src[0]);
 	nop->src[1] = r_anal_value_copy (op->src[1]);
 	nop->src[2] = r_anal_value_copy (op->src[2]);
@@ -76,7 +103,7 @@ R_API int r_anal_op_execute (RAnal *anal, RAnalOp *op) {
 	while (op) {
 		if (op->delay>0) {
 			anal->queued = r_anal_op_copy (op);
-			return R_FALSE;
+			return false;
 		}
 		switch (op->type) {
 		case R_ANAL_OP_TYPE_JMP:
@@ -132,7 +159,7 @@ R_API int r_anal_op_execute (RAnal *anal, RAnalOp *op) {
 			anal->queued = NULL;
 		}
 	}
-	return R_TRUE;
+	return true;
 }
 
 R_API const char *r_anal_optype_to_string(int t) {
@@ -153,6 +180,7 @@ R_API const char *r_anal_optype_to_string(int t) {
 	case R_ANAL_OP_TYPE_LEAVE : return "leave";
 	case R_ANAL_OP_TYPE_LOAD  : return "load";
 	case R_ANAL_OP_TYPE_MOD   : return "mod";
+	case R_ANAL_OP_TYPE_CMOV  : return "cmov";
 	case R_ANAL_OP_TYPE_MOV   : return "mov";
 	case R_ANAL_OP_TYPE_MUL   : return "mul";
 	case R_ANAL_OP_TYPE_NOP   : return "nop";
@@ -183,6 +211,8 @@ R_API const char *r_anal_optype_to_string(int t) {
 	case R_ANAL_OP_TYPE_XCHG  : return "xchg";
 	case R_ANAL_OP_TYPE_XOR   : return "xor";
 	case R_ANAL_OP_TYPE_CASE  : return "case";
+	case R_ANAL_OP_TYPE_CPL   : return "cpl";
+	case R_ANAL_OP_TYPE_CRYPTO: return "crypto";
 	}
 	return "undefined";
 }
@@ -360,7 +390,7 @@ R_API const char *r_anal_stackop_tostring (int s) {
 R_API const char *r_anal_op_family_to_string (int n) {
 	static char num[32];
 	switch (n) {
-	case R_ANAL_OP_FAMILY_UNKNOWN: return "unknown";
+	case R_ANAL_OP_FAMILY_UNKNOWN: return "unk";
 	case R_ANAL_OP_FAMILY_CPU: return "cpu";
 	case R_ANAL_OP_FAMILY_FPU: return "fpu";
 	case R_ANAL_OP_FAMILY_MMX: return "mmx";

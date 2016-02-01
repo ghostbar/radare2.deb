@@ -18,7 +18,7 @@ R_API int r_core_pseudo_code (RCore *core, const char *input) {
 	if (!fcn) {
 		eprintf ("Cannot find function in 0x%08"PFMT64x"\n",
 			core->offset);
-		return R_FALSE;
+		return false;
 	}
 	r_config_set_i (core->config, "asm.pseudo", 1);
 	r_config_set_i (core->config, "asm.decode", 0);
@@ -63,7 +63,7 @@ R_API int r_core_pseudo_code (RCore *core, const char *input) {
 		//if (nindent != indent) {
 		//	r_cons_printf ("\n%s  loc_0x%llx:\n", indentstr, bb->addr);
 		//}
-			r_cons_printf ("\n%s  loc_0x%llx:\n", indentstr, bb->addr);
+		r_cons_printf ("\n%s  loc_0x%llx:\n", indentstr, bb->addr);
 		indentstr[(indent*I_TAB)-2] = 0;
 		r_cons_printf ("\n%s", code);
 		free (code);
@@ -87,7 +87,9 @@ R_API int r_core_pseudo_code (RCore *core, const char *input) {
 			} else {
 				r_cons_printf ("\n%s}", indentstr);
 			}
-			r_cons_printf ("\n%s  goto loc_0x%llx", indentstr, addr);
+			if (addr != bb->addr) {
+				r_cons_printf ("\n%s  goto loc_0x%llx", indentstr, addr);
+			}
 			bb = r_anal_bb_from_offset (core->anal, addr);
 			if (!bb) {
 				eprintf ("failed block\n");
@@ -174,7 +176,6 @@ R_API int r_core_pseudo_code (RCore *core, const char *input) {
 		//n_bb --;
 	} while (n_bb>0);
 	r_cons_printf ("}\n");
-	r_cons_flush ();
 	r_config_set_i (core->config, "asm.pseudo", asmpseudo);
 	r_config_set_i (core->config, "asm.decode", asmdecode);
 	r_config_set_i (core->config, "asm.lines", asmlines);
@@ -185,5 +186,5 @@ R_API int r_core_pseudo_code (RCore *core, const char *input) {
 	r_config_set_i (core->config, "asm.comments", asmcomments);
 	r_config_set_i (core->config, "asm.functions", asmfunctions);
 	sdb_free (db);
-	return R_TRUE;
+	return true;
 }

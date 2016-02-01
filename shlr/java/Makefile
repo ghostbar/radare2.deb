@@ -1,39 +1,44 @@
+NAME=r_java
+LIBAR?=libr_java.a
+
 include ../../config-user.mk
-include ../../mk/${COMPILER}.mk
-SHLR?=$(shell pwd)/..
 include ../../global.mk
-include $(SHLR)/zip/deps.mk
+include ../../mk/platform.mk
+_INCLUDE_MK_GCC_=
+include ../../mk/${COMPILER}.mk
+SHLR?=..
+include ../zip/deps.mk
 
 OSTYPE?=$(shell uname | tr 'A-Z' 'a-z')
 ifeq (${OSTYPE},)
 all:
-	echo LE FAIL
+	echo "OSTYPE not defined"
 	exit 1
 endif
 
-ifeq (,$(findstring cygwin,${OSTYPE}))
-ifeq (,$(findstring mingw32,${OSTYPE}))
-CFLAGS+=-fPIC -g
-else
+CFLAGS+=${PIC_CFLAGS}
+ifneq (,$(findstring mingw32,${OSTYPE}))
 CFLAGS+=-DMINGW32=1
 endif
-endif
 
-#CFLAGS+=-g -ggdb
+CFLAGS+=-g -ggdb
 CFLAGS+=-I../../libr/include
 LDFLAGS+=-L../../libr/util
 OBJS=code.o class.o ops.o dsojson.o
 
-all: out libr_java.a
+all: libr_java.a
+
+RANLIB?=ranlib
 
 libr_java.a: ${OBJS}
 	rm -f libr_java.a
-	${CC_AR} libr_java.a ${OBJS}
+	${CC_AR} ${OBJS}
 	${RANLIB} libr_java.a
 
 out: ${OBJS} main.o
+	echo "COMPILER: ${COMPILER} ${CC}"
 	${CC} ${LDFLAGS} ${CFLAGS} -I. ${OBJS} main.o \
-		-lr_util ${SHLR}/sdb/src/libsdb.a ${LINK} -o out 
+		-lr_util ../sdb/src/libsdb.a ${LINK} -o out
 
 clean:
 	rm -f ${OBJS} main.o a.out libr_java.a out

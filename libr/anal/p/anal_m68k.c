@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2012-2014 - pancake, pof */
+/* radare - LGPL - Copyright 2012-2015 - pancake, pof */
 
 #include <string.h>
 #include <r_types.h>
@@ -39,8 +39,15 @@ static int m68k_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *b, int len) {
 	sz = instlen (b, len);
 	op->size = sz;
 // TODO: Use disasm string to detect type?
+	if (len>=2) {
+		if (!memcmp (b, "\xff\xff", 2)) {
+			op->type = R_ANAL_OP_TYPE_ILL;
+			op->size = sz;
+			return -1;
 
-	switch (b[0] &0xf0) {
+		}
+	}
+	switch (b[0] & 0xf0) {
 	case 0xB0:
 		op->type = R_ANAL_OP_TYPE_CMP;
 		break;
@@ -164,22 +171,15 @@ RAnalPlugin r_anal_plugin_m68k = {
 	.name = "m68k",
 	.desc = "Motorola 68000",
 	.license = "LGPL3",
-	.arch = R_SYS_ARCH_M68K,
+	.arch = "m68k",
 	.bits = 16|32,
-	.init = NULL,
-	.fini = NULL,
 	.op = &m68k_op,
-	.set_reg_profile = NULL,
-	.fingerprint_bb = NULL,
-	.fingerprint_fcn = NULL,
-	.diff_bb = NULL,
-	.diff_fcn = NULL,
-	.diff_eval = NULL
 };
 
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_ANAL,
-	.data = &r_anal_plugin_m68k
+	.data = &r_anal_plugin_m68k,
+	.version = R2_VERSION
 };
 #endif

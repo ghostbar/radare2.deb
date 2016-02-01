@@ -1,11 +1,38 @@
 #!/bin/sh
 
 if [ -z "${CPU}" ]; then
-export CPU=arm64
-export CPU=armv7
+	export CPU=arm64+armv7
+	export CPU=arm64
+	export CPU=armv7
 fi
 
-BUILD=1
+export CPU=arm64+armv7
+export CPU=arm64+armv7
+export PLGCFG=plugins.tiny.cfg
+
+export CPU=x86_64
+export SDK=iphonesimulator
+
+#export CPU=arm64
+export CPU=x86_64
+export SDK=appletvsimulator
+
+export CPU=x86_64
+export SDK=watchsimulator
+
+export CPU=armv7k
+export SDK=watchos
+
+export CPU=i386
+export SDK=watchsimulator
+
+export CPU=arm64
+export SDK=appletvos
+
+export CPU=armv7k
+export SDK=watchos
+
+export BUILD=1
 PREFIX="/usr"
 # PREFIX=/var/mobile
 
@@ -18,18 +45,24 @@ if [ ! -d sys/ios-include ]; then
 fi
 
 export PATH=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin:$PATH
-export PATH=`pwd`/sys:${PATH}
-export CC=`pwd`/sys/ios-sdk-gcc
+export PATH=$(pwd)/sys:${PATH}
+export CC="$(pwd)/sys/ios-sdk-gcc"
 # set only for arm64, otherwise it is armv7
 # select ios sdk version
-export IOSVER=8.3
-export IOSINC=`pwd`/sys/ios-include
+export IOSVER=9.1
+export IOSINC=$(pwd)/sys/ios-include
 export CFLAGS=-O2
 export USE_SIMULATOR=1
+export RANLIB="xcrun --sdk iphoneos ranlib"
+
+if [ "$1" = "-s" ]; then
+	exec bash
+	exit $?
+fi
 
 if true ; then
-make clean
-cp -f plugins.tiny.cfg plugins.cfg
+# make clean
+cp -f ${PLGCFG} plugins.cfg
 ./configure --prefix=${PREFIX} --with-ostype=darwin \
 	--without-fork --without-pic --with-nonpic \
 	--disable-debugger --with-compiler=ios-sdk \
@@ -43,7 +76,7 @@ if [ $? = 0 ]; then
 		rm -rf /tmp/r2ios
 		make install DESTDIR=/tmp/r2ios
 		rm -rf /tmp/r2ios/usr/share/radare2/*/www/enyo/node_modules
-		( cd /tmp/r2ios && tar czvf ../r2ios-${CPU}.tar.gz * )
+		( cd /tmp/r2ios && tar czvf ../r2ios-${CPU}.tar.gz ./* )
 		rm -rf sys/cydia/radare2/root
 		mkdir -p sys/cydia/radare2/root
 		sudo tar xpzvf /tmp/r2ios-${CPU}.tar.gz -C sys/cydia/radare2/root

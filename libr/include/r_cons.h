@@ -38,6 +38,7 @@ extern "C" {
 
 #define R_CONS_GREP_WORDS 10
 #define R_CONS_GREP_WORD_SIZE 64
+#define R_CONS_GREP_TOKENS 64
 
 R_LIB_VERSION_HEADER(r_cons);
 
@@ -49,8 +50,8 @@ typedef struct r_cons_grep_t {
 	int less;
 	int json;
 	int line;
-	int tokenfrom;
-	int tokento;
+	int tokens[R_CONS_GREP_TOKENS];
+	int tokens_used;
 	int amp;
 	int neg;
 	int begin;
@@ -88,6 +89,7 @@ typedef struct r_cons_palette_t {
 	char *pop;
 	char *prompt;
 	char *push;
+	char *crypto;
 	char *reg;
 	char *reset;
 	char *ret;
@@ -103,6 +105,15 @@ typedef struct r_cons_palette_t {
 	char *gui_background;
 	char *gui_alt_background;
 	char *gui_border;
+
+	/* graph colors */
+	char *graph_box;
+	char *graph_box2;
+	char *graph_box3;
+	char *graph_true;
+	char *graph_false;
+	char *graph_trufae;
+
 #define R_CONS_PALETTE_LIST_SIZE 8
 	char *list[R_CONS_PALETTE_LIST_SIZE];
 } RConsPalette;
@@ -159,7 +170,7 @@ typedef struct r_cons_t {
 	int force_columns;
 	int fix_rows;
 	int fix_columns;
-	int breaked;
+	bool breaked;
 	int noflush;
 	FILE *fdin; // FILE? and then int ??
 	int fdout; // only used in pipe.c :?? remove?
@@ -193,8 +204,10 @@ typedef struct r_cons_t {
 	const char **vline;
 	int refcnt;
 	RConsClickCallback onclick;
-
-	int newline;
+	bool newline;
+#if __WINDOWS__ && !__CYGWIN__
+	bool ansicon;
+#endif
 } RCons;
 
 // XXX THIS MUST BE A SINGLETON AND WRAPPED INTO RCons */
@@ -286,6 +299,19 @@ enum {
 	PAL_FF
 };
 
+/* canvas line colors */
+enum {
+	LINE_NONE = 0,
+	LINE_TRUE,
+	LINE_FALSE,
+	LINE_UNCJMP,
+};
+
+typedef struct r_cons_canvas_line_style_t {
+	int color;
+	int symbol;
+} RCanvasLineStyle;
+
 // UTF-8 symbols indexes
 
 #define LINE_VERT 0
@@ -305,15 +331,16 @@ R_API RConsCanvas* r_cons_canvas_new (int w, int h);
 R_API void r_cons_canvas_free (RConsCanvas *c);
 R_API void r_cons_canvas_clear (RConsCanvas *c);
 R_API void r_cons_canvas_print(RConsCanvas *c);
+R_API void r_cons_canvas_print_region(RConsCanvas *c);
 R_API char *r_cons_canvas_to_string(RConsCanvas *c);
 R_API void r_cons_canvas_attr(RConsCanvas *c,const char * attr);
 R_API void r_cons_canvas_write(RConsCanvas *c, const char *_s);
 R_API int r_cons_canvas_gotoxy(RConsCanvas *c, int x, int y);
 R_API void r_cons_canvas_goto_write(RConsCanvas *c,int x,int y, const char * s);
 R_API void r_cons_canvas_box(RConsCanvas *c, int x, int y, int w, int h, const char *color);
-R_API void r_cons_canvas_line (RConsCanvas *c, int x, int y, int x2, int y2, int style);
-R_API void r_cons_canvas_line_diagonal (RConsCanvas *c, int x, int y, int x2, int y2, int style);
-R_API void r_cons_canvas_line_square (RConsCanvas *c, int x, int y, int x2, int y2, int style);
+R_API void r_cons_canvas_line (RConsCanvas *c, int x, int y, int x2, int y2, RCanvasLineStyle *style);
+R_API void r_cons_canvas_line_diagonal (RConsCanvas *c, int x, int y, int x2, int y2, RCanvasLineStyle *style);
+R_API void r_cons_canvas_line_square (RConsCanvas *c, int x, int y, int x2, int y2, RCanvasLineStyle *style);
 R_API int r_cons_canvas_resize(RConsCanvas *c, int w, int h);
 R_API void r_cons_canvas_fill(RConsCanvas *c, int x, int y, int w, int h, char ch, int replace);
 
@@ -325,6 +352,7 @@ R_API char *r_cons_lastline (void);
 typedef void (*RConsBreak)(void *);
 R_API void r_cons_break(RConsBreak cb, void *user);
 R_API void r_cons_break_end(void);
+R_API bool r_cons_is_breaked();
 
 /* pipe */
 R_API int r_cons_pipe_open(const char *file, int fdn, int append);
@@ -353,6 +381,8 @@ R_API int  r_cons_stdout_set_fd(int fd);
 R_API void r_cons_gotoxy(int x, int y);
 R_API void r_cons_show_cursor (int cursor);
 R_API char *r_cons_swap_ground(const char *col);
+R_API bool r_cons_drop (int n);
+R_API void r_cons_chop ();
 R_API void r_cons_set_raw(int b);
 R_API void r_cons_set_interactive(int b);
 R_API void r_cons_set_last_interactive(void);
@@ -366,8 +396,7 @@ R_API void r_cons_memcat(const char *str, int len);
 R_API void r_cons_newline(void);
 R_API void r_cons_filter(void);
 R_API void r_cons_flush(void);
-R_API void r_cons_flush_nonewline(void);
-R_API void r_cons_less_str(const char *str);
+R_API int r_cons_less_str(const char *str, const char *exitkeys);
 R_API void r_cons_less(void);
 R_API void r_cons_2048(void);
 R_API void r_cons_memset(char ch, int len);
@@ -417,8 +446,10 @@ R_API void r_cons_rgb_init (void);
 R_API char *r_cons_rgb_str (char *outstr, ut8 r, ut8 g, ut8 b, int is_bg);
 R_API void r_cons_color (int fg, int r, int g, int b);
 R_API char *r_cons_color_random(int bg);
+R_API char *r_cons_color_random_string(int bg);
 R_API void r_cons_invert(int set, int color);
 R_API int r_cons_yesno(int def, const char *fmt, ...);
+R_API char *r_cons_input(const char *msg);
 R_API void r_cons_set_cup(int enable);
 R_API void r_cons_column(int c);
 R_API int r_cons_get_column (void);
@@ -471,6 +502,7 @@ struct r_line_t {
 	int (*hist_up)(void *user);
 	int (*hist_down)(void *user);
 	char *contents;
+	bool zerosep;
 }; /* RLine */
 
 #ifdef R_API
@@ -480,6 +512,8 @@ R_API RLine *r_line_singleton(void);
 R_API void r_line_free(void);
 R_API char *r_line_get_prompt (void);
 R_API void r_line_set_prompt(const char *prompt);
+R_API int r_line_dietline_init();
+R_API void r_line_hist_free();
 
 typedef int (RLineReadCallback) (void *user, const char *line);
 R_API const char *r_line_readline(void);
@@ -495,6 +529,97 @@ R_API const char *r_line_hist_get(int n);
 
 #define R_CONS_INVERT(x,y) (y? (x?Color_INVERT: Color_INVERT_RESET): (x?"[":"]"))
 
+#endif
+
+/* r_agraph */
+
+typedef struct r_ascii_node_t {
+	RGraphNode *gnode;
+	char *title;
+	char *body;
+
+	int x;
+	int y;
+	int w;
+	int h;
+
+	int layer;
+	int pos_in_layer;
+	int is_dummy;
+	int is_reversed;
+	int klass;
+} RANode;
+
+#define R_AGRAPH_MODE_NORMAL 0
+#define R_AGRAPH_MODE_OFFSET 1
+#define R_AGRAPH_MODE_ESIL 2
+#define R_AGRAPH_MODE_ESIL_OFFSET 3
+#define R_AGRAPH_MODE_MINI 4
+#define R_AGRAPH_MODE_MAX 5
+
+typedef void (*RANodeCallback)(RANode *n, void *user);
+typedef void (*RAEdgeCallback)(RANode *from, RANode *to, void *user);
+
+typedef struct r_ascii_graph_t {
+	RConsCanvas *can;
+	RGraph *graph;
+	const RGraphNode *curnode;
+	char *title;
+	Sdb *db;
+	Sdb *nodes; // Sdb with title(key)=RANode*(value)
+
+	int is_instep;
+	int mode;
+	int is_callgraph;
+	int zoom;
+	int movspeed;
+
+	RANode *update_seek_on;
+	int need_reload_nodes;
+	int need_set_layout;
+	int need_update_dim;
+	int force_update_seek;
+
+	/* events */
+	RANodeCallback on_curnode_change;
+	void *on_curnode_change_data;
+
+	int x, y;
+	int w, h;
+
+	/* layout algorithm info */
+	RList *back_edges;
+	RList *long_edges;
+	struct layer_t *layers;
+	int n_layers;
+	RList *dists; /* RList<struct dist_t> */
+	RList *edges; /* RList<AEdge> */
+
+	/* colors */
+	const char *color_box;
+	const char *color_box2;
+	const char *color_box3;
+	const char *color_true;
+	const char *color_false;
+} RAGraph;
+
+#ifdef R_API
+R_API RAGraph *r_agraph_new(RConsCanvas *can);
+R_API void r_agraph_free(RAGraph *g);
+R_API void r_agraph_reset(RAGraph *g);
+R_API void r_agraph_set_title(RAGraph *g, const char *title);
+R_API RANode *r_agraph_get_first_node(const RAGraph *g);
+R_API RANode *r_agraph_get_node(const RAGraph *g, const char *title);
+R_API RANode *r_agraph_add_node(const RAGraph *g, const char *title, const char *body);
+R_API bool r_agraph_del_node(const RAGraph *g, const char *title);
+R_API void r_agraph_add_edge(const RAGraph *g, RANode *a, RANode *b);
+R_API void r_agraph_add_edge_at(const RAGraph *g, RANode *a, RANode *b, int nth);
+R_API void r_agraph_del_edge(const RAGraph *g, RANode *a, RANode *b);
+R_API void r_agraph_print(RAGraph *g);
+R_API Sdb *r_agraph_get_sdb(RAGraph *g);
+R_API void r_agraph_foreach(RAGraph *g, RANodeCallback cb, void *user);
+R_API void r_agraph_foreach_edge(RAGraph *g, RAEdgeCallback cb, void *user);
+R_API void r_agraph_set_curnode(RAGraph *g, RANode *node);
 #endif
 
 #ifdef __cplusplus

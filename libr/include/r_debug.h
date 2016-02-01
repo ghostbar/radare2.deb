@@ -62,28 +62,23 @@ enum {
 	//..
 };
 
-enum { // TODO: not yet used by r_debug
-	R_DBG_REASON_DEAD = -1,
-	R_DBG_REASON_UNKNOWN,
-	R_DBG_REASON_NEW_PID,
-	R_DBG_REASON_NEW_TID,
-	R_DBG_REASON_NEW_LIB,
-	R_DBG_REASON_EXIT_PID,
-	R_DBG_REASON_EXIT_TID,
-	R_DBG_REASON_EXIT_LIB,
-	R_DBG_REASON_TRAP,
-	R_DBG_REASON_ILL,
-	R_DBG_REASON_INT,
-	R_DBG_REASON_SIGNAL,
-	R_DBG_REASON_FPU,
-	R_DBG_REASON_BP,
-};
-
 /* TODO: move to r_anal */
 typedef struct r_debug_frame_t {
 	ut64 addr;
 	int size;
+	ut64 sp;
+	ut64 bp;
 } RDebugFrame;
+
+typedef struct r_debug_reason_t {
+        int type;
+	int tid;
+	int signum;
+	RBreakpointItem *bpi;
+	ut64 timestamp;
+	ut64 addr;
+	ut64 ptr;
+} RDebugReason;
 
 typedef struct r_debug_map_t {
 	char *name;
@@ -142,23 +137,23 @@ typedef struct r_debug_tracepoint_t {
 } RDebugTracepoint;
 
 typedef struct r_debug_t {
-	int arch;
+	char *arch;
 	int bits; /// XXX: MUST SET ///
 	int pid;    /* selected process id */
 	int tid;    /* selected thread id */
 	int swstep; /* steps with software traps */
 	int steps;  /* counter of steps done */
 	int newstate;
-	int reason; /* stop reason */
-	int signum;
+	RDebugReason reason; /* stop reason */
 	RDebugTrace *trace;
 	int stop_all_threads;
 	RReg *reg;
 	RBreakpoint *bp;
 	int bpsize;
+	int btdepth;
 	void *user;
 	/* io */
-	PrintfCallback printf;
+	PrintfCallback cb_printf;
 	struct r_debug_plugin_t *h;
 	struct list_head plugins;
 	RAnal *anal;
@@ -166,22 +161,22 @@ typedef struct r_debug_t {
 	RList *maps; // <RDebugMap>
 	RList *maps_user; // <RDebugMap>
 	RList *snaps; // <RDebugSnap>
-	RGraph *graph;
+	RTree *tree;
+	Sdb *tracenodes;
 	Sdb *sgnls;
 	RCoreBind corebind;
-#if __WINDOWS__
-	HANDLE process_handle;
-#endif
 	int trace_forks;
 	int trace_execs;
 	int trace_clone;
 	// internal use only
 	int _mode;
-	/* TODO
-	- list of processes and their threads
-	- list of mapped memory (from /proc/XX/maps)
-	- list of managed memory (allocated in child...)
-	*/
+	RList *threads; // XXX This is platform-specific !!!
+	/* select backtrace algorithm */
+	char *btalgo;
+	RNum *num;
+	int regcols;
+	char *glob_libs;
+	char *glob_unlibs;
 } RDebug;
 
 typedef struct r_debug_desc_plugin_t {
@@ -201,14 +196,17 @@ typedef struct r_debug_info_t {
 	int gid;
 	char *exe;
 	char *cmdline;
+	char *libname;
 	char *cwd;
 	int status; // zombie, running, sleeping, ...
+	int signum;
+	void * lib;
 	// retrieve mem/fd/core limits?
 	// list of threads ? hasthreads? counter?
 	// environment?
 	// /proc/pid/stack ???
 	// /proc/pid/syscall ???
-	// 
+	//
 } RDebugInfo;
 
 /* TODO: pass dbg and user data pointer everywhere */
@@ -217,8 +215,9 @@ typedef struct r_debug_plugin_t {
 	const char *license;
 	//const char **archs; // MUST BE DEPREACTED!!!!
 	ut32 bits;
-	ut64 arch;
+	const char *arch;
 	int canstep;
+	int keepio;
 	/* life */
 	RDebugInfo* (*info)(RDebug *dbg, const char *arg);
 	int (*startv)(int argc, char **argv);
@@ -246,6 +245,7 @@ typedef struct r_debug_plugin_t {
 	char* (*reg_profile)(RDebug *dbg);
 	/* memory */
 	RList *(*map_get)(RDebug *dbg);
+	RList *(*modules_get)(RDebug *dbg);
 	RDebugMap* (*map_alloc)(RDebug *dbg, ut64 addr, int size);
 	int (*map_dealloc)(RDebug *dbg, ut64 addr, int size);
 	int (*map_protect)(RDebug *dbg, ut64 addr, int size, int perms);
@@ -261,9 +261,35 @@ typedef struct r_debug_pid_t {
 	int pid;
 	char status; /* stopped, running, zombie, sleeping ,... */
 	int runnable; /* when using 'run', 'continue', .. this proc will be runnable */
-	const char *path;
+	char *path;
 	ut64 pc;
 } RDebugPid;
+
+enum RDebugReasonType {
+	R_DEBUG_REASON_DEAD = -1,
+	R_DEBUG_REASON_NONE = 0,
+	R_DEBUG_REASON_SIGNAL,
+	R_DEBUG_REASON_SEGFAULT,
+	R_DEBUG_REASON_BREAKPOINT,
+	R_DEBUG_REASON_READERR,
+	R_DEBUG_REASON_STEP,
+	R_DEBUG_REASON_ABORT,
+	R_DEBUG_REASON_WRITERR,
+	R_DEBUG_REASON_DIVBYZERO,
+	R_DEBUG_REASON_ILLEGAL,
+	R_DEBUG_REASON_UNKNOWN,
+	R_DEBUG_REASON_ERROR,
+	R_DEBUG_REASON_NEW_PID,
+	R_DEBUG_REASON_NEW_TID,
+	R_DEBUG_REASON_NEW_LIB,
+	R_DEBUG_REASON_EXIT_PID,
+	R_DEBUG_REASON_EXIT_TID,
+	R_DEBUG_REASON_EXIT_LIB,
+	R_DEBUG_REASON_TRAP,
+	R_DEBUG_REASON_SWI,
+	R_DEBUG_REASON_INT,
+	R_DEBUG_REASON_FPU,
+};
 
 #ifdef R_API
 R_API int r_debug_attach(RDebug *dbg, int pid);
@@ -271,6 +297,7 @@ R_API int r_debug_detach(RDebug *dbg, int pid);
 R_API int r_debug_startv(RDebug *dbg, int argc, char **argv);
 R_API int r_debug_start(RDebug *dbg, const char *cmd);
 R_API int r_debug_stop_reason(RDebug *dbg);
+R_API const char *r_debug_reason_to_string(int type);
 R_API int r_debug_wait(RDebug *dbg);
 R_API int r_debug_step_over(RDebug *dbg, int steps);
 R_API int r_debug_continue_until(RDebug *dbg, ut64 addr);
@@ -287,8 +314,8 @@ R_API RDebugPid *r_debug_pid_new(const char *path, int pid, char status, ut64 pc
 R_API RDebugPid *r_debug_pid_free(RDebugPid *pid);
 R_API RList *r_debug_pids(RDebug *dbg, int pid);
 
-R_API int r_debug_set_arch(RDebug *dbg, int arch, int bits);
-R_API int r_debug_use(RDebug *dbg, const char *str);
+R_API bool r_debug_set_arch(RDebug *dbg, const char *arch, int bits);
+R_API bool r_debug_use(RDebug *dbg, const char *str);
 
 R_API RDebugInfo *r_debug_info(RDebug *dbg, const char *arg);
 R_API void r_debug_info_free (RDebugInfo *rdi);
@@ -315,20 +342,21 @@ R_API int r_debug_continue_kill(RDebug *dbg, int signal);
 R_API int r_debug_select(RDebug *dbg, int pid, int tid);
 
 /* handle.c */
-R_API int r_debug_plugin_init(RDebug *dbg);
+R_API void r_debug_plugin_init(RDebug *dbg);
 R_API int r_debug_plugin_set(RDebug *dbg, const char *str);
 R_API int r_debug_plugin_list(RDebug *dbg);
-R_API int r_debug_plugin_add(RDebug *dbg, RDebugPlugin *foo);
+R_API bool r_debug_plugin_add(RDebug *dbg, RDebugPlugin *foo);
 
 /* memory */
+R_API RList *r_debug_modules_list(RDebug*);
 R_API RDebugMap *r_debug_map_alloc(RDebug *dbg, ut64 addr, int size);
 R_API int r_debug_map_dealloc(RDebug *dbg, RDebugMap *map);
 R_API RList *r_debug_map_list_new(void);
-R_API void r_debug_map_list_free(RList *maps);
 R_API RDebugMap *r_debug_map_get(RDebug *dbg, ut64 addr);
 R_API RDebugMap *r_debug_map_new (char *name, ut64 addr, ut64 addr_end, int perm, int user);
 R_API void r_debug_map_free(RDebugMap *map);
 R_API void r_debug_map_list(RDebug *dbg, ut64 addr, int rad);
+R_API void r_debug_map_list_visual(RDebug *dbg, ut64 addr, int use_color);
 
 /* descriptors */
 R_API RDebugDesc *r_debug_desc_new (int fd, char* path, int perm, int type, int off);
@@ -361,10 +389,12 @@ R_API int r_debug_is_dead (RDebug *dbg);
 R_API int r_debug_map_protect (RDebug *dbg, ut64 addr, int size, int perms);
 /* args XXX: weird food */
 R_API ut64 r_debug_arg_get (RDebug *dbg, int fast, int num);
-R_API int r_debug_arg_set (RDebug *dbg, int fast, int num, ut64 value);
+R_API bool r_debug_arg_set (RDebug *dbg, int fast, int num, ut64 value);
 
 /* pid */
 R_API int r_debug_thread_list(RDebug *dbg, int pid);
+
+R_API void r_debug_tracenodes_reset (RDebug *dbg);
 
 R_API void r_debug_trace_reset (RDebug *dbg);
 R_API int r_debug_trace_pc (RDebug *dbg);
@@ -382,13 +412,26 @@ R_API void r_debug_drx_list (RDebug *dbg);
 R_API int r_debug_drx_set (RDebug *dbg, int idx, ut64 addr, int len, int rwx, int g);
 R_API int r_debug_drx_unset (RDebug *dbg, int idx);
 
+/* esil */
+R_API ut64 r_debug_num_callback(RNum *userptr, const char *str, int *ok);
+R_API int r_debug_esil_stepi (RDebug *dbg);
+R_API ut64 r_debug_esil_step (RDebug *dbg, ut32 count);
+R_API ut64 r_debug_esil_continue (RDebug *dbg);
+R_API void r_debug_esil_watch(RDebug *dbg, int rwx, int dev, const char *expr);
+R_API void r_debug_esil_watch_reset(RDebug *dbg);
+R_API void r_debug_esil_watch_list(RDebug *dbg);
+R_API int r_debug_esil_watch_empty(RDebug *dbg);
+R_API void r_debug_esil_prestep (RDebug *d, int p);
+
 /* snap */
 R_API void r_debug_snap_free (void *snap);
 R_API int r_debug_snap_delete(RDebug *dbg, int idx);
-R_API void r_debug_snap_list(RDebug *dbg, int idx);
+R_API void r_debug_snap_list(RDebug *dbg, int idx, int mode);
 R_API int r_debug_snap_diff(RDebug *dbg, int idx);
 R_API int r_debug_snap(RDebug *dbg, ut64 addr);
 R_API int r_debug_snap_comment (RDebug *dbg, int idx, const char *msg);
+R_API int r_debug_snap_all(RDebug *dbg, int perms);
+R_API RDebugSnap* r_debug_snap_get (RDebug *dbg, ut64 addr);
 
 /* plugin pointers */
 extern RDebugPlugin r_debug_plugin_native;

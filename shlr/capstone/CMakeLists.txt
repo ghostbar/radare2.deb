@@ -5,6 +5,19 @@ set(VERSION_MAJOR 4)
 set(VERSION_MINOR 0)
 set(VERSION_PATCH 0)
 
+if(POLICY CMP0042)
+  # http://www.cmake.org/cmake/help/v3.0/policy/CMP0042.html
+  cmake_policy(SET CMP0042 NEW)
+endif(POLICY CMP0042)
+
+if (POLICY CMP0048)
+  # use old policy to honor version set using VERSION_* variables to preserve backwards
+  # compatibility. change OLD to NEW when minimum cmake version is updated to 3.* and
+  # set VERSION using project(capstone VERSION 4.0.0).
+  # http://www.cmake.org/cmake/help/v3.0/policy/CMP0048.html
+  cmake_policy (SET CMP0048 OLD)
+endif()
+
 # to configure the options specify them in in the command line or change them in the cmake UI.
 # Don't edit the makefile!
 option(CAPSTONE_BUILD_STATIC_RUNTIME "Embed static runtime" OFF)
@@ -14,14 +27,27 @@ option(CAPSTONE_BUILD_DIET "Build diet library" OFF)
 option(CAPSTONE_BUILD_TESTS "Build tests" ON)
 option(CAPSTONE_USE_DEFAULT_ALLOC "Use default memory allocation functions" ON)
 
-option(CAPSTONE_ARM_SUPPORT "ARM support" ON)
-option(CAPSTONE_ARM64_SUPPORT "ARM64 support" ON)
-option(CAPSTONE_MIPS_SUPPORT "MIPS support" ON)
-option(CAPSTONE_PPC_SUPPORT "PowerPC support" ON)
-option(CAPSTONE_SPARC_SUPPORT "Sparc support" ON)
-option(CAPSTONE_SYSZ_SUPPORT "SystemZ support" ON)
-option(CAPSTONE_XCORE_SUPPORT "XCore support" ON)
-option(CAPSTONE_X86_SUPPORT "x86 support" ON)
+set(SUPPORTED_ARCHITECTURES ARM ARM64 M68K MIPS PPC SPARC SYSZ XCORE X86)
+set(SUPPORTED_ARCHITECTURE_LABELS ARM ARM64 M68K MIPS PowerPC Sparc SystemZ XCore x86)
+
+list(LENGTH SUPPORTED_ARCHITECTURES count)
+math(EXPR count "${count}-1")
+# create options controlling whether support for a particular architecture is needed
+foreach(i RANGE ${count})
+  list(GET SUPPORTED_ARCHITECTURES ${i} supported_architecture)
+  list(GET SUPPORTED_ARCHITECTURE_LABELS ${i} supported_architecture_label)
+  option("CAPSTONE_${supported_architecture}_SUPPORT" "${supported_architecture_label} support" ON)
+endforeach(i)
+
+# propagate achitecture support variables to preprocessor
+foreach(supported_architecture ${SUPPORTED_ARCHITECTURES})
+  set(option_name "CAPSTONE_${supported_architecture}_SUPPORT")
+  if(${option_name})
+    message("Enabling ${option_name}")
+    add_definitions("-D${option_name}")
+  endif()
+endforeach(supported_architecture)
+
 option(CAPSTONE_X86_REDUCE "x86 with reduce instruction sets to minimize library" OFF)
 option(CAPSTONE_X86_ATT_DISABLE "Disable x86 AT&T syntax" OFF)
 option(CAPSTONE_OSXKERNEL_SUPPORT "Support to embed Capstone into OS X Kernel extensions" OFF)
@@ -63,7 +89,6 @@ set(HEADERS_ENGINE
     MCInstrDesc.h
     MCRegisterInfo.h
     myinttypes.h
-    osxkernel_inttypes.h
     SStream.h
     utils.h
     )
@@ -78,11 +103,12 @@ set(HEADERS_COMMON
     include/capstone/sparc.h
     include/capstone/systemz.h
     include/capstone/xcore.h
+    include/capstone/m68k.h
     include/capstone/platform.h
     )
 
 
-set(TEST_SOURCES test_basic.c test_detail.c test_skipdata.c test_iter.c test_customized_mnem.c)
+set(TEST_SOURCES test_basic.c test_detail.c test_skipdata.c test_iter.c)
 
 ## architecture support
 if (CAPSTONE_ARM_SUPPORT)
@@ -213,7 +239,7 @@ if (CAPSTONE_X86_SUPPORT)
     if (NOT CAPSTONE_BUILD_DIET)
         set(SOURCES_X86 ${SOURCES_X86} arch/X86/X86ATTInstPrinter.c)
     endif ()
-    set(TEST_SOURCES ${TEST_SOURCES} test_x86.c)
+    set(TEST_SOURCES ${TEST_SOURCES} test_x86.c test_customized_mnem.c)
 endif ()
 
 if (CAPSTONE_SPARC_SUPPORT)
@@ -284,6 +310,19 @@ if (CAPSTONE_XCORE_SUPPORT)
     set(TEST_SOURCES ${TEST_SOURCES} test_xcore.c)
 endif ()
 
+if (CAPSTONE_M68K_SUPPORT)
+    add_definitions(-DCAPSTONE_HAS_M68K)
+    set(SOURCES_M68K
+		arch/M68K/M68KDisassembler.c
+		arch/M68K/M68KInstPrinter.c
+		arch/M68K/M68KModule.c
+    )
+    set(HEADERS_M68K
+		arch/M68K/M68KDisassembler.h
+        )
+    set(TEST_SOURCES ${TEST_SOURCES} test_m68k.c)
+endif ()
+
 if (CAPSTONE_OSXKERNEL_SUPPORT)
     add_definitions(-DCAPSTONE_HAS_OSXKERNEL)
 endif ()
@@ -298,6 +337,7 @@ set(ALL_SOURCES
     ${SOURCES_SPARC}
     ${SOURCES_SYSZ}
     ${SOURCES_XCORE}
+    ${SOURCES_M68K}
     )
 
 set(ALL_HEADERS
@@ -311,6 +351,7 @@ set(ALL_HEADERS
     ${HEADERS_SPARC}
     ${HEADERS_SYSZ}
     ${HEADERS_XCORE}
+    ${HEADERS_M68K}
     )
 
 include_directories("${PROJECT_SOURCE_DIR}/include")
@@ -379,6 +420,7 @@ source_group("Source\\Sparc" FILES ${SOURCES_SPARC})
 source_group("Source\\SystemZ" FILES ${SOURCES_SYSZ})
 source_group("Source\\X86" FILES ${SOURCES_X86})
 source_group("Source\\XCore" FILES ${SOURCES_XCORE})
+source_group("Source\\M68K" FILES ${SOURCES_M68K})
 
 source_group("Include\\Common" FILES ${HEADERS_COMMON})
 source_group("Include\\Engine" FILES ${HEADERS_ENGINE})
@@ -390,6 +432,7 @@ source_group("Include\\Sparc" FILES ${HEADERS_SPARC})
 source_group("Include\\SystemZ" FILES ${HEADERS_SYSZ})
 source_group("Include\\X86" FILES ${HEADERS_X86})
 source_group("Include\\XCore" FILES ${HEADERS_XCORE})
+source_group("Include\\M68K" FILES ${HEADERS_M68K})
 
 ## installation
 install(FILES ${HEADERS_COMMON} DESTINATION include/capstone)

@@ -145,14 +145,12 @@ static void cin_putback (RNum *num, RNumCalc *nc, char c) {
 }
 
 R_API const char *r_num_calc_index (RNum *num, const char *p) {
-	if (num == NULL)
-		return NULL;
+	if (!num) return NULL;
 	if (p) {
 		num->nc.calc_buf = p;
 		num->nc.calc_len = strlen (p);
 		num->nc.calc_i = 0;
 	}
-	//if (num->nc.calc_i>num->nc.calc_len) return NULL;
 	return num->nc.calc_buf + num->nc.calc_i;
 }
 
@@ -173,16 +171,16 @@ static int cin_get(RNum *num, RNumCalc *nc, char *c) {
 
 static int cin_get_num(RNum *num, RNumCalc *nc, RNumCalcValue *n) {
 	double d;
-	char str[R_NUMCALC_STRSZ];
+	char str[R_NUMCALC_STRSZ]; // TODO: move into the heap?
 	int i = 0;
 	char c;
 	str[0] = 0;
 	while (cin_get (num, nc, &c)) {
-		if (c!=':' && c!='.' && !isalnum ((unsigned char)c)) {
+		if (c!=':' && c!='.' && !isalnum ((ut8)c)) {
 			cin_putback (num, nc, c);
 			break;
 		}
-		if (i<R_NUMCALC_STRSZ) {
+		if (i < R_NUMCALC_STRSZ) {
 			str[i++] = c;
 		}
 	}
@@ -273,7 +271,7 @@ static RNumCalcToken get_token(RNum *num, RNumCalc *nc) {
 			nc->string_value[i++] = ch;
 			if (ch == '[') {
 				while (cin_get (num, nc, &ch) && ch!=']') {
-					if (i > R_NUMCALC_STRSZ) {
+					if (i > R_NUMCALC_STRSZ - 1) {
 						error (num, nc, "string too long");
 						return 0;
 					}
@@ -290,7 +288,8 @@ static RNumCalcToken get_token(RNum *num, RNumCalc *nc) {
 				}
 			}
 			nc->string_value[i] = 0;
-			cin_putback (num, nc, ch);
+			if (ch!='\'')
+				cin_putback (num, nc, ch);
 			return nc->curr_tok = RNCNAME;
 		}
 /*

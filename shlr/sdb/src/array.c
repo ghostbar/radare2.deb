@@ -1,4 +1,4 @@
-/* sdb - LGPLv3 - Copyright 2011-2015 - pancake */
+/* sdb - MIT - Copyright 2011-2015 - pancake */
 
 #include "sdb.h"
 
@@ -38,13 +38,15 @@ static int astrcmp (const char *a, const char *b) {
 static inline int cstring_cmp(const void *a, const void *b) { 
 	const char **va = (const char **)a;
 	const char **vb = (const char **)b;
-	return astrcmp(*va, *vb);
+	return astrcmp (*va, *vb);
 }
 
 static inline int int_cmp(const void *a, const void *b) { 
-	const ut64 *va = (const ut64 *)a;
-	const ut64 *vb = (const ut64 *)b;
-	return (int)(*va  - *vb);
+	const ut64 va = *(const ut64 *)a;
+	const ut64 vb = *(const ut64 *)b;
+	if (va > vb) return 1;
+	if (va < vb) return -1;
+	return 0;
 } 
 
 SDB_API ut64 sdb_array_get_num(Sdb *s, const char *key, int idx, ut32 *cas) {
@@ -69,14 +71,14 @@ SDB_API char *sdb_array_get(Sdb *s, const char *key, int idx, ut32 *cas) {
 	char *o, *n;
 	int i, len;
 	if (!str || !*str) return NULL;
-	if (idx<0) {
+	if (idx < 0) {
 		int len = sdb_alen (str);
 		idx = -idx;
 		if (idx>len)
 			return NULL;
 		idx = (len-idx);
 	}
-	if (idx==0) {
+	if (idx == 0) {
 		n = strchr (str, SDB_RS);
 		if (!n) return strdup (str);
 		len = n-str;
@@ -85,7 +87,7 @@ SDB_API char *sdb_array_get(Sdb *s, const char *key, int idx, ut32 *cas) {
 		o[len] = 0;
 		return o;
 	}
-	for (i=0; i<idx; i++) {
+	for (i = 0; i < idx; i++) {
 		n = strchr (p, SDB_RS);
 		if (!n) return NULL;
 		p = n+1;
@@ -383,7 +385,7 @@ SDB_API int sdb_array_contains(Sdb *s, const char *key, const char *val, ut32 *c
 	if (list && *list) {
 		do {
 			const char *str = sdb_const_anext (ptr, &next);
-			int len = next? (int)(size_t)(next-str)-1 : strlen (str);
+			int len = next? (int)(size_t)(next-str)-1 : (int)strlen (str);
 			if (len == vlen) {
 				if (!memcmp (str, val, len)) {
 					return 1;
@@ -482,11 +484,14 @@ SDB_API char *sdb_array_pop(Sdb *s, const char *key, ut32 *cas) {
 }
 
 SDB_API void sdb_array_sort(Sdb *s, const char *key, ut32 cas) {
+	char *nstr, *str, **strs;
 	int lstr, j, i;
-	char *nstr, *str = sdb_get_len (s, key, &lstr, 0);
-	char **strs;
-	if (!str || !*str)
+	str = sdb_get_len (s, key, &lstr, 0);
+	if (!str) return;
+	if (!*str) {
+		free (str);
 		return;
+	}
 	strs = sdb_fmt_array (str);
 	for (i=0; strs[i]; i++);
 	qsort (strs, i, sizeof (char*), cstring_cmp);
@@ -499,16 +504,20 @@ SDB_API void sdb_array_sort(Sdb *s, const char *key, ut32 cas) {
 	}
 	*(--nstr) = '\0';
 	sdb_set_owned (s, key, str, cas);
-	free(strs);
+	free (strs);
 	return;
 }
 
 SDB_API void sdb_array_sort_num(Sdb *s, const char *key, ut32 cas) {
-	int lstr, i;
-	char *ret, *nstr, *str = sdb_get_len (s, key, &lstr, 0);
-	ut64 *nums;
-	if (!str || !*str)
+	char *ret, *nstr, *str;
+	int lstr;
+	ut64 i, *nums;
+	str = sdb_get_len (s, key, &lstr, 0);
+	if (!str) return;
+	if (!*str) {
+		free (str);
 		return;
+	}
 	nums = sdb_fmt_array_num (str);
 	qsort (nums+1, (int)*nums, sizeof (ut64), int_cmp);
 	nstr = str;

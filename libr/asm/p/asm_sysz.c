@@ -8,12 +8,12 @@
 
 static csh cd = 0;
 
-static int the_end(void *p) {
+static bool the_end(void *p) {
 	if (cd) {
 		cs_close (&cd);
 		cd = 0;
 	}
-	return R_TRUE;
+	return true;
 }
 
 static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
@@ -57,15 +57,14 @@ RAsmPlugin r_asm_plugin_sysz = {
 	.license = "BSD",
 	.arch = "sysz",
 	.bits = 32,
-	.init = NULL,
 	.fini = the_end,
 	.disassemble = &disassemble,
-	.assemble = NULL
 };
 
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_ASM,
-	.data = &r_asm_plugin_sysz
+	.data = &r_asm_plugin_sysz,
+	.version = R2_VERSION
 };
 #endif

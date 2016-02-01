@@ -29,7 +29,10 @@ static int format_output (char mode, const char *s) {
 	switch (mode) {
 	case 'I': printf ("%"PFMT64d"\n", n); break;
 	case '0': printf ("0x%"PFMT64x"\n", n); break;
-	case 'F': printf ("%ff\n", (float)(ut32)n); break;
+	case 'F': {
+		  float *f = (float*)&n;
+		printf ("%ff\n", *f);
+		} break;
 	case 'f': printf ("%.01lf\n", num->fvalue); break;
 	case 'O': printf ("%"PFMT64o"\n", n); break;
 	case 'B':
@@ -48,7 +51,7 @@ static int format_output (char mode, const char *s) {
 		eprintf ("Unknown output mode %d\n", mode);
 		break;
 	}
-	return R_TRUE;
+	return true;
 }
 
 static int help () {
@@ -87,7 +90,7 @@ static int help () {
 		"  -u    units             ;  rax2 -u 389289238 # 317.0M\n"
 		"  -v    version           ;  rax2 -V\n"
 		);
-	return R_TRUE;
+	return true;
 }
 
 static int rax (char *str, int len, int last) {
@@ -108,7 +111,7 @@ static int rax (char *str, int len, int last) {
 		case 16: force_mode = '0'; break;
 		case 0: force_mode = str[1]; break;
 		}
-		return R_TRUE;
+		return true;
 	}
 	if (*str=='-') {
 		while (str[1] && str[1]!=' ') {
@@ -144,11 +147,11 @@ static int rax (char *str, int len, int last) {
 		}
 		if (last)
 			return !use_stdin ();
-		return R_TRUE;
+		return true;
 	}
 	if (!flags) {
 		if (*str=='q')
-			return R_FALSE;
+			return false;
 		if (*str=='h' || *str=='?')
 			return help ();
 	}
@@ -167,24 +170,24 @@ static int rax (char *str, int len, int last) {
 			fflush (stdout);
 			free (buf);
 		}
-		return R_TRUE;
+		return true;
 	}
 	if (flags & 4) { // -S
 		for (i=0; i<len; i++)
 			printf ("%02x", (ut8)str[i]);
 		printf ("\n");
-		return R_TRUE;
+		return true;
 	} else if (flags & 8) {
 		int i, len;
 		ut8 buf[4096];
 		len = r_str_binstr2bin (str, buf, sizeof (buf));
 		for (i=0; i<len; i++)
 			printf ("%c", buf[i]);
-		return R_TRUE;
+		return true;
 	} else if (flags & 16) {
 		int h = r_str_hash (str);
 		printf ("0x%x\n", h);
-		return R_TRUE;
+		return true;
 	} else if (flags & 32) {
 		out_mode = 'I';
 	} else if (flags & 64) {
@@ -195,7 +198,7 @@ static int rax (char *str, int len, int last) {
 		ut32 *m;
 		buf = (ut8*) malloc (n);
 		if (!buf) {
-			return R_FALSE;
+			return false;
 		}
 		m = (ut32 *) buf;
 		memset (buf, '\0', n);
@@ -211,7 +214,7 @@ static int rax (char *str, int len, int last) {
 			free (s);
 		}
 		free (m);
-		return R_TRUE;
+		return true;
 	} else if (flags & (1<<9)) { // -n
 		ut64 n = r_num_math (num, str);
 		if (n>>32) {
@@ -230,7 +233,7 @@ static int rax (char *str, int len, int last) {
 					np[0], np[1], np[2], np[3]);
 		}
 		fflush (stdout);
-		return R_TRUE;
+		return true;
 	} else if (flags & (1<<15)) { // -N
 		ut64 n = r_num_math (num, str);
 		if (n>>32) {
@@ -250,29 +253,29 @@ static int rax (char *str, int len, int last) {
 				np[0], np[1], np[2], np[3]);
 		}
 		fflush (stdout);
-		return R_TRUE;
+		return true;
 	} else if (flags & 1024) { // -u
 		char buf[80];
 		r_num_units (buf, r_num_math (NULL, str));
 		printf ("%s\n", buf);
-		return R_TRUE;
+		return true;
 	} else if (flags & 2048) { // -t
 		ut32 n = r_num_math (num, str);
 		RPrint *p = r_print_new ();
 		r_mem_copyendian ((ut8*) &n, (ut8*) &n, 4, !(flags & 2));
 		r_print_date_unix (p, (const ut8*)&n, sizeof (ut32));
 		r_print_free (p);
-		return R_TRUE;
+		return true;
 	} else if (flags & 4096) { // -E
 		const int len = strlen (str);
-		char * out = calloc (sizeof(ut8), ((len+1)*4)/3);
+		char * out = calloc (sizeof (char), ((len + 1) * 4) / 3);
 		if (out) {
 			r_base64_encode (out, (const ut8*)str, len);
 			printf ("%s\n", out);
 			fflush (stdout);
 			free (out);
 		}
-		return R_TRUE;
+		return true;
 	} else if (flags & 8192) { // -D
 		const int len = strlen (str);
 		ut8* out = calloc (sizeof(ut8), ((len+1)/4)*3);
@@ -282,8 +285,8 @@ static int rax (char *str, int len, int last) {
 			fflush (stdout);
 			free (out);
 		}
-		return R_TRUE;
-	} else if (flags & 16384) { // -F
+		return true;
+	} else if (flags & 1<<14) { // -F
 		char *str = r_stdin_slurp (NULL);
 		if (str) {
 			char *res = r_hex_from_c (str);
@@ -296,7 +299,7 @@ static int rax (char *str, int len, int last) {
 			}
 			free (str);
 		}
-		return R_FALSE;
+		return false;
 	}
 
 	if (str[0]=='0' && str[1]=='x') {
@@ -323,11 +326,11 @@ static int rax (char *str, int len, int last) {
 		out_mode = 'I';
 		str[strlen (str)-1] = 'b';
 	//TODO: Move print into format_output
-	} else if (str[strlen(str)-1]=='f') {
+	} else if (str[strlen (str)-1]=='f') {
 		ut8 *p = (ut8*)&f;
 		sscanf (str, "%f", &f);
-		printf ("Fx%02x%02x%02x%02x\n", p[0], p[1], p[2], p[3]);
-		return R_TRUE;
+		printf ("Fx%02x%02x%02x%02x\n", p[3], p[2], p[1], p[0]);
+		return true;
 	}
 	while ((p = strchr (str, ' '))) {
 		*p = 0;
@@ -336,15 +339,15 @@ static int rax (char *str, int len, int last) {
 	}
 	if (*str)
 		format_output (out_mode, str);
-	return R_TRUE;
+	return true;
 }
 
 static int use_stdin () {
-	static char buf[STDIN_BUFFER_SIZE];
+	char * buf = malloc (STDIN_BUFFER_SIZE);
 	int l, sflag = (flags & 5);
 	if (! (flags & 16384)) {
 		for (l=0; l>=0; l++) {
-			int n = read (0, buf+l, sizeof (buf)-l-1);
+			int n = read (0, buf+l, STDIN_BUFFER_SIZE-1);
 			if (n<1) break;
 			l+= n;
 			if (buf[l-1]==0) {
@@ -352,7 +355,7 @@ static int use_stdin () {
 				continue;
 			}
 			buf[n] = 0;
-			if (sflag && strlen (buf) < sizeof (buf)) // -S
+			if (sflag && strlen (buf) < STDIN_BUFFER_SIZE) // -S
 				buf[strlen (buf)] = '\0';
 			else buf[strlen (buf)-1] = '\0';
 			if (!rax (buf, l, 0)) break;
@@ -363,6 +366,7 @@ static int use_stdin () {
 	}
 	if (l>0)
 		rax (buf, l, 0);
+	free (buf);
 	return 0;
 }
 

@@ -67,17 +67,61 @@ R_API int r_sandbox_enable (int e) {
 }
 
 R_API int r_sandbox_system (const char *x, int n) {
-	if (!enabled) {
-		if (n) return system (x);
-		return execl ("/bin/sh", "sh", "-c", x, (const char*)NULL);
+	if (enabled) {
+		eprintf ("sandbox: system call disabled\n");
+		return -1;
 	}
-	eprintf ("sandbox: system call disabled\n");
+#if LIBC_HAVE_FORK
+#if LIBC_HAVE_SYSTEM
+	if (n) return system (x);
+	return execl ("/bin/sh", "sh", "-c", x, (const char*)NULL);
+#else
+	#include <spawn.h>
+	if (n && !strchr (x, '|')) {
+		char **argv, *cmd = strdup (x);
+		int rc, pid, argc;
+		char *isbg = strchr (cmd, '&');
+		// XXX this is hacky
+		if (isbg) {
+			*isbg = 0;
+		}
+		argv = r_str_argv (cmd, &argc);
+		if (argv) {
+			char *argv0 = r_file_path (argv[0]);
+			if (!argv0) {
+				eprintf ("Cannot find '%s'\n", argv[0]);
+				return -1;
+			}
+			pid = 0;
+			posix_spawn (&pid, argv0, NULL, NULL, argv, NULL);
+			if (isbg) {
+				// XXX. wait for children
+				rc = 0;
+			} else {
+				rc = waitpid (pid, NULL, 0);
+			}
+			r_str_argv_free (argv);
+			free (argv0);
+			return rc;
+		}
+		eprintf ("Error parsing command arguments\n");
+		return -1;
+	}
+	int child = fork();
+	if (child == -1) return -1;
+	if (child) {
+		return waitpid (child, NULL, 0);
+	}
+	execl ("/bin/sh", "sh", "-c", x, (const char*)NULL);
+	exit (1);
+#endif
+#endif
 	return -1;
 }
 
-R_API int r_sandbox_creat (const char *path, int mode) {
+R_API bool r_sandbox_creat (const char *path, int mode) {
 	if (enabled) {
-		return -1;
+		return false;
 #if 0
 		if (mode & O_CREAT) return -1;
 		if (mode & O_RDWR) return -1;
@@ -85,7 +129,12 @@ R_API int r_sandbox_creat (const char *path, int mode) {
 			return -1;
 #endif
 	}
-	return creat (path, mode);
+	int fd = open (path, O_CREAT | O_TRUNC | O_WRONLY, mode);
+	if (fd != -1) {
+		close (fd);
+		return true;
+	}
+	return false;
 }
 
 static char *expand_home(const char *p) {
@@ -168,8 +217,9 @@ R_API DIR* r_sandbox_opendir (const char *path) {
 }
 
 R_API int r_sys_stop () {
+	int pid;
 	if (enabled) return R_FALSE;
-	int pid = r_sys_getpid ();
+	pid = r_sys_getpid ();
 #ifndef SIGSTOP
 #define SIGSTOP 19
 #endif

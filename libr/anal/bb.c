@@ -1,4 +1,5 @@
-/* radare - LGPL - Copyright 2010-2014 - pancake, nibble */
+/* radare - LGPL - Copyright 2010-2015 - pancake, nibble */
+/* bb.c - basic block analysis */
 
 #include <r_anal.h>
 #include <r_util.h>
@@ -45,6 +46,7 @@ R_API void r_anal_bb_free(RAnalBlock *bb) {
 
 R_API RList *r_anal_bb_list_new() {
 	RList *list = r_list_new ();
+	if (!list) return NULL;
 	list->free = (void*)r_anal_bb_free;
 	return list;
 }
@@ -107,7 +109,7 @@ R_API int r_anal_bb(RAnal *anal, RAnalBlock *bb, ut64 addr, ut8 *buf, ut64 len, 
 			bb->type |= R_ANAL_BB_TYPE_LAST;
 			goto beach;
 		case R_ANAL_OP_TYPE_LEA:
-{
+		{
 			RAnalValue *src = op->src[0];
 			if (src && src->reg && anal->reg) {
 				const char *pc = anal->reg->name[R_REG_NAME_PC];
@@ -120,7 +122,7 @@ R_API int r_anal_bb(RAnal *anal, RAnalBlock *bb, ut64 addr, ut8 *buf, ut64 len, 
 					r_anal_ref_add (anal, ptr, addr+idx-op->size, 'd');
 				}
 			}
-}
+		}
 		}
 		r_anal_op_free (op);
 	}

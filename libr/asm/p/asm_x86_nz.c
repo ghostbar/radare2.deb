@@ -103,15 +103,8 @@ static int isnum(RAsm *a, const char *str) {
 	return str && (*str == '-' || (*str >= '0' && *str <= '9'));
 }
 
-static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
-	ut64 offset = a->pc;
-	ut8 t, *data = ao->buf;
-	char *arg, op[128];
-	int l = 0;
-
-	strncpy (op, str, sizeof (op)-1);
-	op[sizeof (op)-1] = '\0';
-	arg = strstr (op, "dword ptr");
+static int hasDword (char *op) {
+	char *arg = strstr (op, "dword ptr");
 	if (arg) {
 		const int dword_len = strlen ("dword ptr");
 		memmove (arg, arg+dword_len, strlen (arg+dword_len)+1);
@@ -121,6 +114,62 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 		const int dword_len = strlen ("dword ");
 		memmove (arg, arg+dword_len, strlen (arg+dword_len)+1);
 	}
+	return 0;
+}
+
+static int hasByte (char *op) {
+	char *arg = strstr (op, "byte ptr");
+	if (arg) {
+		const int dword_len = strlen ("byte ptr");
+		memmove (arg, arg+dword_len, strlen (arg+dword_len)+1);
+		return 1;
+	}
+	arg = strstr (op, "byte ");
+	if (arg) {
+		const int dword_len = strlen ("byte ");
+		memmove (arg, arg+dword_len, strlen (arg+dword_len)+1);
+		return 1;
+	}
+	return 0;
+}
+
+static int assemble16(RAsm *a, RAsmOp *ao, const char *str) {
+	int l = 0;
+	ut8 *data = ao->buf;
+	if (!strcmp (str, "nop")) {
+		data[l++] = 0x90;
+	} else if (!strcmp (str, "ret")) {
+		data[l++] = 0xc3;
+	} else if (!strcmp (str, "int3")) {
+		data[l++] = 0xcc;
+	} else if (!strncmp (str, "xor al,", 7)) {
+		// just to make the test happy, this needs much more work
+		const char *comma = strchr (str, ',');
+		if (comma) {
+			int n = getnum (a, comma+1);
+			data[l++] = 0x34;
+			data[l++] = n;
+		}
+	}
+	return l;
+}
+
+static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
+	int wordsize = 0;
+	ut64 offset = a->pc;
+	ut8 t, *data = ao->buf;
+	char *arg, op[128];
+	int l = 0;
+
+	if (a->bits == 16) {
+		return assemble16 (a, ao, str);
+	}
+
+	strncpy (op, str, sizeof (op)-1);
+	op[sizeof (op)-1] = '\0';
+
+	if (hasDword (op)) wordsize = 4;
+	if (hasByte (op)) wordsize = 1;
 
 	if (!memcmp (op, "ret ", 4) || !memcmp (op, "retn ", 5)) {
 		int n = getnum (a, op+4);
@@ -163,6 +212,15 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 	if (!strcmp (op, "ud2")) {
 		data[l++] = 0x0f;
 		data[l++] = 0x0b;
+		return l;
+	}
+	if (!strncmp (op, "neg ", 4)) {
+		const char *arg = op + 4;
+		int arg0 = getreg (arg);
+		if (a->bits == 64 && *arg == 'r')
+			data[l++] = 0x48;
+		data[l++] = 0xf7;
+		data[l++] = 0xd8 | arg0;
 		return l;
 	}
 	if (!strcmp (op, "rdtsc")) {
@@ -995,7 +1053,6 @@ SETNP/SETPO - Set if No Parity / Set if Parity Odd (386+)
 						data[l++] = 0x24;
 					} else if (r==5) { // EBP
 						data[l++] = getreg (arg)<<3 | r | 0x40;
-						data[l++] = 0;
 					} else data[l++] = getreg (arg) | r | 0x40;
 					data[l++] = r_num_math (NULL, delta) * N;
 				} else {
@@ -1080,14 +1137,22 @@ SETNP/SETPO - Set if No Parity / Set if Parity Odd (386+)
 				} else {
 					if (argk) {
 						int r = getreg (arg);
-						data[l++] = 0xc7;
-						if (r==4) { //ESP
-							data[l++] = 0x04;
-							data[l++] = 0x24;
-						} else if (r==5) { // EBP
-							data[l++] = 0x75;
-							data[l++] = 0;
-						} else  data[l++] = r;
+						if (wordsize == 1) {
+							// byte ptr
+							data[l++] = 0xc6;
+							data[l++] = r;
+							data[l++] = getnum (a, arg2);
+							return l;
+						} else {
+							data[l++] = 0xc7;
+							if (r==4) { //ESP
+								data[l++] = 0x04;
+								data[l++] = 0x24;
+							} else if (r==5) { // EBP
+								data[l++] = 0x75;
+								data[l++] = 0;
+							} else  data[l++] = r;
+						}
 #define is16reg(x) (x[1]=='l'||x[1]=='h')
 					} else {
 						if (is16reg (arg)) {
@@ -1301,7 +1366,7 @@ RAsmPlugin r_asm_plugin_x86_nz = {
 	.desc = "x86 handmade assembler",
 	.license = "LGPL3",
 	.arch = "x86",
-	.bits = 32|64,
+	.bits = 16|32|64,
 	.init = NULL,
 	.fini = NULL,
 	.disassemble = NULL,
@@ -1312,6 +1377,7 @@ RAsmPlugin r_asm_plugin_x86_nz = {
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_ASM,
-	.data = &r_asm_plugin_x86_nz
+	.data = &r_asm_plugin_x86_nz,
+	.version = R2_VERSION
 };
 #endif

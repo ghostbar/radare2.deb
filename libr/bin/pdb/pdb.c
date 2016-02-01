@@ -3,13 +3,13 @@
 #include <r_pdb.h>
 #include <string.h>
 
-#include "stream_file.h"
 #include "types.h"
+#include "stream_pe.h"
+#include "stream_file.h"
 #include "tpi.h"
 #include "dbi.h"
 #include "fpo.h"
 #include "gdata.h"
-#include "pe.h"
 #include "omap.h"
 
 #define PDB2_SIGNATURE "Microsoft C/C++ program database 2.00\r\n\032JG\0\0"
@@ -334,12 +334,14 @@ static int pdb_read_root(R_PDB *pdb) {
 		//      look default
 		case ePDB_STREAM_PDB:
 			pdb_info_stream = R_NEW0 (SPDBInfoStream);
+			if (!pdb_info_stream) return 0;
 			pdb_info_stream->free_ = free_info_stream;
 			parse_pdb_info_stream(pdb_info_stream, &stream_file);
 			r_list_append(pList, pdb_info_stream);
 			break;
 		case ePDB_STREAM_TPI:
 			tpi_stream = R_NEW0 (STpiStream);
+			if (!tpi_stream) return 0;
 			init_tpi_stream(tpi_stream);
 			if (!parse_tpi_stream(tpi_stream, &stream_file)) {
 				free (tpi_stream);
@@ -782,8 +784,10 @@ void build_command_field(ELeafType lt, char **command_field) {
 
 ///////////////////////////////////////////////////////////////////////////////
 void build_name_field(char *name, char **name_field) {
-	*name_field = (char *) malloc(strlen(name) + 1);
-	strcpy(*name_field, name);
+	if (!name)
+		*name_field = NULL;
+	else
+		*name_field = strdup (name);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -873,7 +877,7 @@ static void print_types(R_PDB *pdb, int mode) {
 	}
 
 	if (mode == 'j') {
-		pdb->printf("{\"%s\":[","types");
+		pdb->cb_printf("{\"%s\":[","types");
 	}
 
 	it = r_list_iterator(tpi_stream->types);
@@ -896,7 +900,7 @@ static void print_types(R_PDB *pdb, int mode) {
 			}
 
 			if ((mode == 8) && (is_first == 0)) {
-				pdb->printf(",");
+				pdb->cb_printf(",");
 			}
 
 			is_first = 0;
@@ -908,9 +912,9 @@ static void print_types(R_PDB *pdb, int mode) {
 				tf->get_val(tf, &val);
 			if (tf->get_members)
 				tf->get_members(tf, &ptmp);
-			//pdb->printf ("%s: size 0x%x\n", name, val);
+			//pdb->cb_printf ("%s: size 0x%x\n", name, val);
 			switch (mode) {
-			case 'd': pdb->printf ("%s: size 0x%x\n", name, val); break;
+			case 'd': pdb->cb_printf ("%s: size 0x%x\n", name, val); break;
 			case 'r':
 				build_command_field (lt, &command_field);
 				build_name_field (name, &name_field);
@@ -924,12 +928,12 @@ static void print_types(R_PDB *pdb, int mode) {
 			case 'j':
 				switch (lt) {
 				case eLF_ENUM:
-					pdb->printf("{\"type\":\"%s\", \"name\":\"%s\",\"%s\":[",
+					pdb->cb_printf("{\"type\":\"%s\", \"name\":\"%s\",\"%s\":[",
 								"enum", name , "enums");
 					break;
 				case eLF_STRUCTURE:
 				case eLF_UNION:
-					pdb->printf("{\"type\":\"%s\",\"name\":\"%s\",\"%s\":[",
+					pdb->cb_printf("{\"type\":\"%s\",\"name\":\"%s\",\"%s\":[",
 								"structure", name, "members");
 					break;
 				default:
@@ -942,7 +946,7 @@ static void print_types(R_PDB *pdb, int mode) {
 			it2 = r_list_iterator(ptmp);
 			while (r_list_iter_next(it2)) {
 				if ((mode == 'j') && (i)) {
-					pdb->printf(",");
+					pdb->cb_printf(",");
 				}
 
 				tf = (STypeInfo *) r_list_iter_get(it2);
@@ -956,8 +960,8 @@ static void print_types(R_PDB *pdb, int mode) {
 					tf->get_print_type(tf, &type);
 				switch (mode) {
 				case 'd':
-					pdb->printf ("  0x%x: %s type:", offset, name);
-					pdb->printf ("%s\n", type);
+					pdb->cb_printf ("  0x%x: %s type:", offset, name);
+					pdb->cb_printf ("%s\n", type);
 					break;
 				case 'r':
 					if (!build_flags_format_and_members_field(pdb, lt, name, type,
@@ -971,12 +975,12 @@ static void print_types(R_PDB *pdb, int mode) {
 				case 'j': // JSON
 					switch (lt) {
 					case eLF_ENUM:
-						pdb->printf("{\"%s\":\"%s\",\"%s\":%d}",
+						pdb->cb_printf("{\"%s\":\"%s\",\"%s\":%d}",
 									"enum_name", name, "enum_val", offset);
 						break;
 					case eLF_STRUCTURE:
 					case eLF_UNION:
-						pdb->printf("{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":%d}",
+						pdb->cb_printf("{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":%d}",
 									"member_type", type + strlen("(member)") + 1,
 									"member_name", name, "offset", offset);
 						break;
@@ -991,30 +995,30 @@ static void print_types(R_PDB *pdb, int mode) {
 			}
 
 			if (mode == 'r') {
-				pdb->printf("%s %s ", command_field, name_field);
+				pdb->cb_printf("%s %s ", command_field, name_field);
 				if (lt != eLF_ENUM) {
-					pdb->printf("%s ", flags_format_field);
+					pdb->cb_printf("%s ", flags_format_field);
 				} else {
-					pdb->printf("%c ", '{');
+					pdb->cb_printf("%c ", '{');
 				}
 
 				sym = (lt == eLF_ENUM) ? ',' : ' ';
 				for (i = 0; i < members_amount; i++) {
-					pdb->printf("%s", members_name_field[i]);
+					pdb->cb_printf("%s", members_name_field[i]);
 					if ((i + 1) != members_amount) {
-						pdb->printf("%c", sym);
+						pdb->cb_printf("%c", sym);
 					}
 				}
 
 				if (lt == eLF_ENUM) {
-					pdb->printf(" };\"\n");
+					pdb->cb_printf(" };\"\n");
 				} else {
-					pdb->printf("\n");
+					pdb->cb_printf("\n");
 				}
 			}
 
 			if (mode == 'j') {
-				pdb->printf("]}");
+				pdb->cb_printf("]}");
 			}
 
 err:
@@ -1031,7 +1035,7 @@ err:
 	}
 
 	if (mode == 'j') {
-		pdb->printf("]}");
+		pdb->cb_printf("]}");
 	}
 }
 
@@ -1074,7 +1078,7 @@ static void print_gvars(R_PDB *pdb, ut64 img_base, int format) {
 	}
 
 	if (format == 'j')
-		pdb->printf("{\"%s\":[","gvars");
+		pdb->cb_printf("{\"%s\":[","gvars");
 
 	gsym_data_stream = (SGDATAStream *) gsym->stream;
 	if ((omap != 0) && (sctns_orig != 0)) {
@@ -1086,7 +1090,7 @@ static void print_gvars(R_PDB *pdb, ut64 img_base, int format) {
 	it = r_list_iterator(gsym_data_stream->globals_list);
 	while (r_list_iter_next(it)) {
 		if ((format == 'j') && (gdata)) {
-			pdb->printf(",");
+			pdb->cb_printf(",");
 		}
 
 		gdata = (SGlobal *) r_list_iter_get(it);
@@ -1096,7 +1100,7 @@ static void print_gvars(R_PDB *pdb, ut64 img_base, int format) {
 			switch (format) {
 			case 2:
 			case 'j': // JSON
-				pdb->printf("{\"%s\":%d,\"%s\":%d,\"%s\":\"%s\",\"%s\":\"%s\"}",
+				pdb->cb_printf("{\"%s\":%d,\"%s\":%d,\"%s\":\"%s\",\"%s\":\"%s\"}",
 							"address", (ut64)(img_base + omap_remap((omap) ? (omap->stream) : 0, gdata->offset + sctn_header->virtual_address)),
 							"symtype", gdata->symtype,
 							"section_name", sctn_header->name,
@@ -1105,7 +1109,7 @@ static void print_gvars(R_PDB *pdb, ut64 img_base, int format) {
 			case 1:
 			case '*':
 			case 'r':
-				pdb->printf ("f pdb.%s = 0x%"PFMT64x" # %d %s\n",
+				pdb->cb_printf ("f pdb.%s = 0x%"PFMT64x" # %d %s\n",
 						name,
 						(ut64)(img_base + omap_remap((omap) ? (omap->stream) : 0,
 							gdata->offset + sctn_header->virtual_address)),
@@ -1113,7 +1117,7 @@ static void print_gvars(R_PDB *pdb, ut64 img_base, int format) {
 				break;
 			case 'd':
 			default:
-				pdb->printf ("0x%08"PFMT64x"  %d  %s  %s\n",
+				pdb->cb_printf ("0x%08"PFMT64x"  %d  %s  %s\n",
 					(ut64) (img_base + omap_remap((omap) ? (omap->stream) : 0,
 						gdata->offset + sctn_header->virtual_address)),
 					gdata->symtype, sctn_header->name, gdata->name.name);
@@ -1128,7 +1132,7 @@ static void print_gvars(R_PDB *pdb, ut64 img_base, int format) {
 	}
 
 	if (format == 'j')
-		pdb->printf("]}");
+		pdb->cb_printf("]}");
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1140,8 +1144,8 @@ int init_pdb_parser(R_PDB *pdb, const char *filename) {
 		eprintf ("struct R_PDB is not correct\n");
 		goto error;
 	}
-	if (!pdb->printf)
-		pdb->printf = (PrintfCallback)printf;
+	if (!pdb->cb_printf)
+		pdb->cb_printf = (PrintfCallback)printf;
 
 	pdb->buf = r_buf_file(filename);
 //	pdb->fp = r_sandbox_fopen (filename, "rb");

@@ -12,6 +12,18 @@
 #undef mips
 #define mips mips
 
+#if __IPHONE_8_0 && TARGET_OS_IPHONE
+#define LIBC_HAVE_SYSTEM 0
+#else
+#define LIBC_HAVE_SYSTEM 1
+#endif
+
+#if APPLE_SDK_APPLETVOS || APPLE_SDK_WATCHOS || APPLE_SDK_APPLETVSIMULATOR || APPLE_SDK_WATCHSIMULATOR
+#define LIBC_HAVE_FORK 0
+#else
+#define LIBC_HAVE_FORK 1
+#endif
+
 #ifdef __GNUC__
 #  define UNUSED_FUNCTION(x) __attribute__((__unused__)) UNUSED_ ## x
 #else
@@ -45,15 +57,19 @@
   #define __addr_t_defined
   #include <windows.h>
 #endif
-#if __WIN32__ || MINGW32
+#if __WIN32__ || MINGW32 && !__CYGWIN__
   #include <winsock.h>
   typedef int socklen_t;
-#if __WIN32__ || __CYGWIN__ || MINGW32
   #undef USE_SOCKETS
   #define __WINDOWS__ 1
   #undef __UNIX__
   #undef __BSD__
 #endif
+
+#if defined(__APPLE__) && (__arm__ || __arm64__ || __aarch64__)
+#define TARGET_OS_IPHONE 1
+#else
+#define TARGET_OS_IPHONE 0
 #endif
 
 #ifdef __GNUC__
@@ -103,14 +119,10 @@
 extern "C" {
 #endif
 
-#ifndef GIT_TAP
-#define GIT_TAP R2_VERSION
-#endif
-
 #define R_LIB_VERSION_HEADER(x) \
 const char *x##_version()
 #define R_LIB_VERSION(x) \
-const char *x##_version () { return "" GIT_TAP; }
+const char *x##_version () { return "" R2_GITTAP; }
 
 #define TODO(x) eprintf(__FUNCTION__"  " x)
 
@@ -120,13 +132,13 @@ const char *x##_version () { return "" GIT_TAP; }
 #define FS "\\"
 #define R_SYS_DIR "\\"
 #define R_SYS_HOME "USERPROFILE"
+#define R2_HOMEDIR ".config\\radare2"
 #else
 #define FS "/"
 #define R_SYS_DIR "/"
 #define R_SYS_HOME "HOME"
-#endif
-
 #define R2_HOMEDIR ".config/radare2"
+#endif
 
 #ifndef __packed
 #define __packed __attribute__((__packed__))
@@ -159,6 +171,11 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #undef R_IPI
 #endif
 
+#ifdef R_HEAP
+#undef R_HEAP
+#endif
+#define R_HEAP
+
 #ifdef R_API
 #undef R_API
 #endif
@@ -167,7 +184,7 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #elif R_INLINE
   #define R_API inline
 #else
-  #if defined(__GNUC__)
+  #if defined(__GNUC__) && __GNUC__ >= 4
     #define R_API __attribute__((visibility("default")))
   #else
     #define R_API
@@ -176,13 +193,14 @@ typedef void (*PrintfCallback)(const char *str, ...);
 
 #define BITS2BYTES(x) (((x)/8)+(((x)%8)?1:0))
 #define ZERO_FILL(x) memset (&x, 0, sizeof (x))
-#define R_NEWS0(x,y) (x*)calloc(sizeof(x),y)
+#define R_NEWS0(x,y) (x*)calloc(y,sizeof(x))
 #define R_NEWS(x,y) (x*)malloc(sizeof(x)*y)
 #define R_NEW0(x) (x*)calloc(1,sizeof(x))
 #define R_NEW(x) (x*)malloc(sizeof(x))
 // TODO: Make R_NEW_COPY be 1 arg, not two
 #define R_NEW_COPY(x,y) x=(void*)malloc(sizeof(y));memcpy(x,y,sizeof(y))
 #define IS_PRINTABLE(x) (x>=' '&&x<='~')
+#define IS_NUMBER(x) (x>='0'&&x<='9')
 #define IS_WHITESPACE(x) (x==' '||x=='\t')
 #define R_MEM_ALIGN(x) ((void *)(size_t)(((ut64)(size_t)x) & 0xfffffffffffff000LL))
 
@@ -240,7 +258,7 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #define HAVE_REGEXP 1
 #endif
 
-#if __WINDOWS__
+#if (__WINDOWS__ || MINGW32) && !__CYGWIN__
 #define PFMT64x "I64x"
 #define PFMT64d "I64d"
 #define PFMT64u "I64u"
@@ -267,7 +285,7 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #elif __WINDOWS__
 # define R_SYS_BASE ((ut64)0x01001000)
 #else // linux, bsd, ...
-# if __arm__
+# if __arm__ || __arm64__
 # define R_SYS_BASE ((ut64)0x4000)
 # else
 # define R_SYS_BASE ((ut64)0x8048000)
@@ -287,6 +305,9 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #elif __arm__
 #define R_SYS_ARCH "arm"
 #define R_SYS_BITS R_SYS_BITS_32
+#elif __arm64__ || __aarch64__
+#define R_SYS_ARCH "arm"
+#define R_SYS_BITS (R_SYS_BITS_32 | R_SYS_BITS_64)
 #elif __arc__
 #define R_SYS_ARCH "arc"
 #define R_SYS_BITS R_SYS_BITS_32
@@ -333,11 +354,14 @@ enum {
 	R_SYS_ARCH_MSP430 = 0x8000000, // 1<<27
 	R_SYS_ARCH_CRIS =  0x10000000, // 1<<28
 	R_SYS_ARCH_HPPA =  0x20000000, // 1<<29
+	R_SYS_ARCH_V810 =  0x40000000, // 1<<30
 };
 
 /* os */
 #if defined (__QNX__)
 #define R_SYS_OS "qnx"
+//#elif TARGET_OS_IPHONE
+//#define R_SYS_OS "ios"
 #elif defined (__APPLE__)
 #define R_SYS_OS "darwin"
 #elif defined (__linux__)

@@ -8,9 +8,9 @@ static int __lib_##x##_cb(RLibPlugin *pl, void *user, void *data) { \
 	struct r_##x##_plugin_t *hand = (struct r_##x##_plugin_t *)data; \
 	RCore *core = (RCore *)user; \
 	r_##x##_add (core->y, hand); \
-	return R_TRUE; \
+	return true; \
 }\
-static int __lib_##x##_dt(RLibPlugin *pl, void *p, void *u) { return R_TRUE; }
+static int __lib_##x##_dt(RLibPlugin *pl, void *p, void *u) { return true; }
 
 // XXX api consistency issues
 #define r_io_add r_io_plugin_add
@@ -47,7 +47,7 @@ R_API int r_core_loadlibs(RCore *core, int where, const char *path) {
 #if R2_LOADLIBS
 	/* TODO: all those default plugin paths should be defined in r_lib */
 	if (!r_config_get_i (core->config, "cfg.plugins")) {
-		return R_FALSE;
+		return false;
 	}
 	if (!where) where = -1;
 	if (path) r_lib_opendir (core->lib, path);
@@ -64,10 +64,15 @@ R_API int r_core_loadlibs(RCore *core, int where, const char *path) {
 		free (homeplugindir);
 	}
 	if (where & R_CORE_LOADLIBS_SYSTEM) {
+#if __WINDOWS__
+		r_lib_opendir (core->lib, "plugins");
+		r_lib_opendir (core->lib, "share/radare2/"R2_VERSION"/plugins");
+#else
 		r_lib_opendir (core->lib, R2_LIBDIR"/radare2/"R2_VERSION);
 		r_lib_opendir (core->lib, R2_LIBDIR"/radare2-extras/"R2_VERSION);
 		r_lib_opendir (core->lib, R2_LIBDIR"/radare2-bindings/"R2_VERSION);
+#endif
 	}
 #endif
-	return R_TRUE;
+	return true;
 }

@@ -109,11 +109,26 @@ static int sparse_limits(RList *l, ut64 *min, ut64 *max) {
 	return set;
 }
 
+R_API RBuffer *r_buf_new_with_pointers (const ut8 *bytes, ut64 len) {
+	RBuffer *b = r_buf_new ();
+	if (bytes && (len > 0 && len != UT64_MAX)) {
+		b->buf = (ut8*)bytes;
+		b->length = len;
+		b->empty = false;
+		b->ro = true;
+	}
+	return b;
+}
+
 R_API RBuffer *r_buf_new_with_bytes (const ut8 *bytes, ut64 len) {
 	RBuffer *b = r_buf_new ();
 	if (bytes && (len > 0 && len != UT64_MAX))
 		r_buf_set_bytes (b, bytes, len);
 	return b;
+}
+
+R_API RBuffer *r_buf_new_with_buf(RBuffer *b) {
+	return r_buf_new_with_bytes (b->buf, b->length);
 }
 
 R_API RBuffer *r_buf_new_sparse() {
@@ -127,10 +142,7 @@ R_API RBuffer *r_buf_new() {
 }
 
 R_API const ut8 *r_buf_buffer (RBuffer *b) {
-	if (!b) return NULL;
-	if (b->sparse)
-		return NULL;
-	return b->buf;
+	return (b && !b->sparse)? b->buf: NULL;
 }
 
 R_API ut64 r_buf_size (RBuffer *b) {
@@ -142,9 +154,7 @@ R_API ut64 r_buf_size (RBuffer *b) {
 		}
 		return 0LL;
 	}
-	if (b->empty) return 0;
-	else return b->length;
-	return UT64_MAX;
+	return b->empty? 0: b->length;
 }
 
 // rename to new?
@@ -441,7 +451,7 @@ R_API int r_buf_fread_at (RBuffer *b, ut64 addr, ut8 *buf, const char *fmt, int 
 
 //ret 0 or -1 if failed; ret copied length if success
 R_API int r_buf_write_at(RBuffer *b, ut64 addr, const ut8 *buf, int len) {
-	if (!b) return 0;
+	if (!b || !buf || len < 1) return 0;
 	if (b->empty) {
 		b->empty = 0;
 		free (b->buf);
@@ -455,6 +465,7 @@ R_API int r_buf_fwrite_at (RBuffer *b, ut64 addr, ut8 *buf, const char *fmt, int
 }
 
 R_API void r_buf_deinit(RBuffer *b) {
+	if (!b) return;
 	if (b->sparse) {
 		r_list_free (b->sparse);
 		b->sparse = NULL;
@@ -467,7 +478,7 @@ R_API void r_buf_deinit(RBuffer *b) {
 
 R_API void r_buf_free(RBuffer *b) {
 	if (!b) return;
-	r_buf_deinit (b);
+	if (!b->ro) r_buf_deinit (b);
 	free (b);
 }
 

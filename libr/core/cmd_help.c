@@ -100,8 +100,7 @@ static int cmd_help(void *data, const char *input) {
 			//b64 decoding takes at most strlen(str) * 4
 			const int buflen = (strlen (input+3) * 4) + 1;
 			char* buf = calloc (buflen, sizeof(char));
-			if (!buf)
-				return R_FALSE;
+			if (!buf) return false;
 			if (input[3] == '-')
 				r_base64_decode ((ut8*)buf, input+5, strlen (input+5));
 			else r_base64_encode (buf, (const ut8*)input+4, strlen (input+4));
@@ -187,10 +186,16 @@ static int cmd_help(void *data, const char *input) {
 			if (core->num->dbz) {
 				eprintf ("RNum ERROR: Division by Zero\n");
 			}
-			asnum  = r_num_as_string (NULL, n);
 			n32 = (ut32)n;
+			{
+				ut64 nn;
+				int be = core->assembler->big_endian;
+				r_mem_copyendian ((ut8*)&nn, (ut8*)&n, sizeof(n), !be);
+				asnum  = r_num_as_string (NULL, nn);
+			}
 			memcpy (&f, &n32, sizeof (f));
 			memcpy (&d, &n, sizeof (d));
+
 			/* decimal, hexa, octal */
 			s = n>>16<<12;
 			a = n & 0x0fff;
@@ -288,6 +293,8 @@ static int cmd_help(void *data, const char *input) {
 			"@@", " hit*", "run the command on every flag matching 'hit*'",
 			"@a:", "arch[:bits]", "temporary set arch and bits",
 			"@b:", "bits", "temporary set asm.bits",
+			"@e:", "k=v,k=v", "temporary change eval vars",
+			"@r:", "reg", "tmp seek to reg value (f.ex pd@r:PC)",
 			"@f:", "file", "temporary replace block with file contents",
 			"@s:", "string", "same as above but from a string",
 			"@x:", "909192", "from hex pairs string",
@@ -305,25 +312,26 @@ static int cmd_help(void *data, const char *input) {
 			"$$", "", "here (current virtual seek)",
 			"$?", "", "last comparison value",
 			"$alias", "=value", "Alias commands (simple macros)",
+			"$b", "", "block size",
+			"$B", "", "begin of function",
+			"$c,$r", "", "get width and height of terminal",
 			"$Cn", "", "get nth call of function",
 			"$Dn", "", "get nth data reference in function",
-			"$F", "", "current function size",
-			"$I", "", "number of instructions of current function",
-			"$Ja", "", "get nth jump of function",
-			"$S", "", "section offset",
-			"$SS", "", "section size",
-			"$Xn", "", "get nth xref of function",
-			"$b", "", "block size",
-			"$c,$r", "", "get width and height of terminal",
 			"$e", "", "1 if end of block, else 0",
 			"$f", "", "jump fail address (e.g. jz 0x10 => next instruction)",
+			"$F", "", "current function size",
+			"$I", "", "number of instructions of current function",
 			"$j", "", "jump address (e.g. jmp 0x10, jz 0x10 => 0x10)",
+			"$Ja", "", "get nth jump of function",
+			"$Xn", "", "get nth xref of function",
 			"$l", "", "opcode length",
 			"$m", "", "opcode memory reference (e.g. mov eax,[0x10] => 0x10)",
+			"$o", "", "here (current disk io offset)",
 			"$p", "", "getpid()",
 			"$P", "", "pid of children (only in debug)",
-			"$o", "", "here (current disk io offset)",
 			"$s", "", "file size",
+			"$S", "", "section offset",
+			"$SS", "", "section size",
 			"$v", "", "opcode immediate value (e.g. lui a0,0x8010 => 0x8010)",
 			"$w", "", "get word size, 4 if asm.bits=32, 8 if 64, ...",
 			"${ev}", "", "get value of eval config variable",
@@ -332,11 +340,18 @@ static int cmd_help(void *data, const char *input) {
 			NULL};
 		r_core_cmd_help (core, help_msg);
 		}
-		return R_TRUE;
+		return true;
 	case 'V':
-		if (!strcmp (R2_VERSION, GIT_TAP))
-			r_cons_printf ("%s %d\n", R2_VERSION, R2_VERSION_COMMIT);
-		else r_cons_printf ("%s aka %s commit %d\n", R2_VERSION, GIT_TAP, R2_VERSION_COMMIT);
+		if (!input[1]){
+			if (!strcmp (R2_VERSION, R2_GITTAP))
+				r_cons_printf ("%s %d\n", R2_VERSION, R2_VERSION_COMMIT);
+
+			else r_cons_printf ("%s aka %s commit %d\n", R2_VERSION, R2_GITTAP, R2_VERSION_COMMIT);
+		}	
+		if (input[1] == 'j' && !input[2]){
+			r_cons_printf ("{\"system\":\"%s-%s-%s\"", R_SYS_OS, R_SYS_ENDIAN, R_SYS_ARCH);
+			r_cons_printf (",\"version\":\"%s\"}\n",  R2_VERSION);
+		}
 		break;
 	case 'l':
 		for (input++; input[0]==' '; input++);
@@ -370,8 +385,9 @@ static int cmd_help(void *data, const char *input) {
 	case 'e': // echo
 		{
 		const char *msg = r_str_chop_ro (input+1);
-		char *newmsg = filter_flags (core, msg);
 		// TODO: replace all ${flagname} by its value in hexa
+		char *newmsg = filter_flags (core, msg);
+		r_str_unescape (newmsg);
 		r_cons_printf ("%s\n", newmsg);
 		free (newmsg);
 		}
@@ -401,7 +417,7 @@ static int cmd_help(void *data, const char *input) {
 		if (core->io->va) {
 			ut64 o, n = (input[0] && input[1])?
 				r_num_math (core->num, input+2): core->offset;
-			o = r_io_section_offset_to_vaddr (core->io, n);
+			o = r_io_section_maddr_to_vaddr (core->io, n);
 			r_cons_printf ("0x%08"PFMT64x"\n", o);
 		} else eprintf ("io.va is false\n");
 		break;
@@ -410,7 +426,7 @@ static int cmd_help(void *data, const char *input) {
 			// physical address
 			ut64 o, n = (input[0] && input[1])?
 				r_num_math (core->num, input+2): core->offset;
-			o = r_io_section_vaddr_to_offset (core->io, n);
+			o = r_io_section_vaddr_to_maddr (core->io, n);
 			r_cons_printf ("0x%08"PFMT64x"\n", o);
 		} else eprintf ("Virtual addresses not enabled!\n");
 		break;
@@ -419,11 +435,13 @@ static int cmd_help(void *data, const char *input) {
 		RIOSection *s;
 		ut64 n = (input[0] && input[1])?
 			r_num_math (core->num, input+2): core->offset;
-		n = r_io_section_vaddr_to_offset (core->io, n);
-		s = r_io_section_vget (core->io, n);
-		if (s && *(s->name))
+		n = r_io_section_vaddr_to_maddr_try (core->io, n);
+		s = r_io_section_mget_in (core->io, n);
+		if (s && *(s->name)) {
 			r_cons_printf ("%s\n", s->name);
-		} break;
+		}
+		break;
+		}
 	case '_': // hud input
 		r_core_yank_hud_file (core, input+1);
 		break;
@@ -441,7 +459,7 @@ static int cmd_help(void *data, const char *input) {
 			r_cons_message (input+2);
 			break;
 		case 'p': {
-			core->num->value = r_core_yank_hud_path (core, input+2, 0) == R_TRUE;
+			core->num->value = r_core_yank_hud_path (core, input+2, 0) == true;
 			} break;
 		case 'k':
 			r_cons_any_key (NULL);
@@ -576,6 +594,7 @@ static int cmd_help(void *data, const char *input) {
 		"S","", "Io section manipulation information",
 		"t","", "Cparse types management",
 		"T"," [-] [num|msg]", "Text log utility",
+		"u","", "uname/undo seek/write",
 		"V","", "Enter visual mode (vcmds=visualvisual  keystrokes)",
 		"w"," [str]", "Multiple write operations",
 		"x"," [len]", "Alias for 'px' (print hexadecimal)",
