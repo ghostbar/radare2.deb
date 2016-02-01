@@ -264,7 +264,7 @@ static int check_fmt(RMagic *ms, struct r_magic *m) {
 	rc = r_regex_comp (&rx, "%[-0-9\\.]*s", R_REGEX_EXTENDED|R_REGEX_NOSUB);
 	if (rc) {
 		char errmsg[512];
-		r_regex_error (rc, &rx, errmsg, sizeof (errmsg-1));
+		r_regex_error (rc, &rx, errmsg, sizeof (errmsg)-1);
 		file_magerror (ms, "regex error %d, (%s)", rc, errmsg);
 		return -1;
 	} else {
@@ -1313,9 +1313,10 @@ static int magiccheck(RMagic *ms, struct r_magic *m) {
 		v = 0;
 
 		for (idx = 0; m->str_range == 0 || idx < m->str_range; idx++) {
+			if ((int)ms->search.offset < 0)
+				break;
 			if (slen + idx > ms->search.s_len)
 				break;
-
 			v = file_strncmp (m->value.s, ms->search.s + idx, slen, m->str_flags);
 			if (v == 0) {	/* found match */
 				ms->search.offset += idx;
@@ -1337,7 +1338,7 @@ static int magiccheck(RMagic *ms, struct r_magic *m) {
 		    R_REGEX_EXTENDED|R_REGEX_NEWLINE|
 		    ((m->str_flags & STRING_IGNORE_CASE) ? R_REGEX_ICASE : 0));
 		if (rc) {
-			(void)r_regex_error(rc, &rx, errmsg, sizeof(errmsg-1));
+			(void)r_regex_error(rc, &rx, errmsg, sizeof(errmsg)-1);
 			file_magerror(ms, "regex error %d, (%s)",
 			    rc, errmsg);
 			v = (ut64)-1;

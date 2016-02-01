@@ -15,8 +15,8 @@ static int check(RBinFile *arch) {
 static int check_bytes(const ut8 *buf, ut64 length) {
 	if (buf && length >= 5)
 		if (!memcmp (buf, "\x7F\x45\x4c\x46\x02", 5))
-			return R_TRUE;
-	return R_FALSE;
+			return true;
+	return false;
 }
 
 extern struct r_bin_dbginfo_t r_bin_dbginfo_elf64;
@@ -145,6 +145,7 @@ RBinPlugin r_bin_plugin_elf64 = {
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_BIN,
-	.data = &r_bin_plugin_elf64
+	.data = &r_bin_plugin_elf64,
+	.version = R2_VERSION
 };
 #endif

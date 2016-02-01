@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2010-2013 - pancake */
+/* radare - LGPL - Copyright 2010-2015 - pancake */
 
 #include <r_egg.h>
 
@@ -251,6 +251,11 @@ static void rcc_element(REgg *egg, char *str) {
 			mode = NORMAL;
 			break;
 		case SYSCALL:
+			if (nsyscalls > 255){
+				eprintf ("global-buffer-overflow in syscalls\n");
+				break;
+			}
+			//XXX the mem for name and arg are not freed - MEMLEAK
 			syscalls[nsyscalls].name = strdup (dstvar);
 			syscalls[nsyscalls].arg = strdup (str);
 			nsyscalls++;
@@ -321,25 +326,25 @@ R_API char *r_egg_mkvar(REgg *egg, char *out, const char *_str, int delta) {
 		qi = atoi (q+1);
 		varsize = (qi==1)? 'b': 'l';
 	} else varsize='l';
-	if (*str=='*'||*str=='&') {
+	if (*str == '*' || *str == '&') {
 		varxs = *str;
 		str++;
 	} else varxs = 0;
-	if (str[0]=='.') {
+	if (str[0] == '.') {
 		REggEmit *e = egg->remit;
 		idx = atoi (str+4) + delta + e->size;
-		if (!memcmp (str+1, "ret", 3)) {
+		if (!strncmp (str+1, "ret", 3)) {
 			strcpy (out, e->retvar);
 		} else
-		if (!memcmp (str+1, "fix", 3)) {
+		if (!strncmp (str+1, "fix", 3)) {
 			e->get_var (egg, 0, out, idx-stackfixed);
 			//sprintf(out, "%d(%%"R_BP")", -(atoi(str+4)+delta+R_SZ-stackfixed));
 		} else
-		if (!memcmp (str+1, "var", 3)) {
+		if (!strncmp (str+1, "var", 3)) {
 			e->get_var (egg, 0, out, idx);
 		//sprintf(out, "%d(%%"R_BP")", -(atoi(str+4)+delta+R_SZ));
 		} else
-		if (!memcmp (str+1, "arg", 3)) {
+		if (!strncmp (str+1, "arg", 3)) {
 			if (str[4]) {
 				if (stackframe == 0) {
 					e->get_var (egg, 1, out, 4); //idx-4);
@@ -352,13 +357,13 @@ R_API char *r_egg_mkvar(REgg *egg, char *out, const char *_str, int delta) {
 					for (i=0; i<nsyscalls; i++)
 						if (!strcmp (syscalls[i].name, callname)) {
 							free (oldstr);
-							return syscalls[i].arg;
+							return strdup(syscalls[i].arg);
 						}
 					eprintf ("Unknown arg for syscall '%s'\n", callname);
 				} else eprintf ("NO CALLNAME '%s'\n", callname);
 			}
 		} else
-		if (!memcmp (str+1, "reg", 3)) {
+		if (!strncmp (str+1, "reg", 3)) {
 			// XXX: can overflow if out is small
 			if (attsyntax)
 				snprintf (out, 32, "%%%s", e->regs (egg, atoi (str+4)));
@@ -368,6 +373,7 @@ R_API char *r_egg_mkvar(REgg *egg, char *out, const char *_str, int delta) {
 			eprintf ("Something is really wrong\n");
 		}
 		ret = strdup(out);
+		free (oldstr);
 	} else if (*str=='"' || *str=='\'') {
 		int mustfilter = *str=='"';
 		/* TODO: check for room in stackfixed area */
@@ -382,8 +388,8 @@ R_API char *r_egg_mkvar(REgg *egg, char *out, const char *_str, int delta) {
 		dstvar = strdup (skipspaces (foo));
 		rcc_pushstr (egg, str, mustfilter);
 		ret = r_egg_mkvar (egg, out, foo, 0);
+		free (oldstr);
 	}
-	free (oldstr);
 	return ret;
 }
 
@@ -518,7 +524,11 @@ static void rcc_context(REgg *egg, int delta) {
 	REggEmit *emit = egg->remit;
 	char str[64];
 
-	nestedi[CTX-1]++;
+
+	if (CTX>31 || CTX <0)
+		return;
+
+	nestedi[CTX]++;
 	if (callname && CTX>0) {// && delta>0) {
 	//	set_nested (callname);
 //eprintf (" - - - - - - -  set nested d=%d c=%d (%s)\n", delta, context-1, callname);
@@ -705,7 +715,7 @@ static void rcc_next(REgg *egg) {
 	int i;
 
 	if (setenviron) {
-		elem[elem_n-1] = 0;
+		elem[elem_n - 1] = 0;
 		r_sys_setenv (setenviron, elem);
 		R_FREE (setenviron);
 		return;
@@ -732,7 +742,9 @@ static void rcc_next(REgg *egg) {
 				r_egg_lang_parsechar (egg, *p);
 			free (q);
 			line = oline;
-		} else eprintf ("Cannot find '%s'\n", path);
+		} else {
+			eprintf ("Cannot find '%s'\n", path);
+		}
 		free (path);
 		return;
 	}
@@ -758,6 +770,7 @@ static void rcc_next(REgg *egg) {
 			//ocn = ptr+1; // what is the point of this?
 		}
 		ocn = skipspaces (callname);
+		if (!ocn) return;
 		str = r_egg_mkvar (egg, buf, ocn, 0);
 		if (!str) {
 			eprintf ("Cannot mkvar\n");
@@ -765,10 +778,9 @@ static void rcc_next(REgg *egg) {
 		}
 		if (*ocn=='.')
 			e->call (egg, str, 1);
-		else
 		if (!strcmp (str, "while")) {
 			char var[128];
-			if (lastctxdelta>=0)
+			if (lastctxdelta >= 0)
 				exit (eprintf ("ERROR: Unsupported while syntax\n"));
 			sprintf (var, "__begin_%d_%d_%d\n", nfunctions, CTX, nestedi[CTX-1]);
 			e->while_end (egg, var); //get_frame_label (1));
@@ -790,7 +802,7 @@ static void rcc_next(REgg *egg) {
 #endif
 			nargs = 0;
 		} else {
-			for (i=0; i<nsyscalls; i++) {
+			for (i = 0; i < nsyscalls; i++) {
 				if (!strcmp (str, syscalls[i].name)) {
 					p = syscallbody;
 					e->comment (egg, "set syscall args");
@@ -807,14 +819,14 @@ static void rcc_next(REgg *egg) {
 							for (q=s; *q; q++)
 								r_egg_lang_parsechar (egg, *q);
 							free (s);
-						} else eprintf ("Cant get @syscall payload\n");
+						} else eprintf ("Cannot get @syscall payload\n");
 					}
 					docall = 0;
 					break;
 				}
 			}
 			if (docall)
-			for (i=0; i<ninlines; i++) {
+			for (i = 0; i < ninlines; i++) {
 				if (!strcmp (str, inlines[i].name)) {
 					p = inlines[i].body;
 					docall = 0;
@@ -831,7 +843,7 @@ static void rcc_next(REgg *egg) {
 				e->call (egg, str, 0);
 			}
 		}
-		if (nargs>0)
+		if (nargs > 0)
 			e->restore_stack (egg, nargs*e->size);
 		if (ocn) { // Used to call .var0()
 			/* XXX: Probably buggy and wrong */

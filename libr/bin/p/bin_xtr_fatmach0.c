@@ -14,11 +14,11 @@ static int free_xtr (void *xtr_obj) ;
 
 static int check(RBin *bin) {
 	ut8 *h, buf[4];
-	int off, ret = R_FALSE;
-	RMmap *m = r_file_mmap (bin->file, R_FALSE, 0);
+	int off, ret = false;
+	RMmap *m = r_file_mmap (bin->file, false, 0);
 	if (!m || !m->buf) {
 		r_file_mmap_free (m);
-		return R_FALSE;
+		return false;
 	}
 	h = m->buf;
 	if (m->len>=0x300 && !memcmp (h, "\xca\xfe\xba\xbe", 4)) {
@@ -30,7 +30,7 @@ static int check(RBin *bin) {
 				!memcmp (buf, "\xfe\xed\xfa\xce", 4) ||
 				!memcmp (buf, "\xfe\xed\xfa\xcf", 4) ||
 				!memcmp (buf, "\xcf\xfa\xed\xfe", 4))
-				ret = R_TRUE;
+				ret = true;
 		}
 	}
 	r_file_mmap_free (m);
@@ -40,10 +40,10 @@ static int check(RBin *bin) {
 static int check_bytes(const ut8* bytes, ut64 sz) {
 	const ut8 *h;
 	ut8 buf[4];
-	int off, ret = R_FALSE;
+	int off, ret = false;
 
 	if (!bytes || sz < 0x300) {
-		return R_FALSE;
+		return false;
 	}
 	memcpy (&off, bytes+4*sizeof (int), sizeof (int));
 	r_mem_copyendian ((ut8*)&off, (ut8*)&off, sizeof(int), !LIL_ENDIAN);
@@ -58,7 +58,7 @@ static int check_bytes(const ut8* bytes, ut64 sz) {
 				!memcmp (buf, "\xfe\xed\xfa\xce", 4) ||
 				!memcmp (buf, "\xfe\xed\xfa\xcf", 4) ||
 				!memcmp (buf, "\xcf\xfa\xed\xfe", 4))
-				ret = R_TRUE;
+				ret = true;
 		}
 	}
 	return ret;
@@ -71,12 +71,12 @@ static int destroy(RBin *bin) {
 
 static int free_xtr (void *xtr_obj) {
 	r_bin_fatmach0_free ((struct r_bin_fatmach0_obj_t*)xtr_obj);
-	return R_TRUE;
+	return true;
 }
 
 static int load(RBin *bin) {
 	return (bin->cur->xtr_obj = r_bin_fatmach0_new (bin->file))?
-		R_TRUE: R_FALSE;
+		true: false;
 }
 
 static int size(RBin *bin) {
@@ -167,8 +167,6 @@ struct r_bin_xtr_plugin_t r_bin_xtr_plugin_fatmach0 = {
 	.name = "fatmach0",
 	.desc = "fat mach0 bin extractor plugin",
 	.license = "LGPL3",
-	.init = NULL,
-	.fini = NULL,
 	.check = &check,
 	.load = &load,
 	.size = &size,
@@ -184,6 +182,7 @@ struct r_bin_xtr_plugin_t r_bin_xtr_plugin_fatmach0 = {
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_BIN_XTR,
-	.data = &r_bin_xtr_plugin_fatmach0
+	.data = &r_bin_xtr_plugin_fatmach0,
+	.version = R2_VERSION
 };
 #endif

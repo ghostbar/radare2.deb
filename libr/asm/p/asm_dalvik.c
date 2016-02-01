@@ -435,25 +435,21 @@ static int dalvik_assemble(RAsm *a, RAsmOp *op, const char *buf) {
 	return 0;
 }
 
-static int init (void *user) {
-	return R_TRUE;
-}
-
 RAsmPlugin r_asm_plugin_dalvik = {
 	.name = "dalvik",
 	.arch = "dalvik",
 	.license = "LGPL3",
 	.desc = "AndroidVM Dalvik",
-	.bits = 32|64,
-	.init = &init,
-	.fini = NULL,
+	.bits = 32 | 64,
 	.disassemble = &dalvik_disassemble,
-	.assemble = &dalvik_assemble
+	.assemble = &dalvik_assemble,
+	0
 };
 
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_ASM,
-	.data = &r_asm_plugin_dalvik
+	.data = &r_asm_plugin_dalvik,
+	.version = R2_VERSION
 };
 #endif

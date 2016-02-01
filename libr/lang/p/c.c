@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2011-2014 pancake */
+/* radare - LGPL - Copyright 2011-2015 pancake */
 /* vala extension for libr (radare2) */
 // TODO: add cache directory (~/.r2/cache)
 
@@ -8,21 +8,20 @@
 
 static int lang_c_file(RLang *lang, const char *file) {
 	void *lib;
-	char *cc, *p, name[512], buf[512];
+	char *a, *cc, *p, name[512], buf[512];
 	const char *libpath, *libname;
 
 	if (strlen (file) > (sizeof(name)-10))
-		return R_FALSE;
+		return false;
 	if (!strstr (file, ".c"))
 		sprintf (name, "%s.c", file);
 	else strcpy (name, file);
 	if (!r_file_exists (name)) {
 		eprintf ("file not found (%s)\n", name);
-		return R_FALSE;
+		return false;
 	}
 
-{
-	char *a = (char*)r_str_lchr (name, '/');
+	a = (char*)r_str_lchr (name, '/');
 	if (a) {
 		*a = 0;
 		libpath = name;
@@ -31,7 +30,7 @@ static int lang_c_file(RLang *lang, const char *file) {
 		libpath = ".";
 		libname = name;
 	}
-}
+	r_sys_setenv ("PKG_CONFIG_PATH", R2_LIBDIR"/pkgconfig");
 	p = strstr (name, ".c"); if (p) *p=0;
 	cc = r_sys_getenv ("CC");
 	if (!cc || !*cc)
@@ -39,8 +38,8 @@ static int lang_c_file(RLang *lang, const char *file) {
 	snprintf (buf, sizeof (buf), "%s -fPIC -shared %s -o %s/lib%s."R_LIB_EXT
 		" $(pkg-config --cflags --libs r_core)", cc, file, libpath, libname);
 	free (cc);
-	if (system (buf) != 0)
-		return R_FALSE;
+	if (r_sandbox_system (buf, 1) != 0)
+		return false;
 
 	snprintf (buf, sizeof (buf), "%s/lib%s."R_LIB_EXT, libpath, libname);
 	lib = r_lib_dl_open (buf);
@@ -57,7 +56,7 @@ static int lang_c_file(RLang *lang, const char *file) {
 
 static int lang_c_init(void *user) {
 	// TODO: check if "valac" is found in path
-	return R_TRUE;
+	return true;
 }
 
 static int lang_c_run(RLang *lang, const char *code, int len) {
@@ -70,7 +69,7 @@ static int lang_c_run(RLang *lang, const char *code, int len) {
 		lang_c_file (lang, ".tmp.c");
 		r_file_rm (".tmp.c");
 	} else eprintf ("Cannot open .tmp.c\n");
-	return R_TRUE;
+	return true;
 }
 
 static struct r_lang_plugin_t r_lang_plugin_c = {

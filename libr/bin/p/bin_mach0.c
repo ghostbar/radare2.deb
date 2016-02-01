@@ -6,6 +6,8 @@
 #include <r_bin.h>
 #include "mach0/mach0.h"
 
+#include "objc/mach0_classes.h"
+
 static int check(RBinFile *arch);
 static int check_bytes(const ut8 *buf, ut64 length);
 static RBinInfo* info(RBinFile *arch);
@@ -36,33 +38,30 @@ static int load(RBinFile *arch) {
 	const ut8 *bytes = arch ? r_buf_buffer (arch->buf) : NULL;
 	ut64 sz = arch ? r_buf_size (arch->buf): 0;
 
-	if (!arch || !arch->o) return R_FALSE;
+	if (!arch || !arch->o) return false;
  	res = load_bytes (arch, bytes, sz, arch->o->loadaddr, arch->sdb);
 
 	if (!arch->o || !res) {
 		MACH0_(mach0_free) (res);
-		return R_FALSE;
+		return false;
 	}
 	arch->o->bin_obj = res;
 	struct MACH0_(obj_t) *mo = arch->o->bin_obj;
 	arch->o->kv = mo->kv; // NOP
 	sdb_ns_set (arch->sdb, "info", mo->kv);
-	return R_TRUE;
+	return true;
 }
 
 static int destroy(RBinFile *arch) {
 	MACH0_(mach0_free) (arch->o->bin_obj);
-	return R_TRUE;
+	return true;
 }
 
 static ut64 baddr(RBinFile *arch) {
 	struct MACH0_(obj_t) *bin;
-
 	if (!arch || !arch->o || !arch->o->bin_obj)
-		return 0;
-
+		return 0LL;
 	bin = arch->o->bin_obj;
-
 	return MACH0_(get_baddr)(bin);
 }
 
@@ -107,9 +106,10 @@ static RList* sections(RBinFile *arch) {
 		ptr->vsize = sections[i].size;
 		ptr->paddr = sections[i].offset + obj->boffset;
 		ptr->vaddr = sections[i].addr;
+		ptr->add = true;
 		if (ptr->vaddr == 0)
 			ptr->vaddr = ptr->paddr;
-		ptr->srwx = sections[i].srwx;
+		ptr->srwx = sections[i].srwx | R_BIN_SCN_MAP;
 		r_list_append (ret, ptr);
 	}
 	free (sections);
@@ -141,13 +141,11 @@ static RList* symbols(RBinFile *arch) {
 		if (!symbols[i].name[0] || symbols[i].addr<100) continue;
 		if (!(ptr = R_NEW0 (RBinSymbol)))
 			break;
-		strncpy (ptr->name, (char*)symbols[i].name, R_BIN_SIZEOF_STRINGS);
-		strncpy (ptr->forwarder, "NONE", R_BIN_SIZEOF_STRINGS);
-		if (symbols[i].type == R_BIN_MACH0_SYMBOL_TYPE_LOCAL)
-			strncpy (ptr->bind, "LOCAL", R_BIN_SIZEOF_STRINGS);
-		else
-			strncpy (ptr->bind, "GLOBAL", R_BIN_SIZEOF_STRINGS);
-		strncpy (ptr->type, "FUNC", R_BIN_SIZEOF_STRINGS); //XXX Get the right type
+		ptr->name = strdup ((char*)symbols[i].name);
+		ptr->forwarder = r_str_const ("NONE");
+		ptr->bind = r_str_const ((symbols[i].type == R_BIN_MACH0_SYMBOL_TYPE_LOCAL)?
+			"LOCAL":"GLOBAL");
+		ptr->type = r_str_const ("FUNC");
 		ptr->vaddr = symbols[i].addr;
 		ptr->paddr = symbols[i].offset+obj->boffset;
 		ptr->size = symbols[i].size;
@@ -163,6 +161,27 @@ static RList* symbols(RBinFile *arch) {
 			lang = "go";
 		}
 		r_list_append (ret, ptr);
+	}
+	//functions from LC_FUNCTION_STARTS
+	if (bin->func_start) {
+		ut64 value = 0, address = 0;
+		const ut8* temp = bin->func_start;
+		const ut8* temp_end = bin->func_start + bin->func_size;
+		while (*temp && temp+3 < temp_end) {
+			temp = r_uleb128_decode (temp, NULL, &value);
+			address += value;
+			ptr = R_NEW0 (RBinSymbol);
+			if (!ptr) break;
+			ptr->vaddr = bin->baddr + address;
+			ptr->paddr = address;
+			ptr->size = 0;
+			ptr->name = r_str_newf ("func.%08"PFMT64x, ptr->vaddr);
+			ptr->type = r_str_const ("FUNC");
+			ptr->forwarder = r_str_const ("NONE");
+			ptr->bind = r_str_const ("LOCAL");
+			ptr->ordinal = i++;
+			r_list_append (ret, ptr);
+		}
 	}
 	bin->lang = lang;
 	free (symbols);
@@ -188,7 +207,7 @@ static RList* imports(RBinFile *arch) {
 
 	if (!(imports = MACH0_(get_imports) (arch->o->bin_obj)))
 		return ret;
-	bin->has_canary = R_FALSE;
+	bin->has_canary = false;
 	for (i = 0; !imports[i].last; i++) {
 		if (!(ptr = R_NEW0 (RBinImport)))
 			break;
@@ -206,14 +225,14 @@ static RList* imports(RBinFile *arch) {
 		// Remove the extra underscore that every import seems to have in Mach-O.
 		if (*name == '_')
 			name++;
-		strncpy (ptr->bind, "NONE", R_BIN_SIZEOF_STRINGS-1);
-		strncpy (ptr->name, name, R_BIN_SIZEOF_STRINGS-1);
-		strncpy (ptr->type, type, R_BIN_SIZEOF_STRINGS-1);
+		ptr->name = strdup (name);
+		ptr->bind = r_str_const ("NONE");
+		ptr->type = r_str_const (type);
 		ptr->ordinal = imports[i].ord;
 		if (bin->imports_by_ord && ptr->ordinal < bin->imports_by_ord_size)
 			bin->imports_by_ord[ptr->ordinal] = ptr;
  		if (!strcmp (name, "__stack_chk_fail") ) {
-			bin->has_canary = R_TRUE;
+			bin->has_canary = true;
 		}
 		r_list_append (ret, ptr);
 	}
@@ -282,7 +301,7 @@ static RBinInfo* info(RBinFile *arch) {
 	struct MACH0_(obj_t) *bin = NULL;
 	char *str;
 	RBinInfo *ret;
-	
+
 	if (!arch || !arch->o)
 		return NULL;
 
@@ -301,6 +320,7 @@ static RBinInfo* info(RBinFile *arch) {
 		ret->dbg_info = bin->dbg_info;
 		ret->lang = bin->lang;
 	}
+	ret->intrp = r_str_dup (NULL, MACH0_(get_intrp)(arch->o->bin_obj));
 	ret->rclass = strdup ("mach0");
 	ret->os = strdup (MACH0_(get_os)(arch->o->bin_obj));
 	ret->subsystem = strdup ("darwin");
@@ -316,7 +336,7 @@ static RBinInfo* info(RBinFile *arch) {
 		ret->big_endian = MACH0_(is_big_endian) (arch->o->bin_obj);
 	}
 
-	ret->has_va = R_TRUE;
+	ret->has_va = true;
 	ret->has_pi = MACH0_(is_pie) (arch->o->bin_obj);
 	return ret;
 }
@@ -332,10 +352,10 @@ static int check(RBinFile *arch) {
 static int check_bytes(const ut8 *buf, ut64 length) {
 	if (buf && length >= 4) {
 		if (!memcmp (buf, "\xce\xfa\xed\xfe", 4) ||
-				!memcmp (buf, "\xfe\xed\xfa\xce", 4))
-			return R_TRUE;
+		    !memcmp (buf, "\xfe\xed\xfa\xce", 4))
+			return true;
 	}
-	return R_FALSE;
+	return false;
 }
 
 #if 0
@@ -548,8 +568,6 @@ RBinPlugin r_bin_plugin_mach0 = {
 	.name = "mach0",
 	.desc = "mach0 bin plugin",
 	.license = "LGPL3",
-	.init = NULL,
-	.fini = NULL,
 	.get_sdb = &get_sdb,
 	.load = &load,
 	.load_bytes = &load_bytes,
@@ -557,27 +575,24 @@ RBinPlugin r_bin_plugin_mach0 = {
 	.check = &check,
 	.check_bytes = &check_bytes,
 	.baddr = &baddr,
-	.boffset = NULL,
 	.binsym = &binsym,
 	.entries = &entries,
 	.sections = &sections,
 	.symbols = &symbols,
 	.imports = &imports,
-	.strings = NULL,
 	.size = &size,
 	.info = &info,
-	.fields = NULL,
 	.libs = &libs,
 	.relocs = &relocs,
-	.dbginfo = NULL,
-	.write = NULL,
 	.create = &create,
+	.classes = &MACH0_(parse_classes)
 };
 
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_BIN,
-	.data = &r_bin_plugin_mach0
+	.data = &r_bin_plugin_mach0,
+	.version = R2_VERSION
 };
 #endif
 #endif

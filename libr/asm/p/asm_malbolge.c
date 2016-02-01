@@ -30,9 +30,9 @@ static int mal_dis(RAsmOp *op, ut64 c, const ut8 *buf, ut64 len) {
 			default:
 				sprintf(op->buf_asm, "nop");
 		}
-		return R_TRUE;
+		return true;
 	}
-	return R_FALSE;
+	return false;
 }
 
 static int __disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
@@ -54,6 +54,7 @@ RAsmPlugin r_asm_plugin_malbolge = {
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_ASM,
-	.data = &r_asm_plugin_malbolge
+	.data = &r_asm_plugin_malbolge,
+	.version = R2_VERSION
 };
 #endif

@@ -1,16 +1,23 @@
+include ../global.mk
 include ../config-user.mk
+# for EXT_EXE
+include ../libr/config.mk
+include ../mk/platform.mk
+_INCLUDE_MK_GCC_=
 include ../mk/${COMPILER}.mk
 
 WGET?=wget
 CS_VER=3.0
 CS_TAR=http://capstone-engine.org/download/$(CS_VER)/capstone-$(CS_VER).tgz
 CS_TAR=
-CS_URL=https://www.github.com/aquynh/capstone.git
-CS_UPD=20150531
+CS_URL=$(GIT_PREFIX)github.com/aquynh/capstone.git
+CS_UPD=20160120
 CS_BRA=next
-CS_TIP=3808eec03330341a09f8017c5370dbf6a4fa1c13
+CS_TIP=3722c74f69ffa5b705d36cd49c19acdf958a9b7a
 # REVERT THIS COMMIT BECAUSE ITS WRONG
-CS_REV=21b9b25e9dae4af0ef309d4089a54e53b8f5b479
+CS_REV=
+#21b9b25e9dae4af0ef309d4089a54e53b8f5b479
+CS_PATCHES=1
 
 .PHONY: capstone-sync capstone-build all clean mrproper libgdbr libwind
 
@@ -18,49 +25,91 @@ HOST_CC?=gcc
 SHLR?=$(shell pwd)
 AR?=ar
 RANLIB?=ranlib
-MODS=sdb udis86 java tcc zip 
+MODS=sdb zip udis86 java tcc
 ifeq (1,$(WITH_GPL))
 MODS+=grub
 endif
+MODS+=gdb
 SDB_URL=git://github.com/radare/sdb
 #SDB_URL=/Users/pancake/prg/sdb
 PWD=$(shell pwd)
 SDB_CONFIG=${PWD}/sdb-config.mk
 
-ifneq (,$(findstring cygwin,${OSTYPE})$(findstring mingw32,${OSTYPE}))
-CFLAGS_SHARED=
-else
-CFLAGS_SHARED=-fPIC
+CFLAGS_SHARED=${PIC_CFLAGS}
+
+ifeq (${EXT_SO},)
+all:
+	echo EXT_SO not defined
+	exit 1
 endif
 
-preall: sdb/sdb libgdbr libwind capstone-build
-	@for a in ${MODS} ; do \
-		echo $(MAKE) -C $$a ; \
-		$(MAKE) -C $$a RANLIB="$(RANLIB)" CC_AR="$(CC_AR)" HAVE_VALA= ROOT="${PWD}/../" CC="${CC}" ; \
+preall: targets libwind capstone-build
+	@for MOD in ${MODS} ; do \
+		echo $(MAKE) -C $$MOD ; \
+		$(MAKE) -C $$MOD HAVE_VALA= ROOT="${PWD}/../" CC="${CC}" ; \
 	done
 
-clean mrproper:
-	-cd capstone && $(MAKE) clean
-	cd gdb && $(MAKE) clean
-	cd wind && $(MAKE) clean
-	rm -f sdb/src/.sdb sdb/sdb
-	cd sdb && $(MAKE) clean
-	rm -f sdb/sdb
-	@for a in ${MODS} ; do $(MAKE) -C $$a clean ; done
+SDBFILES=sdb/src/.sdb${EXT_EXE} sdb/sdb${EXT_EXE} sdb/src/.sdb sdb/sdb
+PREMODS=capstone gdb wind sdb
 
-$(SDBLIB) sdb/sdb:
-	cd sdb ; $(MAKE) src/sdb-version.h
-	cd sdb ; $(MAKE) clean
-	cd sdb ; \
-		$(MAKE) clean && \
-		$(MAKE) CC=${HOST_CC} CFLAGS='${HOST_CFLAGS} -fPIC' && \
-		cp -f src/sdb src/.sdb
-	cd sdb ; $(MAKE) clean
-	cd sdb ; $(MAKE) src/sdb-version.h
+clean mrproper:
+	rm -f ${SDBFILES}
+	@for MOD in ${PREMODS} ${MODS} ; do $(MAKE) -C $$MOD clean ; done
+
+ifeq ($(BUILD_OS),windows)
+BUILD_EXT_EXE=.exe
+else
+BUILD_EXT_EXE=
+endif
+
+SDB_TARGETS=$(SDBLIB)
+ifneq (${EXT_EXE},)
+SDB_TARGETS+=sdb/sdb${EXT_EXE}
+else
+SDB_TARGETS+=sdb/sdb
+endif
+
+ifeq ($(filter sdb/sdb${BUILD_EXT_EXE},$(SDB_TARGETS)),)
+SDB_TARGETS+=sdb/sdb${BUILD_EXT_EXE}
+endif
+
+targets:
+	for TARGET in ${SDB_TARGETS} ; do ${MAKE} $$TARGET ; done
+
+${SDB_TARGETS}:
+	@echo
+	@echo BUILD SUMARY
+	@echo ============
+	@echo COMPILER ${COMPILER}
+	@echo CC ${CC}
+	@echo HOST_CC ${HOST_CC}
+	@echo HOST_OS ${HOST_OS}
+	@echo BUILD_OS ${BUILD_OS}
+	@echo ============
+	@echo
+	@echo ">>>>>>>>>>>>>>>>"
+	@echo "NATIVE BUILD SDB"
+	@echo ">>>>>>>>>>>>>>>>"
+	@echo
+	$(MAKE) -C sdb clean
+	$(MAKE) -C sdb src/sdb_version.h
+	$(MAKE) -C sdb/src CC=${HOST_CC} CFLAGS='${HOST_CFLAGS} -fPIC' bin
+	cp -f sdb/src/sdb${BUILD_EXT_EXE} sdb/src/.sdb${BUILD_EXT_EXE}
+	@echo
+	@echo ">>>>>>>>>>>>>>>>"
+	@echo "TARGET BUILD SDB"
+	@echo ">>>>>>>>>>>>>>>>"
+	@echo
+	$(MAKE) -C sdb clean
+	cd sdb ; $(MAKE) src/sdb_version.h
 	cd sdb/src ; $(MAKE) ARCH=xxx RANLIB="${RANLIB}" CFLAGS_SHARED="${CFLAGS_SHARED}" \
 		CC="${CC}" AR="${AR}" CFLAGS="${CFLAGS}" LDFLAGS="${LDFLAGS}" libsdb.a
 	${RANLIB} sdb/src/libsdb.a
-	cp -f sdb/src/.sdb sdb/sdb
+ifneq (${EXT_AR},a)
+	-cp -f sdb/src/libsdb.a sdb/src/libsdb.${EXT_AR}
+endif
+	rm -f $@
+	cp -f sdb/src/.sdb${BUILD_EXT_EXE} $@
 
 .PHONY: sdb-sync sync-sdb sdbclean
 F=README.md config.mk src Makefile Jamroot
@@ -71,7 +120,12 @@ libgdbr:
 	cd gdb ; $(MAKE) all
 
 libwind:
-	cd wind; $(MAKE) all
+	cd wind ; $(MAKE) all
+
+sdb-clean clean-sdb:
+	$(MAKE) -C sdb clean
+	rm -f sdb/sdb.exe
+	rm -f sdb/src/libsdb.a
 
 sdb-sync sync-sdb:
 	rm -rf sdb sdb.vc
@@ -80,8 +134,8 @@ sdb-sync sync-sdb:
 	cp -rf ${SYNCFILES} sdb
 	rm -rf sdb.vc $I/sdb
 	mkdir -p $I/sdb
-	rm -f src/sdb-version.h
-	cd sdb ; $(MAKE) src/sdb-version.h
+	rm -f src/sdb_version.h
+	cd sdb ; $(MAKE) src/sdb_version.h
 	cp -f sdb/src/*.h $I/sdb
 	echo '#include <sdb/sdb.h>' > $I/sdb.h
 	mkdir -p sdb/test sdb/memcache
@@ -112,25 +166,25 @@ tcc-sync sync-tcc:
 	git clone --depth 1 git://repo.or.cz/tinycc.git _
 	cd _ ; ./configure --prefix=${PREFIX}
 	mkdir -p tcc
-	for a in ${CFILES} ${HFILES} ; do cp -f _/$$a tcc ; done
+	for FILE in ${CFILES} ${HFILES} ; do cp -f _/$$FILE tcc ; done
 	cp -f _/VERSION _/COPYING _/stab.def tcc
 	git add tcc
 	rm -rf _
 
-D=$(call rmdblslash,${DESTDIR}/${PREFIX})
+
 install:
-	#mkdir -p ${D}/lib
-	#cp -f tcc/libr_tcc* ${D}/lib
-	#cp -f zip/libr_z* ${D}/lib
+	#mkdir -p ${DESTDIR}${LIBDIR}
+	#cp -f tcc/libr_tcc* ${DESTDIR}${LIBDIR}
+	#cp -f zip/libr_z* ${DESTDIR}${LIBDIR}
 
 install-symlink symstall:
-	mkdir -p ${D}/lib
-	#cd tcc ; for a in libr_tcc* ; do \
-	#	ln -fs `pwd`/$$a ${D}/lib/$$a ; done
+	mkdir -p "${DESTDIR}${LIBDIR}"
+	#cd tcc ; for FILE in libr_tcc* ; do \
+	#	ln -fs `pwd`/$$FILE ${DESTDIR}${LIBDIR}/$$FILE ; done
 
 uninstall deinstall:
-	#rm -f ${D}/lib/libr_tcc*
-	#rm -f ${D}/lib/libr_z*
+	#rm -f ${DESTDIR}${LIBDIR}/libr_tcc*
+	#rm -f ${DESTDIR}${LIBDIR}/libr_z*
 
 ifeq ($(USE_CAPSTONE),1)
 # Do nothing here
@@ -146,23 +200,11 @@ ifeq ($(CS_TAR),)
 capstone: capstone-sync
 
 capstone-sync:
-	if [ ! -d capstone ]; then \
-		git clone $(CS_URL) ; \
-	fi
-	cd capstone ; \
-		git reset --hard @^^^ ; \
-		git checkout $(CS_BRA) ; \
-		git reset --hard $(CS_TIP) || \
-	( if [ -d .git ]; then \
-		git pull ; git reset --hard $(CS_TIP) ; \
-	else true ; fi)
-	if [ -n "${CS_REV}" ]; then \
-		cd capstone ; \
-		git config user.name || ( \
-		git config user.name "radare-travis" ; \
-		git config user.email radare-travis@foo.com ) ; \
-		EDITOR=cat git revert ${CS_REV} ; \
-	fi
+	"$(SHELL)" capstone.sh "${CS_URL}" "${CS_BRA}" "${CS_TIP}" "${CS_REV}"
+ifeq ($(CS_PATCHES),1)
+	cd capstone ; git reset --hard
+	cd capstone ; for PATCH in ../capstone-patches/* ; do patch -p1 < $$PATCH ; done
+endif
 
 .PHONY: capstone
 else
@@ -176,7 +218,7 @@ capstone: capstone-$(CS_VER).tar.gz
 	tar xzvf capstone-$(CS_VER).tar.gz
 	rm -rf capstone
 	mv capstone-$(CS_VER) capstone
-	#cd capstone ; for a in ../capstone-patches/* ; do patch -p1 < $$a ; done
+	cd capstone ; for PATCH in ../capstone-patches/* ; do patch -p1 < $$PATCH ; done
 
 capstone-$(CS_VER).tar.gz:
 	$(WGET) --no-check-certificate -O capstone-$(CS_VER).tar.gz -c $(CS_TAR)
@@ -184,9 +226,17 @@ endif
 
 CAPSTONE_CFLAGS=-g
 
+ifeq (${EXT_AR},)
+all:
+	echo EXT_AR is not defined
+	exit 1
+endif
+
 capstone-build: capstone
 	cd capstone && CFLAGS="-Dmips=mips ${CAPSTONE_CFLAGS} $(CFLAGS)" LDFLAGS="$(LDFLAGS)" \
 		$(MAKE) CC="$(CC)" AR_EXT=a IS_CYGWIN=0 CAPSTONE_STATIC=yes CAPSTONE_SHARED=no \
-		RANLIB="$(RANLIB)" AR="$(AR)" IS_MINGW=0 \
-		./libcapstone.a
+		RANLIB="$(RANLIB)" AR="$(AR)" IS_MINGW=0 libcapstone.a
+ifneq (${EXT_AR},a)
+	-cp -f capstone/libcapstone.a capstone/libcapstone.${EXT_AR}
+endif
 endif

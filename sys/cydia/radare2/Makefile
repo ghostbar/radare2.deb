@@ -7,6 +7,9 @@ all:
 	${MAKE} clean
 	mkdir -p data
 	cp -aRf root/* data
+	rm -rf data${LIBDIR}/pkgconfig
+	rm -rf data${LIBDIR}/*.a
+	rm -rf data${INCLUDEDIR}
 	${MAKE} control
 	${MAKE} deb
 

@@ -1,6 +1,9 @@
 include ../../config-user.mk
+include ../../mk/platform.mk
 include ../../mk/${COMPILER}.mk
 OFILES=libtcc.o tccgen.o tccpp.o
+
+CFLAGS+=${PIC_CFLAGS}
 
 ifneq (,$(findstring cygwin,${OSTYPE}))
 CFLAGS+=-D__CYGWIN__=1
@@ -9,14 +12,12 @@ SOVER=${EXT_SO}
 LDFLAGS+=-shared
 LDFLAGS_SHARED?=-shared
 else
-ifneq (,$(findstring ming32,${OSTYPE}))
+ifneq (,$(findstring mingw32,${OSTYPE}))
 CFLAGS+=-DMINGW32=1
 EXT_SO=dll
 SOVER=${EXT_SO}
 LDFLAGS+=-shared
 LDFLAGS_SHARED?=-shared
-else
-CFLAGS+=-fPIC
 endif
 endif
 

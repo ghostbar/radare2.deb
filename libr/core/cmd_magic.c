@@ -3,7 +3,7 @@
 /* ugly global vars */
 static int magicdepth = 99; //XXX: do not use global var here
 static RMagic *ck = NULL; // XXX: Use RCore->magic
-static const char *ofile = NULL;
+static char *ofile = NULL;
 
 static int r_core_magic_at(RCore *core, const char *file, ut64 addr, int depth, int v) {
 	const char *fmt;
@@ -20,7 +20,7 @@ static int r_core_magic_at(RCore *core, const char *file, ut64 addr, int depth, 
 		if (addr >= core->offset && (addr+NAH) < (core->offset + core->blocksize)) {
 			delta = addr - core->offset;
 		} else {
-			r_core_seek (core, addr, R_TRUE);
+			r_core_seek (core, addr, true);
 		}
 #endif
 	}
@@ -49,7 +49,8 @@ static int r_core_magic_at(RCore *core, const char *file, ut64 addr, int depth, 
 		// allocate once
 		ck = r_magic_new (0);
 		if (file) {
-			ofile = file;
+			free (ofile);
+			ofile = strdup (file);
 			if (r_magic_load (ck, file) == -1) {
 				eprintf ("failed r_magic_load (\"%s\") %s\n", file, r_magic_error (ck));
 				ck = NULL;
@@ -154,5 +155,5 @@ static void r_core_magic(RCore *core, const char *file, int v) {
 	magicdepth = r_config_get_i (core->config, "magic.depth"); // TODO: do not use global var here
 	r_core_magic_at (core, file, addr, magicdepth, v);
 	if (addr != core->offset)
-		r_core_seek (core, addr, R_TRUE);
+		r_core_seek (core, addr, true);
 }

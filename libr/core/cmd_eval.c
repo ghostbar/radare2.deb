@@ -30,7 +30,7 @@ static int cmd_eval(void *data, const char *input) {
 			}
 			free (k);
 		}
-		return R_TRUE;
+		return true;
 	case 'x': // exit
 		return cmd_quit (data, "");
 	case 'j':
@@ -144,7 +144,7 @@ static int cmd_eval(void *data, const char *input) {
 		break;
 	case '!':
 		input = r_str_chop_ro (input+1);
-		if (!r_config_swap (core->config, input))
+		if (!r_config_toggle (core->config, input))
 			eprintf ("r_config: '%s' is not a boolean variable.\n", input);
 		break;
 	case '-':
@@ -166,6 +166,7 @@ static int cmd_eval(void *data, const char *input) {
 			"e-", "", "reset config vars",
 			"e*", "", "dump config vars in r commands",
 			"e!", "a", "invert the boolean value of 'a' var",
+			"ee", "var", "open editor to change the value of var",
 			"er", " [key]", "set config key as readonly. no way back",
 			"ec", " [k] [color]", "set color for given key (prompt, offset, ...)",
 			"e", " a", "get value of var 'a'",

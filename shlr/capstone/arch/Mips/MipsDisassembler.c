@@ -545,8 +545,7 @@ static DecodeStatus DecodeINSVE_DF_4(MCInst *MI, uint32_t insn,
 	} //else llvm_unreachable("Invalid encoding");
 
 	//assert(NSize != 0 && RegDecoder != nullptr);
-
-	if (RegDecoder == NULL)
+	if (NSize == 0 || RegDecoder == NULL)
 		return MCDisassembler_Fail;
 
 	// $wd
@@ -1684,6 +1683,9 @@ static DecodeStatus DecodeANDI16Imm(MCInst *Inst, unsigned Insn,
 	int32_t DecodedValues[] = {128, 1, 2, 3, 4, 7, 8, 15, 16, 31, 32, 63, 64,
 		255, 32768, 65535};
 
+	if (Insn >= 16)
+		return MCDisassembler_Fail;
+
 	MCOperand_CreateImm0(Inst, DecodedValues[Insn]);
 
 	return MCDisassembler_Success;
@@ -1711,7 +1713,7 @@ static DecodeStatus DecodeRegListOperand(MCInst *Inst, unsigned Insn,
 		return MCDisassembler_Fail;
 
 	RegNum = RegLst & 0xf;
-	for (i = 0; i < RegNum; i++)
+	for (i = 0; i < MIN(RegNum, ARR_SIZE(Regs)); i++)
 		MCOperand_CreateReg0(Inst, Regs[i]);
 
 	if (RegLst & 0x10)

@@ -5,6 +5,7 @@
 #include "r_util.h"
 #include "r_cons.h"
 #include "r_io.h"
+#include "r_reg.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,7 +39,7 @@ typedef struct r_print_t {
 	char datefmt[32];
 	int datezone;
 	int (*write)(const unsigned char *buf, int len);
-	int (*printf)(const char *str, ...);
+	int (*cb_printf)(const char *str, ...);
 	int (*disasm)(void *p, ut64 addr);
 	int (*oprintf)(const char *str, ...);
 	char* (*get_bitfield)(void *user, const char *name, ut64 value);
@@ -65,6 +66,12 @@ typedef struct r_print_t {
 	RStrHT *formats;
 	RCons *cons;
 	RNum *num;
+	RReg *reg;
+	RRegItem* (*get_register)(RReg *reg, const char *name, int type);
+	ut64 (*get_register_value)(RReg *reg, RRegItem *item);
+	ut64* lines_cache;
+	int lines_cache_sz;
+	int lines_abs;
 } RPrint;
 
 #ifdef R_API
@@ -94,15 +101,19 @@ R_API void r_print_set_cursor(RPrint *p, int curset, int ocursor, int cursor);
 R_API void r_print_code(RPrint *p, ut64 addr, ut8 *buf, int len, char lang);
 #define SEEFLAG -2
 #define JSONOUTPUT -3
-#define R_PRINT_MUSTSEE 1
-#define R_PRINT_ISFIELD (1<<1)
-#define R_PRINT_SEEFLAGS (1<<2)
-#define R_PRINT_JSON (1<<3)
-#define R_PRINT_MUSTSET (1<<4)
-#define R_PRINT_UNIONMODE (1<<5)
+
+/* mode values for r_print_format_* API */
+#define R_PRINT_MUSTSEE   (1)      // enable printing of data in specified fmt
+#define R_PRINT_ISFIELD   (1 << 1)
+#define R_PRINT_SEEFLAGS  (1 << 2)
+#define R_PRINT_JSON      (1 << 3)
+#define R_PRINT_MUSTSET   (1 << 4)
+#define R_PRINT_UNIONMODE (1 << 5)
+#define R_PRINT_VALUE     (1 << 6)
+#define R_PRINT_DOT       (1 << 7)
 R_API int r_print_format_struct_size(const char *format, RPrint *p, int mode);
 R_API int r_print_format(RPrint *p, ut64 seek, const ut8* buf, const int len, const char *fmt, int elem, const char *setval, char *field);
-R_API int r_print_format_length (const char *fmt);
+R_API int r_print_format_length(const char *fmt);
 R_API void r_print_offset(RPrint *p, ut64 off, int invert, int opt, int delta);
 #define R_PRINT_STRING_WIDE 1
 #define R_PRINT_STRING_ZEROEND 2

@@ -22,6 +22,7 @@
 
 # python
 bindings/python/build/
+bindings/python/capstone.egg-info/
 *.pyc
 
 # java
@@ -45,7 +46,7 @@ bindings/ocaml/test_xcore
 
 
 # test binaries
-tests/test
+tests/test_basic
 tests/test_detail
 tests/test_iter
 tests/test_arm
@@ -59,6 +60,7 @@ tests/test_systemz
 tests/test_xcore
 tests/*.static
 tests/test_customized_mnem
+tests/test_m68k
 
 # vim tmp file
 *.swp
@@ -88,5 +90,8 @@ xcode/Capstone.xcodeproj/project.xcworkspace/xcuserdata
 # suite/
 test_arm_regression
 test_arm_regression.o
+fuzz_harness
+test_iter_benchmark
+
 
 *.s

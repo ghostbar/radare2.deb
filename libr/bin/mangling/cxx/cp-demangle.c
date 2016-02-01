@@ -115,7 +115,14 @@
 #  ifdef __GNUC__
 #   define alloca __builtin_alloca
 #  else
+#	ifdef __TINYC__
+#define alloca(x) _alloca_tcc(x)
+
+extern void * _alloca_tcc(unsigned x);
+extern void * __bound__alloca_tcc(unsigned x);
+#	else
 extern char *alloca ();
+#	endif /* __TINYC__ */
 #  endif /* __GNUC__ */
 # endif /* alloca */
 #endif /* HAVE_ALLOCA_H */
@@ -2019,10 +2026,10 @@ cplus_demangle_type (struct d_info *di)
 
       pret = d_cv_qualifiers (di, &ret, 0);
       if (pret == NULL)
-	return NULL;
+		return NULL;
       *pret = cplus_demangle_type (di);
       if (! *pret || ! d_add_substitution (di, ret))
-	return NULL;
+		return NULL;
       return ret;
     }
 
@@ -2036,6 +2043,7 @@ cplus_demangle_type (struct d_info *di)
     case 'v': case 'w': case 'x': case 'y': case 'z':
       ret = d_make_builtin_type (di,
 				 &cplus_demangle_builtin_types[peek - 'a']);
+	  if (!ret) return NULL; 
       di->expansion += ret->u.s_builtin.type->len;
       can_subst = 0;
       d_advance (di, 1);

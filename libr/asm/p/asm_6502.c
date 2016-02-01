@@ -1,5 +1,4 @@
-/* radare - LGPL - Copyright 2012-2014 - pancake
-	2014 - condret					*/
+/* radare - LGPL - Copyright 2012-2015 - pancake, condret */
 
 // copypasta from asm_gb.c
 
@@ -18,20 +17,17 @@ static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 
 RAsmPlugin r_asm_plugin_6502 = {
 	.name = "6502",
-	.desc = "6502/NES/C64/T-1000 CPU",
+	.desc = "6502/NES/C64/Tamagotchi/T-1000 CPU",
 	.arch = "6502",
 	.bits = 8|16,
-	.init = NULL,
-	.fini = NULL,
 	.license = "LGPL3",
 	.disassemble = &disassemble,
-	.modify = NULL,
-	.assemble = NULL,
 };
 
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_ASM,
-	.data = &r_asm_plugin_6502
+	.data = &r_asm_plugin_6502,
+	.version = R2_VERSION
 };
 #endif

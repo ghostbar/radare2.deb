@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2010-2014 - nibble, pancake */
+/* radare - LGPL - Copyright 2010-2015 - nibble, pancake */
 
 #include <r_anal.h>
 #include <r_util.h>
@@ -21,6 +21,7 @@ R_API RAnalRef *r_anal_ref_new() {
 
 R_API RList *r_anal_ref_list_new() {
 	RList *list = r_list_new ();
+	if (!list) return NULL;
 	list->free = &r_anal_ref_free;
 	return list;
 }
@@ -31,16 +32,16 @@ R_API void r_anal_ref_free(void *ref) {
 
 R_API int r_anal_ref_add(RAnal *anal, ut64 addr, ut64 at, int type) {
 	r_anal_xrefs_set (anal, type, at, addr);
-	return R_TRUE;
+	return true;
 }
 
-R_API int r_anal_ref_del(RAnal *anal, ut64 at, ut64 addr) {
-	r_anal_xrefs_deln (anal, R_ANAL_REF_TYPE_NULL, at, addr);
-	r_anal_xrefs_deln (anal, R_ANAL_REF_TYPE_CODE, at, addr);
-	r_anal_xrefs_deln (anal, R_ANAL_REF_TYPE_CALL, at, addr);
-	r_anal_xrefs_deln (anal, R_ANAL_REF_TYPE_DATA, at, addr);
-	r_anal_xrefs_deln (anal, R_ANAL_REF_TYPE_STRING, at, addr);
-	return R_TRUE;
+R_API int r_anal_ref_del(RAnal *anal, ut64 from, ut64 to) {
+	r_anal_xrefs_deln (anal, R_ANAL_REF_TYPE_NULL, from, to);
+	r_anal_xrefs_deln (anal, R_ANAL_REF_TYPE_CODE, from, to);
+	r_anal_xrefs_deln (anal, R_ANAL_REF_TYPE_CALL, from, to);
+	r_anal_xrefs_deln (anal, R_ANAL_REF_TYPE_DATA, from, to);
+	r_anal_xrefs_deln (anal, R_ANAL_REF_TYPE_STRING, from, to);
+	return true;
 }
 
 R_API RList *r_anal_xref_get(RAnal *anal, ut64 addr) {

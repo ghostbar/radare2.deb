@@ -65,13 +65,51 @@ static void printopaquemem(MCInst *MI, unsigned OpNo, SStream *O)
 {
 	switch(MI->csh->mode) {
 		case CS_MODE_16:
-			MI->x86opsize = 2;
+			switch(MI->flat_insn->id) {
+				default:
+					MI->x86opsize = 2;
+					break;
+				case X86_INS_LJMP:
+				case X86_INS_LCALL:
+					MI->x86opsize = 4;
+					break;
+				case X86_INS_SGDT:
+				case X86_INS_SIDT:
+				case X86_INS_LGDT:
+				case X86_INS_LIDT:
+					MI->x86opsize = 6;
+					break;
+			}
 			break;
 		case CS_MODE_32:
-			MI->x86opsize = 4;
+			switch(MI->flat_insn->id) {
+				default:
+					MI->x86opsize = 4;
+					break;
+				case X86_INS_LJMP:
+				case X86_INS_LCALL:
+				case X86_INS_SGDT:
+				case X86_INS_SIDT:
+				case X86_INS_LGDT:
+				case X86_INS_LIDT:
+					MI->x86opsize = 6;
+					break;
+			}
 			break;
 		case CS_MODE_64:
-			MI->x86opsize = 8;
+			switch(MI->flat_insn->id) {
+				default:
+					MI->x86opsize = 8;
+					break;
+				case X86_INS_LJMP:
+				case X86_INS_LCALL:
+				case X86_INS_SGDT:
+				case X86_INS_SIDT:
+				case X86_INS_LGDT:
+				case X86_INS_LIDT:
+					MI->x86opsize = 10;
+					break;
+			}
 			break;
 		default:	// never reach
 			break;
@@ -127,7 +165,16 @@ static void printi512mem(MCInst *MI, unsigned OpNo, SStream *O)
 
 static void printf32mem(MCInst *MI, unsigned OpNo, SStream *O)
 {
-	MI->x86opsize = 4;
+	switch(MCInst_getOpcode(MI)) {
+		default:
+			MI->x86opsize = 4;
+			break;
+		case X86_FBSTPm:
+		case X86_FBLDm:
+			// TODO: fix this in tablegen instead
+			MI->x86opsize = 10;
+			break;
+	}
 	printMemReference(MI, OpNo, O);
 }
 
@@ -519,13 +566,32 @@ static void printPCRelImm(MCInst *MI, unsigned OpNo, SStream *O)
 	MCOperand *Op = MCInst_getOperand(MI, OpNo);
 	if (MCOperand_isImm(Op)) {
 		int64_t imm = MCOperand_getImm(Op) + MI->flat_insn->size + MI->address;
+
+		// truncat imm for non-64bit
+		if (MI->csh->mode != CS_MODE_64) {
+			imm = imm & 0xffffffff;
+		}
+
+		if (MI->csh->mode == CS_MODE_16 &&
+				(MI->Opcode != X86_JMP_4 && MI->Opcode != X86_CALLpcrel32))
+			imm = imm & 0xffff;
+
+		// Hack: X86 16bit with opcode X86_JMP_4
+		if (MI->csh->mode == CS_MODE_16 &&
+				(MI->Opcode == X86_JMP_4 && MI->x86_prefix[2] != 0x66))
+			imm = imm & 0xffff;
+
+		// CALL/JMP rel16 is special
+		if (MI->Opcode == X86_CALLpcrel16 || MI->Opcode == X86_JMP_2)
+			imm = imm & 0xffff;
+
+		if (MI->csh->mode == CS_MODE_16) {
+			imm |= (MI->address >> 16) << 16;
+		}
+
 		if (imm < 0) {
 			SStream_concat(O, "0x%"PRIx64, imm);
 		} else {
-			// handle 16bit segment bound
-			if (MI->csh->mode == CS_MODE_16 && imm > 0x100000)
-				imm -= 0x10000;
-
 			if (imm > HEX_THRESHOLD)
 				SStream_concat(O, "0x%"PRIx64, imm);
 			else
@@ -542,7 +608,6 @@ static void printPCRelImm(MCInst *MI, unsigned OpNo, SStream *O)
 
 static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 {
-	int opsize = 0;
 	MCOperand *Op  = MCInst_getOperand(MI, OpNo);
 	if (MCOperand_isReg(Op)) {
 		unsigned int reg = MCOperand_getReg(Op);
@@ -566,94 +631,9 @@ static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 	} else if (MCOperand_isImm(Op)) {
 		// Print X86 immediates as signed values.
 		int64_t imm = MCOperand_getImm(Op);
-
-		switch(MCInst_getOpcode(MI)) {
-			default:
-				break;
-
-			case X86_AAD8i8:
-			case X86_AAM8i8:
-			case X86_ADC8i8:
-			case X86_ADD8i8:
-			case X86_AND8i8:
-			case X86_CMP8i8:
-			case X86_OR8i8:
-			case X86_SBB8i8:
-			case X86_SUB8i8:
-			case X86_TEST8i8:
-			case X86_XOR8i8:
-			case X86_ROL8ri:
-			case X86_ADC8ri:
-			case X86_ADC8ri8:
-			case X86_ADD8ri:
-			case X86_ADD8ri8:
-			case X86_AND8ri:
-			case X86_AND8ri8:
-			case X86_CMP8ri:
-			case X86_CMP8ri8:
-			case X86_IN8ri:
-			case X86_MOV8ri:
-			case X86_MOV8ri_alt:
-			case X86_OR8ri:
-			case X86_OR8ri8:
-			case X86_RCL8ri:
-			case X86_RCR8ri:
-			case X86_ROR8ri:
-			case X86_SAL8ri:
-			case X86_SAR8ri:
-			case X86_SBB8ri:
-			case X86_SBB8ri8:
-			case X86_SHL8ri:
-			case X86_SHR8ri:
-			case X86_SUB8ri:
-			case X86_SUB8ri8:
-			case X86_TEST8ri:
-			case X86_TEST8ri_NOREX:
-			case X86_TEST8ri_alt:
-			case X86_XOR8ri:
-			case X86_XOR8ri8:
-			case X86_OUT8ir:
-
-			case X86_ADC8mi:
-			case X86_ADC8mi8:
-			case X86_ADD8mi:
-			case X86_ADD8mi8:
-			case X86_AND8mi:
-			case X86_AND8mi8:
-			case X86_CMP8mi:
-			case X86_CMP8mi8:
-			case X86_LOCK_ADD8mi:
-			case X86_LOCK_AND8mi:
-			case X86_LOCK_OR8mi:
-			case X86_LOCK_SUB8mi:
-			case X86_LOCK_XOR8mi:
-			case X86_MOV8mi:
-			case X86_OR8mi:
-			case X86_OR8mi8:
-			case X86_RCL8mi:
-			case X86_RCR8mi:
-			case X86_ROL8mi:
-			case X86_ROR8mi:
-			case X86_SAL8mi:
-			case X86_SAR8mi:
-			case X86_SBB8mi:
-			case X86_SBB8mi8:
-			case X86_SHL8mi:
-			case X86_SHR8mi:
-			case X86_SUB8mi:
-			case X86_SUB8mi8:
-			case X86_TEST8mi:
-			case X86_TEST8mi_alt:
-			case X86_XOR8mi:
-			case X86_XOR8mi8:
-			case X86_PUSH64i8:
-			case X86_CMP32ri8:
-			case X86_CMP64ri8:
-
-				imm = imm & 0xff;
-				opsize = 1;	// immediate of 1 byte
-				break;
-		}
+		int opsize = X86_immediate_size(MCInst_getOpcode(MI));
+		if (opsize == 1)    // print 1 byte immediate in positive form
+			imm = imm & 0xff;
 
 		switch(MI->flat_insn->id) {
 			default:
@@ -663,13 +643,22 @@ static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 					else
 						SStream_concat(O, "$%"PRIu64, imm);
 				} else {
-					if (imm < -HEX_THRESHOLD)
+					if (imm == 0x8000000000000000)  // imm == -imm
+						SStream_concat0(O, "$0x8000000000000000");
+					else if (imm < -HEX_THRESHOLD)
 						SStream_concat(O, "$-0x%"PRIx64, -imm);
 					else
 						SStream_concat(O, "$-%"PRIu64, -imm);
 				}
 				break;
 
+			case X86_INS_MOVABS:
+				// do not print number in negative form
+				SStream_concat(O, "$0x%"PRIx64, imm);
+				break;
+
+			case X86_INS_IN:
+			case X86_INS_OUT:
 			case X86_INS_INT:
 				// do not print number in negative form
 				imm = imm & 0xff;
@@ -680,6 +669,16 @@ static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 				}
 				break;
 
+			case X86_INS_LCALL:
+			case X86_INS_LJMP:
+				// always print address in positive form
+				if (OpNo == 1) {	// selector is ptr16
+					imm = imm & 0xffff;
+					opsize = 2;
+				}
+				SStream_concat(O, "$0x%"PRIx64, imm);
+				break;
+
 			case X86_INS_AND:
 			case X86_INS_OR:
 			case X86_INS_XOR:
@@ -687,7 +686,7 @@ static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 				if (imm >= 0 && imm <= HEX_THRESHOLD)
 					SStream_concat(O, "$%u", imm);
 				else {
-					imm = arch_masks[MI->op1_size? MI->op1_size : MI->imm_size] & imm;
+					imm = arch_masks[opsize? opsize : MI->imm_size] & imm;
 					SStream_concat(O, "$0x%"PRIx64, imm);
 				}
 				break;
@@ -711,7 +710,6 @@ static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 				MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].type = X86_OP_IMM;
 				MI->has_imm = true;
 				MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].imm = imm;
-				MI->flat_insn->detail->x86.op_count++;
 
 				if (opsize > 0)
 					MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = opsize;
@@ -719,6 +717,8 @@ static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 					MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = MI->op1_size;
 				else
 					MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = MI->imm_size;
+
+				MI->flat_insn->detail->x86.op_count++;
 			}
 		}
 	}
@@ -878,9 +878,12 @@ void X86_ATT_printInst(MCInst *MI, SStream *OS, void *info)
 	if (MI->has_imm) {
 		// if op_count > 1, then this operand's size is taken from the destination op
 		if (MI->flat_insn->detail->x86.op_count > 1) {
-			for (i = 0; i < MI->flat_insn->detail->x86.op_count; i++) {
-				if (MI->flat_insn->detail->x86.operands[i].type == X86_OP_IMM)
-					MI->flat_insn->detail->x86.operands[i].size = MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count - 1].size;
+			if (MI->flat_insn->id != X86_INS_LCALL && MI->flat_insn->id != X86_INS_LJMP) {
+				for (i = 0; i < MI->flat_insn->detail->x86.op_count; i++) {
+					if (MI->flat_insn->detail->x86.operands[i].type == X86_OP_IMM)
+						MI->flat_insn->detail->x86.operands[i].size =
+							MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count - 1].size;
+				}
 			}
 		} else
 			MI->flat_insn->detail->x86.operands[0].size = MI->imm_size;

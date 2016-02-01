@@ -1,4 +1,4 @@
-/* sdb - LGPLv3 - Copyright 2012-2014 - pancake */
+/* sdb - MIT - Copyright 2012-2015 - pancake */
 
 SDB_API char *sdb_json_indent(const char *s) {
 	int indent = 0;
@@ -67,6 +67,7 @@ SDB_API char *sdb_json_indent(const char *s) {
 			*o++ = *s;
 		}
 	}
+	*o++ = '\n';
 	*o = 0;
 	return O;
 }

@@ -2289,6 +2289,7 @@ static insn_map insns[] = {	// reduce x86 instructions
 };
 #endif
 
+#ifndef CAPSTONE_DIET
 // replace r1 = r2
 static void arr_replace(uint16_t *arr, uint8_t max, x86_reg r1, x86_reg r2)
 {
@@ -2301,6 +2302,7 @@ static void arr_replace(uint16_t *arr, uint8_t max, x86_reg r1, x86_reg r2)
 		}
 	}
 }
+#endif
 
 // given internal insn id, return public instruction info
 void X86_get_insn_id(cs_struct *h, cs_insn *insn, unsigned int id)
@@ -2345,6 +2347,39 @@ void X86_get_insn_id(cs_struct *h, cs_insn *insn, unsigned int id)
 
 			switch(insn->id) {
 				default:
+					break;
+
+				case X86_INS_LOOP:
+				case X86_INS_LOOPE:
+				case X86_INS_LOOPNE:
+					switch(h->mode) {
+						default: break;
+						case CS_MODE_16:
+								 insn->detail->regs_read[0] = X86_REG_CX;
+								 insn->detail->regs_read_count = 1;
+								 insn->detail->regs_write[0] = X86_REG_CX;
+								 insn->detail->regs_write_count = 1;
+								 break;
+						case CS_MODE_32:
+								 insn->detail->regs_read[0] = X86_REG_ECX;
+								 insn->detail->regs_read_count = 1;
+								 insn->detail->regs_write[0] = X86_REG_ECX;
+								 insn->detail->regs_write_count = 1;
+								 break;
+						case CS_MODE_64:
+								 insn->detail->regs_read[0] = X86_REG_RCX;
+								 insn->detail->regs_read_count = 1;
+								 insn->detail->regs_write[0] = X86_REG_RCX;
+								 insn->detail->regs_write_count = 1;
+								 break;
+					}
+
+					// LOOPE & LOOPNE also read EFLAGS
+					if (insn->id != X86_INS_LOOP) {
+						insn->detail->regs_read[1] = X86_REG_EFLAGS;
+						insn->detail->regs_read_count = 2;
+					}
+
 					break;
 
 				case X86_INS_LODSB:
@@ -2543,6 +2578,10 @@ static struct insn_reg insn_regs_att[] = {
 	{ X86_SHRD32mrCL, X86_REG_CL },
 	{ X86_SHLD64mrCL, X86_REG_CL },
 	{ X86_SHRD64mrCL, X86_REG_CL },
+
+	{ X86_OUT8ir, X86_REG_AL },
+	{ X86_OUT16ir, X86_REG_AX },
+	{ X86_OUT32ir, X86_REG_EAX },
 
 #ifndef CAPSTONE_X86_REDUCE
 	{ X86_SKINIT, X86_REG_EAX },
@@ -2802,10 +2841,23 @@ static bool valid_repne(cs_struct *h, unsigned int opcode)
 			case X86_INS_MOVSD:
 			case X86_INS_MOVSQ:
 
+			case X86_INS_LODSB:
+			case X86_INS_LODSW:
+			case X86_INS_LODSD:
+			case X86_INS_LODSQ:
+
 			case X86_INS_STOSB:
 			case X86_INS_STOSW:
 			case X86_INS_STOSD:
 			case X86_INS_STOSQ:
+
+			case X86_INS_INSB:
+			case X86_INS_INSW:
+			case X86_INS_INSD:
+
+			case X86_INS_OUTSB:
+			case X86_INS_OUTSW:
+			case X86_INS_OUTSD:
 
 				return true;
 
@@ -2918,6 +2970,7 @@ static bool valid_repe(cs_struct *h, unsigned int opcode)
 	return false;
 }
 
+#ifndef CAPSTONE_DIET
 // add *CX register to regs_read[] & regs_write[]
 static void add_cx(MCInst *MI)
 {
@@ -2938,6 +2991,7 @@ static void add_cx(MCInst *MI)
 		MI->flat_insn->detail->regs_write_count++;
 	}
 }
+#endif
 
 // return true if we patch the mnemonic
 bool X86_lockrep(MCInst *MI, SStream *O)
@@ -3047,7 +3101,7 @@ void op_addImm(MCInst *MI, int v)
 		MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].type = X86_OP_IMM;
 		MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].imm = v;
 		// if op_count > 0, then this operand's size is taken from the destination op
-		if (MI->csh->syntax == CS_OPT_SYNTAX_INTEL) {
+		if (MI->csh->syntax != CS_OPT_SYNTAX_ATT) {
 			if (MI->flat_insn->detail->x86.op_count > 0)
 				MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = MI->flat_insn->detail->x86.operands[0].size;
 			else
@@ -3197,5 +3251,48 @@ void X86_reg_access(const cs_insn *insn,
 	*regs_write_count = write_count;
 }
 #endif
+
+// map immediate size to instruction id
+static struct size_id {
+	unsigned char size;
+	unsigned short id;
+} x86_imm_size[] = {
+#include "X86ImmSize.inc"
+};
+
+// given the instruction name, return the size of its immediate operand (or 0)
+int X86_immediate_size(unsigned int id)
+{
+#if 0
+	// linear searching
+	unsigned int i;
+
+	for (i = 0; i < ARR_SIZE(x86_imm_size); i++) {
+		if (id == x86_imm_size[i].id) {
+			return x86_imm_size[i].size;
+		}
+	}
+#endif
+
+	// binary searching since the IDs is sorted in order
+	unsigned int left, right, m;
+
+	left = 0;
+	right = ARR_SIZE(x86_imm_size) - 1;
+
+	while(left <= right) {
+		m = (left + right) / 2;
+		if (id == x86_imm_size[m].id)
+			return x86_imm_size[m].size;
+
+		if (id < x86_imm_size[m].id)
+			right = m - 1;
+		else
+			left = m + 1;
+	}
+
+	// not found
+	return 0;
+}
 
 #endif

@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2014 - pancake */
+/* radare - LGPL - Copyright 2009-2016 - pancake */
 
 #include <r_userconf.h>
 
@@ -10,14 +10,15 @@
 
 #define EXCEPTION_PORT 0
 
-#include <sys/ptrace.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 #include <mach/exception_types.h>
+//no available for ios #include <mach/mach_vm.h>
+#include <mach/mach_host.h>
+#include <mach/host_priv.h>
 #include <mach/mach_vm.h>
 #include <mach/mach_init.h>
 #include <mach/mach_port.h>
 #include <mach/mach_traps.h>
+#include <mach/processor_set.h>
 #include <mach/mach_error.h>
 #include <mach/task.h>
 #include <mach/task_info.h>
@@ -28,6 +29,8 @@
 #include <mach-o/nlist.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/wait.h>
 #include <errno.h>
 
@@ -38,35 +41,149 @@ typedef struct {
 	int pid;
 	task_t task;
 } RIOMach;
-#define RIOMACH_PID(x) (x?((RIOMach*)(x))->pid:-1)
-#define RIOMACH_TASK(x) (x?((RIOMach*)(x))->task:-1)
+#define RIOMACH_PID(x) (x ? ((RIOMach*)(x))->pid : -1)
+#define RIOMACH_TASK(x) (x ? ((RIOMach*)(x))->task : -1)
 
 #undef R_IO_NFDS
 #define R_IO_NFDS 2
 extern int errno;
 
+static task_t task_for_pid_workaround(int Pid) {
+	host_t myhost = mach_host_self();
+	mach_port_t psDefault = 0;
+	mach_port_t psDefault_control = 0;
+	task_array_t tasks = NULL;
+	mach_msg_type_number_t numTasks = 0;
+	kern_return_t kr = -1;
+	int i;
+	if (Pid == -1) return -1;
+
+	kr = processor_set_default (myhost, &psDefault);
+	if (kr != KERN_SUCCESS) {
+		return -1;
+	}
+	kr = host_processor_set_priv (myhost, psDefault, &psDefault_control);
+	if (kr != KERN_SUCCESS) {
+		eprintf ("host_processor_set_priv failed with error 0x%x\n", kr);
+		//mach_error ("host_processor_set_priv",kr);
+		return -1;
+	}
+
+	numTasks = 0;
+	kr = processor_set_tasks (psDefault_control, &tasks, &numTasks);
+	if (kr != KERN_SUCCESS) {
+		eprintf ("processor_set_tasks failed with error %x\n", kr);
+		return -1;
+	}
+	if (Pid == 0) {
+		/* kernel task */
+		return tasks[0];
+	}
+	for (i = 0; i < numTasks; i++) {
+		int pid;
+		pid_for_task (i, &pid);
+		if (pid == Pid) {
+			return (tasks[i]);
+		}
+	}
+	return -1;
+}
+
 static task_t pid_to_task(int pid) {
-        task_t task = 0;
-        int err = task_for_pid (mach_task_self (), (pid_t)pid, &task);
-        if ((err != KERN_SUCCESS) || !MACH_PORT_VALID (task)) {
-                eprintf ("Failed to get task %d for pid %d.\n", (int)task, (int)pid);
-                eprintf ("Reason: 0x%x: %s\n", err, MACH_ERROR_STRING (err));
-                eprintf ("You probably need to add user to procmod group.\n"
-                                " Or chmod g+s radare && chown root:procmod radare\n");
-                eprintf ("FMI: http://developer.apple.com/documentation/Darwin/Reference/ManPages/man8/taskgated.8.html\n");
-                return -1;
-        }
-        return task;
+	task_t task = -1;
+	int err = task_for_pid (mach_task_self (), (pid_t)pid, &task);
+	if ((err != KERN_SUCCESS) || !MACH_PORT_VALID (task)) {
+		task = task_for_pid_workaround (pid);
+		if (task == -1) {
+			eprintf ("Failed to get task %d for pid %d.\n", (int)task, (int)pid);
+			eprintf ("Missing priviledges? 0x%x: %s\n", err, MACH_ERROR_STRING (err));
+#if 0
+			eprintf ("You probably need to add user to procmod group.\n"
+					" Or chmod g+s radare && chown root:procmod radare\n");
+			eprintf ("FMI: http://developer.apple.com/documentation/Darwin/Reference/ManPages/man8/taskgated.8.html\n");
+#endif
+			return -1;
+		}
+	}
+	return task;
+}
+
+static ut64 the_lower = 0LL;
+
+static ut64 getNextValid(RIO *io, RIODesc *fd, ut64 addr) {
+	struct vm_region_submap_info_64 info;
+	mach_vm_address_t address = MACH_VM_MIN_ADDRESS;
+	mach_vm_size_t size = (mach_vm_size_t) 0;
+	mach_vm_size_t osize = (mach_vm_size_t) 0;
+	natural_t depth = 0;
+	kern_return_t kr;
+	int tid = RIOMACH_PID (fd->data);
+	task_t task = pid_to_task (tid);
+	ut64 lower = addr;
+#if __arm64__ || __aarch64__
+	size = osize = 16384; // acording to frida
+#else
+	size = osize = 4096;
+#endif
+	if (the_lower) {
+		if (addr < the_lower) {
+			return the_lower;
+		}
+		return addr;
+	}
+
+	for (;;) {
+		mach_msg_type_number_t info_count;
+		info_count = VM_REGION_SUBMAP_INFO_COUNT_64;
+		memset (&info, 0, sizeof (info));
+		kr = mach_vm_region_recurse (task, &address, &size,
+			&depth, (vm_region_recurse_info_t) &info, &info_count);
+		if (kr != KERN_SUCCESS) {
+			break;
+		}
+		if (lower == addr) {
+			lower = address;
+		}
+		if (info.is_submap) {
+			depth++;
+			continue;
+		}
+		if (addr >= address && addr < address + size) {
+			return addr;
+		}
+		if (address < lower) {
+			lower = address;
+		}
+		if (size < 1) {
+			size = osize; // fuck
+		}
+		address += size;
+		size = 0;
+	}
+	the_lower = lower;
+	return lower;
 }
 
 static int __read(RIO *io, RIODesc *fd, ut8 *buf, int len) {
 	vm_size_t size = 0;
 	int blen, err, copied = 0;
-	int blocksize = 16;
-	while (copied<len) {
-		blen = R_MIN ((len-copied), blocksize);
+	int blocksize = 32;
+
+	memset (buf, 0xff, len);
+	if (RIOMACH_PID (fd->data) == 0) {
+		if (io->off < 4096)
+			return len;
+	}
+
+	copied = getNextValid(io, fd, io->off) - io->off;
+	if (copied<0) copied = 0;
+
+	while (copied < len) {
+		blen = R_MIN ((len - copied), blocksize);
+		//blen = len;
 		err = vm_read_overwrite (RIOMACH_TASK (fd->data),
-			(ut64)io->off+copied, blen, (pointer_t)buf+copied, &size);
+			(ut64)io->off + copied, blen,
+			(pointer_t)buf + copied, &size);
 		switch (err) {
 		case KERN_PROTECTION_FAILURE:
 			//eprintf ("r_io_mach_read: kern protection failure.\n");
@@ -79,86 +196,123 @@ static int __read(RIO *io, RIODesc *fd, ut8 *buf, int len) {
 			blocksize = 1;
 			blen = 1;
 			buf[copied] = 0xff;
-			//eprintf("invaddr %d\n",len);
 			break;
 		}
-		if (err == -1) {
-			//eprintf ("Cannot read\n");
+		if (err == -1 || size < 1) {
 			return -1;
 		}
-		if (size==0) {
+		if (size == 0) {
 			if (blocksize == 1) {
 				memset (buf+copied, 0xff, len-copied);
-				return size+copied;
+				return len;
 			}
 			blocksize = 1;
 			blen = 1;
 			buf[copied] = 0xff;
 		}
-		//if (size != blen) { return size+copied; }
 		copied += blen;
 	}
-        return (int)size;
+	return len;
 }
 
-static int mach_write_at(RIOMach *riom, const void *buff, int len, ut64 addr) {
-	task_t task = riom->task;
-#if 0
-/* get paVM_PROT_EXECUTEge perms */
-        kern_return_t err;
-	int ret, _basic64[VM_REGION_BASIC_INFO_COUNT_64];
+static vm_address_t tsk_getpagebase(ut64 addr) {
+	vm_address_t a = addr;
+	a >>= 12;
+	a <<= 12;
+	return a;
+}
+
+static int tsk_getperm(task_t task, vm_address_t addr) {
+	vm_size_t pagesize = 1;
+	int _basic64[VM_REGION_BASIC_INFO_COUNT_64];
 	vm_region_basic_info_64_t basic64 = (vm_region_basic_info_64_t)_basic64;
-	mach_msg_type_number_t	infocnt;
-const int pagesize = 4096;
-vm_offset_t addrbase;
-	mach_port_t	objname;
-	vm_size_t size = pagesize;
+	mach_msg_type_number_t infocnt = VM_REGION_BASIC_INFO_COUNT_64;
+	mach_port_t objname;
+	kern_return_t rc;
 
-eprintf ("   0x%llx\n", addr);
-	infocnt = VM_REGION_BASIC_INFO_COUNT_64;
-addrbase = addr;
-size = len;
-	// intentionally use VM_REGION_BASIC_INFO and get up-converted
-	ret = vm_region_64 (task, &addrbase, &size, VM_REGION_BASIC_INFO_64,
-					 (vm_region_info_t)basic64, &infocnt, &objname);
-eprintf ("+ PERMS (%x) %llx\n", basic64->protection, addr);
-	if (ret == -1) {
-		eprintf ("Cant get vm region info\n");
+	rc = vm_region_64 (task, &addr, &pagesize, VM_REGION_BASIC_INFO,
+		(vm_region_info_t)basic64, &infocnt, &objname);
+	if (rc == KERN_SUCCESS) {
+		return basic64[0].protection;
 	}
+	return 0;
+}
 
+static int tsk_pagesize(RIO *io, int len) {
+#if __arm__ || __arm64__ || __aarch64__
+	int is_arm64 = (io && io->bits == 64);
+	int pagesize = is_arm64? 16384: 4096;
+#else
+	int pagesize = getpagesize();
 #endif
-/* get page perms */
-
-        // XXX SHOULD RESTORE PERMS LATER!!!
-        if (vm_protect (task, addr, len, 0, VM_PROT_COPY | VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE) != KERN_SUCCESS)
-		//if (mach_vm_protect (task, addr, len, 0, VM_PROT_READ | VM_PROT_WRITE) != KERN_SUCCESS)
-			if (vm_protect (task, addr, len, 0, VM_PROT_WRITE) != KERN_SUCCESS)
-				eprintf ("cant change page perms to rw at 0x%"PFMT64x" with len= %d\n", addr, len);
-        if (vm_write (task, (vm_address_t)addr,
-                	(vm_offset_t)buff, (mach_msg_type_number_t)len) != KERN_SUCCESS)
-                eprintf ("cant write on memory\n");
-	//if (vm_read_overwrite(task, addr, 4, buff, &sz)) { eprintf ("cannot overwrite\n"); }
-
-#if 0
-eprintf ("addrbase: %x\n", addrbase);
-eprintf ("change prems to %x\n", basic64->protection);
-int prot = 0;
-if (basic64->protection & 1) prot |= VM_PROT_EXECUTE;
-if (basic64->protection & 2) prot |= VM_PROT_WRITE;
-if (basic64->protection & 4) prot |= VM_PROT_READ;
-printf ("%d vs %d\n", prot, basic64->protection);
-int prot = VM_PROT_READ | VM_PROT_EXECUTE;
-        if (vm_protect (task, addr, len, 0, prot) != KERN_SUCCESS) { //basic64->protection) != KERN_SUCCESS) {
-        	eprintf ("Oops (0x%"PFMT64x") error (%s)\n", addr,
-			MACH_ERROR_STRING (err));
-                eprintf ("cant change page perms to rx\n");
+	if (pagesize<1) pagesize = 4096;
+	if (len > pagesize) {
+		pagesize *= (1 + (len / pagesize));
 	}
+	return pagesize;
+}
+
+static bool tsk_setperm(RIO *io, task_t task, vm_address_t addr, int len, int perm) {
+	mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT;
+	vm_region_flavor_t flavor = VM_REGION_BASIC_INFO;
+	vm_address_t region = (vm_address_t)addr;
+	vm_region_basic_info_data_t info;
+	vm_size_t region_size = tsk_pagesize(io, len);
+#if 1
+	task_t t;
+	vm_region_64 (task, &region, &region_size, flavor, (vm_region_info_t)&info,
+			(mach_msg_type_number_t*)&info_count, (mach_port_t*)&t);
 #endif
+	return vm_protect (task, region, region_size, FALSE, perm) == KERN_SUCCESS;
+}
+
+static bool tsk_write(task_t task, vm_address_t addr, const ut8 *buf, int len) {
+	mach_msg_type_number_t _len = len;
+	vm_offset_t _buf = (vm_offset_t)buf;
+	return vm_write (task, addr, _buf, _len) == KERN_SUCCESS;
+}
+
+static int mach_write_at(RIO *io, RIOMach *riom, const void *buf, int len, ut64 addr) {
+	vm_address_t vaddr = addr;
+	vm_address_t pageaddr;
+	vm_size_t pagesize;
+	int operms = 0;
+	task_t task;
+
+	if (!riom || len <1) {
+		return 0;
+	}
+	task = riom->task;
+
+	pageaddr = tsk_getpagebase (addr);
+	pagesize = tsk_pagesize (io, len);
+
+	if (tsk_write (task, vaddr, buf, len)) {
+		return len;
+	}
+	operms = tsk_getperm (task, pageaddr);
+	if (!tsk_setperm (io, task, pageaddr, pagesize, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY)) {
+		perror ("setperm");
+		eprintf ("io.mach: Cannot set page perms for %d bytes at 0x%08"
+			PFMT64x"\n", (int)pagesize, (ut64)pageaddr);
+		//return -1;
+	}
+	if (!tsk_write (task, vaddr, buf, len)) {
+		perror ("write");
+		eprintf ("io.mach: Cannot write on memory\n");
+		len = -1;
+	}
+	if (operms) {
+		if (!tsk_setperm (io, task, pageaddr, pagesize, operms)) {
+			eprintf ("io.mach: Cannot restore page perms\n");
+			return -1;
+		}
+	}
 	return len;
 }
 
 static int __write(RIO *io, RIODesc *fd, const ut8 *buf, int len) {
-	return mach_write_at ((RIOMach*)fd->data, buf, len, io->off);
+	return mach_write_at (io, (RIOMach*)fd->data, buf, len, io->off);
 }
 
 static int __plugin_open(RIO *io, const char *file, ut8 many) {
@@ -166,15 +320,12 @@ static int __plugin_open(RIO *io, const char *file, ut8 many) {
 		|| !strncmp (file, "mach://", 7));
 }
 
-//static task_t inferior_task = 0;
-//static int task = 0;
-
 // s/inferior_task/port/
 static int debug_attach(int pid) {
-        task_t task = pid_to_task (pid);
-        if (task == -1)
-                return -1;
-        eprintf ("pid: %d\ntask: %d\n", pid, task);
+	task_t task = pid_to_task (pid);
+	if (task == -1)
+		return -1;
+	eprintf ("pid: %d\ntask: %d\n", pid, task);
 #if 0
 	// TODO : move this code into debug
         if (task_threads (task, &inferior_threads, &inferior_thread_count)
@@ -187,45 +338,52 @@ static int debug_attach(int pid) {
 
 #if SUSPEND
 	if (task_suspend (this->port) != KERN_SUCCESS) {
-		eprintf ("cannot suspend task\n");
-		return -1; // R_FALSE
+		eprintf ("Cannot suspend task\n");
+		return -1; // false
 	}
 #endif
 	/* is this required for arm ? */
 #if EXCEPTION_PORT
 	int exception_port;
-        if (mach_port_allocate (mach_task_self (), MACH_PORT_RIGHT_RECEIVE,
+	if (mach_port_allocate (mach_task_self (), MACH_PORT_RIGHT_RECEIVE,
 			&exception_port) != KERN_SUCCESS) {
-                eprintf ("Failed to create exception port.\n");
-                return -1;
-        }
-        if (mach_port_insert_right(mach_task_self(), exception_port,
+		eprintf ("Failed to create exception port.\n");
+		return -1;
+	}
+	if (mach_port_insert_right(mach_task_self(), exception_port,
 			exception_port, MACH_MSG_TYPE_MAKE_SEND) != KERN_SUCCESS) {
-                eprintf ("Failed to acquire insertion rights on the port.\n");
-                return -1;
-        }
-        if (task_set_exception_ports(inferior_task, EXC_MASK_ALL, exception_port,
+		eprintf ("Failed to acquire insertion rights on the port.\n");
+		return -1;
+	}
+	if (task_set_exception_ports(inferior_task, EXC_MASK_ALL, exception_port,
 			EXCEPTION_DEFAULT, THREAD_STATE_NONE) != KERN_SUCCESS) {
-                eprintf ("Failed to set the inferior's exception ports.\n");
-                return -1;
-        }
+		eprintf ("Failed to set the inferior's exception ports.\n");
+		return -1;
+	}
 #endif
-        return task;
+	return task;
 }
 
 static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 	RIODesc *ret = NULL;
 	RIOMach *riom;
-	char *pidpath;
+	const char *pidfile;
+	char *pidpath, *endptr;
 	int pid;
 	task_t task;
 	if (!__plugin_open (io, file, 0))
 		return NULL;
- 	pid = atoi (file+(file[0]=='a'?9:7));
-	if (pid<1)
+	pidfile = file+(file[0]=='a'?9:7);
+	pid = (int)strtol (pidfile, &endptr, 10);
+	if (endptr == pidfile || pid < 0)
 		return NULL;
+
 	task = debug_attach (pid);
 	if ((int)task == -1) {
+		if (pid>0 && io->referer && !strncmp (io->referer, "dbg://", 6)) {
+			eprintf ("Child killed\n");
+			kill (pid, 9);
+		}
 		switch (errno) {
 		case EPERM:
 			eprintf ("Operation not permitted\n");
@@ -244,7 +402,11 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 	riom->pid = pid;
 	riom->task = task;
 	// sleep 1s to get proper path (program name instead of ls) (racy)
-	pidpath = r_sys_pid_to_path (pid);
+	if (pid == 0) {
+		pidpath = strdup ("kernel");
+	} else {
+		pidpath = r_sys_pid_to_path (pid);
+	}
 	ret = r_io_desc_new (&r_io_plugin_mach, riom->pid,
 		pidpath, rw | R_IO_EXEC, mode, riom);
 	free (pidpath);
@@ -252,8 +414,18 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 }
 
 static ut64 __lseek(RIO *io, RIODesc *fd, ut64 offset, int whence) {
-	io->off = offset;
-	return offset;
+	switch (whence) {
+	case 0: // abs
+		io->off = offset;
+		break;
+	case 1: // cur
+		io->off += (int)offset;
+		break;
+	case 2: // end
+		io->off = UT64_MAX;
+		break;
+	}
+	return io->off;
 }
 
 static int __close(RIODesc *fd) {
@@ -266,14 +438,31 @@ static int __system(RIO *io, RIODesc *fd, const char *cmd) {
 	RIOMach *riom = (RIOMach*)fd->data;
 	//printf("ptrace io command (%s)\n", cmd);
 	/* XXX ugly hack for testing purposes */
-	if (!strcmp (cmd, "pid")) {
+	if (!strncmp (cmd, "perm", 4)) {
+		int perm = r_str_rwx (cmd+4);
+		if (perm) {
+			int pagesize = tsk_pagesize(io, 1);
+			tsk_setperm (io, riom->task, io->off, pagesize, perm);
+		} else {
+			eprintf ("Usage: =!perm [rwx]\n");
+		}
+		return 0;
+	}
+	if (!strncmp (cmd, "pid", 3)) {
+		const char *pidstr = cmd + 4;
+		int pid = -1;
 		if (!cmd[3]) {
 			int pid = RIOMACH_PID (fd->data);
 			eprintf ("%d\n", pid);
 			return 0;
 		}
-		int pid = atoi (cmd+4);
-		if (pid != 0) {
+		if (!strcmp (pidstr, "0")) {
+			pid = 0;
+		} else {
+			pid = atoi (cmd+4);
+			if (!pid) pid = -1;
+		}
+		if (pid != -1) {
 			task_t task = pid_to_task (pid);
 			if (task != -1) {
 				eprintf ("PID=%d\n", pid);
@@ -283,30 +472,30 @@ static int __system(RIO *io, RIODesc *fd, const char *cmd) {
 			}
 		}
 		eprintf ("io_mach_system: Invalid pid %d\n", pid);
-		return 1;
-	} else eprintf ("Try: '=!pid'\n");
+	} else 
+		eprintf ("Try: '=!pid' or '=!perm'\n");
 	return 1;
 }
 
 // TODO: rename ptrace to io_mach .. err io.ptrace ??
 RIOPlugin r_io_plugin_mach = {
 	.name = "mach",
-        .desc = "mach debugger io plugin (mach://pid)",
+	.desc = "mach debugger io plugin (mach://pid)",
 	.license = "LGPL",
-        .open = __open,
-        .close = __close,
+	.open = __open,
+	.close = __close,
 	.read = __read,
-        .plugin_open = __plugin_open,
+	.plugin_open = __plugin_open,
 	.lseek = __lseek,
 	.system = __system,
 	.write = __write,
-	.isdbg = R_TRUE
+	.isdbg = true
 };
 
 #else
 RIOPlugin r_io_plugin_mach = {
 	.name = "mach",
-        .desc = "mach debug io (unsupported in this platform)",
+	.desc = "mach debug io (unsupported in this platform)",
 	.license = "LGPL"
 };
 #endif
@@ -314,6 +503,7 @@ RIOPlugin r_io_plugin_mach = {
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_IO,
-	.data = &r_io_plugin_mach
+	.data = &r_io_plugin_mach,
+	.version = R2_VERSION
 };
 #endif

@@ -5,9 +5,12 @@
 
 R_LIB_VERSION(r_lang);
 
-#include "p/pipe.c" // hardcoded
-#include "p/vala.c" // hardcoded
-#include "p/c.c"    // hardcoded
+#include "p/pipe.c"  // hardcoded
+#include "p/vala.c"  // hardcoded
+#include "p/c.c"     // hardcoded
+#if __UNIX__
+#include "p/cpipe.c" // hardcoded
+#endif
 
 
 static RLang *__lang = NULL;
@@ -25,8 +28,11 @@ R_API RLang *r_lang_new() {
 		lang->langs->free = (RListFree)r_lang_plugin_free;
 		lang->defs = r_list_new ();
 		lang->defs->free = (RListFree)r_lang_def_free;
-		lang->printf = (PrintfCallback)printf;
+		lang->cb_printf = (PrintfCallback)printf;
 		r_lang_add (lang, &r_lang_plugin_c);
+#if __UNIX__
+		r_lang_add (lang, &r_lang_plugin_cpipe);
+#endif
 		r_lang_add (lang, &r_lang_plugin_vala);
 		r_lang_add (lang, &r_lang_plugin_pipe);
 	}
@@ -58,7 +64,7 @@ R_API int r_lang_define(RLang *lang, const char *type, const char *name, void *v
 	r_list_foreach (lang->defs, iter, def) {
 		if (!strcasecmp (name, def->name)) {
 			def->value = value;
-			return  R_TRUE;
+			return  true;
 		}
 	}
 	def = R_NEW (RLangDef);
@@ -67,9 +73,9 @@ R_API int r_lang_define(RLang *lang, const char *type, const char *name, void *v
 		def->name = strdup (name);
 		def->value = value;
 		r_list_append (lang->defs, def);
-		return R_TRUE;
+		return true;
 	}
-	return R_FALSE;
+	return false;
 }
 
 R_API void r_lang_def_free (RLangDef *def) {
@@ -90,7 +96,7 @@ R_API void r_lang_undef(RLang *lang, const char *name) {
 			}
 		}
 	} else {
-		r_list_purge (lang->defs);
+		r_list_free (lang->defs);
 		lang->defs = NULL;
 	}
 }
@@ -98,7 +104,7 @@ R_API void r_lang_undef(RLang *lang, const char *name) {
 R_API int r_lang_setup(RLang *lang) {
 	if (lang->cur && lang->cur->setup)
 		return lang->cur->setup (lang);
-	return R_FALSE;
+	return false;
 }
 
 R_API int r_lang_add(RLang *lang, RLangPlugin *foo) {
@@ -107,7 +113,7 @@ R_API int r_lang_add(RLang *lang, RLangPlugin *foo) {
 			foo->init (lang);
 		r_list_append (lang->langs, foo);
 	}
-	return R_TRUE;
+	return true;
 }
 
 /* TODO: deprecate all list methods */
@@ -115,11 +121,11 @@ R_API int r_lang_list(RLang *lang) {
 	RListIter *iter;
 	RLangPlugin *h;
 	if (!lang)
-		return R_FALSE;
+		return false;
 	r_list_foreach (lang->langs, iter, h) {
-		lang->printf ("%s: %s\n", h->name, h->desc);
+		lang->cb_printf ("%s: %s\n", h->name, h->desc);
 	}
-	return R_TRUE;
+	return true;
 }
 
 R_API RLangPlugin *r_lang_get_by_extension (RLang *lang, const char *ext) {
@@ -148,22 +154,22 @@ R_API int r_lang_use(RLang *lang, const char *name) {
 	RLangPlugin *h = r_lang_get_by_name (lang, name);
 	if (h) {
 		lang->cur = h;
-		return R_TRUE;
+		return true;
 	}
-	return R_FALSE;
+	return false;
 }
 
 // TODO: store in r_lang and use it from the plugin?
 R_API int r_lang_set_argv(RLang *lang, int argc, char **argv) {
 	if (lang->cur && lang->cur->set_argv)
 		return lang->cur->set_argv (lang, argc, argv);
-	return R_FALSE;
+	return false;
 }
 
 R_API int r_lang_run(RLang *lang, const char *code, int len) { 
 	if (lang->cur && lang->cur->run)
 		return lang->cur->run (lang, code, len);
-	return R_FALSE;
+	return false;
 }
 
 R_API int r_lang_run_string(RLang *lang, const char *code) {
@@ -171,7 +177,7 @@ R_API int r_lang_run_string(RLang *lang, const char *code) {
 }
 
 R_API int r_lang_run_file(RLang *lang, const char *file) { 
-	int len, ret = R_FALSE;
+	int len, ret = false;
 	if (lang->cur) {
 		if (lang->cur->run_file == NULL) {
 			if (lang->cur->run != NULL) {
@@ -190,11 +196,11 @@ R_API int r_lang_prompt(RLang *lang) {
 	const char *p;
 
 	if (lang->cur == NULL)
-		return R_FALSE;
+		return false;
 
 	if (lang->cur->prompt)
-		if (lang->cur->prompt (lang) == R_TRUE)
-			return R_TRUE;
+		if (lang->cur->prompt (lang) == true)
+			return true;
 	/* init line */
 	RLine *line = r_line_singleton ();
 	RLineHistory hist = line->history;
@@ -245,7 +251,7 @@ R_API int r_lang_prompt(RLang *lang) {
 		}
 		if (!strcmp (buf, "q")) {
 			free (prompt);
-			return R_TRUE;
+			return true;
 		}
 		if (!strcmp (buf, "?")) {
 			RLangDef *def;
@@ -269,9 +275,8 @@ R_API int r_lang_prompt(RLang *lang) {
 	r_line_set_prompt (prompt);
 	line->completion = oc;
 	line->history = hist;
-
 	clearerr (stdin);
 	printf ("\n");
-	free(prompt);
-	return R_TRUE;
+	free (prompt);
+	return true;
 }

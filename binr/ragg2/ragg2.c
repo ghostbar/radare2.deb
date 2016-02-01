@@ -5,9 +5,15 @@
 #include <getopt.c>
 #include "../blob/version.c"
 
+#include <unistd.h>
+#include <sys/types.h>
+#include <string.h>
+
+
 static int usage (int v) {
-	printf ("Usage: ragg2 [-FOLsrxvh] [-a arch] [-b bits] [-k os] [-o file] [-I /] [-i sc]\n"
-		"             [-e enc] [-B hex] [-c k=v] [-C file] [-dDw v] [-p pad] file|f.asm|-\n");
+	printf ("Usage: ragg2 [-FOLsrxhvz] [-a arch] [-b bits] [-k os] [-o file] [-I path]\n"
+		"             [-i sc] [-e enc] [-B hex] [-c k=v] [-C file] [-p pad] [-q off]\n"
+		"             [-q off] [-dDw off:hex] file|f.asm|-\n");
 	if (v) printf (
 	" -a [arch]       select architecture (x86, mips, arm)\n"
 	" -b [bits]       register size (32, 64, ..)\n"
@@ -31,7 +37,8 @@ static int usage (int v) {
 	" -p [padding]    add padding after compilation (padding=n10s32)\n"
 	"                 ntas : begin nop, trap, 'a', sequence\n"
 	"                 NTAS : same as above, but at the end\n"
-	" -P [size]       prepend debrujn pattern\n"
+	" -P [size]       prepend debruijn pattern\n"
+	" -q [fragment]   debruijn pattern offset\n"
 	" -r              show raw bytes instead of hexpairs\n"
 	" -s              show assembler\n"
 	" -v              show version\n"
@@ -105,8 +112,10 @@ int main(int argc, char **argv) {
 	int show_raw = 0;
 	int append = 0;
 	int show_str = 0;
+	ut64 get_offset  = 0;
 	char *shellcode = NULL;
 	char *encoder = NULL;
+	char *sequence = NULL;
 	int bits = (R_SYS_BITS & R_SYS_BITS_64)? 64: 32;
 	int fmt = 0;
 	const char *ofile = NULL;
@@ -115,9 +124,7 @@ int main(int argc, char **argv) {
 	int c, i;
 	REgg *egg = r_egg_new ();
 
-	//egg->bin = r_buf_new ();
-
-        while ((c = getopt (argc, argv, "n:N:he:a:b:f:o:sxrk:FOI:Li:c:p:P:B:C:vd:D:w:z")) != -1) {
+        while ((c = getopt (argc, argv, "n:N:he:a:b:f:o:sxrk:FOI:Li:c:p:P:B:C:vd:D:w:zq:")) != -1) {
                 switch (c) {
 		case 'a':
 			arch = optarg;
@@ -182,10 +189,9 @@ int main(int argc, char **argv) {
 			break;
 		case 'D':
 			{
-			ut64 off, n;
 			char *p = strchr (optarg, ':');
 			if (p) {
-				off = r_num_math (NULL, optarg);
+				ut64 n, off = r_num_math (NULL, optarg);
 				n = r_num_math (NULL, p+1);
 				// TODO: honor endianness here
 				r_egg_patch (egg, off, (const ut8*)&n, 8);
@@ -257,12 +263,17 @@ int main(int argc, char **argv) {
 		case 'z':
 			show_str = 1;
 			break;
+		case 'q':
+			get_offset = 1;
+			sequence = strdup (optarg);
+			break;
 		default:
+			free (sequence);
 			return 1;
 		}
 	}
 
-	if (optind == argc && !shellcode && !bytes && !contents && !encoder && !padding && !pattern && !append) {
+	if (optind == argc && !shellcode && !bytes && !contents && !encoder && !padding && !pattern && !append && !get_offset) {
 		return usage (0);
 	} else file = argv[optind];
 
@@ -271,6 +282,17 @@ int main(int argc, char **argv) {
 			format = "mach064";
 		else if (!strcmp (format, "elf"))
 			format = "elf64";
+	}
+
+	// catch this first
+	if (get_offset) {
+		get_offset = r_num_math (0, sequence);
+		printf ("Little endian: %d\n",
+			r_debruijn_offset (get_offset, 1));
+		printf ("Big endian: %d\n",
+			r_debruijn_offset (get_offset, 0));
+		free (sequence);
+		return 0;
 	}
 
 	// initialize egg

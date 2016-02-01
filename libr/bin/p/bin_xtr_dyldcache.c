@@ -13,26 +13,21 @@ static RList * oneshotall(const ut8 *buf, ut64 size );
 static int free_xtr (void *xtr_obj) ;
 
 static int check(RBin *bin) {
-	int size, ret = R_FALSE;
+	int size, ret = false;
 	ut8 *filebuf = (ut8*)r_file_slurp_range (bin->file, 0, 4, &size);
-	if (filebuf){
-		if (size == 4) {
-			if (!memcmp (filebuf, "\x64\x79\x6c\x64", 4))
-				ret = R_TRUE;
-			free (filebuf);
-		} else free (filebuf);
+	if (filebuf) {
+		if (size == 4)
+			ret = !memcmp (filebuf, "\x64\x79\x6c\x64", 4);
+		free (filebuf);
 	}
 	return ret;
 }
 
 static int check_bytes(const ut8* bytes, ut64 sz) {
-	int ret = R_FALSE;
-
-	if (!bytes || sz < 4) return R_FALSE;
-	if (!memcmp (bytes, "\x64\x79\x6c\x64", 4))
-		ret = R_TRUE;
-
-	return ret;
+	if (bytes && sz >3)
+		if (!memcmp (bytes, "\x64\x79\x6c\x64", 4))
+			return true;
+	return false;
 }
 
 // TODO: destroy must be void?
@@ -42,11 +37,11 @@ static int destroy(RBin *bin) {
 
 static int free_xtr (void *xtr_obj) {
 	r_bin_dyldcache_free ((struct r_bin_dyldcache_obj_t*)xtr_obj);
-	return R_TRUE;
+	return true;
 }
 
 static int load(RBin *bin) {
-	return ((bin->cur->xtr_obj = r_bin_dyldcache_new (bin->file)))? R_TRUE: R_FALSE;
+	return ((bin->cur->xtr_obj = r_bin_dyldcache_new (bin->file)))? true: false;
 }
 
 static RList * extractall(RBin *bin) {
@@ -129,8 +124,6 @@ struct r_bin_xtr_plugin_t r_bin_xtr_plugin_dyldcache = {
 	.name = "dyldcache",
 	.desc = "dyld cache bin extractor plugin",
 	.license = "LGPL3",
-	.init = NULL,
-	.fini = NULL,
 	.check = &check,
 	.load = &load,
 	.extract = &extract,
@@ -145,6 +138,7 @@ struct r_bin_xtr_plugin_t r_bin_xtr_plugin_dyldcache = {
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_BIN_XTR,
-	.data = &r_bin_xtr_plugin_dyldcache
+	.data = &r_bin_xtr_plugin_dyldcache,
+	.version = R2_VERSION
 };
 #endif

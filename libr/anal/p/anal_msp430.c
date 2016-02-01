@@ -7,9 +7,7 @@
 
 #include <msp430_disas.h>
 
-static int msp430_op(RAnal *anal, RAnalOp *op, ut64 addr,
-		const ut8 *buf, int len)
-{
+static int msp430_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *buf, int len) {
 	int ret;
 	struct msp430_cmd cmd;
 
@@ -74,15 +72,7 @@ struct r_anal_plugin_t r_anal_plugin_msp430 = {
 	.name = "msp430",
 	.desc = "TI MSP430 code analysis plugin",
 	.license = "LGPL3",
-	.arch = R_SYS_ARCH_MSP430,
+	.arch = "msp430",
 	.bits = 16,
-	.init = NULL,
-	.fini = NULL,
 	.op = msp430_op,
-	.set_reg_profile = NULL,
-	.fingerprint_bb = NULL,
-	.fingerprint_fcn = NULL,
-	.diff_bb = NULL,
-	.diff_fcn = NULL,
-	.diff_eval = NULL,
 };

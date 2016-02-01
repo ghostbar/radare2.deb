@@ -16,6 +16,7 @@
 
 R_API RAnalState * r_anal_state_new (ut64 start, ut8* buffer, ut64 len) {
 	RAnalState *state = R_NEW0 (RAnalState);
+	if (!state) return NULL;
 	state->start = start;
 	state->end = start + len;
 	state->buffer = buffer;
@@ -85,12 +86,8 @@ R_API const ut8 * r_anal_state_get_buf_by_addr (RAnalState *state, ut64 addr) {
 	return NULL;
 }
 
-R_API int r_anal_state_addr_is_valid (RAnalState *state, ut64 addr) {
-	int result = R_FALSE;
-	if (addr < state->end  && addr >= state->start) {
-		result = R_TRUE;
-	}
-	return result;
+R_API bool r_anal_state_addr_is_valid (RAnalState *state, ut64 addr) {
+	return (addr < state->end  && addr >= state->start);
 }
 
 R_API void r_anal_state_merge_bb_list (RAnalState *state, RList* bbs) {

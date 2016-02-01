@@ -13,7 +13,7 @@
 #include <sys/mman.h>
 #endif
 
-R_API boolt r_file_truncate (const char *filename, ut64 newsize) {
+R_API bool r_file_truncate (const char *filename, ut64 newsize) {
 	int fd;
 	if (r_file_is_directory (filename))
 		return R_FALSE;
@@ -65,7 +65,7 @@ R_API char *r_file_dirname (const char *path) {
 	return newpath;
 }
 
-R_API boolt r_file_is_regular(const char *str) {
+R_API bool r_file_is_regular(const char *str) {
 	struct stat buf = {0};
 	if (!str||!*str)
 		return R_FALSE;
@@ -74,7 +74,7 @@ R_API boolt r_file_is_regular(const char *str) {
 	return ((S_IFREG & buf.st_mode)==S_IFREG)? R_TRUE: R_FALSE;
 }
 
-R_API boolt r_file_is_directory(const char *str) {
+R_API bool r_file_is_directory(const char *str) {
 	struct stat buf = {0};
 	if (!str||!*str)
 		return R_FALSE;
@@ -85,7 +85,7 @@ R_API boolt r_file_is_directory(const char *str) {
 	return (S_IFDIR==(S_IFDIR & buf.st_mode))? R_TRUE: R_FALSE;
 }
 
-R_API boolt r_file_fexists(const char *fmt, ...) {
+R_API bool r_file_fexists(const char *fmt, ...) {
 	int ret;
 	char string[1024];
 	va_list ap;
@@ -96,7 +96,7 @@ R_API boolt r_file_fexists(const char *fmt, ...) {
 	return ret;
 }
 
-R_API boolt r_file_exists(const char *str) {
+R_API bool r_file_exists(const char *str) {
 	struct stat buf = {0};
 	if (str && *str && stat (str, &buf)==-1)
 		return R_FALSE;
@@ -110,18 +110,29 @@ R_API ut64 r_file_size(const char *str) {
 	return (ut64)buf.st_size;
 }
 
+R_API int r_file_is_abspath(const char *file) {
+	return ((*file && file[1]==':') || *file == '/');
+}
+
 R_API char *r_file_abspath(const char *file) {
-	char *ret = NULL;
-	char *cwd = r_sys_getdir ();
-	if (!strncmp (file, "~/", 2)) {
+	char *cwd, *ret = NULL;
+	if (!file || !strcmp (file, ".") || !strcmp (file, "./")) {
+		return r_sys_getdir ();
+	}
+	if (strstr (file, "://")) {
+		return strdup (file);
+	}
+	cwd = r_sys_getdir ();
+	if (!strncmp (file, "~/", 2) || !strncmp (file, "~\\", 2)) {
 		ret = r_str_home (file+2);
 	} else {
 #if __UNIX__ || __CYGWIN__
 		if (cwd && *file != '/')
-			ret = r_str_newf ("%s/%s", cwd, file);
+			ret = r_str_newf ("%s"R_SYS_DIR"%s", cwd, file);
 #elif __WINDOWS__ && !__CYGWIN__
-		if (cwd && !strchr (file, ':'))
+		if (cwd && !strchr (file, ':')) {
 			ret = r_str_newf ("%s\\%s", cwd, file);
+		}
 #endif
 	}
 	free (cwd);
@@ -134,10 +145,6 @@ R_API char *r_file_abspath(const char *file) {
 			ret = abspath;
 		}
 	}
-#else
-	/* remove ../ */
-	/* remove ./ */
-	/* remove // */
 #endif
 	return ret;
 }
@@ -155,7 +162,7 @@ R_API char *r_file_path(const char *bin) {
 			ptr = strchr (str, ':');
 			if (ptr) {
 				*ptr = '\0';
-				snprintf (file, sizeof (file), "%s/%s", str, bin);
+				snprintf (file, sizeof (file), "%s"R_SYS_DIR"%s", str, bin);
 				if (r_file_exists (file)) {
 					free (path);
 					free (path_env);
@@ -403,17 +410,17 @@ R_API char *r_file_root(const char *root, const char *path) {
 	while (strstr (s, "..")) s = r_str_replace (s, "..", "", 1);
 	while (strstr (s, "./")) s = r_str_replace (s, "./", "", 1);
 	while (strstr (s, "//")) s = r_str_replace (s, "//", "", 1);
-	ret = r_str_concat (strdup (root), "/");
+	ret = r_str_concat (strdup (root), R_SYS_DIR);
 	ret = r_str_concat (ret, s);
 	free (s);
 	return ret;
 }
 
-R_API boolt r_file_dump(const char *file, const ut8 *buf, int len, int append) {
+R_API bool r_file_dump(const char *file, const ut8 *buf, int len, int append) {
 	int ret;
 	FILE *fd;
 	if (!file || !*file || !buf) {
-		eprintf ("RET %p, buf %p\n", file, buf);
+		eprintf ("r_file_dump file: %s buf: %p\n", file, buf);
 		return R_FALSE;
 	}
 	if (append) {
@@ -426,13 +433,14 @@ R_API boolt r_file_dump(const char *file, const ut8 *buf, int len, int append) {
 		eprintf ("Cannot open '%s' for writing\n", file);
 		return R_FALSE;
 	}
+	if (len<0) len = strlen ((const char *)buf);
 	ret = fwrite (buf, 1, len, fd) == len;
 	if (!ret) eprintf ("r_file_dump: fwrite: error\n");
 	fclose (fd);
 	return ret;
 }
 
-R_API boolt r_file_rm(const char *file) {
+R_API bool r_file_rm(const char *file) {
 	if (r_sandbox_enable (0)) return R_FALSE;
 	if (r_file_is_directory (file)) {
 #if __WINDOWS__
@@ -447,6 +455,26 @@ R_API boolt r_file_rm(const char *file) {
 		return (unlink (file)==0)? R_TRUE: R_FALSE;
 #endif
 	}
+}
+
+R_API char *r_file_readlink(const char *path) {
+	if (!r_sandbox_enable (0)) {
+#if __UNIX__
+		int ret;
+		char pathbuf[4096];
+		strncpy (pathbuf, path, sizeof (pathbuf)-1);
+		pathbuf[sizeof (pathbuf)-1] = 0;
+		repeat:
+		ret = readlink (path, pathbuf, sizeof (pathbuf)-1);
+		if (ret != -1) {
+			pathbuf[ret] = 0;
+			path = pathbuf;
+			goto repeat;
+		}
+		return strdup (pathbuf);
+#endif
+	}
+	return NULL;
 }
 
 R_API int r_file_mmap_write(const char *file, ut64 addr, const ut8 *buf, int len) {
@@ -613,9 +641,8 @@ static RMmap *r_file_mmap_other (RMmap *m) {
 }
 #endif
 
-
 // TODO: add rwx support?
-R_API RMmap *r_file_mmap (const char *file, boolt rw, ut64 base) {
+R_API RMmap *r_file_mmap (const char *file, bool rw, ut64 base) {
 	RMmap *m = NULL;
 	int fd = -1;
 	if (!rw && !r_file_exists (file)) return m;
@@ -657,16 +684,20 @@ R_API RMmap *r_file_mmap (const char *file, boolt rw, ut64 base) {
 
 R_API void r_file_mmap_free (RMmap *m) {
 	if (!m) return;
+#if __WINDOWS__
+	if (m->fm != INVALID_HANDLE_VALUE)
+		CloseHandle (m->fm);
+	if (m->fh != INVALID_HANDLE_VALUE)
+		CloseHandle (m->fh);
+	if (m->buf)
+		UnmapViewOfFile (m->buf);
+#endif
 	if (m->fd == -1) {
 		free (m);
 		return;
 	}
 #if __UNIX__
 	munmap (m->buf, m->len);
-#elif __WINDOWS__
-	CloseHandle (m->fm);
-	CloseHandle (m->fh);
-	UnmapViewOfFile (m->buf);
 #endif
 	close (m->fd);
 	free (m);

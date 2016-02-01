@@ -19,7 +19,7 @@
 #define R_TH_LOCK_T pthread_mutex_t
 
 #else
-#error Threading library only supported for ptrace and w32
+#error Threading library only supported for pthread and w32
 #endif
 
 #define R_TH_FUNCTION(x) int (*x)(struct r_th_t *)
@@ -55,7 +55,6 @@ R_API int r_th_start(RThread *th, int enable);
 R_API int r_th_wait(RThread *th);
 R_API int r_th_wait_async(RThread *th);
 R_API void r_th_break(RThread *th);
-R_API int r_th_wait(RThread *th);
 R_API void *r_th_free(RThread *th);
 R_API int r_th_kill(struct r_th_t *th, int force);
 

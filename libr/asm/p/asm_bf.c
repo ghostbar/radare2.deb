@@ -155,7 +155,7 @@ RAsmPlugin r_asm_plugin_bf = {
 	.name = "bf",
 	.arch = "bf",
 	.license = "LGPL3",
-	.bits = 16|32,
+	.bits = 16|32|64,
 	.desc = "Brainfuck",
 	.init = NULL,
 	.fini = NULL,
@@ -166,6 +166,7 @@ RAsmPlugin r_asm_plugin_bf = {
 #ifndef CORELIB
 struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_ASM,
-	.data = &r_asm_plugin_bf
+	.data = &r_asm_plugin_bf,
+	.version = R2_VERSION
 };
 #endif
