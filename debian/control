@@ -6,6 +6,7 @@ Uploaders: Sebastian Reichel <sre@debian.org>
 Build-Depends: debhelper (>= 9),
                quilt,
                flex,
+               git,
                gobject-introspection,
                libgmp3-dev,
                libmagic-dev,
