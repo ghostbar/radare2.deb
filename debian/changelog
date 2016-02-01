@@ -32,6 +32,7 @@ radare2 (0.10.0-1) UNRELEASED; urgency=low
       - unused_code: Fix warnings from the build about unused variables.
   * debian/control: Commented out the radare2-plugins package, and removed all
     dependencies.
+  * Update Debian Standards Version to 3.9.6
 
  -- Sebastian Reichel <sre@debian.org>  Mon, 01 Feb 2016 06:16:42 +0100
 
