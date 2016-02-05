@@ -33,6 +33,7 @@ radare2 (0.10.0-1) UNRELEASED; urgency=low
   * debian/control: Commented out the radare2-plugins package, and removed all
     dependencies.
   * Update Debian Standards Version to 3.9.6
+  * Add dependency to zlib to avoid built-in library
 
  -- Sebastian Reichel <sre@debian.org>  Mon, 01 Feb 2016 06:16:42 +0100
 
