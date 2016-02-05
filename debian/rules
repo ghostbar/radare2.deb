@@ -37,6 +37,7 @@ override_dh_auto_install:
 	dh_auto_install
 	# remove "last" symlink
 	rm debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/radare2/last
+	rm debian/tmp/usr/share/doc/radare2/license
 
 override_dh_install:
 	dh_install --fail-missing
