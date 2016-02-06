@@ -34,6 +34,7 @@ radare2 (0.10.0-1) UNRELEASED; urgency=low
     dependencies.
   * Update Debian Standards Version to 3.9.6
   * Add dependency to zlib to avoid built-in library
+  * Drop -dbg packages (switch to automatically generated -dbgsym)
 
  -- Sebastian Reichel <sre@debian.org>  Mon, 01 Feb 2016 06:16:42 +0100
 
