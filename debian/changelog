@@ -11,27 +11,10 @@ radare2 (0.10.0-1) UNRELEASED; urgency=low
     - Web Interface
     - Tons of bugs and segfaults fixed, some others added for sure.
   * debian/patches:
-    - Merged or just not applicable:
-      - 01_fix-kfreebsd-compilation.
-      - 03_unsafe_snprintf.
-      - 04_remove_non-installable_library.
-      - 05_typos.
-      - 07_propagate_ldflags.
-      - 08_proper_tcc_build.
-      - 10_fix_rafind2_segfault.
-      - 11_block_libtcc_install.
-      - 12_fix_strcasestr_declaration.
-    - Still there:
-      - 02_link-needed-libmagic: Refreshed.
-      - 06_no_forced_rpath: Commented for now.
-      - 09_fix_internal_plugins: Internal plugins moved to radare2-bindings, so
-        commented for now.
-      - 101_split_plugins_installation: Commented for the same reason as above.
-    - New:
-      - typos: Typographic mistakes.
-      - unused_code: Fix warnings from the build about unused variables.
-  * debian/control: Commented out the radare2-plugins package, and removed all
-    dependencies.
+    - Dropped all old patches
+    - Add patch from upstream for capstone 3.0.4 support
+  * debian/control: Commented out the radare2-plugins package, and removed
+                    all dependencies (upstream moved them to r2-bindings).
   * Update Debian Standards Version to 3.9.6
   * Add dependency to zlib to avoid built-in library
   * Drop -dbg packages (switch to automatically generated -dbgsym)
