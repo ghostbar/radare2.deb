@@ -19,7 +19,7 @@ Build-Depends: debhelper (>= 9),
                python-dev,
                liblua5.2-dev,
                zlib1g-dev
-Standards-Version: 3.9.6
+Standards-Version: 3.9.7
 Homepage: http://www.radare.org
 Vcs-Browser: https://anonscm.debian.org/gitweb/?p=collab-maint/radare2.git
 Vcs-Git: git://anonscm.debian.org/collab-maint/radare2.git

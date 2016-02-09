@@ -15,7 +15,7 @@ radare2 (0.10.0-1) UNRELEASED; urgency=low
     - Add patch from upstream for capstone 3.0.4 support
   * debian/control: Commented out the radare2-plugins package, and removed
                     all dependencies (upstream moved them to r2-bindings).
-  * Update Debian Standards Version to 3.9.6
+  * Update Debian Standards Version to 3.9.7
   * Add dependency to zlib to avoid built-in library
   * Drop -dbg packages (switch to automatically generated -dbgsym)
 
