@@ -1,18 +1,20 @@
 -include config-user.mk
 include global.mk
 
-PREVIOUS_RELEASE=0.9.9
+PREVIOUS_RELEASE=0.10.0
 
 R2R=radare2-regressions
 R2R_URL=$(shell doc/repo REGRESSIONS)
 R2BINS=$(shell cd binr ; echo r*2 r2agent r2pm)
 DATADIRS=libr/cons/d libr/bin/d libr/asm/d libr/syscall/d libr/magic/d libr/anal/d
-R2VC=$(shell git rev-list --all --count)
 USE_ZIP=YES
 ZIP=zip
+
+R2VC=$(shell git rev-list --all --count 2>/dev/null)
 ifeq ($(R2VC),)
 R2VC=9999999
 endif
+
 STRIP?=strip
 ifneq ($(shell xz --help 2>/dev/null | grep improve),)
 TAR=tar -cvf
@@ -24,6 +26,22 @@ TAREXT=tar.gz
 CZ=gzip -f
 endif
 PWD=$(shell pwd)
+
+# For echo without quotes
+Q='
+ESC=
+ifeq ($(BUILD_OS),windows)
+ifeq ($(OSTYPE),mingw32)
+ifneq (,$(findstring mingw32-make,$(MAKE)))
+ifneq ($(APPVEYOR),True)
+	Q=
+	ESC=^
+	LC_ALL=C
+	export LC_ALL
+endif
+endif
+endif
+endif
 
 all: plugins.cfg libr/include/r_version.h
 	${MAKE} -C shlr/zip
@@ -39,13 +57,14 @@ GIT_TIP=$(shell git rev-parse HEAD 2>/dev/null || echo HEAD)
 GIT_NOW=$(shell date +%Y-%m-%d)
 
 libr/include/r_version.h:
-	@echo "#ifndef R_VERSION_H" > $@.tmp
-	@echo "#define R_VERSION_H 1" >> $@.tmp
-	@echo "#define R2_VERSION_COMMIT $(R2VC)" >> $@.tmp
-	@echo '#define R2_GITTAP "$(GIT_TAP)"' >> $@.tmp
-	@echo '#define R2_GITTIP "$(GIT_TIP)"' >> $@.tmp
-	@echo '#define R2_BIRTH "$(GIT_NOW)"' >> $@.tmp
-	@echo '#endif' >> $@.tmp
+	@echo Generating r_version.h file
+	@echo $(Q)#ifndef R_VERSION_H$(Q) > $@.tmp
+	@echo $(Q)#define R_VERSION_H 1$(Q) >> $@.tmp
+	@echo $(Q)#define R2_VERSION_COMMIT $(R2VC)$(Q) >> $@.tmp
+	@echo $(Q)#define R2_GITTAP $(ESC)"$(GIT_TAP)$(ESC)"$(Q) >> $@.tmp
+	@echo $(Q)#define R2_GITTIP $(ESC)"$(GIT_TIP)$(ESC)"$(Q) >> $@.tmp
+	@echo $(Q)#define R2_BIRTH $(ESC)"$(GIT_NOW)$(ESC)"$(Q) >> $@.tmp
+	@echo $(Q)#endif$(Q) >> $@.tmp
 	@cmp -s $@.tmp $@ || (mv -f $@.tmp $@ && echo "Update libr/include/r_version.h")
 	@rm -f $@.tmp
 
@@ -61,7 +80,7 @@ depgraph.png:
 	cd libr ; perl depgraph.pl | dot -Tpng -odepgraph.png
 
 android:
-	@if [ -z "$(NDK_ARCH)" ]; then echo "Set NDK_ARCH=[arm|mips|x86]" ; false; fi
+	@if [ -z "$(NDK_ARCH)" ]; then echo "Set NDK_ARCH=[arm|arm64|mips|x86]" ; false; fi
 	sys/android-${NDK_ARCH}.sh
 
 w32dist:
@@ -261,7 +280,7 @@ strip:
 	-for FILE in "${DESTDIR}${LIBDIR}/libr_"*".${EXT_SO}" "${DESTDIR}${LIBDIR}/libr2.${EXT_SO}" ; do \
 		 ${STRIP} -s "$$FILE" ; done
 
-purge: purge-doc purge-dev
+purge: purge-doc purge-dev user-uninstall
 	for FILE in ${R2BINS} ; do rm -f "${DESTDIR}${BINDIR}/$$FILE" ; done
 	rm -f "${DESTDIR}${BINDIR}/ragg2-cc"
 	rm -f "${DESTDIR}${BINDIR}/r2"
@@ -270,7 +289,20 @@ purge: purge-doc purge-dev
 	rm -rf "${DESTDIR}${LIBDIR}/radare2"
 	rm -rf "${DESTDIR}${INCLUDEDIR}/libr"
 
+R2V=radare2-${VERSION}
+
 dist:
+	rm -rf $(R2V)
+	git clone . $(R2V)
+	-cd $(R2V) && [ ! -f config-user.mk -o configure -nt config-user.mk ] && ./configure "--prefix=${PREFIX}"
+	cd $(R2V) ; git log $$(git show-ref | grep ${PREVIOUS_RELEASE} | awk '{print $$1}')..HEAD > ChangeLog
+	$(MAKE) -C $(R2V)/shlr capstone-sync
+	FILES=`cd $(R2V); git ls-files | sed -e "s,^,$(R2V)/,"` ; \
+	CS_FILES=`cd $(R2V)/shlr/capstone ; git ls-files | grep -v pdf | grep -v xcode | grep -v msvc | grep -v suite | grep -v bindings | grep -v tests | sed -e "s,^,$(R2V)/shlr/capstone/,"` ; \
+	${TAR} "radare2-${VERSION}.tar" $${FILES} $${CS_FILES} "$(R2V)/ChangeLog" ; \
+	${CZ} "radare2-${VERSION}.tar"
+
+olddist:
 	-[ configure -nt config-user.mk ] && ./configure "--prefix=${PREFIX}"
 	#git log $$(git show-ref `git tag |tail -n1`)..HEAD > ChangeLog
 	git log $$(git show-ref | grep ${PREVIOUS_RELEASE} | awk '{print $$1}')..HEAD > ChangeLog
@@ -303,6 +335,7 @@ tests:
 
 osx-sign:
 	$(MAKE) -C binr/radare2 osx-sign
+
 osx-sign-libs:
 	$(MAKE) -C binr/radare2 osx-sign-libs
 

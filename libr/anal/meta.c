@@ -135,7 +135,10 @@ R_API char *r_meta_get_string(RAnal *a, int type, ut64 addr) {
 }
 
 R_API int r_meta_del(RAnal *a, int type, ut64 addr, ut64 size, const char *str) {
-	char key[100], key2[100], *dtr, *s, *p, *next;
+	char key[100], *dtr, *s, *p, *next;
+#if 0
+	char key2[100];
+#endif
 	const char *ptr;
 	int i;
 	if (size == UT64_MAX) {
@@ -204,7 +207,7 @@ R_API int r_meta_add(RAnal *a, int type, ut64 from, ut64 to, const char *str) {
 	int space_idx = a->meta_spaces.space_idx;
 	char *e_str, key[100], val[2048];
 	int exists;
-	if (from>to)
+	if (from > to)
 		return false;
 	if (from == to)
 		to = from+1;
@@ -225,15 +228,15 @@ R_API int r_meta_add(RAnal *a, int type, ut64 from, ut64 to, const char *str) {
 	// to inconsistent DB, and pretty bad performance. We should
 	// store this list in a different storage that doesnt have
 	// those limits and it's O(1) instead of O(n)
-	if (!exists) {
-		//ut64 count;
-		/* set type index */
-		snprintf (key, sizeof (key)-1, "meta.0x%"PFMT64x, from);
-		snprintf (val, sizeof (val)-1, "%c", type);
-		sdb_array_add (DB, key, val, 0);
-		/* set type index */
-		//count = meta_type_add (a, type, from);
+	snprintf (key, sizeof (key)-1, "meta.0x%"PFMT64x, from);
+	if (exists) {
+		char *value = sdb_get (DB, key, 0);
+		int idx = sdb_array_indexof (DB, key, value, 0);
+		sdb_array_delete (DB, key, idx, 0);
 	}
+	snprintf (val, sizeof (val)-1, "%c", type);
+	sdb_array_add (DB, key, val, 0);
+
 	return true;
 }
 

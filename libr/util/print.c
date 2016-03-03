@@ -5,6 +5,8 @@
 #include "r_print.h"
 #include "r_util.h"
 
+#define DFLT_ROWS 16
+
 static int nullprinter(const char* a, ...) { return 0; }
 static int IsInterrupted = 0;
 
@@ -176,7 +178,7 @@ R_API RPrint *r_print_new() {
 	p->col = 0;
 	p->width = 78;
 	p->cols = 16;
-	p->cur_enabled = R_FALSE;
+	p->cur_enabled = false;
 	p->cur = p->ocur = -1;
 	p->formats = r_strht_new ();
 	p->addrmod = 4;
@@ -190,6 +192,9 @@ R_API RPrint *r_print_new() {
 	p->get_register = NULL;
 	p->get_register_value = NULL;
 	p->lines_cache = NULL;
+	p->row_offsets_sz = 0;
+	p->row_offsets = NULL;
+	p->vflush = true;
 	return p;
 }
 
@@ -203,6 +208,7 @@ R_API RPrint *r_print_free(RPrint *p) {
 		p->zoom = NULL;
 	}
 	R_FREE (p->lines_cache);
+	R_FREE (p->row_offsets);
 	free (p);
 	return NULL;
 }
@@ -584,7 +590,10 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 	}
 
 	// TODO: Use base to change %03o and so on
-	if ((base < 32 && step != 2) && use_header) {
+	if (step == 1 && base < 0) {
+		use_header = false;
+	}
+	if ((base>0 && base < 32 && step != 2) && use_header) {
 		ut32 opad = (ut32)(addr >> 32);
 		{ // XXX: use r_print_addr_header
 			int i, delta;
@@ -646,8 +655,7 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 				if (col == 1) {
 					if (j+1 >= inc + i) {
 						printfmt (j%2?"  |":"| ");
-					}
-					else {
+					} else {
 						printfmt (j%2?"   ":"  ");
 					}
 				} else {
@@ -685,10 +693,19 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 					printfmt ("%s0x%016"PFMT64x"%s  ", a, (ut64)n, b);
 				else if (step == 2)
 					printfmt ("%s0x%04x%s ", a, (ut16)n, b);
-				else
-					printfmt ("%s0x%08x%s ", a, (ut32)n, b);
+				else printfmt ("%s0x%08x%s ", a, (ut32)n, b);
 				r_print_cursor (p, j, 0);
 				j += step - 1;
+			} else if (base == -8) {
+				printfmt("    %d=%c=%X ", -base, 0x3d, 13);
+				j += 3;
+			} else if (base == -1) {
+				st8 *w = (st8*)(buf+j);
+				printfmt ("%4d ", *w);
+			} else if (base == -10) {
+				st16 *w = (st16*)(buf+j);
+				printfmt ("%7d ", *w);
+				j += 1;
 			} else if (base == 10) {
 				int *w = (int*)(buf+j);
 				printfmt ("%13d ", *w);
@@ -1305,4 +1322,44 @@ R_API char * r_print_colorize_opcode (char *p, const char *reg, const char *num)
 	strcpy (o+j, Color_RESET);
 	//strcpy (p, o); // may overflow .. but shouldnt because asm.buf_asm is big enought
 	return strdup (o);
+}
+
+// reset the status of row_offsets
+R_API void r_print_init_rowoffsets (RPrint *p) {
+	R_FREE (p->row_offsets);
+	p->row_offsets_sz = 0;
+}
+
+// set the offset, from the start of the printing, of the i-th row
+R_API void r_print_set_rowoff (RPrint *p, int i, ut32 offset) {
+	if (!p->row_offsets) {
+		p->row_offsets_sz = DFLT_ROWS;
+		p->row_offsets = R_NEWS (ut32, p->row_offsets_sz);
+	}
+	if (i >= p->row_offsets_sz) {
+		size_t new_size;
+		p->row_offsets_sz *= 2;
+		new_size = sizeof (*p->row_offsets) * p->row_offsets_sz;
+		p->row_offsets = realloc (p->row_offsets, new_size);
+	}
+	p->row_offsets[i] = offset;
+}
+
+// return the offset, from the start of the printing, of the i-th row.
+// if the line index is not valid, UT32_MAX is returned.
+R_API ut32 r_print_rowoff (RPrint *p, int i) {
+	if (i < 0 || i >= p->row_offsets_sz) return UT32_MAX;
+	return p->row_offsets[i];
+}
+
+// return the index of the row that contains the given offset or -1 if
+// that row doesn't exist.
+R_API int r_print_row_at_off (RPrint *p, ut32 offset) {
+	int i = 0;
+	ut32 tt;
+
+	while ((tt = r_print_rowoff (p, i)) != UT32_MAX && tt <= offset) {
+		i++;
+	}
+	return tt != UT32_MAX ? i - 1 : -1;
 }

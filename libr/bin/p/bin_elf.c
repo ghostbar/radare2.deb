@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2015 - nibble, pancake */
+/* radare - LGPL - Copyright 2009-2016 - nibble, pancake */
 
 #include <stdio.h>
 #include <r_types.h>
@@ -40,8 +40,9 @@ static void * load_bytes(RBinFile *arch, const ut8 *buf, ut64 sz, ut64 loadaddr,
 	tbuf = r_buf_new ();
 	r_buf_set_bytes (tbuf, buf, sz);
 	res = Elf_(r_bin_elf_new_buf) (tbuf);
-	if (res)
+	if (res) {
 		sdb_ns_set (sdb, "info", res->kv);
+	}
 	r_buf_free (tbuf);
 	return res;
 }
@@ -86,7 +87,7 @@ static RBinAddr* binsym(RBinFile *arch, int sym) {
 		addr = Elf_(r_bin_elf_get_fini_offset) (arch->o->bin_obj);
 		break;
 	}
-	if (addr && addr!= UT64_MAX && (ret = R_NEW0 (RBinAddr))) {
+	if (addr && addr != UT64_MAX && (ret = R_NEW0 (RBinAddr))) {
 		ret->paddr = addr;
 		ret->vaddr = Elf_(r_bin_elf_p2v) (obj, addr);
 	}
@@ -395,6 +396,7 @@ static RBinReloc *reloc_convert(struct Elf_(r_bin_elf_obj_t) *bin, RBinElfReloc 
 
 	r->import = NULL;
 	r->symbol = NULL;
+	r->is_ifunc = false;
 	r->addend = rel->addend;
 	if (rel->sym) {
 		if (rel->sym < bin->imports_by_ord_size && bin->imports_by_ord[rel->sym])
@@ -430,6 +432,7 @@ static RBinReloc *reloc_convert(struct Elf_(r_bin_elf_obj_t) *bin, RBinElfReloc 
 		case R_386_8:        ADD(8,  0);
 		case R_386_PC8:      ADD(8, -P);
 		case R_386_COPY:     ADD(64, 0); // XXX: copy symbol at runtime
+		case R_386_IRELATIVE: r->is_ifunc = true; SET(32);
 		default: break; //eprintf("TODO(eddyb): uninmplemented ELF/x86 reloc type %i\n", rel->type);
 		}
 		break;
@@ -450,6 +453,7 @@ static RBinReloc *reloc_convert(struct Elf_(r_bin_elf_obj_t) *bin, RBinElfReloc 
 		case R_X86_64_PC8:	ADD(8, -P);
 		case R_X86_64_GOTPCREL:	ADD(64, GOT-P);
 		case R_X86_64_COPY:	ADD(64, 0); // XXX: copy symbol at runtime
+		case R_X86_64_IRELATIVE: r->is_ifunc = true; SET(64);
 		default: break; ////eprintf("TODO(eddyb): uninmplemented ELF/x64 reloc type %i\n", rel->type);
 		}
 		break;

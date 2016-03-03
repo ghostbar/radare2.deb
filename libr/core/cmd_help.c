@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2015 - pancake */
+/* radare - LGPL - Copyright 2009-2016 - pancake */
 
 static const char* findBreakChar(const char *s) {
 	while (*s) {
@@ -8,6 +8,7 @@ static const char* findBreakChar(const char *s) {
 	}
 	return s;
 }
+
 static char *filter_flags(RCore *core, const char *msg) {
 	const char *dollar, *end;
 	char *word, *buf = NULL;
@@ -56,6 +57,14 @@ static int cmd_help(void *data, const char *input) {
 	RList *tmp;
 
 	switch (input[0]) {
+	case '0':
+		core->curtab = 0;
+		break;
+	case '1':
+		if (core->curtab < 0)
+			core->curtab = 0;
+		core->curtab ++;
+		break;
 	case ':':
 		{
 		RListIter *iter;
@@ -216,22 +225,48 @@ static int cmd_help(void *data, const char *input) {
 		}
 		break;
 	case 'v':
-		n = (input[1] != '\0') ? r_num_math (core->num, input+2) : 0;
+		{
+			const char *space = strchr (input, ' ');
+			if (space) {
+				n = r_num_math (core->num, space+1);
+			} else {
+				n = r_num_math (core->num, "$?");
+			}
+		}
 		if (core->num->dbz) {
 			eprintf ("RNum ERROR: Division by Zero\n");
 		}
 		switch (input[1]) {
 		case '?':
 			r_cons_printf ("|Usage: ?v[id][ num]  # Show value\n"
+				"|?vi1 200    -> 1 byte size value (char)\n"
+				"|?vi2 0xffff -> 2 byte size value (short)\n"
+				"|?vi4 0xffff -> 4 byte size value (int)\n"
+				"|?vi8 0xffff -> 8 byte size value (st64)\n"
 				"| No argument shows $? value\n"
 				"|?vi will show in decimal instead of hex\n");
 			break;
 		case '\0':
-			r_cons_printf ("%d\n", core->num->value);
+		        r_cons_printf ("%d\n", (st32)n);
 			break;
-		case 'i':
-			if (n>>32) r_cons_printf ("%"PFMT64d"\n", (st64)n);
-			else r_cons_printf ("%d\n", (st32)n);
+		case 'i': // "?vi"
+			switch (input[2]) {
+			case '1': // byte
+				r_cons_printf ("%d\n", (st8)(n & UT8_MAX));
+				break;
+			case '2': // word
+				r_cons_printf ("%d\n", (st16)(n & UT16_MAX));
+				break;
+			case '4': // dword
+				r_cons_printf ("%d\n", (st32)(n & UT32_MAX));
+				break;
+			case '8': // qword
+				r_cons_printf ("%"PFMT64d"\n", (st64)(n & UT64_MAX));
+				break;
+			default:
+				r_cons_printf ("%"PFMT64d"\n", n);
+				break;
+			}
 			break;
 		case 'd':
 			r_cons_printf ("%"PFMT64d"\n", n);

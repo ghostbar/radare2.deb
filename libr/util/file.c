@@ -480,6 +480,7 @@ R_API char *r_file_readlink(const char *path) {
 R_API int r_file_mmap_write(const char *file, ut64 addr, const ut8 *buf, int len) {
 #if __WINDOWS__
 	HANDLE fh;
+	DWORD written = 0;
 	if (r_sandbox_enable (0)) return -1;
 	fh = CreateFile (file, GENERIC_READ|GENERIC_WRITE,
 		FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -512,7 +513,7 @@ R_API int r_file_mmap_write(const char *file, ut64 addr, const ut8 *buf, int len
 	CloseHandle (fm);
 #else
 	SetFilePointer (fh, addr, NULL, FILE_BEGIN);
-	if (!WriteFile (fh, buf, len, NULL, NULL)) {
+	if (!WriteFile (fh, buf, len,  &written, NULL)) {
 		r_sys_perror ("WriteFile");
 		len = -1;
 	}
@@ -521,13 +522,14 @@ R_API int r_file_mmap_write(const char *file, ut64 addr, const ut8 *buf, int len
 	return len;
 #elif __UNIX__
 	int fd = r_sandbox_open (file, O_RDWR|O_SYNC, 0644);
-	const int pagesize = 4096;
-	int mmlen = len+pagesize;
-	int rest = addr%pagesize;
+	const int pagesize = getpagesize ();
+	int mmlen = len + pagesize;
+	int rest = addr % pagesize;
         ut8 *mmap_buf;
 	if (fd == -1) return -1;
+	if ((st64)addr < 0) return -1;
 	mmap_buf = mmap (NULL, mmlen*2, PROT_READ|PROT_WRITE,
-		MAP_SHARED, fd, (off_t)addr-rest);
+		MAP_SHARED, fd, (off_t)addr - rest);
         if (((int)(size_t)mmap_buf)==-1)
                 return -1;
         memcpy (mmap_buf+rest, buf, len);

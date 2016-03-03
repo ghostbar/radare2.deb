@@ -60,7 +60,7 @@ echo "export USE_R2_CAPSTONE=$USE_R2_CAPSTONE"
 echo
 # Set USE_R2_CAPSTONE env var to ignore syscapstone check
 if [ -z "${USE_R2_CAPSTONE}" ]; then
-	pkg-config --atleast-version=3.0 capstone 2>/dev/null
+	pkg-config --atleast-version=4.0 capstone 2>/dev/null
 	if [ $? = 0 ]; then
 		echo '#include <capstone.h>' > .a.c
 		echo 'int main() {return 0;}' >> .a.c
@@ -83,6 +83,7 @@ if [ -d shlr/capstone/.git ]; then
 fi
 [ "`uname`" = Linux ] && export LDFLAGS="-Wl,--as-needed ${LDFLAGS}"
 rm -f plugins.cfg
+unset DEPS
 ./configure ${CFGARG} --prefix=${PREFIX} || exit 1
 ${MAKE} -s -j${MAKE_JOBS} MAKE_JOBS=${MAKE_JOBS} || exit 1
 if [ "`uname`" = Darwin ]; then

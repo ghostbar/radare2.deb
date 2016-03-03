@@ -55,7 +55,11 @@ static bool popRN(RAnalEsil *esil, ut64 *n) {
 
 R_API RAnalEsil *r_anal_esil_new(int stacksize, int iotrap) {
 	RAnalEsil *esil = R_NEW0 (RAnalEsil);
-	if (!esil || stacksize < 3) return NULL;
+	if (!esil) return NULL;
+	if (stacksize < 3) {
+		free (esil);
+		return NULL;
+	}
 	if (!(esil->stack = malloc (sizeof(char *) * stacksize))) {
 		free (esil);
 		return NULL;
@@ -141,7 +145,8 @@ R_API int r_anal_esil_fire_interrupt(RAnalEsil *esil, int interrupt) {
 		return false;
 	i = sdb_itoa ((ut64)interrupt, t, 16);
 	if (!sdb_num_exists (esil->interrupts, i)) {
-		eprintf ("Cannot find interrupt-handler for interrupt %d\n", interrupt);
+		eprintf ("0x%08"PFMT64x" Invalid interrupt/syscall 0x%08x\n",
+			esil->address, interrupt);
 		return false;
 	}
 	icb = (RAnalEsilInterruptCB)sdb_ptr_get (esil->interrupts, i, 0);
@@ -542,7 +547,7 @@ static int esil_neg(RAnalEsil *esil) {
 			}
 		}
 	} else {
-		eprintf ("esil_neg: empty stack\n");
+		eprintf ("0x%08"PFMT64x"  esil_neg: empty stack\n", esil->address);
 	}
 	free (src);
 	return ret;
@@ -700,7 +705,7 @@ static int esil_trap(RAnalEsil *esil) {
 		esil->trap_code = d;
 		return r_anal_esil_fire_trap (esil, (int)s, (int)d);
 	}
-	eprintf ("esil_trap: missing parameters in stack\n");
+	eprintf ("0x%08"PFMT64x" esil_trap: missing parameters in stack\n", esil->address);
 	return false;
 }
 
@@ -750,7 +755,7 @@ SF - sign flag
 	sf = ((st64)num)<0)?1:0;
 OF - overflow flag
 	if (a>0&&b>0 && (a+b)<0)
-    Set if result is too large a positive number or too small a negative number (excluding sign bit) to fit in destination operand; cleared otherwise 
+    Set if result is too large a positive number or too small a negative number (excluding sign bit) to fit in destination operand; cleared otherwise
 
 JBE: CF = 1 || ZF = 1
 
@@ -860,7 +865,7 @@ static int esil_lsr(RAnalEsil *esil) {
 			r_anal_esil_pushnum (esil, res);
 			ret = 1;
 		} else {
-			eprintf ("esil_lsr: empty stack\n");
+			eprintf ("0x%08"PFMT64x"  esil_lsr: empty stack\n", esil->address);
 		}
 	}
 	free (src);
@@ -1102,7 +1107,7 @@ static int esil_div(RAnalEsil *esil) {
 	if (src && r_anal_esil_get_parm (esil, src, &s)) {
 		if (dst && r_anal_esil_get_parm (esil, dst, &d)) {
 			if (s == 0) {
-				eprintf ("esil_div: Division by zero!\n");
+				eprintf ("0x%08"PFMT64x" esil_div: Division by zero!\n", esil->address);
 				esil->trap = R_ANAL_TRAP_DIVBYZERO;
 				esil->trap_code = 0;
 			} else {
@@ -1111,7 +1116,7 @@ static int esil_div(RAnalEsil *esil) {
 			ret = 1;
 		}
 	} else {
-		eprintf ("esil_div: invalid parameters");
+		eprintf ("0x%08"PFMT64x" esil_div: invalid parameters\n", esil->address);
 	}
 	free (src);
 	free (dst);
@@ -1133,7 +1138,7 @@ static int esil_diveq(RAnalEsil *esil) {
 				}
 				r_anal_esil_reg_write (esil, dst, d / s);
 			} else {
-				eprintf ("esil_diveq: Division by zero!\n");
+				// eprintf ("0x%08"PFMT64x" esil_diveq: Division by zero!\n", esil->address);
 				esil->trap = R_ANAL_TRAP_DIVBYZERO;
 				esil->trap_code = 0;
 			}
@@ -1142,7 +1147,7 @@ static int esil_diveq(RAnalEsil *esil) {
 			eprintf ("esil_diveq: empty stack\n");
 		}
 	} else {
-		eprintf ("esil_diveq: invalid parameters");
+		eprintf ("0x08%"PFMT64x" esil_diveq: invalid parameters\n", esil->address);
 	}
 	free (src);
 	free (dst);
@@ -1162,7 +1167,7 @@ static int esil_mul(RAnalEsil *esil) {
 			eprintf ("esil_mul: empty stack\n");
 		}
 	} else {
-		eprintf ("esil_mul: invalid parameters");
+		eprintf ("esil_mul: invalid parameters\n");
 	}
 	free (src);
 	free (dst);
@@ -1205,7 +1210,7 @@ static int esil_add(RAnalEsil *esil) {
 			ret = true;
 		}
 	} else {
-		eprintf ("esil_add: invalid parameters\n");
+		eprintf ("0x%08"PFMT64x" esil_add: invalid parameters\n", esil->address);
 	}
 	free (src);
 	free (dst);
@@ -1255,14 +1260,14 @@ static int esil_inceq(RAnalEsil *esil) {
 	ut64 sd;
 	char *src_dst = r_anal_esil_pop (esil);
 	if (src_dst && (r_anal_esil_get_parm_type (esil, src_dst) == R_ANAL_ESIL_PARM_REG) && r_anal_esil_get_parm (esil, src_dst, &sd)) {
-		esil->old = sd;
-		sd++;
+		// inc rax
+		esil->old = sd++;
 		esil->cur = sd;
 		r_anal_esil_reg_write (esil, src_dst, sd);
 		esil->lastsz = esil_internal_sizeof_reg (esil, src_dst);
 		ret = true;
 	} else {
-		eprintf ("esil_inceq: invalid parameters\n");
+		eprintf ("0x%08"PFMT64x" esil_inceq: invalid parameters\n", esil->address);
 	}
 	free (src_dst);
 	return ret;
@@ -1271,11 +1276,11 @@ static int esil_inceq(RAnalEsil *esil) {
 static int esil_sub(RAnalEsil *esil) {
 	ut64 s = 0, d = 0;
 	if (!popRN (esil, &d)) {
-		eprintf ("esil_sub: dst is broken\n");
+		eprintf ("0x%08"PFMT64x" esil_sub: dst is broken\n", esil->address);
 		return false;
 	}
 	if (!popRN (esil, &s)) {
-		eprintf ("esil_sub: src is broken\n");
+		eprintf ("0x%08"PFMT64x" esil_sub: src is broken\n", esil->address);
 		return false;
 	}
 	r_anal_esil_pushnum (esil, d - s);
@@ -1290,7 +1295,7 @@ static int esil_sub(RAnalEsil *esil) {
 			r_anal_esil_pushnum (esil, d-s);
 			ret = true;
 		} else {
-			eprintf ("esil_sub: invalid parameters");
+			eprintf ("esil_sub: invalid parameters\n");
 		}
 	} else {
 		eprintf ("esil_sub: invalid parameters\n");
@@ -1351,7 +1356,7 @@ static int esil_deceq(RAnalEsil *esil) {
 		esil->lastsz = esil_internal_sizeof_reg (esil, src_dst);
 		ret = true;
 	} else {
-		eprintf ("esil_deceq: invalid parameters\n");
+		eprintf ("0x%08"PFMT64x" esil_deceq: invalid parameters\n", esil->address);
 	}
 	free (src_dst);
 	return ret;
@@ -1433,7 +1438,7 @@ static int esil_poke_some(RAnalEsil *esil) {
 					ret = r_anal_esil_mem_write (esil, ptr,
 								(const ut8 *)&num32, sizeof (num32));
 					if (ret != sizeof (num32)) {
-						eprintf ("Cannot write at 0x%08" PFMT64x "\n", ptr);
+						//eprintf ("Cannot write at 0x%08" PFMT64x "\n", ptr);
 						esil->trap = 1;
 					}
 					ptr += 4;
@@ -2026,11 +2031,11 @@ static int esil_smaller(RAnalEsil *esil) { // 'src < dst' => 'src,dst,<'
 static int esil_bigger(RAnalEsil *esil) { // 'src > dst' => 'src,dst,>'
 	ut64 s, d;
 	if (!popRN (esil, &d)) {
-		eprintf ("esil_bigger: src is broken\n");
+		eprintf ("0x%08"PFMT64x" esil_bigger: src is broken\n", esil->address);
 		return false;
 	}
 	if (!popRN (esil, &s)) {
-		eprintf ("esil_bigger: dst is broken\n");
+		eprintf ("0x%08"PFMT64x" esil_bigger: dst is broken\n", esil->address);
 		return false;
 	}
 	r_anal_esil_pushnum (esil, (d > s));
@@ -2242,7 +2247,9 @@ repeat:
 			str++;
 		}
 		word[wordi++] = *str;
-		str++;
+		//is *str is '\0' in the next iteration the condition will be true
+		//reading beyond the boundaries
+		if (*str) str++;
 	}
 	word[wordi] = 0;
 	if (*word) {

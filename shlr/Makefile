@@ -6,18 +6,28 @@ include ../mk/platform.mk
 _INCLUDE_MK_GCC_=
 include ../mk/${COMPILER}.mk
 
+# Build against last capstone release or next
+CS_RELEASE=0
+
+GIT?=git
 WGET?=wget
-CS_VER=3.0
-CS_TAR=http://capstone-engine.org/download/$(CS_VER)/capstone-$(CS_VER).tgz
+
+ifeq ($(CS_RELEASE),1)
+CS_VER=3.0.4
+CS_TAR=https://codeload.github.com/aquynh/capstone/tar.gz/$(CS_VER)
+#CS_TAR=http://capstone-engine.org/download/$(CS_VER)/capstone-$(CS_VER).tgz
+CS_PATCHES=0
+else
 CS_TAR=
 CS_URL=$(GIT_PREFIX)github.com/aquynh/capstone.git
-CS_UPD=20160120
+CS_UPD=20160215
 CS_BRA=next
-CS_TIP=3722c74f69ffa5b705d36cd49c19acdf958a9b7a
+CS_TIP=2af0217258b61243bcc59f32b140482ea467492b
 # REVERT THIS COMMIT BECAUSE ITS WRONG
 CS_REV=
 #21b9b25e9dae4af0ef309d4089a54e53b8f5b479
 CS_PATCHES=1
+endif
 
 .PHONY: capstone-sync capstone-build all clean mrproper libgdbr libwind
 
@@ -163,14 +173,13 @@ HFILES+=elf.h libtcc.h config.h i386-tok.h
 .PHONY: sdb-sync sync-sdb sdbclean
 tcc-sync sync-tcc:
 	rm -rf _
-	git clone --depth 1 git://repo.or.cz/tinycc.git _
+	$(GIT) clone --depth 1 git://repo.or.cz/tinycc.git _
 	cd _ ; ./configure --prefix=${PREFIX}
 	mkdir -p tcc
 	for FILE in ${CFILES} ${HFILES} ; do cp -f _/$$FILE tcc ; done
 	cp -f _/VERSION _/COPYING _/stab.def tcc
-	git add tcc
+	$(GIT) add tcc
 	rm -rf _
-
 
 install:
 	#mkdir -p ${DESTDIR}${LIBDIR}
@@ -196,19 +205,7 @@ capstone-build:
 
 else
 
-ifeq ($(CS_TAR),)
-capstone: capstone-sync
-
-capstone-sync:
-	"$(SHELL)" capstone.sh "${CS_URL}" "${CS_BRA}" "${CS_TIP}" "${CS_REV}"
-ifeq ($(CS_PATCHES),1)
-	cd capstone ; git reset --hard
-	cd capstone ; for PATCH in ../capstone-patches/* ; do patch -p1 < $$PATCH ; done
-endif
-
-.PHONY: capstone
-else
-
+ifeq ($(CS_RELEASE),1)
 capstone-sync: capstone
 
 capstone-clean:
@@ -218,10 +215,26 @@ capstone: capstone-$(CS_VER).tar.gz
 	tar xzvf capstone-$(CS_VER).tar.gz
 	rm -rf capstone
 	mv capstone-$(CS_VER) capstone
-	cd capstone ; for PATCH in ../capstone-patches/* ; do patch -p1 < $$PATCH ; done
+ifeq ($(CS_PATCHES),1)
+	cd capstone ; for PATCH in ../capstone-patches/* ; do patch -tp1 < $$PATCH ; done
+endif
+	mkdir -p capstone/include/capstone
+	cp -rf capstone/include/*.h capstone/include/capstone
 
 capstone-$(CS_VER).tar.gz:
 	$(WGET) --no-check-certificate -O capstone-$(CS_VER).tar.gz -c $(CS_TAR)
+else
+
+capstone: capstone-sync
+
+capstone-sync:
+	"$(SHELL)" capstone.sh "${CS_URL}" "${CS_BRA}" "${CS_TIP}" "${CS_REV}"
+ifeq ($(CS_PATCHES),1)
+	-cd capstone ; $(GIT) reset --hard
+	cd capstone ; for PATCH in ../capstone-patches/* ; do patch -tp1 < $$PATCH ; done
+endif
+
+.PHONY: capstone
 endif
 
 CAPSTONE_CFLAGS=-g

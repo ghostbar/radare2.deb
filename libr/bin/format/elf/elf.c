@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 #include <r_types.h>
 #include <r_util.h>
 #include "elf.h"
@@ -61,6 +62,7 @@ static int init_ehdr(struct Elf_(r_bin_elf_obj_t) *bin) {
 			" EM_V850=87, EM_M32R=88, EM_MN10300=89, EM_MN10200=90, EM_PJ=91,"
 			" EM_OPENRISC=92, EM_ARC_A5=93, EM_XTENSA=94, EM_NUM=95};", 0);
 	sdb_num_set (bin->kv, "elf_header.offset", 0, 0);
+	sdb_num_set (bin->kv, "elf_header_size.offset", sizeof (Elf_(Ehdr)), 0);
 #if R_BIN_ELF64
 	sdb_set (bin->kv, "elf_header.format", "[16]z[2]E[2]Exqqqxwwwwww"
 		" ident (elf_type)type (elf_machine)machine version entry phoff shoff flags ehsize"
@@ -85,6 +87,9 @@ static int init_ehdr(struct Elf_(r_bin_elf_obj_t) *bin) {
 		return false;
 	}
 	return handle_e_ident (bin);
+	// Usage example:
+	// > td `k bin/cur/info/elf_type.cparse`; td `k bin/cur/info/elf_machine.cparse`
+	// > pf `k bin/cur/info/elf_header.format` @ `k bin/cur/info/elf_header.offset`
 }
 
 static int init_phdr(struct Elf_(r_bin_elf_obj_t) *bin) {
@@ -120,24 +125,27 @@ static int init_phdr(struct Elf_(r_bin_elf_obj_t) *bin) {
 		R_FREE (bin->phdr);
 		return false;
 	}
-	sdb_num_set (bin->kv, "elf_header_size.offset", sizeof (Elf_(Ehdr)), 0);
+	sdb_num_set (bin->kv, "elf_phdr.offset", bin->ehdr.e_phoff, 0);
 	sdb_num_set (bin->kv, "elf_phdr_size.offset", sizeof (Elf_(Phdr)), 0);
-	sdb_num_set (bin->kv, "elf_shdr_size.offset", sizeof (Elf_(Shdr)), 0);
+	sdb_set (bin->kv, "elf_p_type.cparse", "enum elf_p_type {PT_NULL=0,PT_LOAD=1,PT_DYNAMIC=2,"
+			"PT_INERP=3,PT_NOTE=4,PT_SHLIB=5,PT_PHDR=6,PT_LOOS=0x60000000,"
+			"PT_HIOS=0x6fffffff,PT_LOPROC=0x70000000,PT_HIPROC=0x7fffffff};", 0);
+	sdb_set (bin->kv, "elf_p_flags.cparse", "enum elf_p_flags {PF_None=0,PF_Exec=1,"
+			"PF_Write=2,PF_Write_Exec=3,PF_Read=4,PF_Read_Exec=5,PF_Read_Write=6,"
+			"PF_Read_Write_Exec=7};", 0);
 #if R_BIN_ELF64
-	sdb_num_set (bin->kv, "elf_phdr.offset", bin->ehdr.e_phoff, 0);
-	sdb_set (bin->kv, "elf_phdr.format", "xxqqqqqq type flags offset vaddr paddr filesz memsz align", 0);
-	sdb_num_set (bin->kv, "elf_shdr.offset", bin->ehdr.e_shoff, 0);
-	sdb_set (bin->kv, "elf_shdr.format", "xxqqqqxxqq name type flags addr offset size link info addralign entsize", 0);
+	sdb_set (bin->kv, "elf_phdr.format", "[4]E[4]Eqqqqqq (elf_p_type)type (elf_p_flags)flags"
+			" offset vaddr paddr filesz memsz align", 0);
 #else
-	sdb_num_set (bin->kv, "elf_phdr.offset", bin->ehdr.e_phoff, 0);
-	sdb_set (bin->kv, "elf_phdr.format", "xxxxxxxx type offset vaddr paddr filesz memsz flags align", 0);
-	sdb_num_set (bin->kv, "elf_shdr.offset", bin->ehdr.e_shoff, 0);
-	sdb_set (bin->kv, "elf_shdr.format", "xxxxxxxxxx name type flags addr offset size link info addralign entsize", 0);
+	sdb_set (bin->kv, "elf_phdr.format", "[4]Exxxxx[4]Ex (elf_p_type)type offset vaddr paddr"
+			" filesz memsz (elf_p_flags)flags align", 0);
 #endif
-	// Usage example:
-	// > pf `k bin/cur/info/elf.phdr.format` @ `k bin/cur/info/elf.phdr.offset`
 	return true;
+	// Usage example:
+	// > td `k bin/cur/info/elf_p_type.cparse`; td `k bin/cur/info/elf_p_flags.cparse`
+	// > pf `k bin/cur/info/elf_phdr.format` @ `k bin/cur/info/elf_phdr.offset`
 }
+
 
 static int init_shdr(struct Elf_(r_bin_elf_obj_t) *bin) {
 	ut32 shdr_size;
@@ -158,20 +166,39 @@ static int init_shdr(struct Elf_(r_bin_elf_obj_t) *bin) {
 		perror ("malloc (shdr)");
 		return false;
 	}
+	sdb_num_set (bin->kv, "elf_shdr.offset", bin->ehdr.e_shoff, 0);
+	sdb_num_set (bin->kv, "elf_shdr_size.offset", sizeof (Elf_(Shdr)), 0);
+	sdb_set (bin->kv, "elf_s_type.cparse", "enum elf_s_type {SHT_NULL=0,SHT_PROGBITS=1,"
+			"SHT_SYMTAB=2,SHT_STRTAB=3,SHT_RELA=4,SHT_HASH=5,SHT_DYNAMIC=6,SHT_NOTE=7,"
+			"SHT_NOBITS=8,SHT_REL=9,SHT_SHLIB=10,SHT_DYNSYM=11,SHT_LOOS=0x60000000,"
+			"SHT_HIOS=0x6fffffff,SHT_LOPROC=0x70000000,SHT_HIPROC=0x7fffffff};", 0);
 #if R_BIN_ELF64
+	sdb_set (bin->kv, "elf_s_flags_64.cparse", "enum elf_s_flags_64 {SF64_None=0,SF64_Exec=1,"
+			"SF64_Alloc=2,SF64_Alloc_Exec=3,SF64_Write=4,SF64_Write_Exec=5,"
+			"SF64_Write_Alloc=6,SF64_Write_Alloc_Exec=7};", 0);
+	sdb_set (bin->kv, "elf_shdr.format", "x[4]E[8]Eqqqxxqq name (elf_s_type)type"
+			" (elf_s_flags_64)flags addr offset size link info addralign entsize", 0);
 	len = r_buf_fread_at (bin->b, bin->ehdr.e_shoff, (ut8*)bin->shdr,
 			bin->endian ? "2I4L2I2L" : "2i4l2i2l", bin->ehdr.e_shnum);
 #else
+	sdb_set (bin->kv, "elf_s_flags_32.cparse", "enum elf_s_flags_32 {SF32_None=0,SF32_Exec=1,"
+			"SF32_Alloc=2,SF32_Alloc_Exec=3,SF32_Write=4,SF32_Write_Exec=5,"
+			"SF32_Write_Alloc=6,SF32_Write_Alloc_Exec=7};", 0);
+	sdb_set (bin->kv, "elf_shdr.format", "x[4]E[4]Exxxxxxx name (elf_s_type)type"
+			" (elf_s_flags_32)flags addr offset size link info addralign entsize", 0);
 	len = r_buf_fread_at (bin->b, bin->ehdr.e_shoff, (ut8*)bin->shdr,
 			bin->endian ? "10I" : "10i", bin->ehdr.e_shnum);
-
 #endif
 	if (len < 1) {
 		eprintf ("Warning: read (shdr) at 0x%"PFMT64x"\n", (ut64) bin->ehdr.e_shoff);
 		R_FREE (bin->shdr);
 		return false;
 	}
+
 	return true;
+	// Usage example:
+	// > td `k bin/cur/info/elf_s_type.cparse`; td `k bin/cur/info/elf_s_flags_64.cparse`
+	// > pf `k bin/cur/info/elf_shdr.format` @ `k bin/cur/info/elf_shdr.offset`
 }
 
 static int init_strtab(struct Elf_(r_bin_elf_obj_t) *bin) {
@@ -287,6 +314,9 @@ static int init_dynamic_section (struct Elf_(r_bin_elf_obj_t) *bin) {
 	}
 	if (!strtabaddr || strtabaddr > bin->size ||
 	strsize > ST32_MAX || strsize == 0 || strsize > bin->size) {
+		if (!strtabaddr) {
+			eprintf ("Warning: section.shstrtab not found or invalid\n");
+		}
 		free (dyn);
 		return false;
 	}
@@ -373,6 +403,10 @@ ut64 Elf_(r_bin_elf_get_section_addr)(struct Elf_(r_bin_elf_obj_t) *bin, const c
 	return section? section->rva: UT64_MAX;
 }
 
+ut64 Elf_(r_bin_elf_get_section_addr_end)(struct Elf_(r_bin_elf_obj_t) *bin, const char *section_name) {
+	RBinElfSection *section = get_section_by_name (bin, section_name);
+	return section? section->rva + section->size: UT64_MAX;
+}
 #define REL (is_rela ? (void*)rela : (void*)rel)
 #define REL_BUF is_rela ? (ut8*)(&rela[k]) : (ut8*)(&rel[k])
 #define REL_OFFSET is_rela ? rela[k].r_offset : rel[k].r_offset
@@ -499,6 +533,28 @@ static ut64 get_import_addr(struct Elf_(r_bin_elf_obj_t) *bin, int sym) {
 					free (REL);
 					return of;
 					break;
+				}
+				break;
+			case 8:
+				// MIPS32 BIG ENDIAN relocs
+				{
+					RBinElfSection *s = get_section_by_name(bin, ".rela.plt");
+					if (s) {
+						ut8 buf[1024];
+						const ut8 *base;
+						plt_addr = s->rva + s->size;
+						len = r_buf_read_at (bin->b, s->offset + s->size, buf, sizeof (buf));
+						len = sizeof (buf); //
+						base = r_mem_mem_aligned (buf, sizeof (buf), (const ut8*)"\x3c\x0f\x00", 3, 4);
+						if (base) {
+							plt_addr += (int)(size_t)(base - buf);
+						} else {
+							plt_addr += 108 + 8; // HARDCODED HACK
+						}
+						plt_addr += k * 16;
+						free (REL);
+						return plt_addr;
+					}
 				}
 				break;
 			default:
@@ -869,6 +925,8 @@ char* Elf_(r_bin_elf_get_arch)(struct Elf_(r_bin_elf_obj_t) *bin) {
 		return strdup ("mips");
 	case EM_MCST_ELBRUS:
 		return strdup ("elbrus");
+	case EM_TRICORE:
+		return strdup ("tricore");
 	case EM_ARM:
 	case EM_AARCH64:
 		return strdup ("arm");
@@ -891,6 +949,13 @@ char* Elf_(r_bin_elf_get_arch)(struct Elf_(r_bin_elf_obj_t) *bin) {
 		return strdup ("riscv");
 	case EM_VAX:
 		return strdup ("vax");
+	case EM_XTENSA:
+		return strdup ("xtensa");
+	case EM_LANAI:
+		return strdup ("lanai");
+	case EM_VIDEOCORE3:
+	case EM_VIDEOCORE4:
+		return strdup ("vc4");
 	case EM_SH: return strdup ("sh");
 	default: return strdup ("x86");
 	}
@@ -943,6 +1008,7 @@ char* Elf_(r_bin_elf_get_machine_name)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	case EM_ST100:       return strdup ("STMicroelectronic ST100 processor");
 	case EM_TINYJ:       return strdup ("Advanced Logic Corp. Tinyj emb.fam");
 	case EM_X86_64:      return strdup ("AMD x86-64 architecture");
+	case EM_LANAI:       return strdup ("32bit LANAI architecture");
 	case EM_PDSP:        return strdup ("Sony DSP Processor");
 	case EM_FX66:        return strdup ("Siemens FX66 microcontroller");
 	case EM_ST9PLUS:     return strdup ("STMicroelectronics ST9+ 8/16 mc");
@@ -976,7 +1042,9 @@ char* Elf_(r_bin_elf_get_machine_name)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	case EM_AARCH64:     return strdup ("ARM aarch64");
 	case EM_PROPELLER:   return strdup ("Parallax Propeller");
 	case EM_MICROBLAZE:  return strdup ("Xilinx MicroBlaze");
-	case EM_RISCV:       return strdup("RISC V");
+	case EM_RISCV:       return strdup ("RISC V");
+	case EM_VIDEOCORE3:  return strdup ("VideoCore III");
+	case EM_VIDEOCORE4:  return strdup ("VideoCore IV");
 	default:             return r_str_newf ("<unknown>: 0x%x", bin->ehdr.e_machine);
 	}
 }
@@ -1014,9 +1082,24 @@ int Elf_(r_bin_elf_get_bits)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	if (bin->ehdr.e_machine == EM_ARC_A5) return 16;
 	/* Hack for Thumb */
 	if (bin->ehdr.e_machine == EM_ARM) {
-		ut64 entry = Elf_(r_bin_elf_get_entry_offset) (bin);
-		if (entry & 1) {
-			return 16;
+		if (bin->ehdr.e_type != ET_EXEC) {
+			struct r_bin_elf_symbol_t *symbol;
+			if ((symbol = Elf_(r_bin_elf_get_symbols) (bin, R_BIN_ELF_SYMBOLS))) {
+				if (!symbol[0].last) {
+					ut64 paddr = symbol[0].offset;
+					if (paddr & 1) {
+						free (symbol);
+						return 16;
+					}
+				}
+				free (symbol);
+			}
+		}
+		{
+			ut64 entry = Elf_(r_bin_elf_get_entry_offset) (bin);
+			if (entry & 1) {
+				return 16;
+			}
 		}
 	}
 	switch (bin->ehdr.e_ident[EI_CLASS]) {
@@ -1089,16 +1172,21 @@ char *Elf_(r_bin_elf_get_rpath)(struct Elf_(r_bin_elf_obj_t) *bin) {
 static size_t get_relocs_num(struct Elf_(r_bin_elf_obj_t) *bin) {
 	size_t i, ret = 0;
 
+	/* we need to be careful here, in malformed files the section size might
+	 * not be a multiple of a Rel/Rela size; round up so we allocate enough
+	 * space.
+	 */
+#define NUMENTRIES_ROUNDUP(sectionsize, entrysize) (((sectionsize)+(entrysize)-1)/(entrysize))
 	if (!g_sections) return 0;
 	for (i = 0; !g_sections[i].last; i++) {
 		if (!strncmp (g_sections[i].name, ".rela.", strlen (".rela."))) {
-			ret += g_sections[i].size / sizeof(Elf_(Rela));
+			ret += NUMENTRIES_ROUNDUP (g_sections[i].size, sizeof(Elf_(Rela)));
 		} else if (!strncmp (g_sections[i].name, ".rel.", strlen (".rel."))){
-			ret += g_sections[i].size / sizeof(Elf_(Rel));
+			ret += NUMENTRIES_ROUNDUP (g_sections[i].size, sizeof(Elf_(Rel)));
 		}
 	}
 	return ret;
-
+#undef NUMENTRIES_ROUNDUP
 }
 
 static int read_reloc(struct Elf_(r_bin_elf_obj_t) *bin, RBinElfReloc *r, int is_rela, ut64 offset) {
@@ -1154,36 +1242,41 @@ RBinElfReloc* Elf_(r_bin_elf_get_relocs)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	reloc_num = get_relocs_num (bin);
 	if (!reloc_num)	return NULL;
 
-	ret = (RBinElfReloc*)calloc ((size_t)reloc_num + 2, sizeof(RBinElfReloc));
+	ret = (RBinElfReloc*)calloc ((size_t)reloc_num + 1, sizeof(RBinElfReloc));
 	if (!ret) return NULL;
 	section_text_offset = Elf_(r_bin_elf_get_section_offset) (bin, ".text");
 	if (section_text_offset == -1) section_text_offset = 0;
 
 	for (i = 0, rel = 0; !g_sections[i].last && rel < reloc_num ; i++) {
-		if (!strncmp (g_sections[i].name, ".rela.", strlen (".rela."))) {
-			for (j = 0; j < g_sections[i].size; j += res) {
-				if (g_sections[i].size > bin->size) break;
-				if (g_sections[i].offset > bin->size) break;
-				if (&ret[rel] + 1 > ret + reloc_num) break;
-				res = read_reloc (bin, &ret[rel], 1, g_sections[i].offset + j);
-				ret[rel].rva = ret[rel].offset + section_text_offset;
-				ret[rel].sto = section_text_offset;
-				ret[rel].offset = Elf_(r_bin_elf_v2p) (bin, ret[rel].offset);
-				ret[rel].last = 0;
-				if (res < 0) break;
-				rel++;
+		bool is_rela = 0 == strncmp (g_sections[i].name, ".rela.", strlen (".rela."));
+		bool is_rel  = 0 == strncmp (g_sections[i].name, ".rel.",  strlen (".rel."));
+		if (!is_rela && !is_rel)
+			continue;
+		for (j = 0; j < g_sections[i].size; j += res) {
+			if (g_sections[i].size > bin->size) break;
+			if (g_sections[i].offset > bin->size) break;
+			if (rel >= reloc_num) {
+				eprintf ("Internal error: ELF relocation buffer too small,"
+				         "please file a bug report.");
+				break;
 			}
-		} else if (!strncmp (g_sections[i].name, ".rel.", strlen (".rel."))) {
-			for (j = 0; j < g_sections[i].size; j += res) {
-				if (g_sections[i].size > bin->size) break;
-				if (g_sections[i].offset > bin->size) break;
-				res = read_reloc (bin, &ret[rel], 0, g_sections[i].offset + j);
-				ret[rel].rva = ret[rel].offset;
-				ret[rel].offset = Elf_(r_bin_elf_v2p) (bin, ret[rel].offset);
-				ret[rel].last = 0;
-				if (res < 0) break;
-				rel++;
+			res = read_reloc (bin, &ret[rel], is_rela, g_sections[i].offset + j);
+			if (j + res > g_sections[i].size) {
+				eprintf ("Warning: malformed file, relocation entry #%u is partially beyond the end of section %u.\n", rel, i);
 			}
+			ret[rel].rva = ret[rel].offset;
+			if (is_rela) {
+				if (ret[rel].type != R_386_IRELATIVE && ret[rel].type != R_X86_64_IRELATIVE) {
+					// IREL relocations are not really RELA, the addend field is just
+					// repurposed for the ifunc pointer.
+					ret[rel].rva += section_text_offset;
+					ret[rel].sto = section_text_offset;
+				}
+			}
+			ret[rel].offset = Elf_(r_bin_elf_v2p) (bin, ret[rel].offset);
+			ret[rel].last = 0;
+			if (res < 0) break;
+			rel++;
 		}
 	}
 	ret[reloc_num].last = 1;

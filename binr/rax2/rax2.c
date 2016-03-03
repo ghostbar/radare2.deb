@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2015 - pancake */
+/* radare - LGPL - Copyright 2007-2016 - pancake */
 
 #include <r_util.h>
 #include <r_print.h>
@@ -28,7 +28,15 @@ static int format_output (char mode, const char *s) {
 	}
 	switch (mode) {
 	case 'I': printf ("%"PFMT64d"\n", n); break;
-	case '0': printf ("0x%"PFMT64x"\n", n); break;
+	case '0': {
+		int len = strlen(s);
+		if (len > 0 && s[len-1]=='f') {
+			R_STATIC_ASSERT(sizeof(float) == 4)
+			float f = (float) num->fvalue;
+			ut8 *p = (ut8*)&f;
+			printf ("Fx%02x%02x%02x%02x\n", p[3], p[2], p[1], p[0]);
+		} else printf ("0x%"PFMT64x"\n", n);
+		} break;
 	case 'F': {
 		  float *f = (float*)&n;
 		printf ("%ff\n", *f);
@@ -77,6 +85,7 @@ static int help () {
 		"  -B    keep base         ;  rax2 -B 33+3 -> 36\n"
 		"  -d    force integer     ;  rax2 -d 3 -> 3 instead of 0x3\n"
 		"  -e    swap endianness   ;  rax2 -e 0x33\n"
+		"  -E    base64 encode     ;\n"
 		"  -f    floating point    ;  rax2 -f 6.3+2.1\n"
 		"  -F    stdin slurp C hex ;  rax2 -F < shellcode.c\n"
 		"  -h    help              ;  rax2 -h\n"
@@ -88,6 +97,7 @@ static int help () {
 		"  -t    tstamp -> str     ;  rax2 -t 1234567890\n"
 		"  -x    hash string       ;  rax2 -x linux osx\n"
 		"  -u    units             ;  rax2 -u 389289238 # 317.0M\n"
+		"  -w    signed word       ;  rax2 -w 16 0xffff\n"
 		"  -v    version           ;  rax2 -V\n"
 		);
 	return true;
@@ -96,7 +106,7 @@ static int help () {
 static int rax (char *str, int len, int last) {
 	float f;
 	ut8 *buf;
-	char *p, out_mode = (flags&128)? 'I': '0';
+	char *p, out_mode = (flags & 128)? 'I': '0';
 	int i;
 	if (!(flags & 4) || !len)
 		len = strlen (str);
@@ -126,12 +136,13 @@ static int rax (char *str, int len, int last) {
 			case 'd': flags ^= 1<<7; break;
 			case 'k': flags ^= 1<<8; break;
 			case 'n': flags ^= 1<<9; break;
-			case 'u': flags ^=1<<10; break;
-			case 't': flags ^=1<<11; break;
-			case 'E': flags ^=1<<12; break;
-			case 'D': flags ^=1<<13; break;
-			case 'F': flags ^=1<<14; break;
-			case 'N': flags ^=1<<15; break;
+			case 'u': flags ^= 1<<10; break;
+			case 't': flags ^= 1<<11; break;
+			case 'E': flags ^= 1<<12; break;
+			case 'D': flags ^= 1<<13; break;
+			case 'F': flags ^= 1<<14; break;
+			case 'N': flags ^= 1<<15; break;
+			case 'w': flags ^= 1<<16; break;
 			case 'v': blob_version ("rax2"); return 0;
 			case '\0': return !use_stdin ();
 			default:
@@ -234,6 +245,19 @@ static int rax (char *str, int len, int last) {
 		}
 		fflush (stdout);
 		return true;
+	} else if (flags & (1<<16)) { // -w
+		ut64 n = r_num_math (num, str);
+		if (n >> 31) {
+			// is >32bit
+			n = (st64)(st32)n;
+		} else if (n>>14) {
+			n = (st64)(st16)n;
+		} else if (n>>7) {
+			n = (st64)(st8)n;
+		}
+		printf ("%"PFMT64d"\n", n);
+		fflush (stdout);
+		return true;
 	} else if (flags & (1<<15)) { // -N
 		ut64 n = r_num_math (num, str);
 		if (n>>32) {
@@ -246,8 +270,8 @@ static int rax (char *str, int len, int last) {
 				np[4], np[5], np[6], np[7]);
 		} else {
 			/* is 32 bit value */
-			ut32 n32 = (ut32)(n&UT32_MAX);
-			ut8 *np = (ut8*)&n32;
+			ut32 n32 = (ut32)(n & UT32_MAX);
+			ut8 *np = (ut8*) & n32;
 			if (flags & 1) fwrite (&n32, sizeof (n32), 1, stdout);
 			else printf ("\\x%02x\\x%02x\\x%02x\\x%02x\n",
 				np[0], np[1], np[2], np[3]);
@@ -278,7 +302,8 @@ static int rax (char *str, int len, int last) {
 		return true;
 	} else if (flags & 8192) { // -D
 		const int len = strlen (str);
-		ut8* out = calloc (sizeof(ut8), ((len+1)/4)*3);
+		/* http://stackoverflow.com/questions/4715415/base64-what-is-the-worst-possible-increase-in-space-usage */
+		ut8* out = calloc (sizeof(ut8), ((len+2)/3)*4);
 		if (out) {
 			r_base64_decode (out, str, len);
 			printf ("%s\n", out);

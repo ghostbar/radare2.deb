@@ -28,8 +28,7 @@ extern "C" {
 #define RMT_WRITE  0x03
 #define RMT_SEEK   0x04
 #define RMT_CLOSE  0x05
-#define RMT_SYSTEM 0x06
-#define RMT_CMD    0x07
+#define RMT_CMD    0x06
 #define RMT_REPLY  0x80
 
 R_LIB_VERSION_HEADER (r_io);
@@ -147,6 +146,7 @@ typedef struct r_io_t {
 	int autofd;
 	int aslr;
 	ut64 winbase;
+	ut64 maxalloc;
 	char *runprofile;
 	char *args;
 	/* Core Callbacks  (used by rap) */

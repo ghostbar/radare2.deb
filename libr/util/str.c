@@ -219,14 +219,15 @@ R_API const char *r_str_bool(int b) {
 	return b? "true": "false";
 }
 
-R_API void r_str_case(char *str, int up) {
+R_API void r_str_case(char *str, bool up) {
 	if (up) {
 		char oc = 0;
 		for (; *str; oc = *str++)
-			*str = (*str=='x' && oc=='0') ? 'x': toupper ((unsigned char)*str);
-	} else
+			*str = (*str=='x' && oc=='0') ? 'x': toupper ((int)*str);
+	} else {
 		for (; *str; str++)
-			*str = tolower ((unsigned char)*str);
+			*str = tolower ((int)*str);
+	}
 }
 
 R_API char *r_str_home(const char *str) {
@@ -983,7 +984,7 @@ static char *r_str_escape_ (const char *buf, const int dot_nl) {
 				break;
 			default:
 				/* Outside the ASCII printable range */
-				if (*p < ' ' && *p > 0x7E) {
+				if (!IS_PRINTABLE (*p)) {
 					*q++ = '\\';
 					*q++ = 'x';
 					*q++ = '0'+((*p)>>4);
