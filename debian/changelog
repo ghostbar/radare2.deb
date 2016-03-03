@@ -1,18 +1,18 @@
-radare2 (0.10.0-1) UNRELEASED; urgency=low
+radare2 (0.10.1-1) UNRELEASED; urgency=low
 
   * New upstream version:
     - Support for GameBoy added.  I'm sure you were anxiously awaiting it.
     - Support for Nintendo DS, NES, Sega megadrive, SMS, DOL (Wii/Gamecube)
     - Support for cr16, msp430, tms320, m68k, Spc700, Propeller
-    - Support for i4004, LH5801, z80, pebble watch
+    - Support for i4004, LH5801, z80, pebble watch, xtensa, lanai, microblaze
     - Support for Capstone
     - DWARF support
     - ASCII Art graphs
     - Web Interface
     - Tons of bugs and segfaults fixed, some others added for sure.
+    - ahi now supports IPv4 and syscall
   * debian/patches:
     - Dropped all old patches
-    - Add patch from upstream for capstone 3.0.4 support
   * debian/control: Commented out the radare2-plugins package, and removed
                     all dependencies (upstream moved them to r2-bindings).
   * Update Debian Standards Version to 3.9.7
