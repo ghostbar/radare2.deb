@@ -1,6 +1,6 @@
-/* radare - LGPL - Copyright 2009-2015 - pancake */
+/* radare - LGPL - Copyright 2009-2016 - pancake */
 
-#define R_CORE_MAX_DISASM (1024*1024*1)
+#define R_CORE_MAX_DISASM (1024*1024*8)
 
 static char get_string_type (const ut8 *buf, ut64 len){
 	ut64 needle = 0;
@@ -1141,8 +1141,8 @@ static int cmd_print_pxA(RCore *core, int len, const char *data) {
 	int cols = r_config_get_i (core->config, "hex.cols");
 	int show_color = r_config_get_i (core->config, "scr.color");
 	int onechar = r_config_get_i (core->config, "hex.onechar");
-	int show_cursor = core->print->cur_enabled;
 	int bgcolor_in_heap = false;
+	bool show_cursor = core->print->cur_enabled;
 	char buf[2];
 	char *bgcolor, *fgcolor, *text;
 	ut64 i, c, oi;
@@ -1555,6 +1555,7 @@ static int cmd_print(void *data, const char *input) {
 	ut64 n, nbsz, obsz, fsz;
 	ut64 tmpseek = UT64_MAX;
 
+	r_print_init_rowoffsets (core->print);
 	off = UT64_MAX;
 	l = len = core->blocksize;
 	if (input[0] && input[1]) {
@@ -2173,13 +2174,20 @@ static int cmd_print(void *data, const char *input) {
 		segoff = r_config_get_i (core->config, "asm.segoff");
 		old_bits = r_config_get_i (core->config, "asm.bits");
 
+		if (input[1] && input[2]) {
+			int len = (int)r_num_math (core->num, input+2);
+			if (len == 0) {
+				break;
+			}
+		}
 		// XXX - this is necessay b/c radare will automatically
 		// swap flags if arch is x86 and bits == 16 see: __setsegoff in config.c
 
 		// get to the space
-		if (input[0])
+		if (input[0]) {
 			for (pos = 1; pos < R_BIN_SIZEOF_STRINGS && input[pos]; pos++)
 				if (input[pos] == ' ') break;
+		}
 
 		if (!process_input (core, input+pos, &use_blocksize, &new_arch, &new_bits)) {
 			// XXX - print help message
@@ -2364,7 +2372,7 @@ static int cmd_print(void *data, const char *input) {
 			break;
 		case 'j': //pdj
 			processed_cmd = true;
-			if (*input == 'D'){
+			if (*input == 'D') {
 				cmd_pDj (core, input+2);
 			} else cmd_pdj (core, input+2);
 			r_cons_newline ();
@@ -2436,7 +2444,7 @@ static int cmd_print(void *data, const char *input) {
 						//eprintf ("Block size too small\n");
 						return 1;
 					}
-					if (l>R_CORE_MAX_DISASM) { // pD
+					if (l > R_CORE_MAX_DISASM) { // pD
 						eprintf ("Block size too big\n");
 						return 1;
 					}
@@ -2542,7 +2550,7 @@ static int cmd_print(void *data, const char *input) {
 			if (!buf) return 0;
 			if (core->offset<delta)
 				delta = core->offset;
-			p = buf+delta;
+			p = buf + delta;
 			r_core_read_at (core, core->offset-delta, buf, 1024);
 			for (b = p; b>buf; b--) {
 				if (!IS_PRINTABLE (*b)) {
@@ -2778,7 +2786,7 @@ static int cmd_print(void *data, const char *input) {
 				"pxa", "", "show annotated hexdump",
 				"pxA", "", "show op analysis color map",
 				"pxb", "", "dump bits in hexdump form",
-				"pxd", "", "decimal (base 10) dump",
+				"pxd", "[124]", "signed integer dump (1 byte, 2 and 4)",
 				"pxe", "", "emoji hexdump! :)",
 				"pxf", "", "show hexdump of current function",
 				"pxh", "", "show hexadecimal half-words dump (16bit)",
@@ -2851,8 +2859,27 @@ static int cmd_print(void *data, const char *input) {
 					core->block, len, 8, 1);
 			break;
 		case 'd': // "pxd"
-			r_print_hexdump (core->print, core->offset,
-				core->block, len, 10, 4);
+			switch (input[2]) {
+			case '1':
+				// 1 byte signed words (byte)
+				r_print_hexdump (core->print, core->offset,
+					core->block, len, -1, 4);
+				break;
+			case '2':
+				// 2 byte signed words (short)
+				r_print_hexdump (core->print, core->offset,
+					core->block, len, -10, 2);
+				break;
+			case '8':
+				r_print_hexdump (core->print, core->offset,
+					core->block, len, -8, 4);
+				break;
+			case '4':
+			default:
+				// 4 byte signed words
+				r_print_hexdump (core->print, core->offset,
+					core->block, len, 10, 4);
+			}
 			break;
 		case 'w': // "pxw
 			r_print_hexdump (core->print, core->offset, core->block,

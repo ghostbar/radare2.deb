@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2015 - pancake */
+/* radare - LGPL - Copyright 2008-2016 - pancake */
 
 #ifndef R2_UTIL_H
 #define R2_UTIL_H
@@ -36,6 +36,8 @@ R_LIB_VERSION_HEADER(r_util);
 #define R_REFCTR_INIT(x,y) x->refctr=0;x->ref_free=y
 #define R_REFCTR_REF(x) x->refctr++
 #define R_REFCTR_UNREF(x) if (--x->refctr<=0) x->ref_free(x)
+
+#define R_STATIC_ASSERT(x) switch (0) {case 0: case (x):;}
 
 #if 0
 typedef struct {
@@ -432,6 +434,7 @@ R_API void r_prof_start(RProfile *p);
 R_API double r_prof_end(RProfile *p);
 
 R_API void *r_mem_dup (void *s, int l);
+R_API void r_mem_reverse(ut8 *b, int l);
 R_API int r_mem_protect(void *ptr, int size, const char *prot);
 R_API int r_mem_set_num (ut8 *dest, int dest_size, ut64 num, int endian);
 R_API int r_mem_eq(ut8 *a, ut8 *b, int len);
@@ -440,6 +443,7 @@ R_API void r_mem_copyloop (ut8 *dest, const ut8 *orig, int dsize, int osize);
 R_API void r_mem_copyendian (ut8 *dest, const ut8 *orig, int size, int endian);
 R_API int r_mem_cmp_mask (const ut8 *dest, const ut8 *orig, const ut8 *mask, int len);
 R_API const ut8 *r_mem_mem (const ut8 *haystack, int hlen, const ut8 *needle, int nlen);
+R_API const ut8 *r_mem_mem_aligned(const ut8 *haystack, int hlen, const ut8 *needle, int nlen, int align);
 
 #define r_num_abs(x) x>0?x:-x
 R_API void r_num_minmax_swap(ut64 *a, ut64 *b);
@@ -577,7 +581,7 @@ R_API char *r_str_prefix_all (char *s, const char *pfx);
 R_API char *r_str_concat(char *ptr, const char *string);
 R_API char *r_str_concatf(char *ptr, const char *fmt, ...);
 R_API char *r_str_concatch(char *x, char y);
-R_API void r_str_case(char *str, int up);
+R_API void r_str_case(char *str, bool up);
 R_API void r_str_chop_path (char *s);
 R_API ut8 r_str_contains_macro(const char *input_value);
 R_API void r_str_truncate_cmd(char *string);
@@ -806,16 +810,18 @@ R_API int r_is_heap (void *p);
 typedef struct {
 	int len;
 	char *ptr;
+	int ptrlen;
 	char buf[64];
 } RStrBuf;
 
 #define R_STRBUF_SAFEGET(sb) (r_strbuf_get (sb) == NULL ? "" : r_strbuf_get (sb))
 R_API RStrBuf *r_strbuf_new(const char *s);
-R_API int r_strbuf_set(RStrBuf *sb, const char *s);
-R_API int r_strbuf_setf(RStrBuf *sb, const char *fmt, ...);
+R_API bool r_strbuf_set(RStrBuf *sb, const char *s);
+R_API bool r_strbuf_setf(RStrBuf *sb, const char *fmt, ...);
 R_API int r_strbuf_append(RStrBuf *sb, const char *s);
 R_API int r_strbuf_appendf(RStrBuf *sb, const char *fmt, ...);
 R_API char *r_strbuf_get(RStrBuf *sb);
+R_API char *r_strbuf_drain(RStrBuf *sb);
 R_API void r_strbuf_free(RStrBuf *sb);
 R_API void r_strbuf_fini(RStrBuf *sb);
 R_API void r_strbuf_init(RStrBuf *sb);

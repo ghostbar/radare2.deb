@@ -11,6 +11,11 @@ foo:
 include ../config.mk
 include ${STATIC_DEBUG_PLUGINS}
 
+# Enable pure-MACH debugging by default.
+# The ptrace one will be deprecated at some point
+XNU_USE_PTRACE?=0
+CFLAGS+=-DXNU_USE_PTRACE=$(XNU_USE_PTRACE)
+
 STATIC_OBJS=$(subst ..,p/..,$(subst debug_,p/debug_,$(STATIC_OBJ)))
 
 OBJS=signal.o map.o trace.o arg.o debug.o plugin.o snap.o

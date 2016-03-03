@@ -212,17 +212,9 @@ static RAnalBlock* appendBasicBlock (RAnal *anal, RAnalFunction *fcn, ut64 addr)
 		return R_ANAL_RET_ERROR; }
 
 #define VARPREFIX "local"
-//#define VARPREFIX "var"
 #define ARGPREFIX "arg"
 static char *get_varname (RAnal *a, const char *pfx, int idx) {
-	char *s;
-	int word = a->bits / 8;
-	if (idx%word) {
-		s = r_str_newf ("%s_%d_%d", pfx, idx/word, R_ABS(idx%word));
-	} else {
-		s = r_str_newf ("%s_%d", pfx, idx/word);
-	}
-	return s;
+	return r_str_newf ("%s_%xh", pfx, idx);
 }
 
 static int fcn_recurse(RAnal *anal, RAnalFunction *fcn, ut64 addr, ut8 *buf, ut64 len, int depth);
@@ -295,11 +287,15 @@ static int fcn_recurse(RAnal *anal, RAnalFunction *fcn, ut64 addr, ut8 *buf, ut6
 	}
 
 	if (depth<1) {
+		eprintf ("That's too deep\n");
 		return R_ANAL_RET_ERROR; // MUST BE TOO DEEP
 	}
 
 	// check if address is readable //:
 	if (!anal->iob.is_valid_offset (anal->iob.io, addr, 0)) {
+		if (addr != UT64_MAX && !anal->iob.io->va) {
+			eprintf ("Invalid address 0x%"PFMT64x". Try with io.va=true\n", addr);
+		}
 		return R_ANAL_RET_ERROR; // MUST BE TOO DEEP
 	}
 
@@ -353,14 +349,17 @@ repeat:
 				//return R_ANAL_RET_END;
 			}
 		}
-		idx += oplen;
-		delay.un_idx = idx;
 		if (!overlapped) {
+			r_anal_bb_set_offset (bb, bb->ninstr, addr + idx - bb->addr);
 			bb->size += oplen;
+			bb->ninstr++;
+
 			fcn->ninstr++;
 		//	FITFCNSZ(); // defer this, in case this instruction is a branch delay entry
 		//	fcn->size += oplen; /// XXX. must be the sum of all the bblocks
 		}
+		idx += oplen;
+		delay.un_idx = idx;
 		if (op.delay>0 && delay.pending == 0) {
 			// Handle first pass through a branch delay jump:
 			// Come back and handle the current instruction later.
@@ -419,11 +418,13 @@ repeat:
 				varname = get_varname (anal, ARGPREFIX, R_ABS(op.ptr));
 				r_anal_var_add (anal, fcn->addr, 1, op.ptr,
 						'a', NULL, anal->bits/8, varname);
+				r_anal_var_access (anal, fcn->addr, 'a', 1, op.ptr, 1, op.addr);
 				// TODO: DIR_IN?
 			} else {
 				varname = get_varname (anal, VARPREFIX, R_ABS(op.ptr));
 				r_anal_var_add (anal, fcn->addr, 1, -op.ptr,
 						'v', NULL, anal->bits/8, varname);
+				r_anal_var_access (anal, fcn->addr, 'v', 1, -op.ptr, 1, op.addr);
 			}
 			free (varname);
 			break;
@@ -432,11 +433,11 @@ repeat:
 			if (((int)op.ptr) > 0) {
 				varname = get_varname (anal, ARGPREFIX, R_ABS(op.ptr));
 				r_anal_var_add (anal, fcn->addr, 1, op.ptr, 'a', NULL, anal->bits/8, varname);
-				r_anal_var_access (anal, fcn->addr, 'a', 0, op.ptr, 0, op.addr);
+				r_anal_var_access (anal, fcn->addr, 'a', 1, op.ptr, 0, op.addr);
 			} else {
 				varname = get_varname (anal, VARPREFIX, R_ABS(op.ptr));
 				r_anal_var_add (anal, fcn->addr, 1, -op.ptr, 'v', NULL, anal->bits/8, varname);
-				r_anal_var_access (anal, fcn->addr, 'v', 0, -op.ptr, 0, -op.addr);
+				r_anal_var_access (anal, fcn->addr, 'v', 1, -op.ptr, 0, op.addr);
 			}
 			free (varname);
 			break;
@@ -481,12 +482,16 @@ repeat:
 			return R_ANAL_RET_END;
 		case R_ANAL_OP_TYPE_NOP:
 			if (anal->opt.nopskip) {
-				if ((addr + delay.un_idx-oplen) == fcn->addr) {
-					fcn->addr += oplen;
-					bb->size -= oplen;
-					bb->addr += oplen;
-					idx = delay.un_idx;
-					goto repeat;
+				RFlagItem *fi = anal->flb.get_at (anal->flb.f, addr);
+				// do not skip nops if there's a flag at starting address
+				if (!fi || strncmp (fi->name, "sym.", 4)) {
+					if ((addr + delay.un_idx - oplen) == fcn->addr) {
+						fcn->addr += oplen;
+						bb->size -= oplen;
+						bb->addr += oplen;
+						idx = delay.un_idx;
+						goto repeat;
+					}
 				}
 			}
 			break;
@@ -664,12 +669,11 @@ repeat:
 			}
 			if (!anal->opt.eobjmp) {
 				if (continue_after_jump) {
-				#if 0
+					break;
+				} else {
 					FITFCNSZ ();
 					r_anal_op_fini (&op);
 					return R_ANAL_RET_END;
-				#endif
-					break;
 				}
 			}
 			/* fallthru */
@@ -775,9 +779,8 @@ R_API void r_anal_trim_jmprefs(RAnalFunction *fcn) {
 
 R_API int r_anal_fcn(RAnal *anal, RAnalFunction *fcn, ut64 addr, ut8 *buf, ut64 len, int reftype) {
 	int ret;
-
 	fcn->size = 0;
-	fcn->type = (reftype==R_ANAL_REF_TYPE_CODE)?
+	fcn->type = (reftype == R_ANAL_REF_TYPE_CODE)?
 			R_ANAL_FCN_TYPE_LOC: R_ANAL_FCN_TYPE_FCN;
 	if (fcn->addr == UT64_MAX) fcn->addr = addr;
 	if (anal->cur && anal->cur->fcn) {
@@ -804,7 +807,7 @@ R_API int r_anal_fcn(RAnal *anal, RAnalFunction *fcn, ut64 addr, ut8 *buf, ut64 
 				endaddr = bb->addr + bb->size;
 			} else break;
 		}
-		r_anal_fcn_resize(fcn, endaddr - fcn->addr);
+		r_anal_fcn_resize (fcn, endaddr - fcn->addr);
 
 		// resize function if overlaps
 		r_list_foreach (anal->fcns, iter, fcn1) {
@@ -814,7 +817,7 @@ R_API int r_anal_fcn(RAnal *anal, RAnalFunction *fcn, ut64 addr, ut8 *buf, ut64 
 						overlapped = fcn1->addr;
 		}
 		if (overlapped != -1) r_anal_fcn_resize (fcn, overlapped - fcn->addr);
-		r_anal_trim_jmprefs(fcn);
+		r_anal_trim_jmprefs (fcn);
 	}
 	return ret;
 }
@@ -1013,9 +1016,11 @@ R_API int r_anal_fcn_split_bb(RAnal *anal, RAnalFunction *fcn, RAnalBlock *bb, u
 		return 0;
 
 	r_list_foreach (fcn->bbs, iter, bbi) {
-		if (addr == bbi->addr)
-			return R_ANAL_RET_DUP;
+		if (addr == bbi->addr) return R_ANAL_RET_DUP;
+
 		if (addr > bbi->addr && addr < bbi->addr + bbi->size) {
+			int new_bbi_instr, i;
+
 			bb = appendBasicBlock (anal, fcn, addr);
 			bb->size = bbi->addr + bbi->size - addr;
 			bb->jump = bbi->jump;
@@ -1026,13 +1031,29 @@ R_API int r_anal_fcn_split_bb(RAnal *anal, RAnalFunction *fcn, RAnalBlock *bb, u
 			bbi->jump = addr;
 			bbi->fail = -1;
 			bbi->conditional = false;
-			if (bbi->type&R_ANAL_BB_TYPE_HEAD) {
-				bb->type = bbi->type^R_ANAL_BB_TYPE_HEAD;
+			if (bbi->type & R_ANAL_BB_TYPE_HEAD) {
+				bb->type = bbi->type ^ R_ANAL_BB_TYPE_HEAD;
 				bbi->type = R_ANAL_BB_TYPE_HEAD;
 			} else {
 				bb->type = bbi->type;
 				bbi->type = R_ANAL_BB_TYPE_BODY;
 			}
+
+			// recalculate offset of instructions in both bb and bbi
+			i = 0;
+			while (i < bbi->ninstr && r_anal_bb_offset_inst (bbi, i) < bbi->size) i++;
+			new_bbi_instr = i;
+			if (bb->addr - bbi->addr == r_anal_bb_offset_inst (bbi, i)) {
+				bb->ninstr = 0;
+				while (i < bbi->ninstr) {
+					ut16 off_op = r_anal_bb_offset_inst (bbi, i);
+					if (off_op >= bbi->size + bb->size) break;
+					r_anal_bb_set_offset (bb, bb->ninstr, off_op - bbi->size);
+					bb->ninstr++;
+					i++;
+				}
+			}
+			bbi->ninstr = new_bbi_instr;
 #if R_ANAL_BB_HAS_OPS
 			if (bbi->ops) {
 				r_list_foreach (bbi->ops, iter, opi) {
@@ -1198,4 +1219,16 @@ R_API int r_anal_fcn_count (RAnal *anal, ut64 from, ut64 to) {
 		if (fcni->addr >= from && fcni->addr < to)
 			return n++;
 	return n;
+}
+
+/* return the basic block in fcn found at the given address.
+ * NULL is returned if such basic block doesn't exist. */
+R_API RAnalBlock *r_anal_fcn_bbget(RAnalFunction *fcn, ut64 addr) {
+	RListIter *iter;
+	RAnalBlock *bb;
+
+	r_list_foreach (fcn->bbs, iter, bb) {
+		if (bb->addr == addr) return bb;
+	}
+	return NULL;
 }

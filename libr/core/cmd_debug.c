@@ -1015,11 +1015,21 @@ static void cmd_reg_profile (RCore *core, const char *str) { // "arp" and "drp"
 	case 's':
 		if (str[2] == ' ') {
 			ut64 n = r_num_math (core->num, str+2);
+			// TODO: move this thing into the r_reg API
 			RRegSet *rs = r_reg_regset_get (core->dbg->reg, R_REG_TYPE_GPR);
 			if (rs && n>0) {
-				free (rs->arena->bytes);
-				rs->arena->bytes = calloc (1, n);
-				rs->arena->size = n;
+				RListIter *iter;
+				RRegArena *arena;
+				r_list_foreach (rs->pool, iter, arena) {
+					ut8 *newbytes = calloc (1, n);
+					if (newbytes) {
+						free (arena->bytes);
+						arena->bytes = newbytes;
+						arena->size = n;
+					} else {
+						eprintf ("Cannot allocate %d\n", (int)n);
+					}
+				}
 			} else {
 				eprintf ("Invalid arena size\n");
 			}
@@ -1071,10 +1081,12 @@ static void cmd_reg_profile (RCore *core, const char *str) { // "arp" and "drp"
 }
 
 static void cmd_debug_reg(RCore *core, const char *str) {
+	char *arg;
+	struct r_reg_item_t *r;
+	const char *name, *use_color;
 	int size, i, type = R_REG_TYPE_GPR;
 	int bits = (core->dbg->bits & R_SYS_BITS_64)? 64: 32;
 	int use_colors = r_config_get_i (core->config, "scr.color");
-	const char *use_color;
 	if (use_colors) {
 #undef ConsP
 #define ConsP(x) (core->cons && core->cons->pal.x)? core->cons->pal.x
@@ -1082,9 +1094,6 @@ static void cmd_debug_reg(RCore *core, const char *str) {
 	} else {
 		use_color = NULL;
 	}
-	struct r_reg_item_t *r;
-	const char *name;
-	char *arg;
 	switch (str[0]) {
 	case 'C': // "drC"
 		if (core->dbg->reg->reg_profile_cmt) {
@@ -1122,6 +1131,7 @@ static void cmd_debug_reg(RCore *core, const char *str) {
 				"dro", "", "Show previous (old) values of registers",
 				"drp", " <file>", "Load register metadata file",
 				"drp", "", "Display current register profile",
+				"drps", "", "Fake register profile size",
 				"drr", "", "Show registers references (telescoping)",
 				"drs", " [?]", "Stack register states",
 				"drt", "", "Show all register types",
@@ -1141,7 +1151,6 @@ static void cmd_debug_reg(RCore *core, const char *str) {
 				NULL
 			};
 			// TODO: 'drs' to swap register arenas and display old register valuez
-
 			r_core_cmd_help (core, help_message);
 		}
 		break;
@@ -1425,11 +1434,16 @@ free (rf);
 			break;
 		}
 		break;
-	case 'n':
-		name = r_reg_get_name (core->dbg->reg, r_reg_get_name_idx (str+2));
-		if (name && *name)
-			r_cons_printf ("%s\n", name);
-		else eprintf ("Oops. try drn [pc|sp|bp|a0|a1|a2|a3|zf|sf|nf|of]\n");
+	case 'n': // "drn"
+		{
+			char *foo = strdup (str+2);
+			r_str_case (foo, true);
+			name = r_reg_get_name (core->dbg->reg, r_reg_get_name_idx (foo));
+			if (name && *name) {
+				r_cons_printf ("%s\n", name);
+			} else eprintf ("Oops. try drn [pc|sp|bp|a0|a1|a2|a3|zf|sf|nf|of]\n");
+			free (foo);
+		}
 		break;
 	case 'd':
 		r_debug_reg_list (core->dbg, R_REG_TYPE_GPR, bits, 3, use_color); // XXX detect which one is current usage
@@ -1468,8 +1482,15 @@ free (rf);
 		break;
 	case '*':
 		if (r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, false)) {
+			int pcbits = core->anal->bits;
+			const char *pcname = r_reg_get_name (core->anal->reg, R_REG_NAME_PC);
+			RRegItem *reg = r_reg_get (core->anal->reg, pcname, 0);
+			if (reg) {
+				if (core->assembler->bits != reg->size)
+					pcbits = reg->size;
+			}
 			r_cons_printf ("fs+regs\n");
-			r_debug_reg_list (core->dbg, R_REG_TYPE_GPR, bits, '*', use_color);
+			r_debug_reg_list (core->dbg, R_REG_TYPE_GPR, pcbits, '*', use_color);
 			r_flag_space_pop (core->flags);
 			r_cons_printf ("fs-\n");
 		}
@@ -1480,7 +1501,14 @@ free (rf);
 	case 'j':
 	case '\0':
 		if (r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, false)) {
-			r_debug_reg_list (core->dbg, R_REG_TYPE_GPR, bits, str[0], use_color);
+			int pcbits = core->anal->bits;
+			const char *pcname = r_reg_get_name (core->anal->reg, R_REG_NAME_PC);
+			RRegItem *reg = r_reg_get (core->anal->reg, pcname, 0);
+			if (reg) {
+				if (core->assembler->bits != reg->size)
+					pcbits = reg->size;
+			}
+			r_debug_reg_list (core->dbg, R_REG_TYPE_GPR, pcbits, str[0], use_color);
 		} else eprintf ("Cannot retrieve registers from pid %d\n", core->dbg->pid);
 		break;
 	case ' ':
@@ -1550,7 +1578,8 @@ static int bypassbp(RCore *core) {
 	r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, false);
 	addr = r_debug_reg_get (core->dbg, "PC");
 	bpi = r_bp_get_at (core->dbg->bp, addr);
-	if (!bpi) return false;
+	if (!bpi)
+		return false;
 	/* XXX 2 if libr/debug/debug.c:226 is enabled */
 	r_debug_step (core->dbg, 1);
 	return true;
@@ -1629,8 +1658,8 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 	switch (input[1]) {
 	case '.':
 		if (input[2]) {
-			int bpsz = strcmp (core->dbg->arch, "arm")? 1: 4;
-			ut64 addr = r_num_tail (core->num, core->offset, input+2);
+			int bpsz = strcmp (core->dbg->arch, "arm") ? 1 : 4;
+			ut64 addr = r_num_tail (core->num, core->offset, input +2);
 			if (validAddress (core, addr)) {
 				bpi = hwbp
 				? r_bp_add_hw (core->dbg->bp, addr, bpsz, R_BP_PROT_EXEC)
@@ -1742,23 +1771,17 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 					if (f->offset != addr) {
 						int delta = (int)(frame->addr - f->offset);
 						if (delta > 0) {
-							snprintf (flagdesc,
-								sizeof(flagdesc),
-								"%s+%d",
-								f->name, delta);
+							snprintf (flagdesc, sizeof(flagdesc),
+								"%s+%d", f->name, delta);
 						} else if (delta < 0) {
-							snprintf (flagdesc,
-								sizeof(flagdesc),
-								"%s%d",
-								f->name, delta);
+							snprintf (flagdesc, sizeof(flagdesc),
+								"%s%d", f->name, delta);
 						} else {
-							snprintf (flagdesc,
-								sizeof(flagdesc),
+							snprintf (flagdesc, sizeof(flagdesc),
 								"%s", f->name);
 						}
 					} else {
-						snprintf (flagdesc,
-							sizeof(flagdesc),
+						snprintf (flagdesc, sizeof(flagdesc),
 							"%s", f->name);
 					}
 				} else {
@@ -1772,23 +1795,17 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 					if (f->offset != addr) {
 						int delta = (int)(frame->addr - 1 - f->offset);
 						if (delta > 0) {
-							snprintf (flagdesc2,
-								sizeof(flagdesc2),
-								"%s+%d",
-								f->name, delta + 1);
+							snprintf (flagdesc2, sizeof(flagdesc2),
+								"%s+%d", f->name, delta + 1);
 						} else if (delta<0) {
-							snprintf (flagdesc2,
-								sizeof(flagdesc2),
-								"%s%d",
-								f->name, delta + 1);
+							snprintf (flagdesc2, sizeof(flagdesc2),
+								"%s%d", f->name, delta + 1);
 						} else {
-							snprintf (flagdesc2,
-								sizeof(flagdesc2),
+							snprintf (flagdesc2, sizeof(flagdesc2),
 								"%s+1", f->name);
 						}
 					} else {
-						snprintf (flagdesc2,
-							sizeof (flagdesc2),
+						snprintf (flagdesc2, sizeof (flagdesc2),
 							"%s", f->name);
 					}
 				} else {
@@ -1942,8 +1959,7 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 						"'%s'\n", input+2);
 				}
 			} else {
-				eprintf ("Cannot place a breakpoint here. "
-					"No mapped memory\n");
+				eprintf ("Cannot place a breakpoint on unmapped memory. See dbg.bpinmaps\n");
 			}
 		}
 		break;
@@ -2582,7 +2598,7 @@ static int cmd_debug_continue (RCore *core, const char *input) {
 		break;
 	case ' ':
 		old_pid = core->dbg->pid;
-		pid = atoi (input+2);
+		pid = atoi (input + 2);
 		bypassbp (core);
 		r_reg_arena_swap (core->dbg->reg, true);
 		r_debug_select (core->dbg, pid, core->dbg->tid);

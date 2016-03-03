@@ -943,9 +943,12 @@ static void r_print_format_register (const RPrint* p, int mode,
 
 // XXX: this is very incomplete. must be updated to handle all format chars
 int r_print_format_struct_size(const char *f, RPrint *p, int mode) {
-	char *o = strdup(f);
-	char *end = strchr (o, ' '), *args, *fmt = o;
+	char *o, *end, *args, *fmt;
 	int size = 0, tabsize=0, i, idx=0, biggest = 0;
+	if (!f) return -1;
+	o = strdup(f);
+	end = strchr (o, ' ');
+	fmt = o;
 	if (!end && !(end = strchr (o, '\0')))
 		return -1;
 	if (*end) {
@@ -1075,6 +1078,19 @@ static int r_print_format_struct(RPrint* p, ut64 seek, const ut8* b, int len,
 	return r_print_format_struct_size(fmt, p, mode);
 }
 
+static char* get_args_offset( const char *arg ) {
+    char *args = strchr (arg, ' ');
+    char *sq_bracket = strchr (arg, '[');
+    int max = 30;
+    if (args && sq_bracket) {
+        char *csq_bracket = strchr(arg, ']');
+        while (args && csq_bracket && csq_bracket > args && max--) {
+            args = strchr (csq_bracket, ' ');
+        }
+    }
+    return args;
+}
+
 #define MINUSONE ((void*)(size_t)-1)
 #define ISSTRUCT (tmp == '?' || (tmp == '*' && *(arg+1) == '?'))
 R_API int r_print_format(RPrint *p, ut64 seek, const ut8* b, const int len,
@@ -1134,7 +1150,7 @@ R_API int r_print_format(RPrint *p, ut64 seek, const ut8* b, const int len,
 	}
 
 	/* get args */
-	args = strchr (arg, ' ');
+	args = get_args_offset (arg);
 	if (args) {
 		int l=0, maxl = 0;
 		argend = args;
@@ -1586,7 +1602,7 @@ R_API int r_print_format(RPrint *p, ut64 seek, const ut8* b, const int len,
 				if (s)
 					p->cb_printf ("*(%s)", s);
 			}
-			if (tmp != 'D' && !invalid && fmtname==NULL && MUSTSEE && !SEEVALUE)
+			if (tmp != 'D' && !invalid && fmtname==NULL && MUSTSEE)
 				p->cb_printf ("\n");
 			last = tmp;
 		}

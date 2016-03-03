@@ -6,6 +6,13 @@
 
 #define MAX_FORMAT 3
 
+enum {
+	R_BYTE_DATA  = 1,
+	R_WORD_DATA  = 2,
+	R_DWORD_DATA = 4,
+	R_QWORD_DATA = 8
+};
+
 typedef struct {
 	RCore *core;
 	int t_idx;
@@ -651,7 +658,7 @@ R_API int r_core_visual_trackflags(RCore *core) {
 			}
 			break;
 		case 'd':
-			r_flag_unset (core->flags, fs2, NULL);
+			r_flag_unset_name (core->flags, fs2);
 			break;
 		case 'e':
 			/* TODO: prompt for addr, size, name */
@@ -1248,7 +1255,7 @@ R_API void r_core_visual_mounts (RCore *core) {
 						if (file->type == 'd') {
 							strncat (path, file->name, sizeof (path)-strlen (path)-1);
 							r_str_chop_path (path);
-							if (!root || strncmp (root, path, strlen (root)-1))
+							if (root && strncmp (root, path, strlen (root)-1))
 								strncpy (path, root, sizeof (path)-1);
 						} else {
 							r_core_cmdf (core, "s 0x%"PFMT64x, file->off);
@@ -1447,10 +1454,10 @@ static void function_rename(RCore *core, ut64 addr, const char *name) {
 
 	r_list_foreach (core->anal->fcns, iter, fcn) {
 		if (fcn->addr == addr) {
-			r_flag_unset (core->flags, fcn->name, NULL);
+			r_flag_unset_name (core->flags, fcn->name);
 			free (fcn->name);
 			fcn->name = strdup (name);
-			r_flag_set (core->flags, name, addr, fcn->size, 0);
+			r_flag_set (core->flags, name, addr, fcn->size);
 			break;
 		}
 	}
@@ -1811,11 +1818,27 @@ R_API void r_core_seek_previous (RCore *core, const char *type) {
 		r_core_seek (core, next, 1);
 }
 
+//define the data at offset according to the type (byte, word...) n times
+static void define_data_ntimes (RCore *core, ut64 off, int times, int type) {
+	int i = 0;
+	r_meta_cleanup (core->anal, off, off + core->blocksize);
+	if (times < 0)
+		times = 1;
+	for (i = 0; i < times; i++, off += type)
+		r_meta_add (core->anal, R_META_TYPE_DATA, off, off + type, "");
+
+}
+
+static bool isDisasmPrint(int mode) {
+	return (mode == 1 || mode == 2);
+}
+
 R_API void r_core_visual_define (RCore *core) {
 	int plen = core->blocksize;
 	ut64 off = core->offset;
 	int n, ch, ntotal = 0;
 	ut8 *p = core->block;
+	int rep = -1;
 	char *name;
 	int delta = 0;
 	if (core->print->cur_enabled) {
@@ -1829,7 +1852,7 @@ R_API void r_core_visual_define (RCore *core) {
 		p += cur;
 	}
 	{
-		int h;
+		int h = 0;
 		(void)r_cons_get_size (&h);
 		h-=19;
 		if (h<0) {
@@ -1854,12 +1877,14 @@ R_API void r_core_visual_define (RCore *core) {
 		," k    merge up (join this and previous function)"
 		," h    highlight word"
 		," m    manpage for current call"
+		," n    rename flag used at cursor"
 		," q    quit/cancel operation"
 		," r    rename function"
 		," R    find references /r"
 		," s    set string"
 		," S    set strings in current block"
 		," u    undefine metadata here"
+		," x    find xrefs to current address (./r)"
 		," w    set as 32bit word"
 		," W    set as 64bit word"
 		," q    quit this menu"
@@ -1875,6 +1900,7 @@ R_API void r_core_visual_define (RCore *core) {
 	r_cons_flush ();
 
 	// get ESC+char, return 'hjkl' char
+repeat:
 	ch = r_cons_arrow_to_hjkl (r_cons_readchar ());
 
 	switch (ch) {
@@ -1893,9 +1919,11 @@ R_API void r_core_visual_define (RCore *core) {
 			}
 		}
 		break;
+	case 'x':
+		r_core_cmd0 (core, "./r");
+		break;
 	case 'B':
-		r_meta_cleanup (core->anal, off, off+2);
-		r_meta_add (core->anal, R_META_TYPE_DATA, off, off+2, "");
+		define_data_ntimes (core, off, rep, R_WORD_DATA);
 		break;
 	case 'i':
 		{
@@ -1909,8 +1937,7 @@ R_API void r_core_visual_define (RCore *core) {
 		}
 		break;
 	case 'b':
-		r_meta_cleanup (core->anal, off, off+1);
-		r_meta_add (core->anal, R_META_TYPE_DATA, off, off+1, "");
+		define_data_ntimes (core, off, rep, R_BYTE_DATA);
 		break;
 	case 'm':
 		{
@@ -1939,6 +1966,44 @@ R_API void r_core_visual_define (RCore *core) {
 			r_cons_any_key (NULL);
 		}
 		break;
+	case 'n':
+	{
+		RAnalOp op;
+		char *q = NULL;
+		ut64 tgt_addr = UT64_MAX;
+		if (!isDisasmPrint (core->printidx)) break;
+
+		// TODO: get the aligned instruction even if the cursor is in
+		//       the middle of it.
+		r_anal_op (core->anal, &op, off,
+			core->block + off - core->offset, 32);
+
+		tgt_addr = op.jump != UT64_MAX ? op.jump : op.ptr;
+		if (op.var) {
+			q = r_str_newf ("?i Rename variable %s to;afvn %s `?y`",
+				op.var->name, op.var->name);
+		} else if (tgt_addr != UT64_MAX) {
+			RAnalFunction *fcn = r_anal_get_fcn_at (core->anal, tgt_addr, R_ANAL_FCN_TYPE_NULL);
+			RFlagItem *f = r_flag_get_i (core->flags, tgt_addr);
+			if (fcn) {
+				q = r_str_newf ("?i Rename function %s to;afn `?y` 0x%"PFMT64x,
+					fcn->name, tgt_addr);
+			} else if (f) {
+				q = r_str_newf ("?i Rename flag %s to;fr %s `?y`",
+					f->name, f->name);
+			} else {
+				q = r_str_newf ("?i Create flag at 0x%"PFMT64x" named;f `?y` @ 0x%"PFMT64x,
+					tgt_addr, tgt_addr);
+			}
+		}
+
+		if (q) {
+			r_core_cmd0 (core, q);
+			free (q);
+		}
+		r_anal_op_fini (&op);
+		break;
+	}
 	case 'C':
 		{
 			RFlagItem *item = r_flag_get_i (core->flags, off);
@@ -1979,18 +2044,10 @@ R_API void r_core_visual_define (RCore *core) {
 		}
 		break;
 	case 'w':
-		{
-		int asmbits = 32; //r_config_get_i (core->config, "asm.bits");
-		r_meta_cleanup (core->anal, off, off+plen);
-		r_meta_add (core->anal, R_META_TYPE_DATA, off, off+(asmbits/8), "");
-		}
+		define_data_ntimes (core, off, rep, R_DWORD_DATA);
 		break;
 	case 'W':
-		{
-		int asmbits = 64; //r_config_get_i (core->config, "asm.bits");
-		r_meta_cleanup (core->anal, off, off+plen);
-		r_meta_add (core->anal, R_META_TYPE_DATA, off, off+(asmbits/8), "");
-		}
+		define_data_ntimes (core, off, rep, R_QWORD_DATA);
 		break;
 	case 'e':
 		// set function size
@@ -2040,7 +2097,7 @@ R_API void r_core_visual_define (RCore *core) {
 			r_meta_add (core->anal, R_META_TYPE_STRING,
 				off+ntotal, off+n+ntotal, (const char *)name+4);
 			r_name_filter (name, n+10);
-			r_flag_set (core->flags, name, off+ntotal, n, 0);
+			r_flag_set (core->flags, name, off+ntotal, n);
 			free (name);
 			ntotal += n;
 		} while (ntotal<plen);
@@ -2061,7 +2118,7 @@ R_API void r_core_visual_define (RCore *core) {
 				name[4+i]='_';
 		r_meta_add (core->anal, R_META_TYPE_STRING, off, off+n, (const char *)name+4);
 		r_name_filter (name, n+10);
-		r_flag_set (core->flags, name, off, n, 0);
+		r_flag_set (core->flags, name, off, n);
 		free (name);
 		}
 		break;
@@ -2075,13 +2132,6 @@ R_API void r_core_visual_define (RCore *core) {
 		break;
 	case 'u':
 		r_core_anal_undefine (core, off);
-#if 0
-		r_flag_unset_i (core->flags, off, NULL);
-		f = r_anal_get_fcn_in (core->anal, off, 0);
-		r_anal_fcn_del_locs (core->anal, off);
-		if (f) r_meta_del (core->anal, R_META_TYPE_ANY, off, f->size, "");
-		r_anal_fcn_del (core->anal, off);
-#endif
 		break;
 	case 'f':
 		{
@@ -2110,6 +2160,11 @@ R_API void r_core_visual_define (RCore *core) {
 		break;
 	case 'q':
 	default:
+		if (ch >= '0' && ch <= '9') {
+			if (rep < 0) rep = 0;
+			rep = rep * 10 + atoi ((char *)&ch);
+			goto repeat;
+		}
 		break;
 	}
 }

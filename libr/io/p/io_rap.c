@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2011-2015 - pancake */
+/* radare - LGPL - Copyright 2011-2016 - pancake */
 
 // TODO: implement the rap API in r_socket ?
 #include "r_io.h"
@@ -111,7 +111,7 @@ static ut64 rap__lseek(struct r_io_t *io, RIODesc *fd, ut64 offset, int whence) 
 		eprintf ("Unexpected lseek reply\n");
 		return -1;
 	}
-	r_mem_copyendian ((ut8 *)&offset, tmp+1, 8, !ENDIAN);
+	r_mem_copyendian ((ut8 *)&offset, tmp+1, 8, ENDIAN);
 	return offset;
 }
 
@@ -249,17 +249,10 @@ static int rap__system(RIO *io, RIODesc *fd, const char *command) {
 	RSocket *s = RIORAP_FD (fd);
 	ut8 buf[RMT_MAX];
 	char *ptr;
-	int op, ret;
+	int ret;
 	unsigned int i, j = 0;
 
-	// send
-	if (*command=='!') {
-		op = RMT_SYSTEM;
-		command++;
-	} else {
-		op = RMT_CMD;
-	}
-	buf[0] = op;
+	buf[0] = RMT_CMD;
 	i = strlen (command)+1;
 	if (i>RMT_MAX-5) {
 		eprintf ("Command too long\n");
@@ -278,7 +271,7 @@ static int rap__system(RIO *io, RIODesc *fd, const char *command) {
 		}
 		/* system back in the middle */
 		/* TODO: all pkt handlers should check for reverse queries */
-		if (buf[0] == RMT_SYSTEM || buf[0] == RMT_CMD) {
+		if (buf[0] == RMT_CMD) {
 			char *res, *str;
 			ut32 reslen = 0, cmdlen = 0;
 			// run io->cmdstr
@@ -310,8 +303,8 @@ static int rap__system(RIO *io, RIODesc *fd, const char *command) {
 	ret = r_socket_read_block (s, buf+1, 4);
 	if (ret != 4)
 		return -1;
-	if (buf[0] != (op | RMT_REPLY)) {
-		eprintf ("Unexpected system reply\n");
+	if (buf[0] != (RMT_CMD | RMT_REPLY)) {
+		eprintf ("Unexpected rap cmd reply\n");
 		return -1;
 	}
 

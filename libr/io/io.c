@@ -36,6 +36,13 @@ R_API RIO *r_io_new() {
 	r_io_cache_init (io);
 	r_io_plugin_init (io);
 	r_io_section_init (io);
+	{
+		char *env = r_sys_getenv ("R_IO_MAX_ALLOC");
+		if (env) {
+			io->maxalloc = r_num_get (NULL, env);
+			free (env);
+		}
+	}
 	return io;
 }
 
@@ -984,8 +991,13 @@ static ut8 *r_io_desc_read(RIO *io, RIODesc *desc, ut64 *out_sz) {
 	}
 	off = io->off;
 
-	if (*out_sz == UT64_MAX) return buf;
-	if (*out_sz > R_IO_MAX_ALLOC) {
+	if (*out_sz == UT64_MAX) {
+		return buf;
+	}
+	if (io->maxalloc && *out_sz > io->maxalloc) {
+		eprintf ("WARNING: File is greater than 0x%"PFMT64x" bytes.\nTry setting " \
+			"R_IO_MAX_ALLOC environment variable with the desired max " \
+			"allocation bytes.\n", io->maxalloc);
 		return buf;
 	}
 

@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2015 - pancake */
+/* radare - LGPL - Copyright 2009-2016 - pancake */
 
 #include <r_core.h>
 
@@ -67,8 +67,8 @@ static void rasm2_list(RCore *core, const char *arch) {
 }
 
 static inline void __setsegoff(RConfig *cfg, const char *asmarch, int asmbits) {
-	if (!strcmp (asmarch, "x86"))
-		r_config_set (cfg, "asm.segoff", (asmbits==16)?"true":"false");
+	int autoseg = (!strncmp (asmarch, "x86", 3) && asmbits==16);
+	r_config_set (cfg, "asm.segoff", r_str_bool (autoseg));
 }
 
 static int cb_analeobjmp(void *user, void *data) {
@@ -540,6 +540,7 @@ static int cb_cfgdebug(void *user, void *data) {
 		core->bin->is_debugger = false;
 	}
 	if (core->io) {
+		r_config_set (core->config, "io.va", "true");
 		if (core->dbg && core->dbg->h) {
 			ioraw = core->dbg->h->keepio? 0: 1;
 		} else {
@@ -811,7 +812,7 @@ static int cb_hexcols(void *user, void *data) {
 	RCore *core = (RCore *)user;
 	int c = R_MIN (128, R_MAX (((RConfigNode*)data)->i_value, 0));
 	core->print->cols = c & ~1;
-	core->dbg->regcols = c/5;
+	core->dbg->regcols = c/4;
 	return true;
 }
 
@@ -1444,6 +1445,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF("asm.calls", "false", "Show calling convention calls as comments in disasm");
 	SETPREF("asm.bbline", "false", "Show empty line after every basic block");
 	SETPREF("asm.comments", "true", "Show comments in disassembly view");
+	SETPREF("asm.jmphints", "true", "Show jump hints [numbers] in disasm");
 	SETPREF("asm.slow", "true", "Perform slow analysis operations in disasm");
 	SETPREF("asm.decode", "false", "Use code analysis as a disassembler");
 	SETPREF("asm.indent", "false", "Indent disassembly based on reflines depth");
@@ -1574,6 +1576,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETI("stack.delta", 0,  "Delta for the stack dump");
 
 	SETCB("dbg.libs", "", &cb_dbg_libs, "If set stop when loading matching libname");
+	SETI("dbg.hwbp", 0, "Set HW or SW breakpoints");
 	SETCB("dbg.unlibs", "", &cb_dbg_unlibs, "If set stop when unloading matching libname");
 	SETPREF("dbg.slow", "false", "Show stack and regs in visual mode in a slow but verbose mode");
 
@@ -1732,6 +1735,7 @@ R_API int r_core_config_init(RCore *core) {
 #else
 	SETPREF("scr.responsive", "false", "Auto-adjust Visual depending on screen (e.g. unset asm.bytes)");
 #endif
+	SETPREF("scr.wheelnkey", "false", "Use sn/sp and scr.nkey on wheel instead of scroll");
 	SETPREF("scr.wheel", "true", "Mouse wheel in Visual; temporaryly disable/reenable by right click/Enter)");
 	SETPREF("scr.atport", "false", "V@ starts a background http server and spawns an r2 -C");
 	SETI("scr.wheelspeed", 4, "Mouse wheel speed");
@@ -1746,7 +1750,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB("scr.interactive", "true", &cb_scrint, "Start in interactive mode");
 	SETI("scr.feedback", 1, "Set visual feedback level (1=arrow on jump, 2=every key (useful for videos))");
 	SETCB("scr.html", "false", &cb_scrhtml, "Disassembly uses HTML syntax");
-	SETCB("scr.nkey", "fun", &cb_scrnkey, "Select the seek mode in visual");
+	SETCB("scr.nkey", "flag", &cb_scrnkey, "Select the seek mode in visual");
 	SETCB("scr.pager", "", &cb_pager, "Select pager program (when output overflows the window)");
 	SETPREF("scr.pipecolor", "false", "Enable colors when using pipes");
 	SETPREF("scr.promptfile", "false", "Show user prompt file (used by r2 -q)");
@@ -1775,6 +1779,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETI("search.count", 0, "Start index number at search hits");
 	SETI("search.distance", 0, "Search string distance");
 	SETPREF("search.flags", "true", "All search results are flagged, otherwise only printed");
+	SETPREF("search.overlap", "false", "Look for overlapped search hits");
 	SETI("search.maxhits", 0, "Maximum number of hits (0: no limit)");
 	SETI("search.from", -1, "Search start address");
 	SETCB("search.in", "file", &cb_searchin, "Specify search boundaries (raw, block, file, section, range)");

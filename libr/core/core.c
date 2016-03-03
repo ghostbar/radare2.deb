@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2015 - pancake */
+/* radare2 - LGPL - Copyright 2009-2016 - pancake */
 
 #include <r_core.h>
 #include <r_socket.h>
@@ -390,7 +390,7 @@ static const char *radare_argv[] = {
 	"aa", "ab", "af", "ar", "ag", "at", "a?", "ax", "ad",
 	"af", "afa", "afan", "afc", "afi", "afb", "afbb", "afn", "afr", "afs", "af*", "afv", "afvn",
 	"aga", "agc", "agd", "agl", "agfl",
-	"e", "e-", "e*", "e!", "e?", "env ",
+	"e", "et", "e-", "e*", "e!", "e?", "env ",
 	"i", "ii", "iI", "is", "iS", "iz",
 	"q", "q!",
 	"f", "fl", "fr", "f-", "f*", "fs", "fS", "fr", "fo", "f?",
@@ -665,17 +665,18 @@ openfile:
 							line->buffer.data[0],
 							line->buffer.data[1],
 							p);
-						eprintf ("------ %p\n", tmp_argv[i]);
+						// eprintf ("------ %p (%s) = %s\n", tmp_argv[i], buf, p);
 						if (r_is_heap ((void*)tmp_argv[i]))
 							free ((char *)tmp_argv[i]);
 						tmp_argv[i] = strdup (buf); // LEAKS
 						i++;
-						if (i==TMP_ARGV_SZ)
+						if (i == TMP_ARGV_SZ)
 							break;
 					}
 				}
 			}
-			tmp_argv[(i-1>0)?i-1:0] = NULL;
+			//tmp_argv[(i-1>0)?i-1:0] = NULL;
+			tmp_argv[i] = NULL;
 			line->completion.argc = i;
 			line->completion.argv = tmp_argv;
 		} else if (!strncmp (line->buffer.data, "fs ", 3)) {
@@ -757,6 +758,7 @@ openfile:
 				line->completion.argv = NULL;
 			}
 		} else if ( (!strncmp (line->buffer.data, "e ", 2))
+		   || (!strncmp (line->buffer.data, "et ", 3))
 		   || (!strncmp (line->buffer.data, "e? ", 3))
 		   || (!strncmp (line->buffer.data, "e! ", 3))) {
 			const char p = line->buffer.data[1];
@@ -1084,11 +1086,7 @@ static char *r_core_anal_hasrefs_to_depth(RCore *core, ut64 value, int depth) {
 			}
 		}
 	}
-	{
-		char *rs = strdup (r_strbuf_get (s));
-		r_strbuf_free (s);
-		return rs;
-	}
+	return r_strbuf_drain (s);
 }
 
 R_API const char *r_core_anal_optype_colorfor(RCore *core, ut64 addr) {
@@ -1199,6 +1197,18 @@ R_API int r_core_init(RCore *core) {
 	core->assembler->num = core->num;
 	r_asm_set_user_ptr (core->assembler, core);
 	core->anal = r_anal_new ();
+
+	/* default noreturn functions */
+	/* osx */
+	r_anal_noreturn_add (core->anal, "sym.imp.__assert_rtn", UT64_MAX);
+	r_anal_noreturn_add (core->anal, "sym.imp.exit", UT64_MAX);
+	r_anal_noreturn_add (core->anal, "sym.imp._exit", UT64_MAX);
+	r_anal_noreturn_add (core->anal, "sym.imp.__stack_chk_fail", UT64_MAX);
+	/* linux */
+	r_anal_noreturn_add (core->anal, "sym.__assert_fail", UT64_MAX);
+	r_anal_noreturn_add (core->anal, "sym.abort", UT64_MAX);
+	r_anal_noreturn_add (core->anal, "sym.exit", UT64_MAX);
+
 	core->anal->meta_spaces.cb_printf = r_cons_printf;
 	core->anal->cb.on_fcn_new = on_fcn_new;
 	core->anal->cb.on_fcn_delete = on_fcn_delete;
@@ -1842,78 +1852,6 @@ reaccept:
 				r_socket_write (c, buf, 5);
 				r_socket_flush (c);
 				}
-				break;
-			case RMT_SYSTEM:
-				// read
-				r_socket_read_block (c, buf, 4);
-				r_mem_copyendian ((ut8*)&i, buf, 4, !LE);
-				if (i>0&&i<RMT_MAX) {
-					ptr = (ut8 *) malloc (i+7);
-					if (!ptr) {
-						r_socket_close (c);
-						return false;
-					}
-					ptr[5]='!';
-					r_socket_read_block (c, ptr+6, i);
-					ptr[6+i]='\0';
-					//env_update();
-					//pipe_stdout_to_tmp_file((char*)&buf, (char*)ptr+5);
-					strcpy ((char*)buf, "/tmp/.out");
-					pipefd = r_cons_pipe_open ((const char *)buf, 1, 0);
-					//eprintf("SYSTEM(%s)\n", ptr+6);
-					r_sandbox_system ((const char*)ptr+6, 1);
-					r_cons_pipe_close (pipefd);
-					{
-						FILE *fd = r_sandbox_fopen((char*)buf, "r");
-						i = 0;
-						if (fd) {
-							fseek (fd, 0, SEEK_END);
-							i = ftell (fd);
-							fseek (fd, 0, SEEK_SET);
-							free (ptr);
-							ptr = NULL; // potential use after free if i == 0
-							if (i>0) {
-								int r;
-								ptr = (ut8 *) malloc (i+6);
-								if (!ptr) {
-									fclose (fd);
-									r_socket_close (c);
-									return false;
-								}
-								r = fread (ptr+5, i, 1, fd);
-								ptr[5+r]='\0';
-							}
-							fclose (fd);
-						} else {
-							eprintf ("Cannot open tmpfile\n");
-							i = -1;
-						}
-					}
-					{
-					char *out = r_file_slurp ((char*)buf, &i);
-					free (ptr);
-					//eprintf("PIPE(%s)\n", out);
-					ptr = (ut8 *) malloc (i+5);
-					if (ptr) {
-						memcpy (ptr+5, out, i);
-					}
-					free (out);
-					}
-					//unlink((char*)buf);
-				}
-
-				if (!ptr) ptr = (ut8 *) malloc (5); // malloc for 5 byets? c'mon!
-				if (!ptr) return false;
-
-				// send
-				ptr[0] = (RMT_SYSTEM | RMT_REPLY);
-				r_mem_copyendian ((ut8*)ptr+1, (ut8*)&i, 4, !LE);
-				if (i<0) i = 0;
-				r_socket_write (c, ptr, i+5);
-				r_socket_flush (c);
-				eprintf ("REPLY SENT (%d) (%s)\n", i, ptr+5);
-				free (ptr);
-				ptr = NULL;
 				break;
 			default:
 				eprintf ("unknown command 0x%02x\n", cmd);

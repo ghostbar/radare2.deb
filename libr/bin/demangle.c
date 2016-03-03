@@ -345,10 +345,14 @@ R_API int r_bin_lang_type(RBinFile *binfile, const char *def, const char *sym) {
 
 R_API char *r_bin_demangle (RBinFile *binfile, const char *def, const char *str) {
 	int type = -1;
-	RBin *bin = binfile->rbin;
-	if (!strncmp (str, "imp.", 4)) {
+	RBin *bin;
+	if (!binfile) return NULL;
+
+	bin = binfile->rbin;
+	if (!strncmp (str, "sym.", 4))
 		str += 4;
-	}
+	if (!strncmp (str, "imp.", 4))
+		str += 4;
 	if (!strncmp (str, "__", 2)) {
 		type = R_BIN_NM_CXX;
 		str++;

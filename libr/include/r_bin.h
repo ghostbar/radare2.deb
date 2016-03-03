@@ -220,11 +220,11 @@ typedef struct r_bin_xtr_plugin_t {
 	int (*check)(RBin *bin);
 // XXX: ut64 for size is maybe too much, what about st64? signed sizes are useful for detecting errors
 	int (*check_bytes)(const ut8 *bytes, ut64 sz);
-	RBinXtrData * (*extract_from_bytes)(const ut8 *buf, ut64 size, int idx);
-	RList * (*extractall_from_bytes)(const ut8 *buf, ut64 size);
+	RBinXtrData * (*extract_from_bytes)(RBin *bin, const ut8 *buf, ut64 size, int idx);
+	RList * (*extractall_from_bytes)(RBin *bin, const ut8 *buf, ut64 size);
 	RBinXtrData * (*extract)(RBin *bin, int idx);
 	RList * (*extractall)(RBin *bin);
-	int (*load)(RBin *bin);
+	bool (*load)(RBin *bin);
 	int (*size)(RBin *bin);
 	int (*destroy)(RBin *bin);
 	int (*free_xtr)(void *xtr_obj);
@@ -280,6 +280,7 @@ typedef struct r_bin_section_t {
 	ut32 srwx;
 	// per section platform info
 	const char *arch;
+	char *format;
 	int bits;
 	bool has_strings;
 	bool add; // indicates when you want to add the section to io `S` command
@@ -341,6 +342,12 @@ typedef struct r_bin_reloc_t {
 	ut64 vaddr;
 	ut64 paddr;
 	ut32 visibility;
+	/* is_ifunc: indirect function, `addend` points to a resolver function
+	 * that returns the actual relocation value, e.g. chooses
+	 * an optimized version depending on the CPU.
+	 * cf. https://gcc.gnu.org/onlinedocs/gcc/Common-Function-Attributes.html
+	 */
+	bool is_ifunc;
 } RBinReloc;
 
 typedef struct r_bin_string_t {
@@ -554,7 +561,7 @@ extern RBinPlugin r_bin_plugin_ninds;
 extern RBinPlugin r_bin_plugin_nin3ds;
 extern RBinPlugin r_bin_plugin_xbe;
 extern RBinXtrPlugin r_bin_xtr_plugin_fatmach0;
-extern RBinXtrPlugin r_bin_xtr_plugin_dyldcache;
+extern RBinXtrPlugin r_bin_xtr_plugin_xtr_dyldcache;
 extern RBinPlugin r_bin_plugin_zimg;
 extern RBinPlugin r_bin_plugin_omf;
 extern RBinPlugin r_bin_plugin_art;
@@ -567,6 +574,7 @@ extern RBinPlugin r_bin_plugin_sms;
 extern RBinPlugin r_bin_plugin_psxexe;
 extern RBinPlugin r_bin_plugin_spc700;
 extern RBinPlugin r_bin_plugin_vsf;
+extern RBinPlugin r_bin_plugin_dyldcache;
 
 #ifdef __cplusplus
 }

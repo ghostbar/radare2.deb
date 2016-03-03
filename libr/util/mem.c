@@ -150,7 +150,7 @@ R_API int r_mem_set_num (ut8 *dest, int dest_size, ut64 num, int endian) {
 
 /* XXX TODO check and use system endian */
 // TODO: rename to r_mem_swap() */
-R_API void r_mem_copyendian (ut8 *dest, const ut8 *orig, int size, int endian) {
+R_API void r_mem_copyendian(ut8 *dest, const ut8 *orig, int size, int endian) {
 	ut8 buffer[8];
 	if (endian) {
 		if (dest != orig)
@@ -204,6 +204,22 @@ R_API const ut8 *r_mem_mem(const ut8 *haystack, int hlen, const ut8 *needle, int
 	return NULL;
 }
 
+// TODO: rename to r_mem_mem and refactor all calls to this function
+R_API const ut8 *r_mem_mem_aligned(const ut8 *haystack, int hlen, const ut8 *needle, int nlen, int align) {
+	int i, until = hlen-nlen+1;
+	if (align < 1) align = 1;
+	if (hlen<1 || nlen<1)
+		return NULL;
+	if (align>1) {
+		until -= (until % align);
+	}
+	for (i=0; i<until; i+=align) {
+		if (!memcmp (haystack+i, needle, nlen))
+			return haystack+i;
+	}
+	return NULL;
+}
+
 // TODO: implement pack/unpack helpers use vararg or wtf?
 R_API int r_mem_pack() {
 	// TODO: copy this from r_buf??
@@ -246,4 +262,14 @@ R_API void *r_mem_dup (void *s, int l) {
 	if (!d) return NULL;
 	memcpy (d, s, l);
 	return d;
+}
+
+R_API void r_mem_reverse(ut8 *b, int l) {
+	ut8 tmp;
+	int i, end = l / 2;
+	for (i = 0; i < end; i++) {
+		tmp = b[i];
+		b[i] = b[l-i-1];
+		b[l-i-1] = tmp;
+	}
 }

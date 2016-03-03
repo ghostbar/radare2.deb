@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2015 - pancake */
+/* radare - LGPL - Copyright 2009-2016 - pancake */
 
 static int preludecnt = 0;
 static int searchflags = 0;
@@ -206,6 +206,10 @@ R_API int r_core_search_prelude(RCore *core, ut64 from, ut64 to, const ut8 *buf,
 	return preludecnt;
 }
 
+static int count_functions (RCore *core) {
+	return r_list_length (core->anal->fcns);
+}
+
 R_API int r_core_search_preludes(RCore *core) {
 	int ret = -1;
 	const char *prelude = r_config_get (core->config, "anal.prelude");
@@ -213,6 +217,9 @@ R_API int r_core_search_preludes(RCore *core) {
 	int bits = r_config_get_i (core->config, "asm.bits");
 	ut64 from = core->offset;
 	ut64 to = core->offset+0xffffff; // hacky!
+	int fc0, fc1;
+
+	fc0 = count_functions (core);
 	if (prelude && *prelude) {
 		ut8 *kw = malloc (strlen (prelude)+1);
 		int kwlen = r_hex_str2bin (prelude, kw);
@@ -222,10 +229,24 @@ R_API int r_core_search_preludes(RCore *core) {
 		ret = r_core_search_prelude (core, from, to,
 			(const ut8 *)"\x7c\x08\x02\xa6", 4, NULL, 0);
 	} else if (strstr (arch, "arm")) {
-		if (bits == 16) {
+		switch (bits) {
+		case 16:
 			ret = r_core_search_prelude (core, from, to,
 				(const ut8 *)"\xf0\xb5", 2, NULL, 0);
-		} else {
+			break;
+		case 32:
+			ret = r_core_search_prelude (core, from, to,
+				(const ut8 *)"\x00\x48\x2d\xe9", 4, NULL, 0);
+			break;
+		case 64:
+			r_core_search_prelude (core, from, to,
+				(const ut8 *)"\xf6\x57\xbd\xa9", 4, NULL, 0);
+			r_core_search_prelude (core, from, to,
+				(const ut8 *)"\xfd\x7b\xbf\xa9", 4, NULL, 0);
+			r_core_search_prelude (core, from, to,
+				(const ut8 *)"\xfc\x6f\xbe\xa9", 4, NULL, 0);
+			break;
+		default:
 			eprintf ("ap: Unsupported bits: %d\n", bits);
 		}
 	} else if (strstr (arch, "mips")) {
@@ -249,7 +270,8 @@ R_API int r_core_search_preludes(RCore *core) {
 			eprintf ("ap: Unsupported bits: %d\n", bits);
 		}
 	} else eprintf ("ap: Unsupported asm.arch and asm.bits\n");
-	eprintf ("Analyzed %d functions based on preludes\n", ret);
+	fc1 = count_functions (core);
+	eprintf ("Analyzed %d functions based on preludes\n", fc1 - fc0);
 	return ret;
 }
 
@@ -261,7 +283,7 @@ static int __cb_hit(RSearchKeyword *kw, void *user, ut64 addr) {
 		eprintf ("Error: Callback has an invalid RCore.\n");
 		return false;
 	}
-	if (maxhits && searchhits>=maxhits) {
+	if (maxhits && searchhits >= maxhits) {
 		//eprintf ("Error: search.maxhits reached.\n");
 		return false;
 	}
@@ -292,7 +314,7 @@ static int __cb_hit(RSearchKeyword *kw, void *user, ut64 addr) {
 		default:
 			len = kw->keyword_length; // 8 byte context
 			mallocsize = (len*2)+extra;
-			str = (len>0xffff)?  NULL: malloc (mallocsize);
+			str = (len > 0xffff)? NULL: malloc (mallocsize);
 			if (str) {
 				p = str;
 				memset (str, 0, len);
@@ -339,7 +361,7 @@ static int __cb_hit(RSearchKeyword *kw, void *user, ut64 addr) {
 		first_hit = false;
 	if (searchflags) {
 		const char *flag = sdb_fmt (0, "%s%d_%d", searchprefix, kw->kwidx, kw->count);
-		r_flag_set (core->flags, flag, base_addr + addr, kw->keyword_length, 1);
+		r_flag_set (core->flags, flag, base_addr + addr, kw->keyword_length);
 	}
 	if (!strnull (cmdhit)) {
 		ut64 here = core->offset;
@@ -897,6 +919,8 @@ static int r_core_search_rop(RCore *core, ut64 from, ut64 to, int opt, const cha
 	const char *smode = r_config_get (core->config, "search.in");
 	const char *arch = r_config_get (core->config, "asm.arch");
 	int max_count = r_config_get_i(core->config, "search.count");
+	ut64 search_from = r_config_get_i (core->config, "search.from");
+	ut64 search_to = r_config_get_i (core->config, "search.to");
 	int i=0, end=0, mode=0, increment=1, ret;
 	RList/*<endlist_pair>*/ *end_list = r_list_newf(free);
 	RList/*<intptr_t>*/ *badstart = r_list_new();
@@ -925,6 +949,9 @@ static int r_core_search_rop(RCore *core, ut64 from, ut64 to, int opt, const cha
 							"instructions. See /c? for help.\n");
 		}
 		return false;
+	}
+	if (search_from == UT64_MAX) {
+		search_from = 0;
 	}
 
 	if (!strcmp (arch, "mips")) // MIPS has no jump-in-the-middle
@@ -995,6 +1022,18 @@ static int r_core_search_rop(RCore *core, ut64 from, ut64 to, int opt, const cha
 	r_list_foreach (list, itermap, map) {
 		from = map->from;
 		to = map->to;
+		if (to > search_to) {
+			if (to < from) {
+				continue;
+			}
+			to = search_to;
+		}
+		if (from < search_from) {
+			if (search_from > to) {
+				continue;
+			}
+			from = search_from;
+		}
 
 		if (from>to) {
 			eprintf ("Invalid range 0x%"PFMT64x" - 0x%"PFMT64x"\n", from, to);
@@ -1314,7 +1353,7 @@ static void do_anal_search(RCore *core, struct search_parameters *param, const c
 					char flag[64];
 					snprintf (flag, sizeof (flag), "%s%d_%d",
 						searchprefix, kwidx, count);
-					r_flag_set (core->flags, flag, at, ret, 1);
+					r_flag_set (core->flags, flag, at, ret);
 				}
 				count++;
 				if (maxhits && count >= maxhits)
@@ -1405,7 +1444,7 @@ static void do_asm_search(RCore *core, struct search_parameters *param, const ch
 				}
 				if (searchflags) {
 					const char *flagname = sdb_fmt (0, "%s%d_%d", searchprefix, kwidx, count);
-					r_flag_set (core->flags, flagname, hit->addr, hit->len, 1);
+					r_flag_set (core->flags, flagname, hit->addr, hit->len);
 				}
 				count++;
 			}
@@ -1477,7 +1516,9 @@ static void do_string_search(RCore *core, struct search_parameters *param) {
 				fd = core->io->desc->fd;
 			}
 			if (!json) {
-				eprintf ("# %d [0x%"PFMT64x"-0x%"PFMT64x"]\n", fd, param->from, param->to);
+				RSearchKeyword *kw = r_list_first (core->search->kws);
+				eprintf ("Searching %d bytes in [0x%"PFMT64x"-0x%"PFMT64x"]\n",
+					kw? kw->keyword_length: 0, param->from, param->to);
 			}
 			if (r_sandbox_enable (0)) {
 				if ((param->to - param->from) > 1024*64) {
@@ -1667,6 +1708,7 @@ static int cmd_search(void *data, const char *input) {
 */
 	maxhits = r_config_get_i (core->config, "search.maxhits");
 	searchprefix = r_config_get (core->config, "search.prefix");
+	core->search->overlap = r_config_get_i (core->config, "search.overlap");
 	// TODO: get ranges from current IO section
 	/* XXX: Think how to get the section ranges here */
 	if (param.from == 0LL) param.from = core->offset;
@@ -2078,8 +2120,7 @@ reread:
 			}
 			if (kw) {
 				r_search_kw_add (core->search, kw);
-				eprintf ("Searching %d bytes...\n",
-					kw->keyword_length);
+				//eprintf ("Searching %d bytes...\n", kw->keyword_length);
 				r_search_begin (core->search);
 				dosearch = true;
 			} else {
