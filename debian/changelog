@@ -1,5 +1,6 @@
-radare2 (0.10.1-1) UNRELEASED; urgency=low
+radare2 (0.10.1-1) unstable; urgency=low
 
+  [ Sebastian Reichel ]
   * New upstream version:
     - Support for GameBoy added.  I'm sure you were anxiously awaiting it.
     - Support for Nintendo DS, NES, Sega megadrive, SMS, DOL (Wii/Gamecube)
@@ -19,7 +20,10 @@ radare2 (0.10.1-1) UNRELEASED; urgency=low
   * Add dependency to zlib to avoid built-in library
   * Drop -dbg packages (switch to automatically generated -dbgsym)
 
- -- Sebastian Reichel <sre@debian.org>  Mon, 01 Feb 2016 06:16:42 +0100
+  [ Jose Luis Rivas ]
+  * Actual fix on the newer upstream version.
+
+ -- Jose Luis Rivas <ghostbar@debian.org>  Mon, 04 Apr 2016 01:30:18 -0400
 
 radare2 (0.9.6-3.1) unstable; urgency=medium
 
