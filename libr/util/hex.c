@@ -152,9 +152,9 @@ R_API int r_hex_pair2bin(const char *arg) {
 R_API int r_hex_bin2str(const ut8 *in, int len, char *out) {
 	int i, idx;
 	char tmp[5];
-	if (len<0)
+	if (len < 0)
 		return 0;
-	for (idx=i=0; i<len; i++,idx+=2)  {
+	for (idx = i = 0; i < len; i++, idx += 2)  {
 		snprintf (tmp, sizeof (tmp), "%02x", in[i]);
 		memcpy (out+idx, tmp, 2);
 	}
@@ -256,4 +256,19 @@ R_API st64 r_hex_bin_truncate (ut64 in, int n) {
 		return in&UT64_MAX;
 	}
 	return in;
+}
+
+// Check if str contains only hexademical characters and return length of bytes
+R_API int r_hex_str_is_valid(const char* str) {
+	int i;
+	if (!strncmp (str, "0x", 2)) {
+		str += 2;
+	}
+	for (i = 0; str[i] != '\0' && str[i] != ' '; i++) {
+		if (ishexchar (str[i])) {
+			continue;
+		}
+		return -1; //if we're here, then str isnt valid
+	}
+	return i;
 }

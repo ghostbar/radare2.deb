@@ -11,7 +11,6 @@
 #include <r_flist.h> // radare fixed pointer array iterators
 #include <list.h> // kernel linked list
 #include <r_th.h>
-#include <r_lib.h>
 #include <dirent.h>
 #include <sys/time.h>
 #if __UNIX__
@@ -121,6 +120,7 @@ typedef struct r_buf_t {
 	RMmap *mmap;
 	bool empty;
 	bool ro; // read-only
+	int fd;
 	RList *sparse;
 } RBuffer;
 
@@ -379,20 +379,21 @@ R_API RBuffer *r_buf_new(void);
 R_API RBuffer *r_buf_new_with_bytes(const ut8* bytes, ut64 len);
 R_API RBuffer *r_buf_new_with_pointers (const ut8 *bytes, ut64 len);
 R_API RBuffer *r_buf_new_with_buf(RBuffer *b);
-R_API RBuffer *r_buf_file (const char *file);
+R_API RBuffer *r_buf_new_file(const char *file);
+R_API RBuffer *r_buf_new_slurp (const char *file);
 R_API RBuffer *r_buf_mmap (const char *file, int flags);
 R_API RBuffer *r_buf_new_sparse();
 /* methods */
 R_API int r_buf_set_bits(RBuffer *b, int bitoff, int bitsize, ut64 value);
 R_API int r_buf_set_bytes(RBuffer *b, const ut8 *buf, int length);
 R_API int r_buf_append_string(RBuffer *b, const char *str);
-R_API int r_buf_append_buf(RBuffer *b, RBuffer *a);
-R_API int r_buf_append_bytes(RBuffer *b, const ut8 *buf, int length);
-R_API int r_buf_append_nbytes(RBuffer *b, int length);
-R_API int r_buf_append_ut32(RBuffer *b, ut32 n);
-R_API int r_buf_append_ut64(RBuffer *b, ut64 n);
-R_API int r_buf_append_ut16(RBuffer *b, ut16 n);
-R_API int r_buf_prepend_bytes(RBuffer *b, const ut8 *buf, int length);
+R_API bool r_buf_append_buf(RBuffer *b, RBuffer *a);
+R_API bool r_buf_append_bytes(RBuffer *b, const ut8 *buf, int length);
+R_API bool r_buf_append_nbytes(RBuffer *b, int length);
+R_API bool r_buf_append_ut32(RBuffer *b, ut32 n);
+R_API bool r_buf_append_ut64(RBuffer *b, ut64 n);
+R_API bool r_buf_append_ut16(RBuffer *b, ut16 n);
+R_API bool r_buf_prepend_bytes(RBuffer *b, const ut8 *buf, int length);
 R_API char *r_buf_to_string(RBuffer *b);
 R_API ut8 *r_buf_get_at(RBuffer *b, ut64 addr, int *len);
 #define r_buf_read(a,b,c) r_buf_read_at(a,R_BUF_CUR,b,c)
@@ -466,7 +467,7 @@ R_API ut64 r_get_input_num_value(RNum *num, const char *input_value);
 #define isseparator(x) ((x)==' '||(x)=='\t'||(x)=='\n'||(x)=='\r'||(x)==' '|| \
 		(x)==','||(x)==';'||(x)==':'||(x)=='['||(x)==']'|| \
 		(x)=='('||(x)==')'||(x)=='{'||(x)=='}')
-#define ishexchar(x) ((x>='0'&&x<='9') ||  (x>='a'&&x<='f') ||  (x>='A'&&x<='F')) {
+#define ishexchar(x) ((x>='0'&&x<='9') ||  (x>='a'&&x<='f') ||  (x>='A'&&x<='F'))
 
 R_API int r_name_check(const char *name);
 R_API int r_name_filter(char *name, int len);
@@ -572,6 +573,8 @@ R_API char *r_str_escape(const char *buf);
 R_API char *r_str_escape_dot(const char *buf);
 R_API void r_str_uri_decode(char *buf);
 R_API char *r_str_uri_encode (const char *buf);
+R_API char *r_str_utf16_decode (const ut8 *s, int len);
+R_API int r_str_utf16_to_utf8 (ut8 *dst, int len_dst, const ut8 *src, int len_src, int little_endian);
 R_API char *r_str_utf16_encode (const char *s, int len);
 R_API char *r_str_home(const char *str);
 R_API int r_str_nlen (const char *s, int n);
@@ -598,6 +601,7 @@ R_API int r_hex_str2bin(const char *in, ut8 *out);
 R_API int r_hex_bin2str(const ut8 *in, int len, char *out);
 R_API char *r_hex_bin2strdup(const ut8 *in, int len);
 R_API int r_hex_to_byte(ut8 *val, ut8 c);
+R_API int r_hex_str_is_valid(const char * s);
 R_API st64 r_hex_bin_truncate (ut64 in, int n);
 
 R_API int r_file_chmod (const char *file, const char *mod, int recursive);
@@ -739,6 +743,14 @@ R_API const ut8 *r_uleb128 (const ut8 *data, int datalen, ut64 *v);
 R_API const ut8 *r_uleb128_decode (const ut8 *data, int *datalen, ut64 *v);
 R_API const ut8 *r_uleb128_encode (const ut64 s, int *len);
 R_API const ut8 *r_leb128 (const ut8 *data, st64 *v);
+
+/*swap*/ //inline?
+R_API ut16 r_swap_ut16(ut16 val);
+R_API st16 r_swap_st16(st16 val);
+R_API ut32 r_swap_ut32(ut32 val);
+R_API st32 r_swap_st32(st32 val);
+R_API ut64 r_swap_ut64(ut64 val);
+R_API st64 r_swap_st64(st64 val);
 #endif
 
 /* constr */
@@ -756,8 +768,12 @@ R_API const char *r_constr_add (RConstr *c, const char *str);
 
 /* sandbox */
 R_API DIR* r_sandbox_opendir (const char *path);
-R_API int r_sandbox_enable (int e);
-R_API int r_sandbox_disable (int e);
+R_API int r_sandbox_lseek (int fd, ut64 addr, int mode);
+R_API int r_sandbox_close (int fd);
+R_API int r_sandbox_read(int fd, ut8 *buf, int len);
+R_API int r_sandbox_write(int fd, const ut8 *buf, int len);
+R_API bool r_sandbox_enable (bool e);
+R_API bool r_sandbox_disable (bool e);
 R_API int r_sandbox_system (const char *x, int fork);
 R_API bool r_sandbox_creat (const char *path, int mode);
 R_API int r_sandbox_open (const char *path, int mode, int perm);

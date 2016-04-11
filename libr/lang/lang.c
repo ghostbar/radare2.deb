@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2015 - pancake */
+/* radare - LGPL - Copyright 2009-2016 - pancake */
 
 #include <r_lang.h>
 #include <r_util.h>
@@ -7,6 +7,7 @@ R_LIB_VERSION(r_lang);
 
 #include "p/pipe.c"  // hardcoded
 #include "p/vala.c"  // hardcoded
+#include "p/rust.c"  // hardcoded
 #include "p/c.c"     // hardcoded
 #if __UNIX__
 #include "p/cpipe.c" // hardcoded
@@ -34,6 +35,7 @@ R_API RLang *r_lang_new() {
 		r_lang_add (lang, &r_lang_plugin_cpipe);
 #endif
 		r_lang_add (lang, &r_lang_plugin_vala);
+		r_lang_add (lang, &r_lang_plugin_rust);
 		r_lang_add (lang, &r_lang_plugin_pipe);
 	}
 	return lang;
@@ -213,7 +215,7 @@ R_API int r_lang_prompt(RLang *lang) {
 	line->history = histnull;
 	/* foo */
 	for (;;) {
-	snprintf (buf, sizeof (buf)-1, "%s> ", lang->cur->name);
+		snprintf (buf, sizeof (buf)-1, "%s> ", lang->cur->name);
 		r_line_set_prompt (buf);
 #if 0
 		printf ("%s> ", lang->cur->name);

@@ -13,11 +13,54 @@ R_API int cmd_write_hexpair(RCore* core, const char* pairs) {
 		if (r_config_get_i (core->config, "cfg.wseek"))
 			r_core_seek_delta (core, len);
 		r_core_block_read (core, 0);
-	} else
+	} else {
 		eprintf ("Error: invalid hexpair string\n");
+	}
 	free (buf);
-
 	return !len;
+}
+
+static bool encrypt_block(RCore *core, const char *algo, const char *key) {
+	int keylen = key? strlen (key): 0;
+	if (keylen > 0) {
+		RCrypto *cry = r_crypto_new ();
+		if (r_crypto_use (cry, algo)) {
+			ut8 *binkey = malloc (keylen + 1);
+			if (binkey) {
+				int len = r_hex_str2bin (key, binkey);
+				if (len < 1) {
+					len = keylen;
+					strcpy ((char *)binkey, key);
+				} else {
+					keylen = len;
+				}
+				if (r_crypto_set_key (cry, binkey, keylen, 0, 0)) {
+					r_crypto_update (cry, (const ut8*)core->block, core->blocksize);
+					r_crypto_final (cry, NULL, 0);
+
+					int result_size = 0;
+					ut8 *result = r_crypto_get_output (cry, &result_size);
+					if (result) {
+						r_io_write_at (core->io, core->offset, result, result_size);
+						eprintf ("Written %d bytes\n", result_size);
+						free (result);
+					}
+				} else {
+					eprintf ("Invalid key\n");
+				}
+				free (binkey);
+				return 0;
+			} else {
+				eprintf ("Cannot allocate %d bytes\n", keylen);
+			}
+		} else {
+			eprintf ("Unknown encryption algorithm '%s'\n", algo);
+		}
+		r_crypto_free (cry);
+	} else {
+		eprintf ("Encryption key not defined. Use -S [key]\n");
+	}
+	return 1;
 }
 
 static void cmd_write_bits(RCore *core, int set, ut64 val) {
@@ -52,30 +95,37 @@ static void cmd_write_op (RCore *core, const char *input) {
 	int len;
 	const char* help_msg[] = {
 		"Usage:","wo[asmdxoArl24]"," [hexpairs] @ addr[!bsize]",
-		"wow"," [val]", "==  write looped value (alias for 'wb')",
+		"wo[aAdlmorwx24]","", "without hexpair values, clipboard is used",
 		"woa"," [val]", "+=  addition (f.ex: woa 0102)",
-		"wos"," [val]", "-=  substraction",
-		"wom"," [val]", "*=  multiply",
+		"woA"," [val]","&=  and",
 		"wod"," [val]", "/=  divide",
 		"woe"," [from to] [step] [wsz=1]","..  create sequence",
-		"wox"," [val]","^=  xor  (f.ex: wox 0x90)",
-		"woo"," [val]","|=  or",
-		"woA"," [val]","&=  and",
-		"woR","","random bytes (alias for 'wr $b')",
-		"wor"," [val]", ">>= shift right",
+		"woE"," [algo] [key]", "encrypt current block with given algo and key",
 		"wol"," [val]","<<= shift left",
+		"wom"," [val]", "*=  multiply",
+		"woo"," [val]","|=  or",
+		"wopD"," [len]","De Bruijn Pattern (syntax wopD length @ addr)",
+		"wopO"," [len]", "De Bruijn Pattern Offset (syntax: wopO value)",
+		"wor"," [val]", ">>= shift right",
+		"woR","","random bytes (alias for 'wr $b')",
+		"wos"," [val]", "-=  substraction",
+		"wow"," [val]", "==  write looped value (alias for 'wb')",
+		"wox"," [val]","^=  xor  (f.ex: wox 0x90)",
 		"wo2"," [val]","2=  2 byte endian swap",
 		"wo4"," [val]", "4=  4 byte endian swap",
-		"woD"," [len]","De Bruijn Pattern (syntax woD length @ addr)",
-		"woO"," [len]", "De Bruijn Pattern Offset (syntax: woO value)",
 		NULL
 	};
 	if (!input[0])
 		return;
 	switch (input[1]) {
+	case 'e':
+		if (input[2]!=' ') {
+			r_cons_printf ("Usage: 'woe from-to step'\n");
+			return;
+		}
+		/* fallthru */
 	case 'a':
 	case 's':
-	case 'e':
 	case 'A':
 	case 'x':
 	case 'r':
@@ -84,20 +134,15 @@ static void cmd_write_op (RCore *core, const char *input) {
 	case 'd':
 	case 'o':
 	case 'w':
-		if (input[2]!=' ') {
-			if (input[1]=='e')
-				r_cons_printf ("Usage: 'woe from-to step'\n");
-			else
-				r_cons_printf ("Usage: 'wo%c 00 11 22'\n", input[1]);
-			return;
-		}
-		/* fallthru */
 	case '2':
 	case '4':
-		if (input[2]) {
+		if (input[2]) {  // parse val from arg
 			r_core_write_op (core, input+3, input[1]);
 			r_core_block_read (core, 0);
-		} else eprintf ("Missing argument\n");
+		} else {  // use clipboard instead of val
+			r_core_write_op (core, NULL, input[1]);
+			r_core_block_read (core, 0);
+		}
 		break;
 	case 'R':
 		r_core_cmd0 (core, "wr $b");
@@ -106,24 +151,55 @@ static void cmd_write_op (RCore *core, const char *input) {
 		r_core_write_op (core, "ff", 'x');
 		r_core_block_read (core, 0);
 		break;
-	case 'D':
-		len = (int)(input[2]==' ')?
-			r_num_math (core->num, input + 2): core->blocksize;
-		if (len > 0) {
-			buf = (ut8*)r_debruijn_pattern (len, 0, NULL); //debruijn_charset);
-			if (buf) {
-				r_core_write_at (core, core->offset, buf, len);
-				free (buf);
-			} else {
-				eprintf ("Couldn't generate pattern of length %d\n", len);
+	case 'E': // encrypt
+		{
+			const char *algo = NULL;
+			const char *key = NULL;
+			char *space, *args = strdup (r_str_chop_ro (input+2));
+			space = strchr (args, ' ');
+			if (space) {
+				*space++ = 0;
+				key = space;
 			}
+			algo = args;
+			if (algo && *algo) {
+				encrypt_block (core, algo, key);
+			} else {
+				eprintf ("Usage: woE [algo] [key]\n");
+				eprintf ("TODO: list currently supported crypto algorithms\n");
+				eprintf ("  rc2, rc4, xor, blowfish, aes\n");
+			}
+			free (args);
 		}
 		break;
-	case 'O':
-		len = (int)(input[2]==' ')?
-			r_num_math (core->num, input + 2): core->blocksize;
-		core->num->value = r_debruijn_offset (len, !core->assembler->big_endian);
-		r_cons_printf ("%d\n", core->num->value);
+	case 'D': // decrypt
+		eprintf ("TODO: implement woD decrypt\n");
+		break;
+	case 'p': // debrujin patterns
+		switch (input[2]) {
+		case 'D':
+			len = (int)(input[3]==' ')?
+				r_num_math (core->num, input + 3): core->blocksize;
+			if (len > 0) {
+				buf = (ut8*)r_debruijn_pattern (len, 0, NULL); //debruijn_charset);
+				if (buf) {
+					r_core_write_at (core, core->offset, buf, len);
+					free (buf);
+				} else {
+					eprintf ("Couldn't generate pattern of length %d\n", len);
+				}
+			}
+			break;
+		case 'O':
+			len = (int)(input[3]==' ')?
+				r_num_math (core->num, input + 3): core->blocksize;
+			core->num->value = r_debruijn_offset (len, !core->assembler->big_endian);
+			r_cons_printf ("%d\n", core->num->value);
+			break;
+		default:
+			eprintf ("Invalid arguments for wop\n");
+			break;
+		}
 		break;
 	case '\0':
 	case '?':
@@ -286,6 +362,7 @@ static int cmd_write(void *data, const char *input) {
 		"ww"," foobar","write wide string 'f\\x00o\\x00o\\x00b\\x00a\\x00r\\x00'",
 		"wx"," 9090","write two intel nops",
 		"wv"," eip+34","write 32-64 bit value",
+		"wz"," string","write zero terminated string (like w + \\x00",
 		NULL
 	};
 
@@ -755,6 +832,17 @@ static int cmd_write(void *data, const char *input) {
 		r_io_write_at (core->io, core->offset, (const ut8*)str, len);
 #endif
 		WSEEK (core, len);
+		r_core_block_read (core, 0);
+		break;
+	case 'z':
+		/* write zero-terminated string */
+		len = r_str_unescape (str);
+		r_core_write_at (core, core->offset, (const ut8*)str + 1, len);
+#if 0
+		r_io_use_desc (core->io, core->file->desc);
+		r_io_write_at (core->io, core->offset, (const ut8*)str, len);
+#endif
+		WSEEK (core, len + 1);
 		r_core_block_read (core, 0);
 		break;
 	case 't': // "wt"

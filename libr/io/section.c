@@ -1,9 +1,8 @@
-/* radare2 - LGPL - Copyright 2008-2015 - pancake, nibble */
+/* radare2 - LGPL - Copyright 2008-2016 - pancake, nibble */
 
 #include "r_io.h"
-
-// no link dep
-#include <r_cons.h>
+// no link
+#include "r_cons.h"
 
 R_API void r_io_section_init(RIO *io) {
 	io->next_section_id = 0;
@@ -57,10 +56,11 @@ static RIOSection *findMatching (RIO *io, ut64 paddr, ut64 vaddr, ut64 size, ut6
 R_API RIOSection *r_io_section_add(RIO *io, ut64 offset, ut64 vaddr, ut64 size, ut64 vsize, int rwx, const char *name, ut32 bin_id, int fd) {
 	int update = 0;
 	RIOSection *s;
-	if (size==0 || size>0xf0000000) {
-		if (size>0 && size != UT64_MAX && size != UT32_MAX)
-			eprintf ("Invalid size (0x%08"PFMT64x") for section '%s' at 0x%08"PFMT64x"\n",
-			size, name, vaddr);
+	if (size == 0 || size > 0xf0000000) {
+		if (size > 0 && size != UT64_MAX && size != UT32_MAX)
+			eprintf ("Invalid size (0x%08" PFMT64x
+				 ") for section '%s' at 0x%08" PFMT64x "\n",
+				 size, name, vaddr);
 		return NULL;
 	}
 	s = findMatching (io, offset, vaddr, size, vsize, rwx, name);
@@ -71,7 +71,9 @@ R_API RIOSection *r_io_section_add(RIO *io, ut64 offset, ut64 vaddr, ut64 size, 
 	if (s == NULL) {
 		s = R_NEW0 (RIOSection);
 		s->id = io->next_section_id++;
-	} else update = 1;
+	} else {
+		update = 1;
+	}
 	s->offset = offset;
 	s->vaddr = vaddr;
 	s->size = size;
@@ -187,12 +189,12 @@ R_API void r_io_section_list(RIO *io, ut64 offset, int rad) {
 	}
 
 
-static void list_section_visual_vaddr (RIO *io, ut64 seek, ut64 len, int use_color) {
+static void list_section_visual_vaddr (RIO *io, ut64 seek, ut64 len, int use_color, int cols) {
 	ut64 mul, min = -1, max = -1;
 	RListIter *iter;
 	RIOSection *s;
 	int j, i = 0;
-	int  width = r_cons_get_size (NULL) - 60;
+	int  width = cols - 60;
 	if (width < 1) width = 30;
 	r_list_foreach (io->sections, iter, s) {
 		if (min == -1 || s->vaddr < min)
@@ -241,12 +243,12 @@ static void list_section_visual_vaddr (RIO *io, ut64 seek, ut64 len, int use_col
 	}
 }
 
-static void list_section_visual_paddr (RIO *io, ut64 seek, ut64 len, int use_color) {
+static void list_section_visual_paddr (RIO *io, ut64 seek, ut64 len, int use_color, int cols) {
 	ut64 mul, min = -1, max = -1;
 	RListIter *iter;
 	RIOSection *s;
 	int j, i = 0;
-	int  width = r_cons_get_size (NULL) - 60;
+	int  width = cols - 60;
 	if (width < 1) width = 30;
 	seek = r_io_section_vaddr_to_maddr_try (io, seek);
 	r_list_foreach (io->sections, iter, s) {
@@ -297,9 +299,9 @@ static void list_section_visual_paddr (RIO *io, ut64 seek, ut64 len, int use_col
 }
 
 /* TODO: move to print ??? support pretty print of ranges following an array of offsetof */
-R_API void r_io_section_list_visual(RIO *io, ut64 seek, ut64 len, int use_color) {
-	if (io->va) list_section_visual_vaddr (io, seek, len, use_color);
-	else list_section_visual_paddr (io, seek, len, use_color);
+R_API void r_io_section_list_visual(RIO *io, ut64 seek, ut64 len, int use_color, int cols) {
+	if (io->va) list_section_visual_vaddr (io, seek, len, use_color, cols);
+	else list_section_visual_paddr (io, seek, len, use_color, cols);
 }
 
 R_API RIOSection *r_io_section_vget(RIO *io, ut64 vaddr) {

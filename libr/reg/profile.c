@@ -1,7 +1,8 @@
-/* radare - LGPL - Copyright 2009-2015 - pancake */
+/* radare - LGPL - Copyright 2009-2016 - pancake */
 
 #include <r_reg.h>
 #include <r_util.h>
+#include <r_lib.h>
 
 static const char *parse_alias(RReg *reg, char **tok, const int n) {
 	if (n != 2) return "Invalid syntax";
@@ -104,7 +105,7 @@ R_API int r_reg_set_profile_string(RReg *reg, const char *str) {
 	// we should reset all the arenas before setting the new reg profile
 	r_reg_arena_pop (reg);
 	// Purge the old registers
-	r_reg_free_internal (reg);
+	r_reg_free_internal (reg, true);
 
 	// Cache the profile string
 	reg->reg_profile_str = strdup (str);
@@ -166,7 +167,7 @@ R_API int r_reg_set_profile_string(RReg *reg, const char *str) {
 					__FUNCTION__, l, r);
 				//eprintf ("(%s)\n", str);
 				// Clean up
-				r_reg_free_internal (reg);
+				r_reg_free_internal (reg, false);
 				return false;
 			}
 		}
@@ -189,8 +190,7 @@ R_API int r_reg_set_profile(RReg *reg, const char *profile) {
 	char *base, *file;
 	char *str = r_file_slurp (profile, NULL);
 	if (!str) {
-		// XXX we must define this varname in r_lib.h /compiletime/
-		base = r_sys_getenv ("LIBR_PLUGINS");
+		base = r_sys_getenv (R_LIB_ENV);
 		if (base) {
 			file = r_str_concat (base, profile);
 			str = r_file_slurp (file, NULL);

@@ -583,6 +583,8 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 	if (step < 1) step = 1;
 	if (inc < 1) inc = 1;
 	switch (base) {
+	case -10: fmt = "0x%08x "; pre = " "; if (inc<4) inc = 4; break;
+	case -1: fmt = "0x%08x "; pre = "  "; if (inc<4) inc = 4; break;
 	case 8: fmt = "%03o"; pre = " "; break;
 	case 10: fmt = "%3d"; pre = " "; break;
 	case 32: fmt = "0x%08x "; pre = " "; if (inc<4) inc = 4; break;
@@ -593,40 +595,45 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 	if (step == 1 && base < 0) {
 		use_header = false;
 	}
-	if ((base>0 && base < 32 && step != 2) && use_header) {
-		ut32 opad = (ut32)(addr >> 32);
-		{ // XXX: use r_print_addr_header
-			int i, delta;
-			char soff[32];
-			if (use_segoff) {
-				ut32 s, a;
-				a = addr & 0xffff;
-				s = ((addr-a)>>4 ) &0xffff;
-				snprintf (soff, sizeof (soff), "%04x:%04x ", s, a);
-				printfmt ("- offset -");
-			} else {
-				printfmt ("- offset - ");
-				snprintf (soff, sizeof (soff), "0x%08"PFMT64x, addr);
+	if (use_header) {
+		if (base < 32 ) { //&& step != 2) {
+			ut32 opad = (ut32)(addr >> 32);
+			{ // XXX: use r_print_addr_header
+				int i, delta;
+				char soff[32];
+				if (use_segoff) {
+					ut32 s, a;
+					a = addr & 0xffff;
+					s = ((addr-a)>>4 ) &0xffff;
+					snprintf (soff, sizeof (soff), "%04x:%04x ", s, a);
+					printfmt ("- offset -");
+				} else {
+					printfmt ("- offset - ");
+					snprintf (soff, sizeof (soff), "0x%08"PFMT64x, addr);
+				}
+				delta = strlen (soff) - 10;
+				for (i=0; i<delta; i++)
+					printfmt (" ");
+					//printfmt (i+1==delta?" ":" "); // NOP WTF
 			}
-			delta = strlen (soff) - 10;
-			for (i=0; i<delta; i++)
-				printfmt (" ");
-				//printfmt (i+1==delta?" ":" "); // NOP WTF
+			printfmt (col == 1 ? "|" : " ");
+			opad >>= 4;
+			k = 0; // TODO: ??? SURE??? config.seek & 0xF;
+			/* extra padding for offsets > 8 digits */
+			for (i=0; i<inc; i++) {
+				printfmt (pre);
+				if (base<0) {
+					if (i&1)printfmt(" ");
+				}
+				printfmt (" %c", hex[(i+k)%16]);
+				if (i&1 || !pairs)
+					printfmt (col != 1 ? " " : ((i + 1) < inc) ? " " : "|");
+			}
+			printfmt ((col == 2) ? "|" : " ");
+			for (i = 0; i < inc; i++)
+				printfmt ("%c", hex[(i+k)%16]);
+			printfmt (col == 2 ? "|\n" : "\n");
 		}
-		printfmt (col == 1 ? "|" : " ");
-		opad >>= 4;
-		k = 0; // TODO: ??? SURE??? config.seek & 0xF;
-		/* extra padding for offsets > 8 digits */
-		for (i=0; i<inc; i++) {
-			printfmt (pre);
-			printfmt (" %c", hex[(i+k)%16]);
-			if (i&1 || !pairs)
-				printfmt (col != 1 ? " " : ((i + 1) < inc) ? " " : "|");
-		}
-		printfmt ((col == 2) ? "|" : " ");
-		for (i = 0; i < inc; i++)
-			printfmt ("%c", hex[(i+k)%16]);
-		printfmt (col == 2 ? "|\n" : "\n");
 	}
 
 	if (p) p->interrupt = 0;
@@ -1029,28 +1036,61 @@ void lsb_stego_process (FILE *fd, int length, bool forward, bool downward, int o
 #endif
 
 /// XXX: fix ascii art with different INCs
-R_API void r_print_fill(RPrint *p, const ut8 *arr, int size) {
+R_API void r_print_fill(RPrint *p, const ut8 *arr, int size, ut64 addr, int step) {
+	const int show_colors = p->flags & R_PRINT_FLAGS_COLOR;
+	const char *firebow[6] = {
+		Color_BGBLUE,
+		Color_BGGREEN,
+		Color_BGMAGENTA,
+		Color_BGRED,
+		Color_BGYELLOW,
+		Color_BGWHITE,
+	};
 	int i = 0, j;
 #define INC 5
-	p->cb_printf ("         ");
-	if (arr[0]>1) for (i=0;i<arr[0]; i+=INC) p->cb_printf ("_");
-	p->cb_printf ("\n");
-	for (i=0; i<size; i++) {
-		ut8 next = (i+1<size)? arr[i+1]:0;
-			int base = 0;
+#if TOPLINE
+	if (arr[0] > 1) {
+		p->cb_printf ("         ");
+		if (addr != UT64_MAX && step > 0) {
+			p->cb_printf ("           ");
+		}
+		if (arr[0]>1) for (i=0;i<arr[0]; i+=INC) p->cb_printf ("_");
+		p->cb_printf ("\n");
+	}
+#endif
+	for (i = 0; i < size; i++) {
+		ut8 next = (i + 1 < size)? arr[i+1]: 0;
+		int base = 0;
+		if (addr != UT64_MAX && step > 0) {
+			p->cb_printf ("0x%08"PFMT64x" ", addr + (i * step));
+		}
 		p->cb_printf ("%02x %04x |", i, arr[i]);
-			if (next<INC) base = 1;
-		if (next<arr[i]) {
+		if (show_colors) {
+			int idx = (int)(arr[i] * 5 / 255);
+			const char *k = firebow[idx];
+			p->cb_printf ("%s", k);
+		}
+		if (next < INC) base = 1;
+		if (next < arr[i]) {
 			//if (arr[i]>0 && i>0) p->cb_printf ("  ");
-			if (arr[i]>INC)
-			for (j=0;j<next+base; j+=INC) p->cb_printf (" ");
-			for (j=next+INC; j+base<arr[i]; j+=INC) p->cb_printf ("_");
+			if (arr[i] > INC) {
+				for (j=0;j<next+base; j+=INC) p->cb_printf (i?" ":"'");
+			}
+			for (j = next + INC; j + base < arr[i]; j += INC) p->cb_printf ("_");
 		} else {
-			for (j=INC; j<arr[i]+base; j+=INC) p->cb_printf (" ");
+			if (i==0) {
+				for (j = INC; j < arr[i]+base; j += INC) p->cb_printf ("'");
+			} else {
+				for (j = INC; j < arr[i]+base; j += INC) p->cb_printf (" ");
+			}
 		}
 		//for (j=1;j<arr[i]; j+=INC) p->cb_printf (under);
-		p->cb_printf ("|");
-		if (i+1 == size) {
+		if (show_colors) {
+			p->cb_printf ("|"Color_RESET);
+		} else {
+			p->cb_printf ("|");
+		}
+		if (i + 1 == size) {
 			for (j=arr[i]+INC+base; j+base<next; j+=INC)
 				p->cb_printf ("_");
 		} else if (arr[i+1] > arr[i]) {
@@ -1332,14 +1372,18 @@ R_API void r_print_init_rowoffsets (RPrint *p) {
 
 // set the offset, from the start of the printing, of the i-th row
 R_API void r_print_set_rowoff (RPrint *p, int i, ut32 offset) {
-	if (!p->row_offsets) {
-		p->row_offsets_sz = DFLT_ROWS;
+	if (i < 0) return;
+	if (!p->row_offsets || !p->row_offsets_sz) {
+		p->row_offsets_sz = R_MAX(i + 1, DFLT_ROWS);
 		p->row_offsets = R_NEWS (ut32, p->row_offsets_sz);
 	}
 	if (i >= p->row_offsets_sz) {
 		size_t new_size;
 		p->row_offsets_sz *= 2;
-		new_size = sizeof (*p->row_offsets) * p->row_offsets_sz;
+		//XXX dangerous
+		while (i >= p->row_offsets_sz)
+			p->row_offsets_sz *= 2;
+		new_size = sizeof (ut32) * p->row_offsets_sz;
 		p->row_offsets = realloc (p->row_offsets, new_size);
 	}
 	p->row_offsets[i] = offset;

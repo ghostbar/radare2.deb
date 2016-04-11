@@ -5,8 +5,9 @@
 #include <r_lib.h>
 #include <r_bin.h>
 #include "mach0/mach0.h"
-
 #include "objc/mach0_classes.h"
+
+extern RBinWrite r_bin_write_mach0;
 
 static int check(RBinFile *arch);
 static int check_bytes(const ut8 *buf, ut64 length);
@@ -176,7 +177,7 @@ static RList* symbols(RBinFile *arch) {
 		ut64 value = 0, address = 0;
 		const ut8* temp = bin->func_start;
 		const ut8* temp_end = bin->func_start + bin->func_size;
-		while (*temp && temp+3 < temp_end) {
+		while (temp+3 < temp_end && *temp) {
 			temp = r_uleb128_decode (temp, NULL, &value);
 			address += value;
 			ptr = R_NEW0 (RBinSymbol);
@@ -594,7 +595,8 @@ RBinPlugin r_bin_plugin_mach0 = {
 	.libs = &libs,
 	.relocs = &relocs,
 	.create = &create,
-	.classes = &MACH0_(parse_classes)
+	.classes = &MACH0_(parse_classes),
+	.write = &r_bin_write_mach0,
 };
 
 #ifndef CORELIB

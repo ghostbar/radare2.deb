@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2010-2015 - pancake, nibble */
+/* radare - LGPL - Copyright 2010-2016 - pancake, nibble */
 
 #include <r_anal.h>
 #include <r_util.h>
@@ -45,14 +45,21 @@ R_API void r_anal_op_fini(RAnalOp *op) {
 	r_anal_value_free (op->src[1]);
 	r_anal_value_free (op->src[2]);
 	r_anal_value_free (op->dst);
+	r_strbuf_fini (&op->esil);
 	r_anal_switch_op_free (op->switch_op);
-	free (op->mnemonic);
-	memset (op, 0, sizeof (RAnalOp));
+	op->src[0] = NULL;
+	op->src[1] = NULL;
+	op->src[2] = NULL;
+	op->dst = NULL;
+	op->var = NULL;
+	op->switch_op = NULL;
+	R_FREE (op->mnemonic);
 }
 
 R_API void r_anal_op_free(void *_op) {
 	if (!_op) return;
 	r_anal_op_fini (_op);
+	memset (_op, 0, sizeof (RAnalOp));
 	free (_op);
 }
 
@@ -60,7 +67,6 @@ static RAnalVar *get_used_var(RAnal *anal, RAnalOp *op) {
 	char *inst_key = sdb_fmt (0, "inst.0x%"PFMT64x".vars", op->addr);
 	char *var_def = sdb_get (anal->sdb_fcns, inst_key, 0);
 	struct VarUsedType vut;
-	int fmt_len, i, ct = 0;
 	RAnalVar *res;
 
 	if (sdb_fmt_tobin (var_def, SDB_VARUSED_FMT, &vut) != 4) {
@@ -74,7 +80,8 @@ static RAnalVar *get_used_var(RAnal *anal, RAnalOp *op) {
 R_API int r_anal_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len) {
 	int ret = 0;
 
-	if (!anal) return -1;
+	//len will end up in memcmp so check for negative	
+	if (!anal || len < 0) return -1;
 	if (anal->pcalign) {
 		if (addr % anal->pcalign) {
 			memset (op, 0, sizeof (RAnalOp));

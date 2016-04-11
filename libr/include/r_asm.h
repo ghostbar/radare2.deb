@@ -17,7 +17,8 @@ R_LIB_VERSION_HEADER(r_asm);
 
 #define R_ASM_OPCODES_PATH R2_LIBDIR "/radare2/" R2_VERSION "/opcodes"
 // XXX too big!
-#define R_ASM_BUFSIZE 256
+// the 256th character is left for the null terminator
+#define R_ASM_BUFSIZE 255
 
 /* backward compatibility */
 #define R_ASM_ARCH_NONE R_SYS_ARCH_NONE
@@ -64,9 +65,9 @@ typedef struct r_asm_op_t {
 	int size; // instruction size
 	int payload; // size of payload (opsize = (size-payload))
 	// But this is pretty slow..so maybe we should add some accessors
-	ut8  buf[R_ASM_BUFSIZE];
-	char buf_asm[R_ASM_BUFSIZE];
-	char buf_hex[R_ASM_BUFSIZE];
+	ut8  buf[R_ASM_BUFSIZE+1];
+	char buf_asm[R_ASM_BUFSIZE+1];
+	char buf_hex[R_ASM_BUFSIZE+1];
 } RAsmOp;
 
 typedef struct r_asm_code_t {
@@ -132,7 +133,7 @@ R_API RAsm *r_asm_new(void);
 R_API RAsm *r_asm_free(RAsm *a);
 R_API int r_asm_modify(RAsm *a, ut8 *buf, int field, ut64 val);
 R_API void r_asm_set_user_ptr(RAsm *a, void *user);
-R_API int r_asm_add(RAsm *a, RAsmPlugin *foo);
+R_API bool r_asm_add(RAsm *a, RAsmPlugin *foo);
 R_API int r_asm_setup(RAsm *a, const char *arch, int bits, int big_endian);
 R_API int r_asm_is_valid(RAsm *a, const char *name);
 R_API int r_asm_use(RAsm *a, const char *name);
@@ -225,6 +226,7 @@ extern RAsmPlugin r_asm_plugin_vax;
 extern RAsmPlugin r_asm_plugin_lanai_gnu;
 extern RAsmPlugin r_asm_plugin_xtensa;
 extern RAsmPlugin r_asm_plugin_tricore;
+extern RAsmPlugin r_asm_plugin_pic18c;
 #endif
 
 #ifdef __cplusplus

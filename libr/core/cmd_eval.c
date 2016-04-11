@@ -1,5 +1,115 @@
 /* radare2 - LGPL - Copyright 2009-2016 - pancake */
 
+static char *curtheme = NULL;
+static bool getNext = false;
+
+static bool nextpal_item(RCore *core, int mode, const char *file) {
+	const char *fn = r_str_lchr (file, '/');
+	if (!fn) fn = file;
+	switch (mode) {
+	case 'l': // list
+		r_cons_printf ("%s\n", fn);
+		break;
+	case 'p': // previous
+		// TODO: move logic here
+		break;
+	case 'n': // next
+		if (getNext) {
+			curtheme = r_str_dup (curtheme, fn);
+			getNext = false;
+			return false;
+		} else if (curtheme) {
+			if (!strcmp (curtheme, fn)) {
+				getNext = true;
+			}
+		} else {
+			curtheme = r_str_dup (curtheme, fn);
+			return false;
+		}
+		break;
+	}
+	return true;
+}
+
+static void nextpal(RCore *core, int mode) {
+	RList *files = NULL;
+	RListIter *iter;
+	const char *fn;
+	char *home = r_str_home (".config/radare2/cons/");
+
+	getNext = false;
+	if (home) {
+		files = r_sys_dir (home);
+		r_list_foreach (files, iter, fn) {
+			if (*fn && *fn != '.') {
+				if (mode == 'p') {
+					const char *nfn = iter->n? iter->n->data: NULL;
+					if (!curtheme) {
+						free (home);
+						r_list_free (files);
+						return;
+					}
+					eprintf ("%s %s %s\n", nfn, curtheme, fn);
+					if (nfn && !strcmp (nfn, curtheme)) {
+						r_list_free (files);
+						files = NULL;
+						free (curtheme);
+						curtheme = strdup (fn);
+						R_FREE (home);
+						goto done;
+					}
+				} else {
+					if (!nextpal_item (core, mode, fn)) {
+						r_list_free (files);
+						files = NULL;
+						R_FREE (home);
+						goto done;
+					}
+				}
+			}
+		}
+		r_list_free (files);
+		R_FREE (home);
+	}
+	files = r_sys_dir (R2_DATDIR"/radare2/"R2_VERSION"/cons/");
+	r_list_foreach (files, iter, fn) {
+		if (*fn && *fn != '.') {
+			if (mode == 'p') {
+				const char *nfn = iter->n? iter->n->data: NULL;
+				if (!curtheme) {
+					free (home);
+					r_list_free (files);
+					return;
+				}
+				eprintf ("%s %s %s\n", nfn, curtheme, fn);
+				if (nfn && !strcmp (nfn, curtheme)) {
+					free (curtheme);
+					curtheme = strdup (fn);
+					goto done;
+				}
+			} else {
+				if (!nextpal_item (core, mode, fn))
+					goto done;
+			}
+		}
+	}
+done:
+	if (getNext) {
+		R_FREE (curtheme);
+		nextpal (core, mode);
+		return;
+	}
+	if (mode == 'l' && !curtheme && !r_list_empty (files)) {
+		//nextpal (core, mode);
+	} else {
+		if (curtheme) {
+			r_core_cmdf (core, "eco %s", curtheme);
+		}
+	}
+	r_list_free (files);
+	files = NULL;
+}
+
 static int cmd_eval(void *data, const char *input) {
 	char *p;
 	RCore *core = (RCore *)data;
@@ -49,17 +159,11 @@ static int cmd_eval(void *data, const char *input) {
 	case 'j':
 		r_config_list (core->config, NULL, 'j');
 		break;
-	case '\0':
+	case '\0': // "e"
 		r_config_list (core->config, NULL, 0);
 		break;
-	case 'c':
+	case 'c': // "ec"
 		switch (input[1]) {
-		case 'h': // echo
-			if (( p = strchr (input, ' ') )) {
-				r_cons_strcat (p+1);
-				r_cons_newline ();
-			}
-			break;
 		case 'd':
 			r_cons_pal_init (NULL);
 			break;
@@ -74,6 +178,8 @@ static int cmd_eval(void *data, const char *input) {
 			"ecj","","show palette in JSON",
 			"ecc","","show palette in CSS",
 			"eco"," dark|white","load white color scheme template",
+			"ecp","","load previous color theme",
+			"ecn","","load next color theme",
 			"ec"," prompt red","change color of prompt",
 			"ec"," prompt red blue","change color and background of prompt",
 			""," ","",
@@ -87,46 +193,60 @@ static int cmd_eval(void *data, const char *input) {
 			break;
 		case 'o': // "eco"
 			if (input[2] == ' ') {
+				bool failed = false;
 				char *home, path[512];
 				snprintf (path, sizeof (path), ".config/radare2/cons/%s", input+3);
 				home = r_str_home (path);
 				snprintf (path, sizeof (path), R2_DATDIR"/radare2/"
 					R2_VERSION"/cons/%s", input+3);
-				if (!r_core_cmd_file (core, home))
-					if (!r_core_cmd_file (core, path))
-						if (!r_core_cmd_file (core, input+3))
+				if (!r_core_cmd_file (core, home)) {
+					if (r_core_cmd_file (core, path)) {
+						//curtheme = r_str_dup (curtheme, path);
+						curtheme = r_str_dup (curtheme, input + 3);
+					} else {
+						if (r_core_cmd_file (core, input+3)) {
+							curtheme = r_str_dup (curtheme, input + 3);
+						} else {
 							eprintf ("eco: cannot open colorscheme profile (%s)\n", path);
-				free (home);
-			} else {
-				RList *files;
-				RListIter *iter;
-				const char *fn;
-				char *home = r_str_home (".config/radare2/cons/");
-				if (home) {
-					files = r_sys_dir (home);
-					r_list_foreach (files, iter, fn) {
-						if (*fn && *fn != '.')
-							r_cons_printf ("%s\n", fn);
+							failed = true;
+						}
 					}
-					r_list_free (files);
-					free (home);
 				}
-				files = r_sys_dir (R2_DATDIR"/radare2/"R2_VERSION"/cons/");
-				r_list_foreach (files, iter, fn) {
-					if (*fn && *fn != '.')
-						r_cons_printf ("%s\n", fn);
+				free (home);
+				if (failed) {
+					eprintf ("Something went wrong\n");
 				}
-				r_list_free (files);
+			} else if (input[2]=='?') {
+				eprintf ("Usage: eco [themename]  ;load theme from /usr/share/radare2/0.10.2-git/cons/\n");
+
+			} else {
+				nextpal (core, 'l');
 			}
 			break;
-		case 's': r_cons_pal_show (); break;
-		case '*': r_cons_pal_list (1); break;
-		case 'j': r_cons_pal_list ('j'); break;
-		case 'c': r_cons_pal_list ('c'); break;
-		case '\0': r_cons_pal_list (0); break;
-		case 'r': r_cons_pal_random (); break;
+		case 's': r_cons_pal_show (); break; // "ecs"
+		case '*': r_cons_pal_list (1); break; // "ec*"
+		case 'h': // echo 
+			if (( p = strchr (input, ' ') )) {
+				r_cons_strcat (p+1);
+				r_cons_newline ();
+			} else {
+				r_cons_pal_list ('h'); break; // "ecj"
+			}
+			break;
+		case 'j': r_cons_pal_list ('j'); break; // "ecj"
+		case 'c': r_cons_pal_list ('c'); break; // "ecc"
+		case '\0': r_cons_pal_list (0); break; // "ec"
+		case 'r': // "ecr"
+			r_cons_pal_random ();
+			break;
+		case 'n': // "ecn"
+			nextpal (core, 'n');
+			break;
+		case 'p': // "ecp"
+			nextpal (core, 'p');
+			break;
 		default: {
-			char *p = strdup (input+2);
+			char *p = strdup (input + 2);
 			char *q = strchr (p, '=');
 			if (!q) q = strchr (p, ' ');
 			if (q) {

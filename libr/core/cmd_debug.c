@@ -1146,6 +1146,7 @@ static void cmd_debug_reg(RCore *core, const char *str) {
 				"drf","","show fpu registers (80 bit long double)",
 				"drm","","show multimedia packed registers",
 				"drm"," mmx0 0 32 = 12","set the first 32 bit word of the mmx reg to 12",
+				"drw"," <hexnum>", "Set contents of the register arena",
 				".dr", "*", "Include common register values in flags",
 				".dr", "-", "Unflag all registers",
 				NULL
@@ -1170,9 +1171,10 @@ static void cmd_debug_reg(RCore *core, const char *str) {
 	case 'b': // "drb"
 		{ // WORK IN PROGRESS // DEBUG COMMAND
 		int len;
-		const ut8 *buf = r_reg_get_bytes (core->dbg->reg, R_REG_TYPE_GPR, &len);
+		ut8 *buf = r_reg_get_bytes (core->dbg->reg, R_REG_TYPE_GPR, &len);
 		//r_print_hexdump (core->print, 0LL, buf, len, 16, 16);
 		r_print_hexdump (core->print, 0LL, buf, len, 32, 4);
+		free (buf);
 		}
 		break;
 	case 'c': // "drc"
@@ -1441,7 +1443,7 @@ free (rf);
 			name = r_reg_get_name (core->dbg->reg, r_reg_get_name_idx (foo));
 			if (name && *name) {
 				r_cons_printf ("%s\n", name);
-			} else eprintf ("Oops. try drn [pc|sp|bp|a0|a1|a2|a3|zf|sf|nf|of]\n");
+			} else eprintf ("Oops. try drn [PC|SP|BP|A0|A1|A2|A3|A4|R0|R1|ZF|SF|NF|OF]\n");
 			free (foo);
 		}
 		break;
@@ -2618,6 +2620,12 @@ static int cmd_debug_continue (RCore *core, const char *input) {
 	return 1;
 }
 
+static char *set_corefile_name (const char *raw_name, pid_t pid) {
+	return (!*raw_name)?
+		r_str_newf ("core.%u", pid) :
+		r_str_chop (strdup (raw_name));
+}
+
 static int cmd_debug_step (RCore *core, const char *input) {
 	ut64 addr;
 	ut8 buf[64];
@@ -2948,13 +2956,16 @@ static int cmd_debug(void *data, const char *input) {
 		}
 		//r_core_cmd (core, "|reg", 0);
 		break;
-	case 'p':
+	case 'p': // "dp"
 		cmd_debug_pid (core, input);
 		break;
-	case 'h':
-		if (input[1]==' ')
-			r_debug_use (core->dbg, input+2);
-		else r_debug_plugin_list (core->dbg);
+	case 'h': // "dh"
+		if (input[1]==' ') {
+			char *str = r_str_chop (strdup (input + 2));
+			r_config_set (core->config, "dbg.backend", str);
+			// implicit by config.set r_debug_use (core->dbg, str);
+			free (str);
+		} else r_debug_plugin_list (core->dbg);
 		break;
 	case 'i':
 		{
@@ -2981,6 +2992,8 @@ static int cmd_debug(void *data, const char *input) {
 				P ("inbp=%s\n", core->dbg->reason.bpi? "true": "false");
 				P ("pid=%d\n", rdi->pid);
 				P ("tid=%d\n", rdi->tid);
+				P ("uid=%d\n", rdi->uid);
+				P ("gid=%d\n", rdi->gid);
 				if (rdi->exe && *rdi->exe)
 					P ("exe=%s\n", rdi->exe);
 				if (rdi->cmdline && *rdi->cmdline)
@@ -3002,6 +3015,8 @@ static int cmd_debug(void *data, const char *input) {
 				P ("\"inbp\":%s,", core->dbg->reason.bpi? "true": "false");
 				P ("\"pid\":%d,", rdi->pid);
 				P ("\"tid\":%d,", rdi->tid);
+				P ("\"uid\":%d,", rdi->uid);
+				P ("\"gid\":%d,", rdi->gid);
 				if (rdi->exe) PS("\"exe\":\"%s\",", rdi->exe)
 				if (rdi->cmdline) PS ("\"cmdline\":\"%s\",", rdi->cmdline);
 				if (rdi->cwd) PS ("\"cwd\":\"%s\",", rdi->cwd);
@@ -3111,7 +3126,25 @@ static int cmd_debug(void *data, const char *input) {
 		}
 		break;
 	case 'o':
-		r_core_file_reopen (core, input[1] ? input + 2: NULL, 0, 1);
+		switch (input[1]) {
+		case 'o': //"doo" : reopen in debugger
+			r_core_file_reopen_debug (core, input + 2);
+			break;
+		case 0: // "do"
+			r_core_file_reopen (core, input[1] ? input + 2: NULL, 0, 1);
+			break;
+		case '?':
+		default: {
+				const char* help_msg[] = {
+				"Usage:", "do", " # Debug commands",
+				"do", "", "Open process (reload, alias for 'oo')",
+				"doo", "[args]", "Reopen in debugger mode with args (alias for 'ood')",
+				NULL};
+				r_core_cmd_help (core, help_msg);
+			}
+			break;
+		}
+
 		break;
 	case 'w':
 		r_cons_break (static_debug_stop, core->dbg);
@@ -3130,6 +3163,20 @@ static int cmd_debug(void *data, const char *input) {
 	case 'e':
 		r_core_debug_esil (core, input + 1);
 		break;
+	case 'g': // "dg"
+		if (core->dbg->h && core->dbg->h->gcore) {
+			char *corefile = set_corefile_name (input + 1, core->dbg->pid);
+			eprintf ("Writing to file %s\n", corefile);
+			r_sandbox_creat (corefile, 0644);
+			RBuffer *file = r_buf_new_file (corefile);
+			if (!file) perror ("r_buf_new_file");
+			free (corefile);
+			r_sandbox_enable (true);
+			core->dbg->h->gcore (core->dbg, file);
+			r_buf_free (file);
+			r_sandbox_enable (false);
+		}
+		break;
 	default: {
 			const char* help_msg[] = {
 			"Usage:", "d", " # Debug commands",
@@ -3138,12 +3185,14 @@ static int cmd_debug(void *data, const char *input) {
 			"dc", "[?]", "Continue execution",
 			"dd", "[?]", "File descriptors (!fd in r1)",
 			"de", "[-sc] [rwx] [rm] [e]", "Debug with ESIL (see de?)",
+			"dg", " <file>", "Generate a core-file (WIP)",
 			"dh", " [handler]", "List or set debugger handler",
 			"dH", " [handler]", "Transplant process to a new handler",
 			"di", "", "Show debugger backend information (See dh)",
 			"dk", "[?]", "List, send, get, set, signal handlers of child",
 			"dm", "[?]", "Show memory maps",
 			"do", "", "Open process (reload, alias for 'oo')",
+			"doo", "[args]", "Reopen in debugger mode with args (alias for 'ood')",
 			"dp", "[?]", "List, attach to process or thread id",
 			"dr", "[?]", "Cpu registers",
 			"ds", "[?]", "Step, over, source line",

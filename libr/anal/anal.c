@@ -16,8 +16,10 @@ static void r_anal_type_init(RAnal *anal) {
 	sdb_set (D, "unsigned int", "type", 0);
 	sdb_set (D, "unsigned char", "type", 0);
 	sdb_set (D, "unsigned short", "type", 0);
+	sdb_set (D, "short", "type", 0);
 	sdb_set (D, "int", "type", 0);
 	sdb_set (D, "long", "type", 0);
+	sdb_set (D, "long long", "type", 0);
 	sdb_set (D, "void *", "type", 0);
 	sdb_set (D, "char", "type", 0);
 	sdb_set (D, "char *", "type", 0);
@@ -29,8 +31,10 @@ static void r_anal_type_init(RAnal *anal) {
 	sdb_set (D, "type.unsigned int", "i", 0);
 	sdb_set (D, "type.unsigned char", "b", 0);
 	sdb_set (D, "type.unsigned short", "w", 0);
+	sdb_set (D, "type.short", "w", 0);
 	sdb_set (D, "type.int", "d", 0);
 	sdb_set (D, "type.long", "x", 0);
+	sdb_set (D, "type.long long", "q", 0);
 	sdb_set (D, "type.void *", "p", 0);
 	sdb_set (D, "type.char", "b", 0);
 	sdb_set (D, "type.char *", "*z", 0);
@@ -111,14 +115,14 @@ R_API RAnal *r_anal_new() {
 	anal->types = r_anal_type_list_new ();
 	r_anal_set_bits (anal, 32);
 	r_anal_set_big_endian (anal, false);
-	anal->plugins = r_list_new ();
-	anal->plugins->free = (RListFree) r_anal_plugin_free;
-	for (i=0; anal_static_plugins[i]; i++) {
-		static_plugin = R_NEW (RAnalPlugin);
-		*static_plugin = *anal_static_plugins[i];
-		r_anal_add (anal, static_plugin);
+	anal->plugins = r_list_newf ((RListFree) r_anal_plugin_free);
+	if (anal->plugins) {
+		for (i=0; anal_static_plugins[i]; i++) {
+			static_plugin = R_NEW (RAnalPlugin);
+			*static_plugin = *anal_static_plugins[i];
+			r_anal_add (anal, static_plugin);
+		}
 	}
-
 	return anal;
 }
 
@@ -132,6 +136,7 @@ R_API RAnal *r_anal_free(RAnal *a) {
 	if (!a) return NULL;
 	/* TODO: Free anals here */
 	R_FREE (a->cpu);
+	R_FREE (a->os);
 	r_list_free (a->plugins);
 	r_list_free (a->noreturn);
 	a->fcns->free = r_anal_fcn_free;
@@ -166,16 +171,15 @@ R_API int r_anal_add(RAnal *anal, RAnalPlugin *foo) {
 }
 
 // TODO: Must be deprecated
-R_API int r_anal_list(RAnal *anal) {
+R_API void r_anal_list(RAnal *anal) {
 	RAnalPlugin *h;
 	RListIter *it;
 	r_list_foreach (anal->plugins, it, h) {
 		anal->cb_printf ("anal %-10s %s\n", h->name, h->desc);
 	}
-	return false;
 }
 
-R_API int r_anal_use(RAnal *anal, const char *name) {
+R_API bool r_anal_use(RAnal *anal, const char *name) {
 	RListIter *it;
 	RAnalPlugin *h;
 	r_list_foreach (anal->plugins, it, h) {
@@ -193,9 +197,25 @@ R_API int r_anal_use(RAnal *anal, const char *name) {
 	return false;
 }
 
-R_API int r_anal_set_reg_profile(RAnal *anal) {
-	if (anal && anal->cur && anal->cur->set_reg_profile)
-		return anal->cur->set_reg_profile (anal);
+R_API char *r_anal_get_reg_profile(RAnal *anal) {
+	if (anal && anal->cur && anal->cur->get_reg_profile)
+		return anal->cur->get_reg_profile (anal);
+	return NULL;
+}
+
+// deprecate.. or at least reuse get_reg_profile...
+R_API bool r_anal_set_reg_profile(RAnal *anal) {
+	bool ret = false;
+	if (anal && anal->cur && anal->cur->set_reg_profile) {
+		ret = anal->cur->set_reg_profile (anal);
+	} else {
+		char *p = r_anal_get_reg_profile (anal);
+		if (p && *p) {
+			r_reg_set_profile_string (anal->reg, p);
+			ret = true;
+		}
+		free (p);
+	}
 	return false;
 }
 
@@ -219,6 +239,7 @@ R_API bool r_anal_set_fcnsign(RAnal *anal, const char *name) {
 		sdb_close (anal->sdb_fcnsign);
 		sdb_free (anal->sdb_fcnsign);
 		anal->sdb_fcnsign = sdb_new (0, file, 0);
+		sdb_ns_set (anal->sdb, "fcnsign", anal->sdb_fcnsign);
 		return (anal->sdb_fcnsign != NULL);
 	}
 	return false;
@@ -238,11 +259,11 @@ R_API int r_anal_set_triplet(RAnal *anal, const char *os, const char *arch, int 
 	return r_anal_use (anal, arch);
 }
 
-R_API int r_anal_set_os(RAnal *anal, const char *os) {
+R_API bool r_anal_set_os(RAnal *anal, const char *os) {
 	return r_anal_set_triplet (anal, os, NULL, -1);
 }
 
-R_API int r_anal_set_bits(RAnal *anal, int bits) {
+R_API bool r_anal_set_bits(RAnal *anal, int bits) {
 	switch (bits) {
 	case 8:
 	case 16:

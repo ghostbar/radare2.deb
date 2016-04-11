@@ -139,8 +139,11 @@ static int filter(RParse *p, RFlag *f, char *data, char *str, int len) {
 	RAnalFunction *fcn;
 	RFlagItem *flag;
 	ut64 off;
-	int x86 = (p&&p->cur&&p->cur->name)?
-		(strstr (p->cur->name, "x86")? 1: 0): 0;
+	bool x86 = false;
+	if (p&&p->cur&&p->cur->name) {
+		if (strstr (p->cur->name, "x86")) x86 = true;
+		if (strstr (p->cur->name, "m68k")) x86 = true;
+	}
 	if (!data || !p) return 0;
 #if FILTER_DWORD
 	ptr2 = strstr (ptr, "dword ");
@@ -195,11 +198,16 @@ static int filter(RParse *p, RFlag *f, char *data, char *str, int len) {
 			int pnumleft, immbase = p->hint->immbase;
 			bool big_endian = false;
 			char num[256], *pnum;
+			bool is_hex = false;
 			strncpy (num, ptr, sizeof (num)-2);
-			for (pnum = num; *pnum; pnum++) {
-				if (IS_NUMBER (*pnum))
+			pnum = num;
+			if (!strncmp (pnum, "0x", 2)) {
+				is_hex = true;
+				pnum += 2;
+			}
+			for (; *pnum; pnum++) {
+				if ((is_hex && ishexchar(*pnum)) || IS_NUMBER(*pnum))
 					continue;
-				if (*pnum=='x') continue;
 				break;
 			}
 			*pnum = 0;

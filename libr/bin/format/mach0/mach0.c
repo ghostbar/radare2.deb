@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2010-2015 - nibble, pancake */
+/* radare - LGPL - Copyright 2010-2016 - nibble, pancake */
 
 #include <stdio.h>
 #include <r_types.h>
@@ -136,37 +136,31 @@ static int parse_segments(struct MACH0_(obj_t)* bin, ut64 off) {
 	int sect, len, seg = bin->nsegs - 1;
 	ut32 size_sects;
 
-	if (!UT32_MUL (&size_sects, bin->nsegs, sizeof (struct MACH0_(segment_command)))){
+	if (!UT32_MUL (&size_sects, bin->nsegs, sizeof (struct MACH0_(segment_command))))
 		return false;
-	}
 	if (!size_sects || size_sects > bin->size)
+		return false;
+	if (off > bin->size || off + sizeof (struct MACH0_(segment_command)) > bin->size)
 		return false;
 	if (!(bin->segs = realloc (bin->segs, bin->nsegs * sizeof(struct MACH0_(segment_command))))) {
 		perror ("realloc (seg)");
 		return false;
 	}
-	if (off > bin->size || off + sizeof (struct MACH0_(segment_command)) > bin->size)
-		return false;
 #if R_BIN_MACH064
-	len = r_buf_fread_at (bin->b, off, (ut8*)&bin->segs[seg],
-		bin->endian?"2I16c4L4I":"2i16c4l4i", 1);
+	len = r_buf_fread_at (bin->b, off, (ut8*)&bin->segs[seg], bin->endian?"2I16c4L4I":"2i16c4l4i", 1);
 #else
-	len = r_buf_fread_at (bin->b, off, (ut8*)&bin->segs[seg],
-		bin->endian?"2I16c8I":"2i16c8i", 1);
+	len = r_buf_fread_at (bin->b, off, (ut8*)&bin->segs[seg], bin->endian?"2I16c8I":"2i16c8i", 1);
 #endif
+	if (len < 1)
+		return false;
 	sdb_num_set (bin->kv, sdb_fmt (0, "mach0_segment_%d.offset", seg), off, 0);
 	sdb_num_set (bin->kv, "mach0_segments.count", 0, 0);
 	sdb_set (bin->kv, "mach0_segment.format",
 		"xd[16]zxxxxoodx "
 		"cmd cmdsize segname vmaddr vmsize "
 		"fileoff filesize maxprot initprot nsects flags", 0);
-#if 0
-// ENUM DEMO
-	sdb_set (bin->kv, sdb_fmt (0, "mach0_segment.cparse"),
-		"enum { FOO=1, FOO=2, FOO=4 }", 0);
-#endif
 
-	if (len == 0 || len == -1) {
+	if (len < 1) {
 		eprintf ("Error: read (seg)\n");
 		return false;
 	}
@@ -390,7 +384,8 @@ static int parse_dysymtab(struct MACH0_(obj_t)* bin, ut64 off) {
 static int parse_thread(struct MACH0_(obj_t)* bin, struct load_command *lc, ut64 off, bool is_first_thread) {
 	ut64 ptr_thread, pc = UT64_MAX, pc_offset = UT64_MAX;
 	ut32 flavor, count;
-	int len;
+	ut8 *arw_ptr = NULL;
+	int arw_sz, len = 0;
 
 	if (off > bin->size || off + sizeof (struct thread_command) > bin->size)
 		return false;
@@ -432,9 +427,10 @@ static int parse_thread(struct MACH0_(obj_t)* bin, struct load_command *lc, ut64
 				eprintf ("Error: read (thread state x86_32)\n");
 				return false;
 			}
-
 			pc = bin->thread_state.x86_32.eip;
 			pc_offset = ptr_thread + r_offsetof(struct x86_thread_state32, eip);
+			arw_ptr = (ut8 *)&bin->thread_state.x86_32;
+			arw_sz = sizeof (struct x86_thread_state32);
 			break;
 		case X86_THREAD_STATE64:
 			if (ptr_thread + sizeof (struct x86_thread_state64) > bin->size)
@@ -446,6 +442,8 @@ static int parse_thread(struct MACH0_(obj_t)* bin, struct load_command *lc, ut64
 			}
 			pc = bin->thread_state.x86_64.rip;
 			pc_offset = ptr_thread + r_offsetof(struct x86_thread_state64, rip);
+			arw_ptr = (ut8 *)&bin->thread_state.x86_64;
+			arw_sz = sizeof (struct x86_thread_state64);
 			break;
 		//default: eprintf ("Unknown type\n");
 		}
@@ -462,6 +460,8 @@ static int parse_thread(struct MACH0_(obj_t)* bin, struct load_command *lc, ut64
 			}
 			pc = bin->thread_state.ppc_32.srr0;
 			pc_offset = ptr_thread + r_offsetof(struct ppc_thread_state32, srr0);
+			arw_ptr = (ut8 *)&bin->thread_state.ppc_32;
+			arw_sz = sizeof (struct ppc_thread_state32);
 		} else if (flavor == X86_THREAD_STATE64) {
 			if (ptr_thread + sizeof (struct ppc_thread_state64) > bin->size)
 				return false;
@@ -472,6 +472,8 @@ static int parse_thread(struct MACH0_(obj_t)* bin, struct load_command *lc, ut64
 			}
 			pc = bin->thread_state.ppc_64.srr0;
 			pc_offset = ptr_thread + r_offsetof(struct ppc_thread_state64, srr0);
+			arw_ptr = (ut8 *)&bin->thread_state.ppc_64;
+			arw_sz = sizeof (struct ppc_thread_state64);
 		}
 		break;
 	case CPU_TYPE_ARM:
@@ -483,7 +485,9 @@ static int parse_thread(struct MACH0_(obj_t)* bin, struct load_command *lc, ut64
 			return false;
 		}
 		pc = bin->thread_state.arm_32.r15;
-		pc_offset = ptr_thread + r_offsetof(struct arm_thread_state32, r15);
+		pc_offset = ptr_thread + r_offsetof (struct arm_thread_state32, r15);
+		arw_ptr = (ut8 *)&bin->thread_state.arm_32;
+		arw_sz = sizeof (struct arm_thread_state32);
 		break;
 	case CPU_TYPE_ARM64:
 		if (ptr_thread + sizeof (struct arm_thread_state64) > bin->size)
@@ -495,10 +499,23 @@ static int parse_thread(struct MACH0_(obj_t)* bin, struct load_command *lc, ut64
 		}
 		pc = bin->thread_state.arm_64.pc;
 		pc_offset = ptr_thread + r_offsetof(struct arm_thread_state64, pc);
+		arw_ptr = (ut8*)&bin->thread_state.arm_64;
+		arw_sz = sizeof (struct arm_thread_state64);
 		break;
 	default:
 		eprintf ("Error: read (unknown thread state structure)\n");
 		return false;
+	}
+
+	// TODO: this shouldnt be an eprintf...
+	if (arw_ptr && arw_sz > 0) {
+		int i;
+		ut8 *p = arw_ptr;
+		eprintf ("arw ");
+		for (i=0; i< arw_sz; i++) {
+			eprintf ("%02x", 0xff & p[i]);
+		}
+		eprintf ("\n");
 	}
 
 	if (is_first_thread) {
@@ -929,7 +946,30 @@ struct section_t* MACH0_(get_sections)(struct MACH0_(obj_t)* bin) {
 	char segname[32], sectname[32];
 	int i, j, to;
 
-	if (!bin || !bin->sects)
+	if (!bin)
+		return NULL;
+	/* for core files */
+	if (bin->nsects <1 && bin->nsegs > 0) {
+		struct MACH0_(segment_command) *seg;
+		if (!(sections = malloc ((bin->nsegs + 1) * sizeof (struct section_t))))
+			return NULL;
+		for (i = 0; i < bin->nsegs; i++) {
+			seg = &bin->segs[i];
+			sections[i].addr = seg->vmaddr;
+			sections[i].offset = seg->fileoff;
+			sections[i].size = seg->vmsize;
+			sections[i].align = 4096;
+			sections[i].flags = seg->flags;
+			r_str_ncpy (sectname, seg->segname, sizeof (sectname)-1);
+			// hack to support multiple sections with same name
+			sections[i].srwx = prot2perm (seg->initprot);
+			sections[i].last = 0;
+		}
+		sections[i].last = 1;
+		return sections;
+	}
+
+	if (!bin->sects)
 		return NULL;
 	to = R_MIN (bin->nsects, 128); // limit number of sections here to avoid fuzzed bins
 	if (to < 1)

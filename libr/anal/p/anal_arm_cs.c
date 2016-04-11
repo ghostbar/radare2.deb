@@ -600,6 +600,9 @@ r4,r5,r6,3,sp,[*],12,sp,+=
 	case ARM_INS_CMP:
 		r_strbuf_appendf (&op->esil, "%s,%s,==", ARG(1), ARG(0));
 		break;
+	case ARM_INS_CMN:
+		r_strbuf_appendf (&op->esil, "%s,%s,!=", ARG(1), ARG(0));
+		break;
 	case ARM_INS_LSL:
 		// suffix 'S' forces conditional flag to be updated
 		if (OPCOUNT() == 2) {
@@ -746,7 +749,7 @@ r4,r5,r6,3,sp,[*],12,sp,+=
 					pcdelta = 0; // not needed for esil
 					break;
 				case 32:
-					pcdelta = 8;
+					pcdelta = 4;
 					op->ptr = addr + 8 + MEMDISP(1);
 					op->refptr = 4;
 					break;
@@ -970,9 +973,39 @@ static void anop64 (RAnalOp *op, cs_insn *insn) {
 	}
 }
 
+static int cond_cs2r2(int cc) {
+	if (cc == ARM_CC_AL || cc < 0) {
+		cc = R_ANAL_COND_AL;
+	} else {
+		switch (cc) {
+		case ARM_CC_EQ: cc = R_ANAL_COND_EQ; break;
+		case ARM_CC_NE: cc = R_ANAL_COND_NE; break;
+		case ARM_CC_HS: cc = R_ANAL_COND_HS; break;
+		case ARM_CC_LO: cc = R_ANAL_COND_LO; break;
+		case ARM_CC_MI: cc = R_ANAL_COND_MI; break;
+		case ARM_CC_PL: cc = R_ANAL_COND_PL; break;
+		case ARM_CC_VS: cc = R_ANAL_COND_VS; break;
+		case ARM_CC_VC: cc = R_ANAL_COND_VC; break;
+
+		case ARM_CC_HI: cc = R_ANAL_COND_HI; break;
+		case ARM_CC_LS: cc = R_ANAL_COND_LS; break;
+		case ARM_CC_GE: cc = R_ANAL_COND_GE; break;
+		case ARM_CC_LT: cc = R_ANAL_COND_LT; break;
+		case ARM_CC_GT: cc = R_ANAL_COND_GT; break;
+		case ARM_CC_LE: cc = R_ANAL_COND_LE; break;
+		}
+	}
+	return cc;
+}
+
 static void anop32 (RAnalOp *op, cs_insn *insn) {
 	ut64 addr = op->addr;
 	int i;
+	op->cond = cond_cs2r2 (insn->detail->arm.cc);
+	if (op->cond == R_ANAL_COND_NV) {
+		op->type = R_ANAL_OP_TYPE_NOP;
+		return;
+	}
 	switch (insn->id) {
 #if 0
 
@@ -991,7 +1024,7 @@ jmp $$ + 4 + ( [delta] * 2 )
 	case ARM_INS_IT:
 		op->type = R_ANAL_OP_TYPE_CJMP;
 		op->jump = addr + insn->size;
-		op->fail = addr + insn->size + 2;
+		op->fail = addr + insn->size + 4; // XXX must be next_insn->size;
 			// XXX what if instruction is 4
 		break;
 	case ARM_INS_NOP:
@@ -1045,6 +1078,13 @@ jmp $$ + 4 + ( [delta] * 2 )
 	case ARM_INS_VQMOVUN:
 	case ARM_INS_VQMOVN:
 		op->type = R_ANAL_OP_TYPE_MOV;
+		if (REGID(0) == ARM_REG_PC) {
+			if (REGID(1) == ARM_REG_LR) {
+				op->type = R_ANAL_OP_TYPE_RET;
+			} else {
+				op->type = R_ANAL_OP_TYPE_UJMP;
+			}
+		}
 		break;
 	case ARM_INS_UDF:
 		op->type = R_ANAL_OP_TYPE_TRAP;
@@ -1056,6 +1096,7 @@ jmp $$ + 4 + ( [delta] * 2 )
 		op->type = R_ANAL_OP_TYPE_AND;
 		break;
 	case ARM_INS_CMP:
+	case ARM_INS_CMN:
 	case ARM_INS_TST:
 		op->type = R_ANAL_OP_TYPE_CMP;
 		break;
@@ -1066,10 +1107,19 @@ jmp $$ + 4 + ( [delta] * 2 )
 		break;
 		//case ARM_INS_POP:
 	case ARM_INS_PUSH:
-	case ARM_INS_STR:
-		op->type = R_ANAL_OP_TYPE_STORE;
+	case ARM_INS_STM:
+	case ARM_INS_STMDB:
+		op->type = R_ANAL_OP_TYPE_PUSH;
 // 0x00008160    04202de5     str r2, [sp, -4]!
 // 0x000082a0    28000be5     str r0, [fp, -0x28]
+		if (REGBASE(1) == ARM_REG_FP) {
+			op->stackop = R_ANAL_STACK_SET;
+			op->stackptr = 0;
+			op->ptr = MEMDISP(1);
+		}
+		break;
+	case ARM_INS_STR:
+		op->type = R_ANAL_OP_TYPE_STORE;
 		if (REGBASE(1) == ARM_REG_FP) {
 			op->stackop = R_ANAL_STACK_SET;
 			op->stackptr = 0;
@@ -1092,7 +1142,7 @@ jmp $$ + 4 + ( [delta] * 2 )
 	case ARM_INS_LDRSHT:
 	case ARM_INS_LDRT:
 // 0x000082a8    28301be5     ldr r3, [fp, -0x28]
-		if (insn->detail->arm.operands[0].reg == ARM_REG_PC) {
+		if (REGID(0) == ARM_REG_PC) {
 			op->type = R_ANAL_OP_TYPE_UJMP;
 		} else {
 			op->type = R_ANAL_OP_TYPE_LOAD;
@@ -1135,11 +1185,12 @@ jmp $$ + 4 + ( [delta] * 2 )
 	case ARM_INS_BX:
 	case ARM_INS_BXJ:
 		// BX LR == RET
-		if (insn->detail->arm.operands[0].reg == ARM_REG_LR) {
+		if (REGID(0) == ARM_REG_LR) {
 			op->type = R_ANAL_OP_TYPE_RET;
 		} else {
-			op->type = R_ANAL_OP_TYPE_UJMP;
+			op->type = R_ANAL_OP_TYPE_JMP;
 			op->jump = IMM(0);
+			op->fail = addr + op->size;
 		}
 		break;
 	default:
@@ -1203,7 +1254,7 @@ static int analop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len) {
 	return op->size;
 }
 
-static int set_reg_profile(RAnal *anal) {
+static char *get_reg_profile(RAnal *anal) {
 	const char *p;
 	if (anal->bits == 64) {
 		p = \
@@ -1351,8 +1402,7 @@ static int set_reg_profile(RAnal *anal) {
 		"gpr	gef	.4	72.16	0	great_or_equal\n" // +16
 		;
 	}
-
-	return r_reg_set_profile_string (anal->reg, p);
+	return strdup (p);
 }
 
 static int archinfo(RAnal *anal, int q) {
@@ -1379,7 +1429,7 @@ RAnalPlugin r_anal_plugin_arm_cs = {
 	.esil = true,
 	.arch = "arm",
 	.archinfo = archinfo,
-	.set_reg_profile = set_reg_profile,
+	.get_reg_profile = get_reg_profile,
 	.bits = 16 | 32 | 64,
 	.op = &analop,
 };

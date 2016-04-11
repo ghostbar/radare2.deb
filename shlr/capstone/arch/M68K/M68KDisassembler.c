@@ -298,7 +298,7 @@ static m68k_insn s_trap_lut[] = {
 static unsigned int peek_imm_8(const m68k_info *info)  { return (m68k_read_safe_16((info), (info)->pc)&0xff); }
 static unsigned int peek_imm_16(const m68k_info *info) { return m68k_read_safe_16((info), (info)->pc); }
 static unsigned int peek_imm_32(const m68k_info *info) { return m68k_read_safe_32((info), (info)->pc); }
-static unsigned int peek_imm_64(const m68k_info *info) { return m68k_read_safe_64((info), (info)->pc); }
+static unsigned int peek_imm_64(const m68k_info *info) { return (unsigned int)m68k_read_safe_64((info), (info)->pc); }
 
 static unsigned int read_imm_8(m68k_info *info)  { const unsigned int value = peek_imm_8(info);  (info)->pc+=2; return value; }
 static unsigned int read_imm_16(m68k_info *info) { const unsigned int value = peek_imm_16(info); (info)->pc+=2; return value; }
@@ -901,9 +901,12 @@ static void build_movem_re(m68k_info *info, int opcode, int size)
 	op1 = &ext->operands[1];
 
 	op0->type = M68K_OP_REG_BITS;
-	op0->register_bits = reverse_bits(read_imm_16(info));
+	op0->register_bits = read_imm_16(info);
 
 	get_ea_mode_op(info, op1, info->ir, size);
+
+	if (op1->address_mode == M68K_AM_REGI_ADDR_PRE_DEC)
+		op0->register_bits = reverse_bits(op0->register_bits);
 }
 
 static void build_movem_er(m68k_info *info, int opcode, int size)
@@ -915,10 +918,10 @@ static void build_movem_er(m68k_info *info, int opcode, int size)
 	op0 = &ext->operands[0];
 	op1 = &ext->operands[1];
 
-	get_ea_mode_op(info, op0, info->ir, size);
-
 	op1->type = M68K_OP_REG_BITS;
 	op1->register_bits = read_imm_16(info);
+
+	get_ea_mode_op(info, op0, info->ir, size);
 }
 
 static void build_imm(m68k_info *info, int opcode, int data)
@@ -3022,7 +3025,7 @@ static void d68000_roxr_r_32(m68k_info *info)
 
 static void d68000_roxr_ea(m68k_info *info)
 {
-	build_ea(info, M68K_INS_ROL, 2);
+	build_ea(info, M68K_INS_ROXR, 2);
 }
 
 static void d68000_roxl_s_8(m68k_info *info)
@@ -3918,7 +3921,7 @@ bool M68K_getInstruction(csh ud, const uint8_t* code, size_t code_len, MCInst* i
 
 	// Make sure we always stay within range 
 	if (s > (int)code_len)
-		*size = code_len;
+		*size = (uint16_t)code_len;
 	else
 		*size = (uint16_t)s;
 

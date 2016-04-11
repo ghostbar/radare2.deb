@@ -1,5 +1,3 @@
-/* radare - LGPL - Copyright 2008-2015 - nibble, pancake */
-
 #ifndef R2_BIN_H
 #define R2_BIN_H
 
@@ -28,6 +26,12 @@ R_LIB_VERSION_HEADER (r_bin);
 #define R_BIN_DBG_LINENUMS 0x04
 #define R_BIN_DBG_SYMS     0x08
 #define R_BIN_DBG_RELOCS   0x10
+
+#define R_BIN_ENTRY_TYPE_PROGRAM 0
+#define R_BIN_ENTRY_TYPE_MAIN    1
+#define R_BIN_ENTRY_TYPE_INIT    2
+#define R_BIN_ENTRY_TYPE_FINI    3
+#define R_BIN_ENTRY_TYPE_TLS     4
 
 #define R_BIN_SIZEOF_STRINGS 512
 #define R_BIN_MAX_ARCH 1024
@@ -71,6 +75,7 @@ enum {
 typedef struct r_bin_addr_t {
 	ut64 vaddr;
 	ut64 paddr;
+	int type;
 } RBinAddr;
 
 typedef struct r_bin_hash_t {
@@ -104,6 +109,8 @@ typedef struct r_bin_info_t {
 	int has_crypto;
 	int has_nx;
 	int big_endian;
+	char *actual_checksum;
+	char *claimed_checksum;
 	ut64 dbg_info;
 	RBinHash sum[3];
 	ut64 baddr;
@@ -131,7 +138,7 @@ typedef struct r_bin_object_t {
 	RList/*<??>*/ *entries;
 	RList/*<??>*/ *fields;
 	RList/*<??>*/ *libs;
-	RList/*<??>*/ *relocs;
+	RList/*<RBinReloc>*/ *relocs;
 	RList/*<??>*/ *strings;
 	RList/*<RBinClass>*/ *classes;
 	RList/*<RBinDwarfRow>*/ *lines;
@@ -210,6 +217,10 @@ typedef struct r_bin_xtr_extract_t {
 R_API RBinXtrData * r_bin_xtrdata_new (void *xtr_obj, FREE_XTR free_xtr, RBuffer *buf, ut64 offset, ut64 size, ut32 file_count);
 R_API void r_bin_xtrdata_free (void /*RBinXtrData*/ *data);
 R_API void r_bin_info_free (RBinInfo *rb);
+R_API void r_bin_import_free(void *_imp);
+R_API void r_bin_symbol_free(void *_sym);
+R_API void r_bin_string_free(void *_str);
+R_API void r_bin_field_free(void *_fld);
 
 typedef struct r_bin_xtr_plugin_t {
 	char *name;
@@ -258,6 +269,7 @@ typedef struct r_bin_plugin_t {
 	RList* (*relocs)(RBinFile *arch);
 	RList* (*classes)(RBinFile *arch);
 	RList* (*mem)(RBinFile *arch);
+	RList* (*patch_relocs)(RBin *bin);
 	int (*demangle_type)(const char *str);
 	struct r_bin_dbginfo_t *dbginfo;
 	struct r_bin_write_t *write;
@@ -385,6 +397,7 @@ typedef struct r_bin_write_t {
 	bool (*scn_perms)(RBinFile *arch, const char *name, int perms);
 	int (*rpath_del)(RBinFile *arch);
 	bool (*entry)(RBinFile *arch, ut64 addr);
+	bool (*addlib)(RBinFile *arch, const char *lib);
 } RBinWrite;
 
 // TODO: deprecate r_bin_is_big_endian
@@ -434,6 +447,7 @@ R_API void r_bin_set_baddr(RBin *bin, ut64 baddr);
 R_API ut64 r_bin_get_laddr(RBin *bin);
 R_API ut64 r_bin_get_boffset(RBin *bin);
 R_API RBinAddr* r_bin_get_sym(RBin *bin, int sym);
+R_API const char *r_bin_entry_type_string(int etype);
 
 R_API char* r_bin_demangle(RBinFile *binfile, const char *lang, const char *str);
 R_API int r_bin_demangle_type (const char *str);
@@ -456,6 +470,7 @@ R_API RList* r_bin_get_imports(RBin *bin);
 R_API RBinInfo* r_bin_get_info(RBin *bin);
 R_API RList* r_bin_get_libs(RBin *bin);
 R_API ut64 r_bin_get_size (RBin *bin);
+R_API RList* r_bin_patch_relocs(RBin *bin);
 R_API RList* r_bin_get_relocs(RBin *bin);
 R_API RList* r_bin_get_sections(RBin *bin);
 R_API RList* /*<RBinClass>*/r_bin_get_classes(RBin *bin);
@@ -511,6 +526,7 @@ R_API int r_bin_addr2line(RBin *bin, ut64 addr, char *file, int len, int *line);
 R_API char *r_bin_addr2text(RBin *bin, ut64 addr);
 R_API char *r_bin_addr2fileline(RBin *bin, ut64 addr);
 /* bin_write.c */
+R_API bool r_bin_wr_addlib(RBin *bin, const char *lib);
 R_API ut64 r_bin_wr_scn_resize(RBin *bin, const char *name, ut64 size);
 R_API bool r_bin_wr_scn_perms(RBin *bin, const char *name, int perms);
 R_API bool r_bin_wr_rpath_del(RBin *bin);

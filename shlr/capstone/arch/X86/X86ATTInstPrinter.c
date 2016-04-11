@@ -174,6 +174,21 @@ static void printf32mem(MCInst *MI, unsigned OpNo, SStream *O)
 			// TODO: fix this in tablegen instead
 			MI->x86opsize = 10;
 			break;
+		case X86_FSTENVm:
+		case X86_FLDENVm:
+			// TODO: fix this in tablegen instead
+			switch(MI->csh->mode) {
+				default:    // never reach
+					break;
+				case CS_MODE_16:
+					MI->x86opsize = 14;
+					break;
+				case CS_MODE_32:
+				case CS_MODE_64:
+					MI->x86opsize = 28;
+					break;
+			}
+			break;
 	}
 	printMemReference(MI, OpNo, O);
 }
@@ -853,6 +868,7 @@ void X86_ATT_printInst(MCInst *MI, SStream *OS, void *info)
 {
 	char *mnem;
 	x86_reg reg, reg2;
+	enum cs_ac_type access1, access2;
 	int i;
 
 	// Output CALLpcrel32 as "callq" in 64-bit mode.
@@ -892,7 +908,7 @@ void X86_ATT_printInst(MCInst *MI, SStream *OS, void *info)
 	if (MI->csh->detail) {
 		uint8_t access[6];
 
-        // some instructions need to supply immediate 1 in the first op
+		// some instructions need to supply immediate 1 in the first op
 		switch(MCInst_getOpcode(MI)) {
 			default:
 				break;
@@ -975,7 +991,7 @@ void X86_ATT_printInst(MCInst *MI, SStream *OS, void *info)
 
 		//printf(">>> opcode = %u\n", MCInst_getOpcode(MI));
 
-		reg = X86_insn_reg_att(MCInst_getOpcode(MI));
+		reg = X86_insn_reg_att(MCInst_getOpcode(MI), &access1);
 		if (reg) {
 			// shift all the ops right to leave 1st slot for this new register op
 			memmove(&(MI->flat_insn->detail->x86.operands[1]), &(MI->flat_insn->detail->x86.operands[0]),
@@ -983,17 +999,20 @@ void X86_ATT_printInst(MCInst *MI, SStream *OS, void *info)
 			MI->flat_insn->detail->x86.operands[0].type = X86_OP_REG;
 			MI->flat_insn->detail->x86.operands[0].reg = reg;
 			MI->flat_insn->detail->x86.operands[0].size = MI->csh->regsize_map[reg];
+			MI->flat_insn->detail->x86.operands[0].access = access1;
 
 			MI->flat_insn->detail->x86.op_count++;
 		} else {
-			if (X86_insn_reg_att2(MCInst_getOpcode(MI), &reg, &reg2)) {
+			if (X86_insn_reg_att2(MCInst_getOpcode(MI), &reg, &access1, &reg2, &access2)) {
 
 				MI->flat_insn->detail->x86.operands[0].type = X86_OP_REG;
 				MI->flat_insn->detail->x86.operands[0].reg = reg;
 				MI->flat_insn->detail->x86.operands[0].size = MI->csh->regsize_map[reg];
+				MI->flat_insn->detail->x86.operands[0].access = access1;
 				MI->flat_insn->detail->x86.operands[1].type = X86_OP_REG;
 				MI->flat_insn->detail->x86.operands[1].reg = reg2;
 				MI->flat_insn->detail->x86.operands[1].size = MI->csh->regsize_map[reg2];
+				MI->flat_insn->detail->x86.operands[0].access = access2;
 				MI->flat_insn->detail->x86.op_count = 2;
 			}
 		}

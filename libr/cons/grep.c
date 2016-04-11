@@ -391,6 +391,23 @@ R_API int r_cons_html_print(const char *ptr) {
 			printf ("<br />");
 			fflush (stdout);
 		}
+		if (ptr[0] == '<') {
+			tmp = (int) (size_t) (ptr-str);
+			if (write (1, str, tmp) != tmp)
+				eprintf ("r_cons_html_print: write: error\n");
+			printf ("&lt;");
+			fflush (stdout);
+			str = ptr + 1;
+			continue;
+		} else if (ptr[0] == '>') {
+			tmp = (int) (size_t) (ptr-str);
+			if (write (1, str, tmp) != tmp)
+				eprintf ("r_cons_html_print: write: error\n");
+			printf ("&gt;");
+			fflush (stdout);
+			str = ptr + 1;
+			continue;
+		}
 		if (ptr[0] == 0x1b) {
 			esc = 1;
 			tmp = (int) (size_t) (ptr-str);
@@ -456,7 +473,7 @@ R_API int r_cons_html_print(const char *ptr) {
 			} else
 			if (ptr[0] == '3' && ptr[2] == 'm') {
 				printf ("<font color='%s'>", gethtmlcolor (ptr[1], inv ? "#fff" : "#000"));
-				fflush(stdout);
+				fflush (stdout);
 				tag_font = 1;
 				ptr = ptr + 1;
 				str = ptr + 2;
@@ -466,7 +483,12 @@ R_API int r_cons_html_print(const char *ptr) {
 			if (ptr[0] == '4' && ptr[2] == 'm') {
 				printf ("<font style='background-color:%s'>",
 						gethtmlcolor (ptr[1], inv ? "#000" : "#fff"));
-				fflush(stdout);
+				fflush (stdout);
+				tag_font = 1;
+				ptr = ptr + 1;
+				str = ptr + 2;
+				esc = 0;
+				continue;
 			}
 		}
 		len++;

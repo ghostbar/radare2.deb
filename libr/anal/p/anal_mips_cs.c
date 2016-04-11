@@ -1,4 +1,4 @@
-/* radare2 - LGPL - Copyright 2013-2015 - pancake */
+/* radare2 - LGPL - Copyright 2013-2016 - pancake */
 
 #include <r_asm.h>
 #include <r_lib.h>
@@ -102,7 +102,10 @@ static const char *arg(csh *handle, cs_insn *insn, char *buf, int n) {
 				insn->detail->mips.operands[n].reg));
 		break;
 	case MIPS_OP_IMM:
-		sprintf (buf, "%"PFMT64u, (ut64)insn->detail->mips.operands[n].imm);
+		{
+			st64 x = (st64)insn->detail->mips.operands[n].imm;
+			sprintf (buf, "%"PFMT64d, x);
+		}
 		break;
 	case MIPS_OP_MEM:
 		{
@@ -368,8 +371,13 @@ static int analop_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len
 		const char *arg1 = ARG(1);
 		const char *arg2 = ARG(2);
 		PROTECT_ZERO () {
-			r_strbuf_appendf (&op->esil, "%s,%s,+,%s,=",
-					arg2, arg1, arg0);
+			if (*arg2 == '-') {
+				r_strbuf_appendf (&op->esil, "%s,%s,-,%s,=",
+						arg2+1, arg1, arg0);
+			} else {
+				r_strbuf_appendf (&op->esil, "%s,%s,+,%s,=",
+						arg2, arg1, arg0);
+			}
 		}
 		}
 		break;
@@ -666,23 +674,22 @@ static int analop(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *buf, int len) 
 			op->fail = addr+8;
 			break;
 		}
-
 		break;
-
+	case MIPS_INS_LUI:
 	case MIPS_INS_MOVE:
 		op->type = R_ANAL_OP_TYPE_MOV;
 		SET_SRC_DST_2_REGS (op);
 		break;
 	case MIPS_INS_ADD:
 	case MIPS_INS_ADDI:
+	case MIPS_INS_ADDU:
 	case MIPS_INS_ADDIU:
 	case MIPS_INS_DADD:
 	case MIPS_INS_DADDI:
 	case MIPS_INS_DADDIU:
-		SET_VAL (op,2);
+		SET_VAL (op, 2);
 		SET_SRC_DST_3_REG_OR_IMM (op);
 		op->type = R_ANAL_OP_TYPE_ADD;
-		
 		break;
 	case MIPS_INS_SUB:
 	case MIPS_INS_SUBV:
@@ -849,7 +856,7 @@ static int analop(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *buf, int len) 
 	return opsize;
 }
 
-static int set_reg_profile(RAnal *anal) {
+static char *get_reg_profile(RAnal *anal) {
 	// XXX : 64bit profile
 	const char *p =
 		"=PC    pc\n"
@@ -896,7 +903,7 @@ static int set_reg_profile(RAnal *anal) {
 		"gpr	hi	.64	132	0\n"
 		"gpr	lo	.64	140	0\n"
 		"gpr	t	.32	148	0\n";
-	return r_reg_set_profile_string (anal->reg, p);
+	return strdup (p);
 }
 
 static int archinfo(RAnal *anal, int q) {
@@ -909,7 +916,7 @@ RAnalPlugin r_anal_plugin_mips_cs = {
 	.license = "BSD",
 	.esil = true,
 	.arch = "mips",
-	.set_reg_profile = set_reg_profile,
+	.get_reg_profile = get_reg_profile,
 	.archinfo = archinfo,
 	.bits = 16|32|64,
 	.op = &analop,

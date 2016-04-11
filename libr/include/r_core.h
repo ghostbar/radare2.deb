@@ -82,6 +82,12 @@ typedef struct r_core_file_t {
 	ut8 alive;
 } RCoreFile;
 
+typedef struct r_core_times_t {
+	ut64 loadlibs_init_time;
+	ut64 loadlibs_time;
+	ut64 file_open_time;
+} RCoreTimes;
+
 #define R_CORE_ASMSTEPS 128
 #define R_CORE_ASMQJMPS_NUM 10
 #define R_CORE_ASMQJMPS_LETTERS 26
@@ -116,6 +122,7 @@ typedef struct r_core_t {
 	RAnal *anal;
 	RAsm *assembler;
 	/* ^^ */
+	RCoreTimes *times;
 	RParse *parser;
 	RPrint *print;
 	RLang *lang;
@@ -249,6 +256,7 @@ R_API void r_core_visual_mark_reset(RCore *core);
 R_API int r_core_search_cb(RCore *core, ut64 from, ut64 to, RCoreSearchCallback cb);
 R_API int r_core_serve(RCore *core, RIODesc *fd);
 R_API int r_core_file_reopen(RCore *core, const char *args, int perm, int binload);
+R_API void r_core_file_reopen_debug(RCore *core, const char *args);
 R_API RCoreFile * r_core_file_find_by_fd(RCore* core, ut64 fd);
 R_API RCoreFile * r_core_file_find_by_name (RCore * core, const char * name);
 R_API RCoreFile * r_core_file_cur (RCore *r);
@@ -288,6 +296,7 @@ R_API int r_core_yank_to(RCore *core, const char *arg);
 R_API int r_core_yank_dump (RCore *core, ut64 pos);
 R_API int r_core_yank_hexdump (RCore *core, ut64 pos);
 R_API int r_core_yank_cat (RCore *core, ut64 pos);
+R_API int r_core_yank_cat_string (RCore *core, ut64 pos);
 R_API int r_core_yank_hud_file (RCore *core, const char *input);
 R_API int r_core_yank_hud_path (RCore *core, const char *input, int dir);
 R_API int r_core_yank_file_ex (RCore *core, const char *input);
@@ -313,6 +322,8 @@ R_API RAnalOp *r_core_op_anal(RCore *core, ut64 addr);
 R_API char *r_core_disassemble_instr(RCore *core, ut64 addr, int l);
 R_API char *r_core_disassemble_bytes(RCore *core, ut64 addr, int b);
 
+R_API int r_core_process_input_pade(RCore *core, const char *input, char** hex, char **asm_arch, ut32 *bits);
+
 /* anal.c */
 R_API RAnalOp* r_core_anal_op(RCore *core, ut64 addr);
 R_API void r_core_anal_esil (RCore *core, const char *str);
@@ -331,7 +342,9 @@ R_API ut64 r_core_anal_get_bbaddr(RCore *core, ut64 addr);
 R_API int r_core_anal_bb_seek(RCore *core, ut64 addr);
 R_API int r_core_anal_fcn(RCore *core, ut64 at, ut64 from, int reftype, int depth);
 R_API char *r_core_anal_fcn_autoname(RCore *core, ut64 addr, int dump);
+R_API void r_core_anal_autoname_all_fcns(RCore *core);
 R_API int r_core_anal_fcn_list(RCore *core, const char *input, int rad);
+R_API int r_core_anal_fcn_list_size(RCore *core);
 R_API void r_core_anal_fcn_labels(RCore *core, RAnalFunction *fcn, int rad);
 R_API int r_core_anal_fcn_clean(RCore *core, ut64 addr);
 R_API int r_core_anal_graph(RCore *core, ut64 addr, int opts);
@@ -354,6 +367,7 @@ R_API RBuffer *r_core_syscallf (RCore *core, const char *name, const char *fmt, 
 R_API RCoreAsmHit *r_core_asm_hit_new(void);
 R_API RList *r_core_asm_hit_list_new(void);
 R_API void r_core_asm_hit_free(void *_hit);
+R_API void r_core_set_asm_configs(RCore *core, char *arch, ut32 bits, int segoff);
 R_API char* r_core_asm_search(RCore *core, const char *input, ut64 from, ut64 to);
 R_API RList *r_core_asm_strsearch(RCore *core, const char *input, ut64 from, ut64 to, int maxhits, int regexp);
 R_API RList *r_core_asm_bwdisassemble (RCore *core, ut64 addr, int n, int len);
@@ -382,14 +396,15 @@ R_API int r_core_bin_refresh_strings(RCore *core);
 R_API int r_core_pseudo_code (RCore *core, const char *input);
 
 /* gdiff.c */
-R_API int r_core_gdiff(RCore *core1, RCore *core2, int anal_all);
+R_API int r_core_gdiff(RCore *core1, RCore *core2);
 R_API int r_core_gdiff_fcn(RCore *c, ut64 addr, ut64 addr2);
 
 R_API int r_core_project_open(RCore *core, const char *file);
 R_API int r_core_project_cat(RCore *core, const char *name);
 R_API int r_core_project_delete(RCore *core, const char *prjfile);
 R_API int r_core_project_list(RCore *core, int mode);
-R_API int r_core_project_save(RCore *core, const char *file);
+R_API bool r_core_project_save_rdb(RCore *core, const char *file, int opts);
+R_API bool r_core_project_save(RCore *core, const char *file);
 R_API char *r_core_project_info(RCore *core, const char *file);
 R_API char *r_core_project_notes_file (RCore *core, const char *file);
 
@@ -421,7 +436,21 @@ R_API void r_core_sysenv_help(const RCore* core);
 #define R_CORE_BIN_ACC_SIZE     0x1000
 #define R_CORE_BIN_ACC_MEM	0x4000
 #define R_CORE_BIN_ACC_EXPORTS  0x8000
+#define R_CORE_BIN_ACC_VERSIONINFO 0x10000
 #define R_CORE_BIN_ACC_ALL	0x4FFF
+
+#define R_CORE_PRJ_FLAGS	0x0001
+#define R_CORE_PRJ_EVAL		0x0002
+#define R_CORE_PRJ_IO_MAPS	0x0004
+#define R_CORE_PRJ_SECTIONS	0x0008
+#define R_CORE_PRJ_META		0x0010
+#define R_CORE_PRJ_XREFS	0x0020
+#define R_CORE_PRJ_FCNS		0x0040
+#define R_CORE_PRJ_ANAL_HINTS	0x0080
+#define R_CORE_PRJ_ANAL_TYPES	0x0100
+#define R_CORE_PRJ_ANAL_MACROS	0x0200
+#define R_CORE_PRJ_ANAL_SEEK	0x0400
+#define R_CORE_PRJ_ALL		0xFFFF
 
 typedef struct r_core_bin_filter_t {
 	ut64 offset;

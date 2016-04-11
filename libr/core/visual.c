@@ -39,6 +39,58 @@ static int visual_repeat_thread(RThread *th) {
 	return 0;
 }
 
+static void toggle_bits(RCore *core) {
+	RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, core->offset, R_ANAL_FCN_TYPE_NULL);
+	if (fcn) {
+		int bits = fcn->bits? fcn->bits: core->assembler->bits;
+		switch (bits) {
+		case 16: bits = 32; break;
+		case 32: bits = 64; break;
+		default: bits = 16; break;
+		}
+		fcn->bits = bits;
+		return;
+	}
+	switch (core->assembler->bits) {
+	case 8:
+		r_config_set_i (core->config, "asm.bits", 16);
+		if (core->assembler->bits != 16) {
+			r_config_set_i (core->config, "asm.bits", 32);
+			if (core->assembler->bits != 32) {
+				r_config_set_i (core->config, "asm.bits", 64);
+			}
+		}
+		break;
+	case 16:
+		r_config_set_i (core->config, "asm.bits", 32);
+		if (core->assembler->bits != 32) {
+			r_config_set_i (core->config, "asm.bits", 64);
+			if (core->assembler->bits != 64) {
+				r_config_set_i (core->config, "asm.bits", 8);
+			}
+		}
+		break;
+	case 32:
+		r_config_set_i (core->config, "asm.bits", 64);
+		if (core->assembler->bits != 64) {
+			r_config_set_i (core->config, "asm.bits", 8);
+			if (core->assembler->bits != 8) {
+				r_config_set_i (core->config, "asm.bits", 16);
+			}
+		}
+		break;
+	case 64:
+		r_config_set_i (core->config, "asm.bits", 8);
+		if (core->assembler->bits != 8) {
+			r_config_set_i (core->config, "asm.bits", 16);
+			if (core->assembler->bits != 16) {
+				r_config_set_i (core->config, "asm.bits", 32);
+			}
+		}
+		break;
+	}
+}
+
 static void visual_repeat(RCore *core) {
 	int atport = r_config_get_i (core->config, "scr.atport");
 	if (atport) {
@@ -533,19 +585,24 @@ static ut64 prevop_addr (RCore *core, ut64 addr) {
 	RAnalBlock *bb;
 	RAnalOp op;
 	int len, ret, i;
+	int minop = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_MIN_OP_SIZE);
+	int maxop = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_MAX_OP_SIZE);
+
+	if (minop == maxop) {
+		return addr - minop;
+	}
 
 	// let's see if we can use anal info to get the previous instruction
 	// TODO: look in the current basicblock, then in the current function
 	// and search in all functions only as a last chance, to try to speed
 	// up the process.
-	bb = r_anal_bb_from_offset (core->anal, addr - 1);
+	bb = r_anal_bb_from_offset (core->anal, addr - minop);
 	if (bb) {
-		ut64 res = r_anal_bb_opaddr_at (bb, addr - 1);
+		ut64 res = r_anal_bb_opaddr_at (bb, addr - minop);
 		if (res != UT64_MAX) {
 			return res;
 		}
 	}
-
 	// if we anal info didn't help then fallback to the dumb solution.
 	target = addr;
 	base = target - OPDELTA;
@@ -564,13 +621,20 @@ static ut64 prevop_addr (RCore *core, ut64 addr) {
 	}
 	return target - 4;
 }
-static void visual_offset (RCore *core) {
+
+static void reset_print_cur(RPrint *p) {
+	p->cur = 0;
+	p->ocur = -1;
+}
+
+static void visual_offset(RCore *core) {
 	char buf[256];
 	r_line_set_prompt ("[offset]> ");
 	strcpy (buf, "s ");
 	if (r_cons_fgets (buf+2, sizeof (buf)-3, 0, NULL) >0) {
 		if (buf[2]=='.')buf[1]='.';
 		r_core_cmd0 (core, buf);
+		reset_print_cur (core->print);
 	}
 }
 
@@ -591,14 +655,18 @@ R_API int r_core_visual_xrefs_x (RCore *core) {
 	int skip = 0;
 	int idx = 0;
 	char cstr[32];
+	ut64 addr = core->offset;
+	if (core->print->cur_enabled) {
+		addr += core->print->cur;
+	}
 
 repeat:
-	if ((xrefs = r_anal_xref_get (core->anal, core->offset))) {
+	if ((xrefs = r_anal_xref_get (core->anal, addr))) {
 		r_cons_clear00 ();
 		r_cons_gotoxy (1, 1);
-		r_cons_printf ("[GOTO XREF]> 0x%08"PFMT64x"\n", core->offset);
+		r_cons_printf ("[GOTO XREF]> 0x%08"PFMT64x"\n", addr);
 		if (r_list_empty (xrefs)) {
-			r_cons_printf ("\tNo XREF found at 0x%"PFMT64x"\n", core->offset);
+			r_cons_printf ("\tNo XREF found at 0x%"PFMT64x"\n", addr);
 			r_cons_any_key (NULL);
 			r_cons_clear00 ();
 		} else {
@@ -676,14 +744,18 @@ R_API int r_core_visual_xrefs_X (RCore *core) {
 	RAnalRef *refi;
 	RListIter *iter;
 	RAnalFunction *fun;
+	ut64 addr = core->offset;
+	if (core->print->cur_enabled) {
+		addr += core->print->cur;
+	}
 
-	fun = r_anal_get_fcn_in (core->anal, core->offset, R_ANAL_FCN_TYPE_NULL);
+	fun = r_anal_get_fcn_in (core->anal, addr, R_ANAL_FCN_TYPE_NULL);
 	if (fun) {
 		r_cons_clear00 ();
 		r_cons_gotoxy (1, 1);
 		r_cons_printf ("[GOTO REF]> \n");
 		if (r_list_empty (fun->refs)) {
-			r_cons_printf ("\tNo REF found at 0x%"PFMT64x"\n", core->offset);
+			r_cons_printf ("\tNo REF found at 0x%"PFMT64x"\n", addr);
 			r_cons_any_key (NULL);
 			r_cons_clear00 ();
 		} else {
@@ -799,7 +871,6 @@ static bool isDisasmPrint(int mode) {
 
 static void cursor_ocur(RCore *core, bool use_ocur) {
 	RPrint *p = core->print;
-
 	if (use_ocur && p->ocur == -1) {
 		p->ocur = p->cur;
 	} else if (!use_ocur) {
@@ -814,12 +885,10 @@ static void cursor_nextrow(RCore *core, bool use_ocur) {
 	RAsmOp op;
 
 	cursor_ocur (core, use_ocur);
-	if (PIDX == 2) {
-		if (core->seltab == 1) {
-			const int cols = core->dbg->regcols;
-			p->cur += cols>0? cols: 3;
-			return;
-		}
+	if (PIDX == 2 && core->seltab == 1) {
+		const int cols = core->dbg->regcols;
+		p->cur += cols > 0 ? cols: 3;
+		return;
 	}
 
 	if (p->row_offsets != NULL) {
@@ -835,9 +904,13 @@ static void cursor_nextrow(RCore *core, bool use_ocur) {
 			p->cur++;
 			return;
 		}
-		sz = r_asm_disassemble (core->assembler, &op,
-				core->block + next_roff, 32);
-		if (sz < 1) sz = 1;
+		if (next_roff + 32 < core->blocksize) {
+			sz = r_asm_disassemble (core->assembler, &op,
+					core->block + next_roff, 32);
+			if (sz < 1) sz = 1;
+		} else {
+			sz = 1;
+		}
 		delta = p->cur - roff;
 		p->cur = next_roff + R_MIN (delta, sz - 1);
 	} else {
@@ -847,15 +920,13 @@ static void cursor_nextrow(RCore *core, bool use_ocur) {
 
 static void cursor_prevrow(RCore *core, bool use_ocur) {
 	RPrint *p = core->print;
-	int row;
 	ut32 roff, prev_roff;
+	int row;
 
-	if (PIDX == 2) {
-		if (core->seltab == 1) {
-			const int cols = core->dbg->regcols;
-			p->cur -= cols>0? cols: 4;
-			return;
-		}
+	if (PIDX == 2 && core->seltab == 1) {
+		const int cols = core->dbg->regcols;
+		p->cur -= cols>0? cols: 4;
+		return;
 	}
 	cursor_ocur (core, use_ocur);
 
@@ -873,12 +944,16 @@ static void cursor_prevrow(RCore *core, bool use_ocur) {
 		delta = p->cur - roff;
 		if (prev_roff == UT32_MAX) {
 			ut64 prev_addr = prevop_addr (core, core->offset + roff);
-			RAsmOp op;
-
-			prev_roff = 0;
-			r_core_seek (core, prev_addr, 1);
-			prev_sz = r_asm_disassemble (core->assembler, &op,
-				core->block, 32);
+			if (prev_addr > core->offset) {
+				prev_roff = 0;
+				prev_sz = 1;
+			} else {
+				RAsmOp op;
+				prev_roff = 0;
+				r_core_seek (core, prev_addr, 1);
+				prev_sz = r_asm_disassemble (core->assembler, &op,
+						core->block, 32);
+			}
 		} else {
 			prev_sz = roff - prev_roff;
 		}
@@ -891,8 +966,7 @@ static void cursor_prevrow(RCore *core, bool use_ocur) {
 static void cursor_left(RCore *core, bool use_ocur) {
 	if (PIDX == 2) {
 		if (core->seltab == 1) {
-
-	core->print->cur--;
+			core->print->cur--;
 			return;
 		}
 	}
@@ -916,6 +990,7 @@ static bool fix_cursor(RCore *core) {
 	int offscreen = (core->cons->rows - 3) * p->cols;
 	bool res = false;
 
+	if (!core->print->cur_enabled) return false;
 	if (core->screen_bounds > 1) {
 		bool off_is_visible = core->offset < core->screen_bounds;
 		bool cur_is_visible = core->offset + p->cur < core->screen_bounds;
@@ -924,15 +999,14 @@ static bool fix_cursor(RCore *core) {
 		if (!cur_is_visible && !is_close) {
 			// when the cursor is not visible and it's far from the
 			// last visible byte, just seek there.
-			r_core_seek (core, core->offset + p->cur, 1);
-			p->cur = 0;
-			p->ocur = -1;
+			r_core_seek_delta (core, p->cur);
+			reset_print_cur (p);
 		} else if ((!cur_is_visible && is_close) || !off_is_visible) {
 			RAsmOp op;
 			int sz = r_asm_disassemble (core->assembler,
 				&op, core->block, 32);
 			if (sz < 1) sz = 1;
-			r_core_seek (core, core->offset + sz, 1);
+			r_core_seek_delta (core, sz);
 			p->cur = R_MAX (p->cur - sz, 0);
 			if (p->ocur != -1) p->ocur = R_MAX (p->ocur - sz, 0);
 			res |= off_is_visible;
@@ -1259,7 +1333,11 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		showcursor (core, false);
 		break;
 	case 'R':
-		r_core_cmd0 (core, "ecr");
+		if (r_config_get_i (core->config, "scr.randpal")) {
+			r_core_cmd0 (core, "ecr");
+		} else {
+			r_core_cmd0 (core, "ecn");
+		}
 		break;
 	case 'e':
 		r_core_visual_config (core);
@@ -1271,44 +1349,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		r_core_visual_mounts (core);
 		break;
 	case '&':
-		switch (core->assembler->bits) {
-		case 8:
-			r_config_set_i (core->config, "asm.bits", 16);
-			if (core->assembler->bits!=16) {
-				r_config_set_i (core->config, "asm.bits", 32);
-				if (core->assembler->bits!=32) {
-					r_config_set_i (core->config, "asm.bits", 64);
-				}
-			}
-			break;
-		case 16:
-			r_config_set_i (core->config, "asm.bits", 32);
-			if (core->assembler->bits!=32) {
-				r_config_set_i (core->config, "asm.bits", 64);
-				if (core->assembler->bits!=64) {
-					r_config_set_i (core->config, "asm.bits", 8);
-				}
-			}
-			break;
-		case 32:
-			r_config_set_i (core->config, "asm.bits", 64);
-			if (core->assembler->bits!=64) {
-				r_config_set_i (core->config, "asm.bits", 8);
-				if (core->assembler->bits!=8) {
-					r_config_set_i (core->config, "asm.bits", 16);
-				}
-			}
-			break;
-		case 64:
-			r_config_set_i (core->config, "asm.bits", 8);
-			if (core->assembler->bits!=8) {
-				r_config_set_i (core->config, "asm.bits", 16);
-				if (core->assembler->bits!=16) {
-					r_config_set_i (core->config, "asm.bits", 32);
-				}
-			}
-			break;
-		}
+		toggle_bits (core);
 		break;
 	case 't':
 		r_core_visual_types (core);
@@ -1343,6 +1384,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 				r_cons_message("No basic blocks in this function. You may want to use 'afb+'.");
 				break;
 			}
+			reset_print_cur (core->print);
 			ocolor = r_config_get_i (core->config, "scr.color");
 			r_core_visual_graph (core, NULL, NULL, true);
 			r_config_set_i (core->config, "scr.color", ocolor);
@@ -1443,7 +1485,11 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 			cursor_nextrow (core, true);
 		} else {
 			if (core->screen_bounds > 1 && core->screen_bounds >= core->offset) {
-				r_core_seek (core, core->screen_bounds, 1);
+				ut64 addr = core->screen_bounds;
+				if (core->screen_bounds == core->offset) {
+					addr += r_asm_disassemble (core->assembler, &op, core->block, 32);
+				}
+				r_core_seek (core, addr, 1);
 			} else {
 				r_core_seek (core, core->offset + obs, 1);
 			}
@@ -1454,7 +1500,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 			cursor_prevrow (core, false);
 		} else {
 			if (r_config_get_i (core->config, "scr.wheelnkey")) {
-				r_core_cmd0(core, "sp");
+				r_core_cmd0 (core, "sp");
 			} else {
 				int times = wheelspeed;
 				if (times<1) times = 1;
@@ -1479,7 +1525,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		if (core->print->cur_enabled) {
 			cursor_prevrow (core, true);
 		} else {
-			if (core->screen_bounds >= core->offset) {
+			if (core->screen_bounds > 1 && core->screen_bounds > core->offset) {
 				int delta = (core->screen_bounds - core->offset);
 				if (core->offset >= delta)
 					r_core_seek (core, core->offset - delta, 1);
@@ -1695,16 +1741,33 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 			} else {
 				switch (buf[i]) {
 				case '-':
-					memcpy (buf, "\"CC-", 4);
+					memcpy (buf, "\"CC-\x00", 5);
 					break;
 				case '!':
-					memcpy (buf, "\"CC!", 4);
+					memcpy (buf, "\"CC!\x00", 5);
 					break;
 				default:
 					memcpy (buf, "\"CC ", 4);
 					break;
 				}
 				strcat (buf, "\"");
+			}
+			if (buf[3] == ' ') {
+				// have to escape any quotes.
+				int j, len = strlen (buf);
+				char* duped = strdup (buf);
+				i = 4, j=4;
+				for (i=4, j=4; i < len; ++i,++j) {
+					char c = duped[i];
+					if (c == '"' && i != (len - 1)) {
+						buf[j] = '\\';
+						++j;
+						buf[j] = '"';
+					} else {
+						buf[j] = c;
+					}
+				}
+				free (duped);
 			}
 			r_core_cmd (core, buf, 1);
 			if (core->print->cur_enabled) r_core_seek (core, orig, 1);
@@ -1731,6 +1794,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		ut64 off = r_io_sundo (core->io, core->offset);
 		if (off != UT64_MAX) {
 			r_core_visual_seek_animation (core, off);
+			reset_print_cur (core->print);
 		} else {
 			eprintf ("Cannot undo\n");
 		}
@@ -1741,6 +1805,7 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		ut64 off = r_io_sundo_redo (core->io);
 		if (off != UT64_MAX) {
 			r_core_visual_seek_animation (core, off);
+			reset_print_cur (core->print);
 		}
 		}
 		break;
@@ -2020,11 +2085,8 @@ R_API int r_core_visual(RCore *core, const char *input) {
 
 	core->print->flags |= R_PRINT_FLAGS_ADDRMOD;
 	do {
-		skip = false;
-		if (core->print->cur_enabled) {
-			// update the cursor when it's not visible anymore
-			skip |= fix_cursor (core);
-		}
+		// update the cursor when it's not visible anymore
+		skip = fix_cursor (core);
 
 		if (core->printidx == 2) {
 			static char debugstr[512];
