@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2015 - nibble, pancake */
+/* radare - LGPL - Copyright 2009-2016 - nibble, pancake */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +31,7 @@
 #define ACTION_PDB_DWNLD 0x100000
 #define ACTION_DLOPEN    0x200000
 #define ACTION_EXPORTS   0x400000
+#define ACTION_VERSIONINFO 0x800000
 
 static struct r_bin_t *bin = NULL;
 static char* output = NULL;
@@ -354,7 +355,18 @@ static int rabin_do_operation(const char *op) {
 		case 'S':
 			if (!ptr2)
 				goto _rabin_do_operation_error;
-			else if (!rabin_dump_sections (ptr2))
+			if (!rabin_dump_sections (ptr2))
+				goto error;
+			break;
+		default:
+			goto _rabin_do_operation_error;
+		}
+		break;
+	case 'a':
+		if (!ptr) goto _rabin_do_operation_error;
+		switch (*ptr) {
+		case 'l':
+			if (!ptr2 || !r_bin_wr_addlib (bin, ptr2))
 				goto error;
 			break;
 		default:
@@ -441,11 +453,11 @@ static char *demangleAs(int type) {
 int main(int argc, char **argv) {
 	const char *query = NULL;
 	int c, bits = 0, actions_done = 0, actions = 0, action = ACTION_UNK;
-	char *homeplugindir = r_str_home (R2_HOMEDIR"/plugins");
 	char *tmp, *ptr, *arch = NULL, *arch_name = NULL;
 	const char *forcebin = NULL;
 	const char *chksum = NULL;
 	const char *op = NULL;
+	const char *path = NULL;
 	RCoreBinFilter filter;
 	RCoreFile *cf = NULL;
 	int xtr_idx = 0; // load all files if extraction is necessary.
@@ -456,20 +468,31 @@ int main(int argc, char **argv) {
 	r_core_init (&core);
 	bin = core.bin;
 
-	if ((tmp = r_sys_getenv ("RABIN2_NOPLUGINS"))) {
-		free (tmp);
-	} else {
+	if (!(tmp = r_sys_getenv ("RABIN2_NOPLUGINS"))) {
 		l = r_lib_new ("radare_plugin");
 		r_lib_add_handler (l, R_LIB_TYPE_BIN, "bin plugins",
 				   &__lib_bin_cb, &__lib_bin_dt, NULL);
 		r_lib_add_handler (l, R_LIB_TYPE_BIN_XTR, "bin xtr plugins",
 				   &__lib_bin_xtr_cb, &__lib_bin_xtr_dt, NULL);
 		/* load plugins everywhere */
-		r_lib_opendir (l, getenv ("LIBR_PLUGINS"));
-		r_lib_opendir (l, homeplugindir);
-		r_lib_opendir (l, R2_LIBDIR"/radare2/"R2_VERSION);
-		free (tmp);
+		
+		path = r_sys_getenv (R_LIB_ENV);
+		if (path && *path)
+			r_lib_opendir (l, path);
+		
+		if (1) {
+			char *homeplugindir = r_str_home (R2_HOMEDIR "/plugins");
+			// eprintf ("OPENDIR (%s)\n", homeplugindir);
+			r_lib_opendir (l, homeplugindir);
+			free (homeplugindir);
+		}
+		if (1) { //where & R_CORE_LOADLIBS_SYSTEM) {
+			r_lib_opendir (l, R2_LIBDIR "/radare2/" R2_VERSION);
+			r_lib_opendir (l, R2_LIBDIR "/radare2-extras/" R2_VERSION);
+			r_lib_opendir (l, R2_LIBDIR "/radare2-bindings/" R2_VERSION);
+		}
 	}
+	free (tmp);
 
 	if ((tmp = r_sys_getenv ("RABIN2_LANG"))) {
 		r_config_set (core.config, "bin.lang", tmp);
@@ -495,7 +518,7 @@ int main(int argc, char **argv) {
 #define is_active(x) (action&x)
 #define set_action(x) actions++; action |= x
 #define unset_action(x) action &= ~x
-	while ((c = getopt (argc, argv, "DjgAf:F:a:B:G:b:cC:k:K:dD:Mm:n:N:@:isSIHeElRwO:o:pPqQrvLhuxzZ")) != -1) {
+	while ((c = getopt (argc, argv, "DjgAf:F:a:B:G:b:cC:k:K:dD:Mm:n:N:@:isSVIHeElRwO:o:pPqQrvLhuxzZ")) != -1) {
 		switch (c) {
 		case 'g':
 			set_action (ACTION_CLASSES);
@@ -511,17 +534,14 @@ int main(int argc, char **argv) {
 			set_action (ACTION_MAIN);
 			set_action (ACTION_LIBS);
 			set_action (ACTION_RELOCS);
+			set_action (ACTION_VERSIONINFO);
 			break;
+		case 'V': set_action (ACTION_VERSIONINFO); break;
 		case 'q': rad = R_CORE_BIN_SIMPLE; break;
 		case 'j': rad = R_CORE_BIN_JSON; break;
 		case 'A': set_action (ACTION_LISTARCHS); break;
-		case 'a': if (optarg) arch = optarg; break;
+		case 'a': arch = optarg; break;
 		case 'C':
-			if (!optarg) {
-				eprintf ("Missing argument for -C");
-				r_core_fini (&core);
-				return 1;
-			}
 			set_action (ACTION_CREATE);
 			create = strdup (optarg);
 			break;
@@ -529,7 +549,7 @@ int main(int argc, char **argv) {
 		case 'k': query = optarg; break;
 		case 'K': chksum = optarg; break;
 		case 'c': set_action (ACTION_CLASSES); break;
-		case 'f': if (optarg) arch_name = strdup (optarg); break;
+		case 'f': arch_name = strdup (optarg); break;
 		case 'F': forcebin = optarg; break;
 		case 'b': bits = r_num_math (NULL, optarg); break;
 		case 'm':
@@ -585,11 +605,12 @@ int main(int argc, char **argv) {
 			if (isBinopHelp (op)) {
 				printf ("Operation string:\n"
 					"  Change Entrypoint: e/0x8048000\n"
-					"  Dump symbols: d/s/1024\n"
-					"  Dump section: d/S/.text\n"
-					"  Resize section: r/.data/1024\n"
+					"  Dump Symbols: d/s/1024\n"
+					"  Dump Section: d/S/.text\n"
+					"  Resize Section: r/.data/1024\n"
 					"  Remove RPATH: R\n"
-					"  Change permissions: p/.data/rwx\n");
+					"  Add Library: a/l/libfoo.dylib\n"
+					"  Change Permissions: p/.data/rwx\n");
 				r_core_fini (&core);
 				return 0;
 			}
@@ -614,19 +635,10 @@ int main(int argc, char **argv) {
 			break;
 		case '@': at = r_num_math (NULL, optarg); break;
 		case 'n': name = optarg; break;
-		case 'N': if (optarg) {
-				  char *q, *p = strdup (optarg);
-				  q = strchr (p, ':');
-				  if (q) {
-					  r_config_set (core.config, "bin.minstr", p);
-					  r_config_set (core.config, "bin.maxstr", q+1);
-				  } else {
-					  r_config_set (core.config, "bin.minstr", optarg);
-				  }
-				  free (p);
-			} else {
-				eprintf ("Missing argument for -N\n");
-			}
+		case 'N':
+			tmp = strchr (optarg, ':');
+			r_config_set (core.config, "bin.minstr", optarg);
+			if (tmp) r_config_set (core.config, "bin.maxstr", tmp + 1);
 			break;
 		case 'h':
 			  r_core_fini (&core);
@@ -936,18 +948,27 @@ int main(int argc, char **argv) {
 	run_action ("dwarf", ACTION_DWARF, R_CORE_BIN_ACC_DWARF);
 	run_action ("pdb", ACTION_PDB, R_CORE_BIN_ACC_PDB);
 	run_action ("size", ACTION_SIZE, R_CORE_BIN_ACC_SIZE);
+	run_action ("versioninfo", ACTION_VERSIONINFO, R_CORE_BIN_ACC_VERSIONINFO);
 	if (action & ACTION_SRCLINE) {
 		rabin_show_srcline (at);
 	}
 	if (action & ACTION_EXTRACT) {
 		RListIter *iter;
 		RBinXtrPlugin *xtr;
+		bool supported = false;
+
 		r_list_foreach (bin->binxtrs, iter, xtr) {
 			if (xtr->check (bin)) {
 				// xtr->extractall (bin);
 				rabin_extract ((!arch && !arch_name && !bits));
+				supported = true;
 				break;
 			}
+		}
+
+		if (!supported) {
+			// if we reach here, no supported xtr plugins found
+			eprintf ("Cannot extract bins from '%s'. No supported plugins found!\n", bin->file);
 		}
 	}
 	if (op && action & ACTION_OPERATION)

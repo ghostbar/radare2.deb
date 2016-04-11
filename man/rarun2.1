@@ -1,4 +1,4 @@
-.Dd Sep 30, 2014
+.Dd Mar 27, 2016
 .Dt RARUN2 1
 .Sh NAME
 .Nm rarun2
@@ -54,6 +54,8 @@ set the niceness level of the process
 preload a library (not supported on Windows, only linux,osx,bsd)
 .It Ar program
 path to program to be executed
+.It Ar execve
+use execve instead of posix_spawn (osx tricks)
 .It Ar r2preload
 preload with libr2, kill -USR1 to get an r2 shell or -USR2 to spawn a webserver in a thread
 .It Ar r2preweb
@@ -80,6 +82,23 @@ execute the given command
 set a timeout
 .It Ar unsetenv
 unset one environment variable
+.El
+.Sh VALUE PREFIXES
+Every value in this configuration file can contain a special
+.Pp
+.Bl -tag -width Fl
+.It Ar @filename
+Slurp contents of file and put them inside the key
+.It Ar "text"
+Escape characters useful for hex chars
+.It Ar 'string'
+Escape characters useful for hex chars
+.It Ar !cmd
+Run command to store the output in the variable
+.It Ar :102030
+Parse hexpair string and store it in the variable
+.It Ar :!102030
+Parse hexpair string from output of command and store it in the variable
 .El
 .Sh EXAMPLES
 Sample rarun2 script

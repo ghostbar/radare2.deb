@@ -97,7 +97,7 @@ R_API void r_cons_rgb_init (void) {
 
 R_API int r_cons_rgb_parse (const char *p, ut8 *r, ut8 *g, ut8 *b, int *is_bg) {
 	const char *q = 0;
-	int isbg = 0, bold=127;
+	int isbg = 0, bold = 255; // 127; // 255 ?
 	//const double k = (256/6);
 	if (!p) return 0;
 	if (*p == 0x1b) p++;
@@ -109,7 +109,8 @@ R_API int r_cons_rgb_parse (const char *p, ut8 *r, ut8 *g, ut8 *b, int *is_bg) {
 	case '4': isbg = 1; break;
 	}
 #define SETRGB(x,y,z) if (r) *r = (x); if (g) *g = (y); if (b) *b = (z)
-	if (bold != 255 && strchr (p, ';')) {
+	//if (bold != 255 && strchr (p, ';')) {
+	if (strchr (p, ';')) {
 		if (p[4] == '5')  {
 			int x, y, z;
 			int n = atoi (p+6);
@@ -129,7 +130,7 @@ R_API int r_cons_rgb_parse (const char *p, ut8 *r, ut8 *g, ut8 *b, int *is_bg) {
 		}
 		return 1;
 	} else {
-		/* plain ansi */
+		/* plain ansi escape codes */
 		if (is_bg) *is_bg = isbg;
 		switch (p[2]) {
 		case '0': SETRGB (0, 0, 0); break;
@@ -182,4 +183,18 @@ R_API void r_cons_rgb (ut8 r, ut8 g, ut8 b, int is_bg) {
 R_API void r_cons_rgb_fgbg (ut8 r, ut8 g, ut8 b, ut8 R, ut8 G, ut8 B) {
 	r_cons_rgb (r, g, b, 0);
 	r_cons_rgb (R, G, B, 1);
+}
+
+R_API char *r_cons_rgb_tostring(ut8 r, ut8 g, ut8 b) {
+	const char *str = NULL;
+	if (r == 0x00 && g == b && g == 0) str = "black";
+	if (r == 0xff && g == b && g == 0xff) str = "white";
+	if (r == 0xff && g == b && g == 0) str = "red";
+	if (g == 0xff && r == b && r == 0) str = "green";
+	if (b == 0xff && r == g && r == 0) str = "blue";
+	if (r == 0xff && g == 0xff && b == 0x00) str = "yellow";
+	if (r == 0x00 && g == 0xff && b == 0xff) str = "cyan";
+	if (r == 0xff && g == 0x00 && b == 0xff) str = "magenta";
+	if (str) return strdup (str);
+	return r_str_newf ("#%02x%02x%02x", r, g, b);
 }

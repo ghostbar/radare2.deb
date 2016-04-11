@@ -20,16 +20,15 @@ CS_PATCHES=0
 else
 CS_TAR=
 CS_URL=$(GIT_PREFIX)github.com/aquynh/capstone.git
-CS_UPD=20160215
+CS_UPD=20160511
 CS_BRA=next
-CS_TIP=2af0217258b61243bcc59f32b140482ea467492b
+CS_TIP=5476c6f52a4c093b875fad38e6aaa98ea5aafdb2
 # REVERT THIS COMMIT BECAUSE ITS WRONG
 CS_REV=
-#21b9b25e9dae4af0ef309d4089a54e53b8f5b479
 CS_PATCHES=1
 endif
 
-.PHONY: capstone-sync capstone-build all clean mrproper libgdbr libwind
+.PHONY: capstone-sync capstone-build all clean mrproper libgdbr libwind bochs
 
 HOST_CC?=gcc
 SHLR?=$(shell pwd)
@@ -53,14 +52,14 @@ all:
 	exit 1
 endif
 
-preall: targets libwind capstone-build
+preall: targets libwind capstone-build bochs
 	@for MOD in ${MODS} ; do \
 		echo $(MAKE) -C $$MOD ; \
 		$(MAKE) -C $$MOD HAVE_VALA= ROOT="${PWD}/../" CC="${CC}" ; \
 	done
 
 SDBFILES=sdb/src/.sdb${EXT_EXE} sdb/sdb${EXT_EXE} sdb/src/.sdb sdb/sdb
-PREMODS=capstone gdb wind sdb
+PREMODS=capstone gdb wind sdb bochs
 
 clean mrproper:
 	rm -f ${SDBFILES}
@@ -127,10 +126,13 @@ SYNCFILES=$(addprefix sdb.vc/,${F})
 I=../libr/include
 
 libgdbr:
-	cd gdb ; $(MAKE) all
+	$(MAKE) -C gdb all
 
 libwind:
-	cd wind ; $(MAKE) all
+	$(MAKE) -C wind all
+
+bochs:
+	$(MAKE) -C bochs all
 
 sdb-clean clean-sdb:
 	$(MAKE) -C sdb clean

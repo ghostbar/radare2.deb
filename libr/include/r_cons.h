@@ -421,6 +421,7 @@ R_API const char *r_cons_pal_get (const char *key);
 R_API const char *r_cons_pal_get_i (int n);
 R_API const char *r_cons_pal_get_color(int n);
 R_API int r_cons_rgb_parse (const char *p, ut8 *r, ut8 *g, ut8 *b, int *is_bg);
+R_API char *r_cons_rgb_tostring(ut8 r, ut8 g, ut8 b);
 R_API void r_cons_pal_list (int rad);
 R_API void r_cons_pal_show (void);
 R_API int r_cons_get_size(int *rows);
@@ -555,7 +556,8 @@ typedef struct r_ascii_node_t {
 #define R_AGRAPH_MODE_ESIL 2
 #define R_AGRAPH_MODE_ESIL_OFFSET 3
 #define R_AGRAPH_MODE_MINI 4
-#define R_AGRAPH_MODE_MAX 5
+#define R_AGRAPH_MODE_SUMMARY 5
+#define R_AGRAPH_MODE_MAX 6
 
 typedef void (*RANodeCallback)(RANode *n, void *user);
 typedef void (*RAEdgeCallback)(RANode *from, RANode *to, void *user);

@@ -290,6 +290,9 @@ static int cmd_yank(void *data, const char *input) {
 	case ' ':
 		r_core_yank (core, core->offset, r_num_math (core->num, input+1));
 		break;
+	case 'l':
+		core->num->value = core->yank_buf->length;
+		break;
 	case 'y':
 		while (input[1]==' ') input++;
 		n = input[1]? r_num_math (core->num, input+1): core->offset;
@@ -301,8 +304,31 @@ static int cmd_yank(void *data, const char *input) {
 	case 'z':
 		r_core_yank_string (core, core->offset, r_num_math (core->num, input+1));
 		break;
+	case 'w':
+		switch (input[1]) {
+		case ' ':
+			r_core_yank_set (core, 0, (const ut8*)input + 2, strlen (input + 2));
+			break;
+		case 'x':
+			if (input[2] == ' ') {
+				char *out = strdup (input + 3);
+				int len = r_hex_str2bin (input+3, (ut8*)out);
+				if (len> 0) {
+					r_core_yank_set (core, 0LL, (const ut8*)out, len);
+				} else {
+					eprintf ("Invalid length\n");
+				}
+				free (out);
+			} else eprintf ("Usage: ywx [hexpairs]\n");
+			// r_core_yank_write_hex (core, input + 2);
+			break;
+		}
+		break;
 	case 'p':
 		r_core_yank_cat (core, r_num_math (core->num, input+1));
+		break;
+	case 's':
+		r_core_yank_cat_string (core, r_num_math (core->num, input+1));
 		break;
 	case 't':
 		r_core_yank_to (core, input+1);
@@ -327,6 +353,7 @@ static int cmd_yank(void *data, const char *input) {
 		"yz", " 16 @ 0x200", "copy up to 16 zero terminated string bytes into clipboard from 0x200",
 		"yp", "", "print contents of clipboard",
 		"yx", "", "print contents of clipboard in hexadecimal",
+		"ys", "", "print contents of clipboard as string",
 		"yt", " 64 0x200", "copy 64 bytes from current seek to 0x200",
 		"yf", " 64 0x200", "file copy 64 bytes from 0x200 from file (opens w/ io), use -1 for all bytes",
 		"yfa", " file copy", "copy all bytes from file (opens w/ io)",
@@ -2188,9 +2215,9 @@ R_API int r_core_cmd_lines(RCore *core, const char *lines) {
 			}
 			*nl = '\0';
 			r = r_core_cmd (core, data, 0);
-			if (r == -1) {
+			if (r < 0) { //== -1) {
 				data = nl+1;
-				ret = false;
+				ret = -1; //r; //false;
 				break;
 			}
 			r_cons_flush ();
@@ -2198,14 +2225,14 @@ R_API int r_core_cmd_lines(RCore *core, const char *lines) {
 				if (data[1]=='!')
 					ret = -1;
 				else eprintf ("'q': quit ignored. Use 'q!'\n");
-				data = nl+1;
+				data = nl + 1;
 				break;
 			}
 			data = nl+1;
 		} while ((nl = strchr (data, '\n')));
 		r_cons_break_end ();
 	}
-	if (data && *data)
+	if (ret>=0 && data && *data)
 		r_core_cmd (core, data, 0);
 	free (odata);
 	return ret;

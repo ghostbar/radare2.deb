@@ -245,45 +245,37 @@ static int cb_asmbits(void *user, void *data) {
 	const char *asmos, *asmarch;
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	int ret;
+	int ret = 0, bits;
 	if (!core) {
 		eprintf ("user can't be NULL\n");
 		return false;
 	}
 
-	ret = r_asm_set_bits (core->assembler, node->i_value);
-	if (ret == false) {
-		RAsmPlugin *h = core->assembler->cur;
-		if (h) {
-			eprintf ("Cannot set bits %"PFMT64d" to '%s'\n",
-					node->i_value, h->name);
-		} else {
-			eprintf ("e asm.bits: Cannot set value, no plugins defined yet\n");
-			ret = true;
+	bits = node->i_value;
+
+	if (bits > 0) {
+		ret = r_asm_set_bits (core->assembler, bits);
+		if (ret == false) {
+			RAsmPlugin *h = core->assembler->cur;
+			if (h) {
+				eprintf ("Cannot set bits %d to '%s'\n", bits, h->name);
+			} else {
+				eprintf ("e asm.bits: Cannot set value, no plugins defined yet\n");
+				ret = true;
+			}
 		}
+		if (!r_anal_set_bits (core->anal, node->i_value)) {
+			eprintf ("asm.arch: Cannot setup '%d' bits analysis engine\n", bits);
+		}
+		core->print->bits = bits;
 	}
-	if (!r_anal_set_bits (core->anal, node->i_value)) {
-		eprintf ("asm.arch: Cannot setup '%i' bits analysis engine\n", (int)node->i_value);
-	}
-	core->print->bits = node->i_value;
 	if (core->dbg && core->anal && core->anal->cur) {
-		int load_from_debug = 0;
-		r_debug_set_arch (core->dbg, core->anal->cur->arch, node->i_value);
+		bool load_from_debug = false;
+		r_debug_set_arch (core->dbg, core->anal->cur->arch, bits);
 		if (r_config_get_i (core->config, "cfg.debug")) {
-			if (core->dbg->h && core->dbg->h->reg_profile) {
-				char *rp = core->dbg->h->reg_profile (core->dbg);
-				r_reg_set_profile_string (core->dbg->reg, rp);
-				r_reg_set_profile_string (core->anal->reg, rp);
-				free (rp);
-			} else {
-				load_from_debug = 1;
-			}
+			load_from_debug = true;
 		} else {
-			if (core->anal->cur->set_reg_profile) {
-				core->anal->cur->set_reg_profile (core->anal);
-			} else {
-				load_from_debug = 1;
-			}
+			(void)r_anal_set_reg_profile (core->anal);
 		}
 		if (load_from_debug) {
 			if (core->dbg->h && core->dbg->h->reg_profile) {
@@ -298,8 +290,7 @@ static int cb_asmbits(void *user, void *data) {
 	asmos = r_config_get (core->config, "asm.os");
 	asmarch = r_config_get (core->config, "asm.arch");
 	if (core->anal) {
-		if (!r_syscall_setup (core->anal->syscall, asmarch,
-					asmos, node->i_value)) {
+		if (!r_syscall_setup (core->anal->syscall, asmarch, asmos, bits)) {
 			//eprintf ("asm.arch: Cannot setup syscall '%s/%s' from '%s'\n",
 			//	node->value, asmos, R2_LIBDIR"/radare2/"R2_VERSION"/syscall");
 		}
@@ -1398,8 +1389,10 @@ R_API int r_core_config_init(RCore *core) {
 	SETI("anal.depth", 16, "Max depth at code analysis"); // XXX: warn if depth is > 50 .. can be problematic
 	SETICB("anal.sleep", 0, &cb_analsleep, "Sleep N usecs every so often during analysis. Avoid 100% CPU usage");
 	SETPREF("anal.calls", "false", "Make basic af analysis walk into calls");
+	SETPREF("anal.autoname", "true", "Automatically set a name for the functions, may result in some false positives");
 	SETPREF("anal.hasnext", "false", "Continue analysis after each function");
 	SETPREF("anal.esil", "false", "Use the new ESIL code analysis");
+	SETPREF("anal.strings", "false", "Identify and register strings during analysis (aar only)");
 	SETCB("anal.nopskip", "true", &cb_analnopskip, "Skip nops at the beginning of functions");
 	SETCB("anal.bbsplit", "true", &cb_analbbsplit, "Use the experimental basic block split for JMPs");
 	SETCB("anal.noncode", "false", &cb_analnoncode, "Analyze data as code");
@@ -1448,6 +1441,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF("asm.jmphints", "true", "Show jump hints [numbers] in disasm");
 	SETPREF("asm.slow", "true", "Perform slow analysis operations in disasm");
 	SETPREF("asm.decode", "false", "Use code analysis as a disassembler");
+	SETPREF("asm.flgoff", "false", "Show offset in flags");
 	SETPREF("asm.indent", "false", "Indent disassembly based on reflines depth");
 	SETI("asm.indentspace", 2, "How many spaces to indent the code");
 	SETPREF("asm.dwarf", "false", "Show dwarf comment at disassembly");
@@ -1469,8 +1463,10 @@ R_API int r_core_config_init(RCore *core) {
 	SETICB("asm.lineswidth", 7, &cb_asmlineswidth, "Number of columns for program flow arrows");
 	SETPREF("asm.middle", "false", "Allow disassembling jumps in the middle of an instruction");
 	SETPREF("asm.offset", "true", "Show offsets at disassembly");
+	SETPREF("asm.spacy", "false", "Spacy disasm after calls and before flags");
 	SETPREF("asm.reloff", "false", "Show relative offsets instead of absolute address in disasm");
 	SETPREF("asm.section", "false", "Show section name before offset");
+	SETI("asm.section.col", 20, "Columns width to show asm.section");
 	SETPREF("asm.pseudo", "false", "Enable pseudo syntax");
 	SETPREF("asm.size", "false", "Show size of opcodes in disassembly (pd)");
 	SETPREF("asm.stackptr", "false", "Show stack pointer at disassembly");
@@ -1488,6 +1484,8 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF("asm.relsub", "false", "Substitute pc relative expressions in disasm");
 	SETPREF("asm.cmtfold", "false", "Fold comments, toggle with Vz");
 	SETPREF("asm.family", "false", "Show family name in disasm");
+	SETPREF("asm.symbol", "false", "Show symbol+delta instead of absolute offset");
+	SETI("asm.symbol.col", 40, "Columns width to show asm.section");
 	SETCB("asm.arch", R_SYS_ARCH, &cb_asmarch, "Set the arch to be used by asm");
 	SETCB("asm.features", "", &cb_asmfeatures, "Specify supported features by the target CPU (=? for help)");
 	SETCB("asm.cpu", R_SYS_ARCH, &cb_asmcpu, "Set the kind of asm.arch cpu");
@@ -1512,7 +1510,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB("bin.filter", "true", &cb_binfilter, "Filter symbol names to fix dupped names");
 	SETCB("bin.force", "", &cb_binforce, "Force that rbin plugin");
 	SETPREF("bin.lang", "", "Language for bin.demangle");
-	SETPREF("bin.demangle", "false", "Import demangled symbols from RBin");
+	SETPREF("bin.demangle", "true", "Import demangled symbols from RBin");
 
 	/* bin */
 	SETI("bin.baddr", -1, "Base address of the binary");
@@ -1657,6 +1655,7 @@ R_API int r_core_config_init(RCore *core) {
 
 	/* http */
 	SETPREF("http.cors", "false", "Enable CORS");
+	SETPREF("http.referer", "", "CSFR protection if set");
 	SETPREF("http.dirlist", "false", "Enable directory listing");
 	SETPREF("http.allow", "", "Only accept clients from the comma separated IP list");
 #if __WINDOWS__
@@ -1708,6 +1707,9 @@ R_API int r_core_config_init(RCore *core) {
 	SETI("graph.scroll", 5, "Scroll speed in ascii-art graph");
 	SETPREF("graph.invscroll", "false", "Invert scroll direction in ascii-art graph");
 	SETPREF("graph.title", "", "Title of the graph");
+	SETPREF("graph.gv.node", "", "Custom graphviz node style for aga, agc, ...");
+	SETPREF("graph.gv.edge", "", "Custom graphviz edge style for aga, agc, ...");
+	SETPREF("graph.gv.graph", "", "Custom graphviz graph style for aga, agc, ...");
 
 	/* hud */
 	SETPREF("hud.path", "", "Set a custom path for the HUD file");
@@ -1752,6 +1754,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB("scr.html", "false", &cb_scrhtml, "Disassembly uses HTML syntax");
 	SETCB("scr.nkey", "flag", &cb_scrnkey, "Select the seek mode in visual");
 	SETCB("scr.pager", "", &cb_pager, "Select pager program (when output overflows the window)");
+	SETPREF("scr.randpal", "false", "Random color palete or just get the next one from 'eco'");
 	SETPREF("scr.pipecolor", "false", "Enable colors when using pipes");
 	SETPREF("scr.promptfile", "false", "Show user prompt file (used by r2 -q)");
 	SETPREF("scr.promptflag", "false", "Show flag name in the prompt");
@@ -1810,7 +1813,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB("io.vio", "false", &cb_iovio, "Enable the new vio (reading only) (WIP)");
 
 	/* file */
-	SETPREF("file.analyze", "false", "Analyze file on load. Same as r2 -c aa ..");
+	SETI("file.analyze", 0, "Analyze file on load. 1) r2 -A 2) -AA 3) -AAA");
 	SETPREF("file.desc", "", "User defined file description (used by projects)");
 	SETPREF("file.md5", "", "MD5 sum of current file");
 	SETPREF("file.path", "", "Path of current file");

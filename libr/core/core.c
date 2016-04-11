@@ -3,6 +3,7 @@
 #include <r_core.h>
 #include <r_socket.h>
 #include "../config.h"
+#include <r_util.h>
 #if __UNIX__
 #include <signal.h>
 #endif
@@ -22,12 +23,8 @@ static ut64 letter_divs[R_CORE_ASMQJMPS_LEN_LETTERS - 1] = {
 static const char *tmp_argv[TMP_ARGV_SZ];
 static bool tmp_argv_heap = false;
 
-static void r_core_free_autocomplete(RCore *core) {
+static void r_line_free_autocomplete(RLine *line) {
 	int i;
-	RLine *line;
-	if (!core || !core->cons || !core->cons->line)
-		return;
-	line = core->cons->line;
 	if (tmp_argv_heap) {
 		int argc = line->completion.argc;
 		for (i = 0; i < argc; i++) {
@@ -40,6 +37,11 @@ static void r_core_free_autocomplete(RCore *core) {
 	line->completion.argv = tmp_argv;
 }
 
+static void r_core_free_autocomplete(RCore *core) {
+	if (!core || !core->cons || !core->cons->line)
+		return;
+	r_line_free_autocomplete (core->cons->line);
+}
 
 static int on_fcn_new(void *_anal, void* _user, RAnalFunction *fcn) {
 	RCore *core = (RCore*)_user;
@@ -257,6 +259,7 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 		// TODO: group analop-dependant vars after a char, so i can filter
 		r_anal_op (core->anal, &op, core->offset,
 			core->block, core->blocksize);
+		r_anal_op_fini (&op); // we dont need strings or pointers, just values, which are not nullified in fini
 		switch (str[1]) {
 		case '.': // can use pc, sp, a0, a1, ...
 			return r_debug_reg_get (core->dbg, str+2);
@@ -306,6 +309,17 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 		case 'P': return (core->dbg->pid>0)? core->dbg->pid: 0;
 		case 'f': return op.fail;
 		case 'm': return op.ptr; // memref
+		case 'M': {
+				ut64 lower = UT64_MAX;
+				RListIter *iter;
+				RIOSection *s;
+				r_list_foreach (core->io->sections, iter, s) {
+					if (!s->vaddr && s->offset) continue;
+					if (s->vaddr < lower) lower = s->vaddr;
+				}
+				return (lower == UT64_MAX)? 0LL: lower;
+			}
+			break;
 		case 'v': return op.val; // immediate value
 		case 'l': return op.size;
 		case 'b': return core->blocksize;
@@ -388,6 +402,7 @@ static const char *radare_argv[] = {
 	"#!python", "#!perl", "#!vala",
 	"V",
 	"aa", "ab", "af", "ar", "ag", "at", "a?", "ax", "ad",
+	"aaa", "aac","aae", "aai", "aar", "aan", "aas", "aat", "aap", "aav",
 	"af", "afa", "afan", "afc", "afi", "afb", "afbb", "afn", "afr", "afs", "af*", "afv", "afvn",
 	"aga", "agc", "agd", "agl", "agfl",
 	"e", "et", "e-", "e*", "e!", "e?", "env ",
@@ -703,6 +718,7 @@ openfile:
 		    (!strncmp (line->buffer.data, "ad ", 3)) ||
 		    (!strncmp (line->buffer.data, "bf ", 3)) ||
 		    (!strncmp (line->buffer.data, "ag ", 3)) ||
+		    (!strncmp (line->buffer.data, "aav ", 4)) ||
 		    (!strncmp (line->buffer.data, "afi ", 4)) ||
 		    (!strncmp (line->buffer.data, "afb ", 4)) ||
 		    (!strncmp (line->buffer.data, "afc ", 4)) ||
@@ -803,6 +819,8 @@ R_API int r_core_fgets(char *buf, int len) {
 	const char *ptr;
 	RLine *rli = r_line_singleton ();
 	buf[0] = '\0';
+	if (rli->completion.argv != radare_argv)
+		r_line_free_autocomplete (rli);
 	rli->completion.argc = CMDS;
 	rli->completion.argv = radare_argv;
 	rli->completion.run = autocomplete;
@@ -1118,8 +1136,15 @@ static void r_core_setenv (RCore *core) {
 }
 
 R_API int r_core_init(RCore *core) {
-	r_core_setenv(core);
-	core->cmd_depth = R_CORE_CMD_DEPTH+1;
+	core->blocksize = R_CORE_BLOCKSIZE;
+	core->block = (ut8*)malloc (R_CORE_BLOCKSIZE+1);
+	if (core->block == NULL) {
+		eprintf ("Cannot allocate %d bytes\n", R_CORE_BLOCKSIZE);
+		/* XXX memory leak */
+		return false;
+	}
+	r_core_setenv (core);
+	core->cmd_depth = R_CORE_CMD_DEPTH + 1;
 	core->sdb = sdb_new (NULL, "r2kv.sdb", 0); // XXX: path must be in home?
 	core->lastsearch = NULL;
 	core->incomment = false;
@@ -1144,6 +1169,7 @@ R_API int r_core_init(RCore *core) {
 	core->scriptstack = r_list_new ();
 	core->scriptstack->free = (RListFree)free;
 	core->log = r_core_log_new ();
+	core->times = R_NEW0 (RCoreTimes);
 	core->vmode = false;
 	core->section = NULL;
 	core->oobi = NULL;
@@ -1179,13 +1205,6 @@ R_API int r_core_init(RCore *core) {
 	}
 	core->print->cons = core->cons;
 	core->cons->num = core->num;
-	core->blocksize = R_CORE_BLOCKSIZE;
-	core->block = (ut8*)malloc (R_CORE_BLOCKSIZE+1);
-	if (core->block == NULL) {
-		eprintf ("Cannot allocate %d bytes\n", R_CORE_BLOCKSIZE);
-		/* XXX memory leak */
-		return false;
-	}
 	core->lang = r_lang_new ();
 	core->lang->cmd_str = (char *(*)(void *, const char *))r_core_cmd_str;
 	core->cons->editor = (RConsEditorCallback)r_core_editor;
@@ -1201,10 +1220,12 @@ R_API int r_core_init(RCore *core) {
 	/* default noreturn functions */
 	/* osx */
 	r_anal_noreturn_add (core->anal, "sym.imp.__assert_rtn", UT64_MAX);
+	r_anal_noreturn_add (core->anal, "sym.imp.abort", UT64_MAX);
 	r_anal_noreturn_add (core->anal, "sym.imp.exit", UT64_MAX);
 	r_anal_noreturn_add (core->anal, "sym.imp._exit", UT64_MAX);
 	r_anal_noreturn_add (core->anal, "sym.imp.__stack_chk_fail", UT64_MAX);
 	/* linux */
+	r_anal_noreturn_add (core->anal, "sym.imp.__assert_fail", UT64_MAX);
 	r_anal_noreturn_add (core->anal, "sym.__assert_fail", UT64_MAX);
 	r_anal_noreturn_add (core->anal, "sym.abort", UT64_MAX);
 	r_anal_noreturn_add (core->anal, "sym.exit", UT64_MAX);
@@ -1304,6 +1325,7 @@ R_API RCore *r_core_fini(RCore *c) {
 	r_core_task_join (c, NULL);
 	free (c->cmdqueue);
 	free (c->lastcmd);
+	free (c->block);
 	r_io_free (c->io);
 	r_num_free (c->num);
 	// TODO: sync or not? sdb_sync (c->sdb);
@@ -1313,6 +1335,7 @@ R_API RCore *r_core_fini(RCore *c) {
 	r_list_free (c->files);
 	r_list_free (c->watchers);
 	r_list_free (c->scriptstack);
+	r_list_free (c->tasks);
 	c->rcmd = r_cmd_free (c->rcmd);
 	c->anal = r_anal_free (c->anal);
 	c->assembler = r_asm_free (c->assembler);
@@ -1336,6 +1359,9 @@ R_API RCore *r_core_fini(RCore *c) {
 	r_agraph_free (c->graph);
 	R_FREE (c->asmqjmps);
 	sdb_free (c->sdb);
+	r_core_log_free (c->log);
+	r_parse_free (c->parser);
+	free (c->times);
 	return NULL;
 }
 

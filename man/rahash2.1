@@ -5,9 +5,10 @@
 .Nd block based hashing utility
 .Sh SYNOPSIS
 .Nm hasher2
-.Op Fl BdDehjrkv
+.Op Fl BdDehjrkvq
 .Op Fl a Ar algorithm
 .Op Fl b Ar size
+.Op Fl E Ar algo
 .Op Fl s Ar string
 .Op Fl i Ar iterations
 .Op Fl S Ar seed
@@ -39,6 +40,8 @@ encoDe base64 string or file
 Decode base64 string or file
 .It Fl e
 Use little endian to display checksums
+.It Fl E Ar algo
+Encrypt instead of hash using the given algorithm (rc4, aes, xor, blowfish, rot)
 .It Fl i Ar iters
 Apply the hash Iters times to itself+seed
 .It Fl j
@@ -55,6 +58,8 @@ Set seed to hash with, use ^to prefix seed, otherwise its suffixed.
 Start hashing at given address
 .It Fl t Ar to
 Stop hashing at given address
+.It Fl q
+Quiet mode (-qq for even quieter!)
 .It Fl r
 Show output in radare commands
 .It Fl x Ar hexstr

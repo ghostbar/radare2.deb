@@ -61,6 +61,7 @@ R_API int r_anal_xrefs_load(RAnal *anal, const char *prjfile) {
 }
 
 R_API void r_anal_xrefs_save(RAnal *anal, const char *prjfile) {
+	sdb_file (anal->sdb_xrefs, prjfile);
 	sdb_sync (anal->sdb_xrefs);
 }
 
@@ -154,7 +155,7 @@ R_API int r_anal_xrefs_init (RAnal *anal) {
 static int xrefs_list_cb_rad(RAnal *anal, const char *k, const char *v) {
 	ut64 dst, src = r_num_get (NULL, v);
 	if (!strncmp (k, "ref.", 4)) {
-		char *p = strchr (k+4, '.');
+		const char *p = r_str_rchr (k, NULL, '.');
 		if (p) {
 			dst = r_num_get (NULL, p+1);
 			anal->cb_printf ("ax 0x%"PFMT64x" 0x%"PFMT64x"\n", src, dst);
@@ -166,7 +167,7 @@ static int xrefs_list_cb_rad(RAnal *anal, const char *k, const char *v) {
 static int xrefs_list_cb_json(RAnal *anal, const char *k, const char *v) {
 	ut64 dst, src = r_num_get (NULL, v);
 	if (!strncmp (k, "ref.", 4) && (strlen (k)>8)) {
-		char *p = strchr (k+4, '.');
+		const char *p = r_str_rchr (k, NULL, '.');
 		if (p) {
 			dst = r_num_get (NULL, p+1);
 			sscanf (p+1, "0x%"PFMT64x, &dst);
@@ -214,3 +215,19 @@ R_API const char *r_anal_xrefs_type_tostring (char type) {
 	}
 }
 
+typedef struct {
+	RAnal *anal;
+	int count;
+} CountState;
+
+static int countcb(CountState *cs, const char *k, const char *v) {
+	if (!strncmp (k, "ref.", 4))
+		cs->count ++;
+	return 1;
+}
+
+R_API int r_anal_xrefs_count(RAnal *anal) {
+	CountState cs = { anal, 0 };
+	sdb_foreach (DB, (SdbForeachCallback)countcb, &cs);
+	return cs.count;
+}

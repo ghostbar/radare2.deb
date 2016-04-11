@@ -36,8 +36,12 @@ static int free_xtr (void *xtr_obj) {
 }
 
 static bool load(RBin *bin) {
-	if (!bin || !bin->cur) return false;
-	return ((bin->cur->xtr_obj = r_bin_dyldcache_new (bin->file)) != NULL);
+	if (!bin || !bin->cur) 
+	    	return false;
+	bin->cur->xtr_obj = r_bin_dyldcache_new (bin->cur->file);
+	if (!bin->file)
+	    	bin->file = bin->cur->file;
+	return bin->cur->xtr_obj? true : false;
 }
 
 static RList * extractall(RBin *bin) {
@@ -78,16 +82,17 @@ static RBinXtrData *oneshot(RBin *bin, const ut8* buf, ut64 size, int idx) {
 	struct r_bin_dyldcache_lib_t *lib;
 	int nlib = 0;
 	if (!bin->file) {
-		load (bin);
+		if (!load (bin))
+		    	return NULL;
 	}
+	//XXX why allocate again and again? use bin->cur->xtr_obj though is producing uaf review
 	xtr_obj = r_bin_dyldcache_from_bytes_new (buf, size);
 	lib = r_bin_dyldcache_extract (xtr_obj, idx, &nlib);
 	if (!lib) {
 		free_xtr (xtr_obj);
-		return res;
+		return NULL;
 	}
-	res = r_bin_xtrdata_new (xtr_obj, free_xtr, lib->b, lib->offset,
-		lib->size, nlib);
+	res = r_bin_xtrdata_new (xtr_obj, free_xtr, lib->b, lib->offset, lib->size, nlib);
 	r_buf_free (lib->b);
 	free (lib);
 	return res;
@@ -96,9 +101,10 @@ static RBinXtrData *oneshot(RBin *bin, const ut8* buf, ut64 size, int idx) {
 static RList * oneshotall(RBin *bin, const ut8* buf, ut64 size) {
 	RBinXtrData *data = NULL;
 	RList *res = NULL;
-	int nlib, i = 1;
+	int nlib, i = 0;
 	if (!bin->file) {
-		load (bin);
+		if (!load (bin))
+		    	return NULL;
 	}
 	data = oneshot (bin, buf, size, i);
 	if (!data) return res;

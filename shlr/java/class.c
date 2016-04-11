@@ -1530,12 +1530,11 @@ R_API RBinJavaCPTypeObj* r_bin_java_read_next_constant_pool_item(RBinJavaObj *bi
 		str_len = R_BIN_JAVA_USHORT (buf, offset+1);
 		buf_sz += str_len;
 	}
-	cp_buf = malloc (buf_sz);
+	cp_buf = calloc (buf_sz, 1);
 	if (!cp_buf)
 		return java_obj;
-	memset (cp_buf, 0, buf_sz);
-	if (offset+0x20 < len) {
-		memcpy (cp_buf, (ut8*) buf+offset, buf_sz);
+	if (offset + buf_sz < len) {
+		memcpy (cp_buf, (ut8*) buf + offset, buf_sz);
 		IFDBG eprintf ("Parsed the tag '%d':%s and create object from offset 0x%08"PFMT64x".\n",tag, R_BIN_JAVA_CP_METAS[tag].name, offset);
 		java_obj = (*java_constant_info->allocs->new_obj)(bin, cp_buf, buf_sz);
 		if (java_obj != NULL && java_obj->metas != NULL) {
@@ -1982,7 +1981,9 @@ R_API RBinJavaAttrInfo* r_bin_java_read_next_attr_from_buffer (ut8 *buffer, st64
 	if (type_info) {
 		IFDBG eprintf ("Typeinfo: %s, was %s\n", type_info->name, name);
 		//printf ("SZ %d %d %d\n", nsz, sz, buf_offset);
-		if (nsz>sz) nsz = sz;
+		if (nsz > sz)  {
+			return NULL;
+		}
 		if ((attr = type_info->allocs->new_obj (buffer, nsz, buf_offset))) {
 			attr->metas->ord = (R_BIN_JAVA_GLOBAL_BIN->attr_idx++);
 		}

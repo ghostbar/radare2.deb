@@ -277,8 +277,13 @@ static int is_data_section(RBinFile *a, RBinSection *s) {
 			return true;
 #define X 1
 #define ROW (4 | 2)
+		/* probably too much false positives in here, or thats fine? */
 		if (strstr (o->info->bclass, "PE") && s->srwx & ROW && !(s->srwx & X) && s->size > 0) {
-			if (!strcmp (s->name, ".rdata")) // Maybe other sections are interesting too?
+			if (!strcmp (s->name, ".rsrc"))
+				return true;
+			if (!strcmp (s->name, ".data"))
+				return true;
+			if (!strcmp (s->name, ".rdata"))
 				return true;
 		}
 	}
@@ -354,6 +359,7 @@ static void r_bin_object_delete_items(RBinObject *o) {
 	r_list_free (o->symbols);
 	r_list_free (o->classes);
 	r_list_free (o->lines);
+	sdb_free (o->kv);
 	if (o->mem) o->mem->free = mem_free;
 	r_list_free (o->mem);
 	o->entries = NULL;
@@ -367,6 +373,7 @@ static void r_bin_object_delete_items(RBinObject *o) {
 	o->classes = NULL;
 	o->lines = NULL;
 	o->info = NULL;
+	o->kv = NULL;
 	for (i = 0; i < R_BIN_SYM_LAST; i++) {
 		free (o->binsym[i]);
 		o->binsym[i] = NULL;
@@ -392,10 +399,12 @@ R_API void r_bin_info_free(RBinInfo *rb) {
 
 R_API void r_bin_import_free(void *_imp) {
 	RBinImport *imp = (RBinImport *)_imp;
-	free (imp->name);
-	free (imp->classname);
-	free (imp->descriptor);
-	free (imp);
+	if (imp) {
+		R_FREE (imp->name);
+		R_FREE (imp->classname);
+		R_FREE (imp->descriptor);
+		free (imp);
+	}
 }
 
 R_API void r_bin_symbol_free(void *_sym) {
@@ -422,7 +431,6 @@ static void r_bin_object_free(void /*RBinObject*/ *o_) {
 	if (!o) return;
 	r_bin_info_free (o->info);
 	r_bin_object_delete_items (o);
-	free (o);
 }
 
 // XXX - change this to RBinObject instead of RBinFile
@@ -477,6 +485,7 @@ static int r_bin_object_set_items(RBinFile *binfile, RBinObject *o) {
 		}
 	}
 	if (cp->imports) {
+		r_list_free (o->imports);
 		o->imports = cp->imports (binfile);
 		if (o->imports) {
 			o->imports->free = r_bin_import_free;
@@ -493,15 +502,15 @@ static int r_bin_object_set_items(RBinFile *binfile, RBinObject *o) {
 	}
 	o->info = cp->info? cp->info (binfile): NULL;
 	if (cp->libs) o->libs = cp->libs (binfile);
-	if (cp->relocs) {
-		o->relocs = cp->relocs (binfile);
-		REBASE_PADDR (o, o->relocs, RBinReloc);
-	}
 	if (cp->sections) {
 		o->sections = cp->sections (binfile);
 		REBASE_PADDR (o, o->sections, RBinSection);
 		if (bin->filter)
 			r_bin_filter_sections (o->sections);
+	}
+	if (cp->relocs) {
+		o->relocs = cp->relocs (binfile);
+		REBASE_PADDR (o, o->relocs, RBinReloc);
 	}
 	if (cp->strings) {
 		o->strings = cp->strings (binfile);
@@ -650,7 +659,6 @@ R_API int r_bin_load_io_at_offset_as_sz(RBin *bin, RIODesc *desc, ut64 baseaddr,
 	if (!io || !desc) return false;
 	if (loadaddr == UT64_MAX) loadaddr = 0;
 
-	buf_bytes = NULL;
 	file_sz = iob->desc_size (io, desc);
 #if __APPLE__
 	/* Fix OSX/iOS debugger -- needs review for proper fix */
@@ -731,8 +739,9 @@ R_API int r_bin_load_io_at_offset_as_sz(RBin *bin, RIODesc *desc, ut64 baseaddr,
 	if (!binfile) {
 		binfile = r_bin_file_new_from_bytes (bin, desc->name, buf_bytes, sz,
 			file_sz, bin->rawstr, baseaddr, loadaddr, desc->fd, name, NULL, offset);
+	} else {
+		free (buf_bytes); // possible UAF
 	}
-
 	return binfile? r_bin_file_set_cur_binfile (bin, binfile): false;
 }
 
@@ -846,7 +855,10 @@ static RBinFile *r_bin_file_xtr_load_bytes(RBin *bin, RBinXtrPlugin *xtr, const 
 	if (!bf) {
 		if (!bin) return NULL;
 		bf = r_bin_file_create_append (bin, filename, bytes, sz, file_sz, rawstr, fd, xtr->name);
-		if (!bf) return bf;
+		if (!bf) 
+			return bf;
+		if (!bin->cur) 
+			bin->cur = bf;
 	}
 	if (idx == 0 && xtr && bytes) {
 		RList *xtr_data_list = xtr->extractall_from_bytes (bin, bytes, sz);
@@ -1159,6 +1171,7 @@ R_API void *r_bin_free(RBin *bin) {
 	if (!bin) return NULL;
 	bin->file = NULL;
 	free (bin->force);
+	free (bin->srcdir);
 	//r_bin_free_bin_files (bin);
 	r_list_free (bin->binfiles);
 	r_list_free (bin->binxtrs);
@@ -1265,6 +1278,27 @@ R_API RBinInfo *r_bin_get_info(RBin *bin) {
 R_API RList *r_bin_get_libs(RBin *bin) {
 	RBinObject *o = r_bin_cur_object (bin);
 	return o? o->libs: NULL;
+}
+
+
+R_API RList * r_bin_patch_relocs(RBin *bin) {
+	static bool first = true;
+	RBinObject *o = r_bin_cur_object (bin);
+	if (!o) return NULL;
+
+	//r_bin_object_set_items set o->relocs but there we don't have access to io
+	//so we need to be run from bin_relocs, free the previous reloc and get the patched ones
+	if (first && o->plugin && o->plugin->patch_relocs) {
+		RList *tmp = o->plugin->patch_relocs (bin);
+		first = false;
+		if (!tmp) return o->relocs;
+		r_list_free (o->relocs);
+		o->relocs = tmp;
+		REBASE_PADDR (o, o->relocs, RBinReloc);
+		first = false;
+		return o->relocs;
+	}
+	return o->relocs;
 }
 
 R_API RList *r_bin_get_relocs(RBin *bin) {
@@ -1903,6 +1937,10 @@ R_API int r_bin_file_set_cur_binfile_obj(RBin *bin, RBinFile *bf, RBinObject *ob
 	bin->file = bf->file;
 	bin->cur = bf;
 	bin->narch = bf->narch;
+	#if 0
+	if (bf->o != obj)
+		r_bin_object_free (bf->o);
+	#endif
 	bf->o = obj;
 	plugin = r_bin_file_cur_plugin (bf);
 	if (bin->minstrlen < 1)
@@ -1948,4 +1986,20 @@ R_API int r_bin_write_at(RBin *bin, ut64 addr, const ut8 *buf, int size) {
 	if (!bin || !(iob = &(bin->iob)))
 		return false;
 	return iob->write_at (iob->io, addr, buf, size);
+}
+
+R_API const char *r_bin_entry_type_string(int etype) {
+	switch (etype) {
+	case R_BIN_ENTRY_TYPE_PROGRAM:
+		return "program";
+	case R_BIN_ENTRY_TYPE_MAIN:
+		return "main";
+	case R_BIN_ENTRY_TYPE_INIT:
+		return "init";
+	case R_BIN_ENTRY_TYPE_FINI:
+		return "fini";
+	case R_BIN_ENTRY_TYPE_TLS:
+		return "tls";
+	}
+	return NULL;
 }

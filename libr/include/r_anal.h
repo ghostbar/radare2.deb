@@ -459,14 +459,22 @@ typedef enum {
 
 /* TODO: what to do with signed/unsigned conditionals? */
 typedef enum {
-	R_ANAL_COND_EQ = 0,
-	R_ANAL_COND_NE,
-	R_ANAL_COND_GE,
-	R_ANAL_COND_GT,
-	R_ANAL_COND_LE,
-	R_ANAL_COND_LT,
-	R_ANAL_COND_AL,
-	R_ANAL_COND_NV,
+	R_ANAL_COND_AL = 0,        // Always executed (no condition)
+	R_ANAL_COND_EQ,            // Equal
+	R_ANAL_COND_NE,            // Not equal
+	R_ANAL_COND_GE,            // Greater or equal
+	R_ANAL_COND_GT,            // Greater than
+	R_ANAL_COND_LE,            // Less or equal
+	R_ANAL_COND_LT,            // Less than
+	R_ANAL_COND_NV,            // Never executed             must be a nop? :D
+	R_ANAL_COND_HS,            // Carry set                  >, ==, or unordered
+	R_ANAL_COND_LO,            // Carry clear                Less than
+	R_ANAL_COND_MI,            // Minus, negative            Less than
+	R_ANAL_COND_PL,            // Plus, positive or zero     >, ==, or unordered
+	R_ANAL_COND_VS,            // Overflow                   Unordered
+	R_ANAL_COND_VC,            // No overflow                Not unordered
+	R_ANAL_COND_HI,            // Unsigned higher            Greater than, or unordered
+	R_ANAL_COND_LS             // Unsigned lower or same     Less than or equal
 } _RAnalCond;
 
 typedef enum {
@@ -1020,6 +1028,7 @@ typedef int (*RAnalBbCallback)(RAnal *a, RAnalBlock *bb, ut64 addr, const ut8 *d
 typedef int (*RAnalFnCallback)(RAnal *a, RAnalFunction *fcn, ut64 addr, const ut8 *data, int len, int reftype);
 
 typedef int (*RAnalRegProfCallback)(RAnal *a);
+typedef char*(*RAnalRegProfGetCallback)(RAnal *a);
 typedef int (*RAnalFPBBCallback)(RAnal *a, RAnalBlock *bb);
 typedef int (*RAnalFPFcnCallback)(RAnal *a, RAnalFunction *fcn);
 typedef int (*RAnalDiffBBCallback)(RAnal *anal, RAnalFunction *fcn, RAnalFunction *fcn2);
@@ -1097,6 +1106,7 @@ typedef struct r_anal_plugin_t {
 	RAnalCmdExt cmd_ext;
 
 	RAnalRegProfCallback set_reg_profile;
+	RAnalRegProfGetCallback get_reg_profile;
 	RAnalFPBBCallback fingerprint_bb;
 	RAnalFPFcnCallback fingerprint_fcn;
 	RAnalDiffBBCallback diff_bb;
@@ -1139,6 +1149,7 @@ R_API void r_anal_type_define (RAnal *anal, const char *key, const char *value);
 R_API void r_anal_type_header (RAnal *anal, const char *hdr);
 
 R_API int r_anal_type_link (RAnal *anal, const char *val, ut64 addr);
+R_API int r_anal_type_unlink(RAnal *anal, ut64 addr);
 R_API char *r_anal_type_format (RAnal *anal, const char *t);
 R_API int r_anal_type_set(RAnal *anal, ut64 at, const char *field, ut64 val);
 
@@ -1149,12 +1160,13 @@ R_API RAnal *r_anal_free(RAnal *r);
 R_API void r_anal_set_user_ptr(RAnal *anal, void *user);
 R_API void r_anal_plugin_free (RAnalPlugin *p);
 R_API int r_anal_add(RAnal *anal, RAnalPlugin *foo);
-R_API int r_anal_list(RAnal *anal);
+R_API void r_anal_list(RAnal *anal);
 R_API int r_anal_archinfo(RAnal *anal, int query);
-R_API int r_anal_use(RAnal *anal, const char *name);
-R_API int r_anal_set_reg_profile(RAnal *anal);
-R_API int r_anal_set_bits(RAnal *anal, int bits);
-R_API int r_anal_set_os(RAnal *anal, const char *os);
+R_API bool r_anal_use(RAnal *anal, const char *name);
+R_API bool r_anal_set_reg_profile(RAnal *anal);
+R_API char *r_anal_get_reg_profile(RAnal *anal);
+R_API bool r_anal_set_bits(RAnal *anal, int bits);
+R_API bool r_anal_set_os(RAnal *anal, const char *os);
 R_API void r_anal_set_cpu(RAnal *anal, const char *cpu);
 R_API int r_anal_set_big_endian(RAnal *anal, int boolean);
 R_API char *r_anal_strmask (RAnal *anal, const char *data);
@@ -1274,7 +1286,7 @@ R_API int r_anal_var_count(RAnal *a, RAnalFunction *fcn, int kind);
 
 /* vars // globals. not here  */
 
-
+R_API int r_anal_fcn_size(RAnalFunction *fcn);
 R_API int r_anal_fcn_cc(RAnalFunction *fcn);
 R_API int r_anal_fcn_split_bb(RAnal *anal, RAnalFunction *fcn, RAnalBlock *bb, ut64 addr);
 R_API int r_anal_fcn_bb_overlaps(RAnalFunction *fcn, RAnalBlock *bb);
@@ -1294,6 +1306,7 @@ R_API int r_anal_fcn_resize (RAnalFunction *fcn, int newsize);
 #define r_anal_fcn_get_vars(x) x->vars
 #define r_anal_fcn_get_bbs(x) x->bbs
 #else
+R_API int r_anal_xrefs_count(RAnal *anal);
 R_API const char *r_anal_xrefs_type_tostring (char type);
 R_API RList *r_anal_xrefs_get (RAnal *anal, ut64 to);
 R_API RList *r_anal_xrefs_get_from (RAnal *anal, ut64 from);
@@ -1381,6 +1394,7 @@ R_API void r_anal_cond_free (RAnalCond *c);
 R_API char *r_anal_cond_to_string(RAnalCond *cond);
 R_API int r_anal_cond_eval (RAnal *anal, RAnalCond *cond);
 R_API RAnalCond *r_anal_cond_new_from_string(const char *str);
+R_API const char *r_anal_cond_tostring(int cc);
 
 /* reflines.c */
 R_API RList* /*<RAnalRefline>*/ r_anal_reflines_get(RAnal *anal,
@@ -1560,6 +1574,7 @@ extern RAnalPlugin r_anal_plugin_riscv;
 extern RAnalPlugin r_anal_plugin_vax;
 extern RAnalPlugin r_anal_plugin_i4004;
 extern RAnalPlugin r_anal_plugin_xtensa;
+extern RAnalPlugin r_anal_plugin_pic18c;
 #ifdef __cplusplus
 }
 #endif

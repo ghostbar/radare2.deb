@@ -235,6 +235,7 @@ typedef struct r_debug_plugin_t {
 	int (*step_over)(RDebug *dbg);
 	int (*cont)(RDebug *dbg, int pid, int tid, int sig);
 	int (*wait)(RDebug *dbg, int pid);
+	bool (*gcore)(RDebug *dbg, RBuffer *dest);
 	int (*kill)(RDebug *dbg, int pid, int tid, int sig);
 	RList* (*kill_list)(RDebug *dbg);
 	int (*contsc)(RDebug *dbg, int pid, int sc);
@@ -441,7 +442,7 @@ extern RDebugPlugin r_debug_plugin_rap;
 extern RDebugPlugin r_debug_plugin_gdb;
 extern RDebugPlugin r_debug_plugin_bf;
 extern RDebugPlugin r_debug_plugin_wind;
-
+extern RDebugPlugin r_debug_plugin_bochs;
 #endif
 
 #ifdef __cplusplus

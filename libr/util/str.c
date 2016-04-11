@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2015 - pancake */
+/* radare - LGPL - Copyright 2007-2016 - pancake */
 
 #include "r_types.h"
 #include "r_util.h"
@@ -223,10 +223,10 @@ R_API void r_str_case(char *str, bool up) {
 	if (up) {
 		char oc = 0;
 		for (; *str; oc = *str++)
-			*str = (*str=='x' && oc=='0') ? 'x': toupper ((int)*str);
+			*str = (*str=='x' && oc=='0') ? 'x': toupper ((int)(ut8)*str);
 	} else {
 		for (; *str; str++)
-			*str = tolower ((int)*str);
+			*str = tolower ((int)(ut8)*str);
 	}
 }
 
@@ -1545,6 +1545,101 @@ R_API char *r_str_uri_encode (const char *s) {
 	}
 	*d = 0;
 	return realloc (od, strlen (od)+1); // FIT
+}
+
+R_API int r_str_utf16_to_utf8 (ut8 *dst, int len_dst, const ut8 *src, int len_src, int little_endian) {
+	ut8 *outstart = dst;
+	const ut8 *processed = src;
+	ut8 *outend = dst + len_dst;
+	ut16 *in = (ut16*)src;
+	ut16 *inend;
+	ut32 c, d, inlen;
+	ut8 *tmp;
+	int bits;
+
+	if ((len_src % 2) == 1)
+		len_src--;
+	inlen = len_src / 2;
+	inend = in + inlen;
+	while ((in < inend) && (dst - outstart + 5 < len_dst)) {
+		if (little_endian) {
+			c= *in++;
+		} else {
+			tmp = (ut8*) in;
+			c = *tmp++;
+			c = c | (((ut32)*tmp) << 8);
+			in++;
+		}
+		if ((c & 0xFC00) == 0xD800) {    /* surrogates */
+			if (in >= inend) {           /* (in > inend) shouldn't happens */
+				break;
+			}
+			if (little_endian) {
+				d = *in++;
+			} else {
+				tmp = (ut8*) in;
+				d = *tmp++;
+				d = d | (((ut32)*tmp) << 8);
+				in++;
+			}
+			if ((d & 0xFC00) == 0xDC00) {
+				c &= 0x03FF;
+				c <<= 10;
+				c |= d & 0x03FF;
+				c += 0x10000;
+			}
+			else {
+				len_dst = dst - outstart;
+				len_src = processed - src;
+				return -2;
+			}
+		}
+
+		/* assertion: c is a single UTF-4 value */
+		if (dst >= outend)
+			break;
+
+		if      (c <    0x80) { *dst++ =  c; bits= -6; }
+		else if (c <   0x800) { *dst++ = ((c >>  6) & 0x1F) | 0xC0; bits =  0; }
+		else if (c < 0x10000) { *dst++ = ((c >> 12) & 0x0F) | 0xE0; bits =  6; }
+		else                  { *dst++ = ((c >> 18) & 0x07) | 0xF0; bits = 12; }
+
+		for (; bits >= 0; bits-= 6) {
+			if (dst >= outend)
+				break;
+			*dst++ = ((c >> bits) & 0x3F) | 0x80;
+		}
+		processed = (const unsigned char*) in;
+	}
+	len_dst = dst - outstart;
+	return len_dst;
+}
+
+R_API char *r_str_utf16_decode (const ut8 *s, int len) {
+	int i = 0;
+	int j = 0;
+	char *result = NULL;
+	int count_unicode = 0;
+	int count_ascii = 0;
+	int lenresult = 0;
+	if (!s) return NULL;
+	for (i = 0; i < len && (s[i] || s[i+1]); i += 2) {
+		if (!s[i+1] && 0x20 <= s[i] && s[i] <= 0x7E) {
+			++count_ascii;
+		} else {
+			++count_unicode;
+		}
+	}
+	lenresult = 1 + count_ascii + count_unicode * 6; // len("\\uXXXX") = 6
+	if (!(result = calloc (1 + count_ascii + count_unicode * 6, 1))) return NULL;
+	for (i = 0; i < len && j < lenresult && (s[i] || s[i+1]); i += 2) {
+		if (!s[i+1] && 0x20 <= s[i] && s[i] <= 0x7E) {
+			result[j++] = s[i];
+		} else {
+			j += sprintf (&result[j], "\\u%.2hhx%.2hhx", s[i], s[i+1]);
+		}
+	}
+	return result;
 }
 
 R_API char *r_str_utf16_encode (const char *s, int len) {

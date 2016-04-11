@@ -57,7 +57,7 @@ static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	} else {
 		cs_option (cd, CS_OPT_DETAIL, CS_OPT_OFF);
 	}
-	n = cs_disasm (cd, buf, R_MIN (4, len),
+	n = cs_disasm (cd, buf, R_MIN (8, len),
 		a->pc, 1, &insn);
 	if (n<1) {
 		ret = -1;
@@ -95,6 +95,7 @@ static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	if (!strncmp (op->buf_asm, "dc.w", 4)) {
 		strcpy (op->buf_asm, "invalid");
 	}
+	r_str_rmch (op->buf_asm, '#');
 	return op->size;
 }
 

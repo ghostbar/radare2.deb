@@ -113,6 +113,7 @@ R_API RDebug *r_debug_free(RDebug *dbg) {
 	r_list_free (dbg->maps);
 	r_list_free (dbg->maps_user);
 	r_list_free (dbg->threads);
+	r_num_free (dbg->num);
 	sdb_free (dbg->sgnls);
 	r_tree_free (dbg->tree);
 	sdb_foreach (dbg->tracenodes, (SdbForeachCallback)free_tracenodes_entry, dbg);
@@ -121,6 +122,8 @@ R_API RDebug *r_debug_free(RDebug *dbg) {
 	free (dbg->btalgo);
 	r_debug_trace_free (dbg);
 	free (dbg->arch);
+	free (dbg->glob_libs);
+	free (dbg->glob_unlibs);
 	free (dbg);
 	return NULL;
 }
@@ -228,7 +231,7 @@ R_API ut64 r_debug_execute(RDebug *dbg, const ut8 *buf, int len, int restore) {
 		ri = r_reg_get (dbg->reg, dbg->reg->name[R_REG_NAME_A0], R_REG_TYPE_GPR);
 		ra0 = r_reg_get_value (dbg->reg, ri);
 		if (restore) {
-			r_reg_set_bytes (dbg->reg, -1, orig, orig_sz);
+			r_reg_read_regs (dbg->reg, orig, orig_sz);
 		} else {
 			r_reg_set_value (dbg->reg, ripc, rpc);
 		}
@@ -587,17 +590,17 @@ repeat:
 				// skip signal. requires skipping one instruction
 				ut8 buf[64];
 				RAnalOp op = {0};
-				ut64 pc = r_debug_reg_get (dbg, "pc");
+				ut64 pc = r_debug_reg_get (dbg, "PC");
 				dbg->iob.read_at (dbg->iob.io, pc, buf, sizeof (buf));
 				r_anal_op (dbg->anal, &op, pc, buf, sizeof (buf));
 				if (op.size > 0) {
 					const char *signame = r_debug_signal_resolve_i (dbg, dbg->reason.signum);
-					r_debug_reg_set (dbg, "pc", pc+op.size);
+					r_debug_reg_set (dbg, "PC", pc+op.size);
 					eprintf ("Skip signal %d handler %s\n",
 						dbg->reason.signum, signame);
 					goto repeat;
 				} else {
-					ut64 pc = r_debug_reg_get (dbg, "pc");
+					ut64 pc = r_debug_reg_get (dbg, "PC");
 					eprintf ("Stalled with an exception at 0x%08"PFMT64x"\n", pc);
 				}
 			}
@@ -715,7 +718,7 @@ static int show_syscall(RDebug *dbg, const char *sysreg) {
 		args = 3;
 	}
 	eprintf ("--> %s 0x%08"PFMT64x" syscall %d %s (", sysreg,
-			r_debug_reg_get (dbg, "pc"), reg, sysname);
+			r_debug_reg_get (dbg, "PC"), reg, sysname);
 	for (i=0; i<args; i++) {
 		ut64 val;
 		snprintf (regname, sizeof (regname)-1, "A%d", i);

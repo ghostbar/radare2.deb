@@ -115,7 +115,7 @@ typedef struct r_reg_flags_t {
 
 #ifdef R_API
 R_API void r_reg_free(RReg *reg);
-R_API void r_reg_free_internal(RReg *reg);
+R_API void r_reg_free_internal(RReg *reg, bool init);
 R_API RReg *r_reg_new(void);
 R_API int r_reg_set_name(RReg *reg, int role, const char *name);
 R_API int r_reg_set_profile_string(RReg *reg, const char *profile);
@@ -172,10 +172,11 @@ R_API ut64 r_reg_get_pack(RReg *reg, RRegItem *item, int packidx, int packbits);
 /* byte arena */
 R_API ut8 *r_reg_get_bytes(RReg *reg, int type, int *size);
 R_API bool r_reg_set_bytes(RReg *reg, int type, const ut8 *buf, const int len);
+R_API bool r_reg_read_regs(RReg *reg, ut8 *buf, const int len);
+R_API int r_reg_arena_set_bytes(RReg *reg, const char* str);
 R_API RRegArena *r_reg_arena_new(int size);
 R_API void r_reg_arena_free(RRegArena *ra);
 R_API int r_reg_fit_arena(RReg *reg);
-R_API int r_reg_arena_set(RReg *reg, int n, int copy);
 R_API void r_reg_arena_swap(RReg *reg, int copy);
 R_API int r_reg_arena_push(RReg *reg);
 R_API void r_reg_arena_pop(RReg *reg);
@@ -183,7 +184,6 @@ R_API void r_reg_arena_zero(RReg *reg);
 
 R_API ut8 *r_reg_arena_peek(RReg *reg);
 R_API void r_reg_arena_poke(RReg *reg, const ut8 *buf);
-R_API ut64 r_reg_cmp(RReg *reg, RRegItem *item);
 R_API const char *r_reg_cond_to_string(int n);
 R_API int r_reg_cond_from_string(const char *str);
 #endif

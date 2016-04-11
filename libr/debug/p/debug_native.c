@@ -74,6 +74,8 @@ static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int 
 
 /* begin of debugger code */
 #if DEBUGGER
+
+#if !__APPLE__
 static int r_debug_handle_signals (RDebug *dbg) {
 #if __linux__
 	return linux_handle_signals (dbg);
@@ -81,6 +83,7 @@ static int r_debug_handle_signals (RDebug *dbg) {
 	return -1;
 #endif
 }
+#endif
 
 //this is temporal
 #if __APPLE__ || __linux__
@@ -1256,6 +1259,28 @@ static int r_debug_desc_native_open (const char *path) {
 	return 0;
 }
 
+#if 0
+static int r_debug_setup_ownership (int fd, RDebug *dbg) {
+	RDebugInfo *info = r_debug_info (dbg, NULL);
+
+	if (!info) {
+		eprintf ("Error while getting debug info.\n");
+		return -1;
+	}
+	fchown (fd, info->uid, info->gid);
+	r_debug_info_free (info);
+  	return 0;
+}
+#endif
+
+static bool r_debug_gcore (RDebug *dbg, RBuffer *dest) {
+#if __APPLE__
+	return xnu_generate_corefile (dbg, dest);
+#else
+	return false;
+#endif
+}
+
 struct r_debug_desc_plugin_t r_debug_desc_plugin_native = {
 	.open = r_debug_desc_native_open,
 	.list = r_debug_desc_native_list,
@@ -1272,9 +1297,6 @@ struct r_debug_plugin_t r_debug_plugin_native = {
 	.bits = R_SYS_BITS_32 | R_SYS_BITS_64,
 	.arch = "x86",
 	.canstep = 1,
-#elif __arm__
-	.bits = R_SYS_BITS_16 | R_SYS_BITS_32 | R_SYS_BITS_64,
-	.arch = "arm",
 #if __linux__
 	.canstep = 0, // XXX it's 1 on some platforms...
 #else
@@ -1284,6 +1306,9 @@ struct r_debug_plugin_t r_debug_plugin_native = {
 	.bits = R_SYS_BITS_16 | R_SYS_BITS_32 | R_SYS_BITS_64,
 	.arch = "arm",
 	.canstep = 0, // XXX it's 1 on some platforms...
+#elif __arm__
+	.bits = R_SYS_BITS_16 | R_SYS_BITS_32 | R_SYS_BITS_64,
+	.arch = "arm",
 #elif __mips__
 	.bits = R_SYS_BITS_32 | R_SYS_BITS_64,
 	.arch = "mips",
@@ -1312,7 +1337,7 @@ struct r_debug_plugin_t r_debug_plugin_native = {
 	.frames = &r_debug_native_frames, // rename to backtrace ?
 	.reg_profile = (void *)r_debug_native_reg_profile,
 	.reg_read = r_debug_native_reg_read,
-        .info = r_debug_native_info,
+	.info = r_debug_native_info,
 	.reg_write = (void *)&r_debug_native_reg_write,
 	.map_alloc = r_debug_native_map_alloc,
 	.map_dealloc = r_debug_native_map_dealloc,
@@ -1321,6 +1346,7 @@ struct r_debug_plugin_t r_debug_plugin_native = {
 	.map_protect = r_debug_native_map_protect,
 	.breakpoint = r_debug_native_bp,
 	.drx = r_debug_native_drx,
+	.gcore = r_debug_gcore,
 };
 
 #ifndef CORELIB
