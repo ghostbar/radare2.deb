@@ -1,3 +1,9 @@
+radare2 (0.10.2-1) unstable; urgency=medium
+
+  * new upstream version 
+
+ -- Jose Luis Rivas <ghostbar@debian.org>  Mon, 11 Apr 2016 10:42:48 -0400
+
 radare2 (0.10.1-1) unstable; urgency=low
 
   [ Sebastian Reichel ]
