@@ -139,9 +139,6 @@ typedef struct r_core_t {
 	char *lastcmd;
 	int cmdrepeat;
 	ut64 inc;
-	// represents the first not-visible offset on the screen
-	// (only when in visual disasm mode)
-	ut64 screen_bounds;
 	int rtr_n;
 	RCoreRtrHost rtr_host[RTR_MAX_HOSTS];
 	int curasmstep;
@@ -246,6 +243,7 @@ R_API int r_core_visual_xrefs_X(RCore *core);
 R_API int r_core_visual_hud(RCore *core);
 R_API ut64 r_core_get_asmqjmps(RCore *core, const char *str);
 R_API void r_core_set_asmqjmps(RCore *core, char *str, size_t len, int i);
+R_API char* r_core_add_asmqjmp(RCore *core, ut64 addr);
 /* visual marks */
 R_API void r_core_visual_mark_seek(RCore *core, ut8 ch);
 R_API void r_core_visual_mark(RCore *core, ut8 ch);
@@ -412,6 +410,7 @@ R_API char *r_core_sysenv_begin(RCore *core, const char *cmd);
 R_API void r_core_sysenv_end(RCore *core, const char *cmd);
 R_API void r_core_sysenv_help(const RCore* core);
 
+R_API void fcn_callconv (RCore *core, RAnalFunction *fcn);
 /* bin.c */
 #define R_CORE_BIN_PRINT	0x000
 #define R_CORE_BIN_RADARE	0x001
@@ -419,6 +418,7 @@ R_API void r_core_sysenv_help(const RCore* core);
 #define R_CORE_BIN_SIMPLE	0x004
 #define R_CORE_BIN_JSON         0x008
 #define R_CORE_BIN_ARRAY 	0x010
+#define R_CORE_BIN_SIMPLEST 	0x020
 
 #define R_CORE_BIN_ACC_STRINGS	0x001
 #define R_CORE_BIN_ACC_INFO	0x002
@@ -437,6 +437,7 @@ R_API void r_core_sysenv_help(const RCore* core);
 #define R_CORE_BIN_ACC_MEM	0x4000
 #define R_CORE_BIN_ACC_EXPORTS  0x8000
 #define R_CORE_BIN_ACC_VERSIONINFO 0x10000
+#define R_CORE_BIN_ACC_SIGNATURE 0x20000
 #define R_CORE_BIN_ACC_ALL	0x4FFF
 
 #define R_CORE_PRJ_FLAGS	0x0001

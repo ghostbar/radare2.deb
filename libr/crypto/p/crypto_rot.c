@@ -32,12 +32,29 @@ static void rot_crypt(ut8 key, const ut8 *inbuf, ut8 *outbuf, int buflen) {
 		outbuf[i] -= (inbuf[i] >= 'a' && inbuf[i] <= 'z') ? 'a' : 'A';
 		outbuf[i] = mod (outbuf[i], 26);
 		outbuf[i] += (inbuf[i] >= 'a' && inbuf[i] <= 'z') ? 'a' : 'A';
-    }   
+	}
+}
+
+static void rot_decrypt(ut8 key, const ut8 *inbuf, ut8 *outbuf, int buflen) {
+	int i;
+	for (i = 0; i < buflen; i++) {
+		outbuf[i] = inbuf[i];
+		if ((inbuf[i] < 'a' || inbuf[i] > 'z') && (inbuf[i] < 'A' || inbuf[i] > 'Z')) {
+			continue;
+		}
+		outbuf[i] += 26;	//adding so that subtracting does not make it negative
+		outbuf[i] -= key;
+		outbuf[i] -= (inbuf[i] >= 'a' && inbuf[i] <= 'z') ? 'a' : 'A';
+		outbuf[i] = mod (outbuf[i], 26);
+		outbuf[i] += (inbuf[i] >= 'a' && inbuf[i] <= 'z') ? 'a' : 'A';
+	}
 }
 
 static ut8 rot_key;
+static int flag = 0;
 
 static int rot_set_key(RCrypto *cry, const ut8 *key, int keylen, int mode, int direction) {
+	flag = direction;
 	return rot_init (&rot_key, key, keylen);
 }
 
@@ -53,7 +70,11 @@ static bool rot_use(const char *algo) {
 static int update(RCrypto *cry, const ut8 *buf, int len) {
 	ut8 *obuf = calloc (1, len);
 	if (!obuf) return false;
-	rot_crypt (rot_key, buf, obuf, len);
+	if (flag == 0) {
+		rot_crypt (rot_key, buf, obuf, len);
+	} else if (flag == 1) {
+		rot_decrypt (rot_key, buf, obuf, len);
+	}
 	r_crypto_append (cry, obuf, len);
 	free (obuf);
 	return 0;

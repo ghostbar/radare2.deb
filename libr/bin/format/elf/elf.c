@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2016 - nibble, pancake */
+/* radare - LGPL - Copyright 2008-2016 - nibble, pancake, alvaro_fe */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -80,8 +80,7 @@ static int init_ehdr(struct Elf_(r_bin_elf_obj_t) *bin) {
 		" ident (elf_type)type (elf_machine)machine version entry phoff shoff flags ehsize"
 		" phentsize phnum shentsize shnum shstrndx", 0);
 #endif
-	bin->endian = (e_ident[EI_DATA] == ELFDATA2MSB) ?
-		LIL_ENDIAN: !LIL_ENDIAN;
+	bin->endian = (e_ident[EI_DATA] == ELFDATA2MSB)? 1: 0;
 	memset (&bin->ehdr, 0, sizeof (Elf_(Ehdr)));
 	len = r_buf_fread_at (bin->b, 0, (ut8*)&bin->ehdr,
 #if R_BIN_ELF64
@@ -259,7 +258,7 @@ static int init_strtab(struct Elf_(r_bin_elf_obj_t) *bin) {
 }
 
 static int init_dynamic_section (struct Elf_(r_bin_elf_obj_t) *bin) {
-	Elf_(Dyn) *dyn = NULL;
+	Elf_(Dyn) *tmp, *dyn = NULL;
 	Elf_(Addr) strtabaddr = 0;
 	ut64 offset = 0;
 	char *strtab = NULL;
@@ -271,17 +270,24 @@ static int init_dynamic_section (struct Elf_(r_bin_elf_obj_t) *bin) {
 	if (!bin || !bin->phdr || bin->ehdr.e_phnum == 0)
 		return false;
 	for (i = 0; i < bin->ehdr.e_phnum ; i++) {
-		if (bin->phdr[i].p_type == PT_DYNAMIC) break;
+		if (bin->phdr[i].p_type == PT_DYNAMIC) {
+		    	dyn_size = bin->phdr[i].p_filesz;
+			break;
+		}
 	}
 	if (i == bin->ehdr.e_phnum)
-		// we didn't find the PT_DYNAMIC section
 		return false;
 	if (bin->phdr[i].p_filesz > bin->size)
 		return false;
 	if (bin->phdr[i].p_offset > bin->size)
 		return false;
-
-	entries = (int)(bin->phdr[i].p_filesz / sizeof (Elf_(Dyn)));
+	tmp = dyn = (Elf_(Dyn)*)((ut8 *)bin->b->buf + bin->phdr[i].p_offset);
+	for (entries = 0; (ut8*)dyn < ((ut8*)tmp + dyn_size); dyn++) {
+	    	entries++;
+		if (dyn->d_tag == DT_NULL) break;
+		if ((ut8*)(dyn+1) > ((ut8*)bin->b->buf + bin->size))
+		    	return false;
+	}
 	if (entries < 1) return false;
 	dyn = (Elf_(Dyn)*)calloc (entries, sizeof (Elf_(Dyn)));
 	if (!dyn) return false;
@@ -314,7 +320,7 @@ static int init_dynamic_section (struct Elf_(r_bin_elf_obj_t) *bin) {
 			break;
 		}
 	}
-	if (!strtabaddr || strtabaddr > bin->size || strsize > ST32_MAX || strsize == 0 || strsize > bin->size) {
+	if (!strtabaddr || strtabaddr > bin->size || strsize > ST32_MAX || !strsize || strsize > bin->size) {
 		if (!strtabaddr)
 			eprintf ("Warning: section.shstrtab not found or invalid\n");
 		goto beach;
@@ -700,6 +706,10 @@ static Sdb *store_versioninfo_gnu_verneed(struct Elf_(r_bin_elf_obj_t) *bin, Elf
 			snprintf (key, sizeof (key), "vernaux%d", j);
 			sdb_ns_set (sdb_version, key, sdb_vernaux);
 		}
+		if ((int)entry->vn_next < 0) {
+			eprintf ("Invalid vn_next\n");
+			break;
+		}
 		i += entry->vn_next;
 		snprintf (key, sizeof (key), "version%d", cnt );
 		sdb_ns_set (sdb, key, sdb_version);
@@ -991,8 +1001,8 @@ static ut64 get_import_addr(struct Elf_(r_bin_elf_obj_t) *bin, int sym) {
 				}
 				break;
 			default:
-				eprintf ("Unsupported relocs for this arch %d\n",
-					bin->ehdr.e_machine);
+				eprintf ("Unsupported relocs type %d for arch %d\n",
+					reloc_type, bin->ehdr.e_machine);
 				break;
 			}
 		}
@@ -1038,7 +1048,7 @@ of the maximum page size
 ut64 Elf_(r_bin_elf_get_baddr)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	int i;
 	ut64 tmp, base = UT64_MAX;
-	if (!bin) 
+	if (!bin)
 		return 0;
 	if (bin->phdr) {
 		for (i = 0; i < bin->ehdr.e_phnum; i++) {
@@ -1111,7 +1121,7 @@ ut64 Elf_(r_bin_elf_get_fini_offset)(struct Elf_(r_bin_elf_obj_t) *bin) {
 ut64 Elf_(r_bin_elf_get_entry_offset)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	ut64 entry;
 	if (!bin) return 0LL;
-	entry = (ut64) bin->ehdr.e_entry;
+	entry = r_read_ble32 (&bin->ehdr.e_entry, 0);
 	if (entry == 0LL) {
 		entry = Elf_(r_bin_elf_get_section_offset)(bin, ".init.text");
 		if (entry != UT64_MAX) return entry;
@@ -1120,7 +1130,7 @@ ut64 Elf_(r_bin_elf_get_entry_offset)(struct Elf_(r_bin_elf_obj_t) *bin) {
 		entry = Elf_(r_bin_elf_get_section_offset)(bin, ".init");
 		if (entry != UT64_MAX) return entry;
 	}
-	return Elf_(r_bin_elf_v2p) (bin, bin->ehdr.e_entry);
+	return Elf_(r_bin_elf_v2p) (bin, entry);
 }
 
 static ut64 getmainsymbol(struct Elf_(r_bin_elf_obj_t) *bin) {
@@ -1525,8 +1535,9 @@ int Elf_(r_bin_elf_get_bits)(struct Elf_(r_bin_elf_obj_t) *bin) {
 		if (bin->ehdr.e_type != ET_EXEC) {
 			struct r_bin_elf_symbol_t *symbol;
 			if ((symbol = Elf_(r_bin_elf_get_symbols) (bin, R_BIN_ELF_SYMBOLS))) {
-				if (!symbol[0].last) {
-					ut64 paddr = symbol[0].offset;
+			    	int i = 0;
+			    	for (i = 0; !symbol[i].last; i++) {
+					ut64 paddr = symbol[i].offset;
 					if (paddr & 1) {
 						free (symbol);
 						return 16;
@@ -1926,27 +1937,38 @@ static RBinElfSymbol* get_symbols_from_phdr (struct Elf_(r_bin_elf_obj_t) *bin, 
 	RBinElfSymbol *ret = NULL;
 	int j, k, r, tsize, nsym, ret_ctr;
 	ut64 toffset;
-	ut32 size;
+	ut32 size, sym_size = 0;
 
 	if (!bin || !bin->phdr || bin->ehdr.e_phnum == 0)
 		return NULL;
 	for (j = 0; j < bin->dyn_entries; j++) {
-		if (bin->dyn_buf[j].d_tag == DT_SYMTAB) {
+	    	switch (bin->dyn_buf[j].d_tag) {
+		case (DT_SYMTAB):
 			addr_sym_table = Elf_(r_bin_elf_v2p) (bin, bin->dyn_buf[j].d_un.d_ptr);
 			break;
+		case (DT_SYMENT):
+			sym_size = bin->dyn_buf[j].d_un.d_val;
+			break;
+		default:
+			break;
 		}
+
 	}
 	if (!addr_sym_table) return NULL;
+	if (!sym_size) return NULL;
 	//since ELF doesn't specify the symbol table size we are going to read until the end of the buffer
 	// this might be overkill.
-	nsym = (int)(bin->size - addr_sym_table) / sizeof (Elf_(Sym));
-	if (nsym < 1) return NULL;
-	sym = (Elf_(Sym)*) calloc (nsym, sizeof (Elf_(Sym)));
-	if (!sym) return NULL;
-	if (!UT32_MUL (&size, nsym, sizeof (Elf_(Sym)))) goto beach;
-	if (size < 1) goto beach;
-	if (addr_sym_table > bin->size ||
-	    addr_sym_table + size > bin->size)
+	nsym = (bin->size - addr_sym_table) / sym_size;
+	if (nsym < 1)
+	    	return NULL;
+	sym = (Elf_(Sym)*) calloc (nsym, sym_size);
+	if (!sym)
+	    	return NULL;
+	if (!UT32_MUL (&size, nsym, sizeof (Elf_(Sym)))) 
+	    	goto beach;
+	if (size < 1)
+	    	goto beach;
+	if (addr_sym_table > bin->size || addr_sym_table + size > bin->size)
 		goto beach;
 
 #if R_BIN_ELF64
@@ -2021,6 +2043,7 @@ done:
 			bin->symbols_by_ord = (RBinSymbol**)calloc (ret_ctr, sizeof (RBinSymbol*));
 		}
 	}
+	free (sym);
 	return ret;
 beach:
 	free (sym);
@@ -2218,6 +2241,7 @@ void* Elf_(r_bin_elf_free)(struct Elf_(r_bin_elf_obj_t)* bin) {
 	free (bin->strtab);
 	free (bin->dyn_buf);
 	free (bin->shstrtab);
+	free (bin->dynstr);
 	//free (bin->strtab_section);
 	if (bin->imports_by_ord) {
 		for (i=0; i<bin->imports_by_ord_size; i++)

@@ -144,6 +144,7 @@ typedef struct r_debug_t {
 	int swstep; /* steps with software traps */
 	int steps;  /* counter of steps done */
 	int newstate;
+	bool in_recoil; 			/* are we stopped due to bp? */
 	RDebugReason reason; /* stop reason */
 	RDebugTrace *trace;
 	int stop_all_threads;
@@ -393,6 +394,9 @@ R_API int r_debug_map_protect(RDebug *dbg, ut64 addr, int size, int perms);
 R_API ut64 r_debug_arg_get(RDebug *dbg, int fast, int num);
 R_API bool r_debug_arg_set(RDebug *dbg, int fast, int num, ut64 value);
 
+/*breakpoints*/
+R_API RBreakpointItem *r_debug_bp_add(RDebug *dbg, ut64 addr, int hw, char *module, st64 m_delta);
+
 /* pid */
 R_API int r_debug_thread_list(RDebug *dbg, int pid);
 
@@ -443,6 +447,7 @@ extern RDebugPlugin r_debug_plugin_gdb;
 extern RDebugPlugin r_debug_plugin_bf;
 extern RDebugPlugin r_debug_plugin_wind;
 extern RDebugPlugin r_debug_plugin_bochs;
+extern RDebugPlugin r_debug_plugin_qnx;
 #endif
 
 #ifdef __cplusplus

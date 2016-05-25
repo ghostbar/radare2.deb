@@ -947,10 +947,13 @@ int r_print_format_struct_size(const char *f, RPrint *p, int mode) {
 	int size = 0, tabsize=0, i, idx=0, biggest = 0;
 	if (!f) return -1;
 	o = strdup(f);
+	if (!o) return -1;
 	end = strchr (o, ' ');
 	fmt = o;
-	if (!end && !(end = strchr (o, '\0')))
+	if (!end && !(end = strchr (o, '\0'))) {
+		free (o);
 		return -1;
+	}
 	if (*end) {
 		*end = 0;
 		args = strdup (end+1);

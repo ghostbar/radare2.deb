@@ -1,4 +1,11 @@
-/* radare - LGPL - Copyright 2009-2015 - pancake */
+/* radare - LGPL - Copyright 2009-2016 - pancake */
+
+#include "r_types.h"
+#include "r_config.h"
+#include "r_cons.h"
+#include "r_core.h"
+#include "r_debug.h"
+#include "r_io.h"
 
 static void __init_seek_line (RCore *core) {
 	ut64 from, to;
@@ -123,27 +130,37 @@ static int cmd_seek(void *data, const char *input) {
 	char *cmd, *p;
 	ut64 off;
 
-	if (*input=='r') {
+	if (*input == 'r') {
 		if (input[1] && input[2]) {
 			if (core->io->debug) {
-				off = r_debug_reg_get (core->dbg, input+2);
+				off = r_debug_reg_get (core->dbg, input + 2);
 				r_io_sundo_push (core->io, core->offset);
 				r_core_seek (core, off, 1);
 			} else {
 				RReg *orig = core->dbg->reg;
 				core->dbg->reg = core->anal->reg;
-				off = r_debug_reg_get (core->dbg, input+2);
+				off = r_debug_reg_get (core->dbg, input + 2);
 				core->dbg->reg = orig;
 				r_core_seek (core, off, 1);
 			}
 		} else eprintf ("|Usage| 'sr PC' seek to program counter register\n");
 	}
 	if (*input) {
+		char* ptr;
+		if ((ptr = strstr(input, "+.")) != NULL) {
+			char* dup = strdup(input);
+			dup[ptr - input] = '\x00';
+			off = r_num_math (core->num, dup + 1);
+			core->offset = off;
+			free (dup);
+		}
 		const char *inputnum = strchr (input, ' ');
 		int sign = 1;
-		inputnum = inputnum? inputnum+1: input+1;
-		off = r_num_math (core->num, inputnum);
-		if (*inputnum== '-') off = -off;
+		{
+			const char *u_num = inputnum? inputnum + 1: input + 1;
+			off = r_num_math (core->num, u_num);
+			if (*u_num == '-') off = -off;
+		}
 #if 0
 		if (input[0]!='/' && inputnum && isalpha (inputnum[0]) && off == 0) {
 			if (!r_flag_get (core->flags, inputnum)) {
@@ -222,7 +239,7 @@ static int cmd_seek(void *data, const char *input) {
 			break;
 		case ' ':
 			r_io_sundo_push (core->io, core->offset);
-			r_core_seek (core, off*sign, 1);
+			r_core_seek (core, off * sign, 1);
 			r_core_block_read (core, 0);
 			break;
 		case '/':
@@ -271,7 +288,9 @@ static int cmd_seek(void *data, const char *input) {
 			r_core_seek_base (core, input);
 			break;
 		case '*':
-			r_io_sundo_list (core->io);
+		case '=':
+		case 'j':
+			r_io_sundo_list (core->io, input[0]);
 			break;
 		case '+':
 			if (input[1]!='\0') {
@@ -337,7 +356,7 @@ static int cmd_seek(void *data, const char *input) {
 			}
 			RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, core->offset, 0);
 			if (fcn) {
-				r_core_seek (core, fcn->addr+fcn->size, 1);
+				r_core_seek (core, fcn->addr + r_anal_fcn_size (fcn), 1);
 			}
 			break;
 		case 'o': // "so"
@@ -383,7 +402,7 @@ static int cmd_seek(void *data, const char *input) {
 			break;
 		case 'l': // "sl"
 			{
-			int sl_arg = r_num_math (core->num, input+2);
+			int sl_arg = r_num_math (core->num, input+1);
 			const char *help_msg[] = {
 				"Usage:", "sl+ or sl- or slc", "",
 				"sl", " [line]", "Seek to absolute line",
@@ -404,13 +423,8 @@ static int cmd_seek(void *data, const char *input) {
 				}
 				__seek_line_absolute (core, sl_arg);
 				break;
-			case '-':
-				if (!core->print->lines_cache) {
-					__init_seek_line (core);
-				}
-				__seek_line_relative (core, -sl_arg);
-				break;
 			case '+':
+			case '-':
 				if (!core->print->lines_cache) {
 					__init_seek_line (core);
 				}
@@ -442,7 +456,7 @@ static int cmd_seek(void *data, const char *input) {
 			"s+", "", "Redo seek",
 			"s+", " n", "Seek n bytes forward",
 			"s++", "", "Seek blocksize bytes forward",
-			"s*", "", "List undo seek history",
+			"s[j*=]", "", "List undo seek history (JSON, =list, *r2)",
 			"s/", " DATA", "Search for next occurrence of 'DATA'",
 			"s/x", " 9091", "Search for next occurrence of \\x90\\x91",
 			"s.", "hexoff", "Seek honoring a base from core->offset",
