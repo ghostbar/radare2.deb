@@ -150,7 +150,9 @@ typedef enum {
 	RNCPLUS='+', RNCMINUS='-', RNCMUL='*', RNCDIV='/', RNCMOD='%',
 	//RNCXOR='^', RNCOR='|', RNCAND='&',
 	RNCNEG='~', RNCAND='&', RNCORR='|', RNCXOR='^',
-	RNCPRINT=';', RNCASSIGN='=', RNCLEFTP='(', RNCRIGHTP=')'
+	RNCPRINT=';', RNCASSIGN='=', RNCLEFTP='(', RNCRIGHTP=')',
+	RNCSHL='<', RNCSHR = '>'
+
 } RNumCalcToken;
 
 typedef struct r_num_calc_t {
@@ -408,7 +410,7 @@ R_API char *r_buf_free_to_string (RBuffer *b);
 R_API const ut8 *r_buf_buffer (RBuffer *b);
 R_API ut64 r_buf_size (RBuffer *b);
 
-R_API ut64 r_mem_get_num(const ut8 *b, int size, int endian);
+R_API ut64 r_mem_get_num(const ut8 *b, int size);
 
 /* MEMORY POOL */
 R_API RMemoryPool* r_mem_pool_deinit(RMemoryPool *pool);
@@ -437,11 +439,12 @@ R_API double r_prof_end(RProfile *p);
 R_API void *r_mem_dup (void *s, int l);
 R_API void r_mem_reverse(ut8 *b, int l);
 R_API int r_mem_protect(void *ptr, int size, const char *prot);
-R_API int r_mem_set_num (ut8 *dest, int dest_size, ut64 num, int endian);
+R_API int r_mem_set_num (ut8 *dest, int dest_size, ut64 num);
 R_API int r_mem_eq(ut8 *a, ut8 *b, int len);
 R_API void r_mem_copybits(ut8 *dst, const ut8 *src, int bits);
 R_API void r_mem_copyloop (ut8 *dest, const ut8 *orig, int dsize, int osize);
-R_API void r_mem_copyendian (ut8 *dest, const ut8 *orig, int size, int endian);
+R_API void r_mem_swaporcopy (ut8 *dest, const ut8 *src, int len, bool big_endian);
+R_API void r_mem_swapendian (ut8 *dest, const ut8 *orig, int size);
 R_API int r_mem_cmp_mask (const ut8 *dest, const ut8 *orig, const ut8 *mask, int len);
 R_API const ut8 *r_mem_mem (const ut8 *haystack, int hlen, const ut8 *needle, int nlen);
 R_API const ut8 *r_mem_mem_aligned(const ut8 *haystack, int hlen, const ut8 *needle, int nlen, int align);
@@ -478,6 +481,12 @@ R_API int r_base64_encode(char *bout, const ut8 *bin, int len);
 R_API int r_base64_decode(ut8 *bout, const char *bin, int len);
 R_API ut8 *r_base64_decode_dyn(const char *in, int len);
 R_API char *r_base64_encode_dyn(const char *str, int len);
+
+R_API int r_base91_encode(char *bout, const ut8 *bin, int len);
+R_API int r_base91_decode(ut8 *bout, const char *bin, int len);
+
+R_API char *r_punycode_encode(const char*src, int srclen, int *dstlen);
+R_API char *r_punycode_decode(const char *src, int srclen, int *dstlen);
 
 /* strings */
 static inline void r_str_rmch (char *s, char ch) {
@@ -639,7 +648,7 @@ R_API const char *r_sys_arch_str(int arch);
 R_API int r_sys_arch_id(const char *arch);
 R_API bool r_sys_arch_match(const char *archstr, const char *arch);
 R_API RList *r_sys_dir(const char *path);
-R_API void r_sys_perror(const char *fun);
+R_API void r_sys_perror_str(const char *fun);
 #if __WINDOWS__ && !defined(__CYGWIN__)
 #define r_sys_mkdir(x) (CreateDirectory(x,NULL)!=0)
 #define r_sys_mkdir_failed() (GetLastError () != ERROR_ALREADY_EXISTS)
@@ -744,13 +753,38 @@ R_API const ut8 *r_uleb128_decode (const ut8 *data, int *datalen, ut64 *v);
 R_API const ut8 *r_uleb128_encode (const ut64 s, int *len);
 R_API const ut8 *r_leb128 (const ut8 *data, st64 *v);
 
-/*swap*/ //inline?
-R_API ut16 r_swap_ut16(ut16 val);
-R_API st16 r_swap_st16(st16 val);
-R_API ut32 r_swap_ut32(ut32 val);
-R_API st32 r_swap_st32(st32 val);
-R_API ut64 r_swap_ut64(ut64 val);
-R_API st64 r_swap_st64(st64 val);
+/*swap*/
+static inline ut16 r_swap_ut16(ut16 val) {
+    return (val << 8) | (val >> 8 );
+}
+
+static inline st16 r_swap_st16(st16 val) {
+    val = ((val << 8) & 0xFF00FF00 ) | ((val >> 8) & 0xFF00FF );
+    return (val << 16) | (val >> 16);
+}
+
+static inline ut32 r_swap_ut32(ut32 val) {
+    val = ((val << 8) & 0xFF00FF00 ) | ((val >> 8) & 0xFF00FF );
+    return (val << 16) | (val >> 16);
+}
+
+static inline st32 r_swap_st32(st32 val) {
+    val = ((val << 8) & 0xFF00FF00) | ((val >> 8) & 0xFF00FF );
+    return (val << 16) | ((val >> 16) & 0xFFFF);
+}
+
+
+static inline ut64 r_swap_ut64(ut64 val) {
+    val = ((val << 8) & 0xFF00FF00FF00FF00ULL ) | ((val >> 8) & 0x00FF00FF00FF00FFULL );
+    val = ((val << 16) & 0xFFFF0000FFFF0000ULL ) | ((val >> 16) & 0x0000FFFF0000FFFFULL );
+    return (val << 32) | (val >> 32);
+}
+
+static inline st64 r_swap_st64(st64 val) {
+    val = ((val << 8) & 0xFF00FF00FF00FF00ULL ) | ((val >> 8) & 0x00FF00FF00FF00FFULL );
+    val = ((val << 16) & 0xFFFF0000FFFF0000ULL ) | ((val >> 16) & 0x0000FFFF0000FFFFULL );
+    return (val << 32) | ((val >> 32) & 0xFFFFFFFFULL);
+}
 #endif
 
 /* constr */

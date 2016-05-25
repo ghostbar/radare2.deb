@@ -23,7 +23,7 @@ static int useva = true;
 static int delta = 0;
 static int showbare = false;
 static int json_started = 0;
-static int diffmode = 0; 
+static int diffmode = 0;
 static bool disasm = false;
 static RCore *core = NULL;
 static const char *arch = NULL;
@@ -33,6 +33,7 @@ static int anal_all = 0;
 static RCore* opencore(const char *f) {
 	const ut64 baddr = UT64_MAX;
 	RCore *c = r_core_new ();
+	if (!c) return NULL;
 	r_core_loadlibs (c, R_CORE_LOADLIBS_ALL, NULL);
 	r_config_set_i (c->config, "io.va", useva);
 	r_config_set_i (c->config, "anal.split", true);
@@ -146,13 +147,13 @@ static int cb(RDiff *d, void *user, RDiffOp *op) {
 }
 
 static int show_help(int v) {
-	printf ("Usage: radiff2 [-abcCdjrspOv] [-g sym] [-t %%] [file] [file]\n");
+	printf ("Usage: radiff2 [-abcCdjrspOxv] [-g sym] [-t %%] [file] [file]\n");
 	if (v) printf (
 		"  -a [arch]  specify architecture plugin to use (x86, arm, ..)\n"
-		"  -A [-A]    run aaa or aaaa after loading each binary\n"
+		"  -A [-A]    run aaa or aaaa after loading each binary (see -C)\n"
 		"  -b [bits]  specify register size for arch (16 (thumb), 32, 64, ..)\n"
 		"  -c         count of changes\n"
-		"  -C         graphdiff code (columns: off-A, match-ratio, off-B)\n"
+		"  -C         graphdiff code (columns: off-A, match-ratio, off-B) (see -A)\n"
 		"  -d         use delta diffing\n"
 		"  -D         show disasm instead of hexpairs\n"
 		"  -g [sym|off1,off2]   graph diff of given symbol, or between two offsets\n"
@@ -163,13 +164,16 @@ static int show_help(int v) {
 		"  -r         output in radare commands\n"
 		"  -s         compute text distance\n"
 		"  -t [0-100] set threshold for code diff (default is 70%%)\n"
+		"  -x         show two column hexdump diffing\n"
 		"  -v         show version information\n");
 	return 1;
 }
 
+#define DUMP_CONTEXT 2
 static void dump_cols (ut8 *a, int as, ut8 *b, int bs, int w) {
 	ut32 sz = R_MIN (as, bs);
 	ut32 i, j;
+	int ctx = DUMP_CONTEXT;
 	switch (w) {
 	case 8:
 		printf ("  offset     0 1 2 3 4 5 6 7 01234567    0 1 2 3 4 5 6 7 01234567\n");
@@ -184,18 +188,50 @@ static void dump_cols (ut8 *a, int as, ut8 *b, int bs, int w) {
 		return ;
 	}
 	for (i = 0; i < sz; i += w) {
-		printf ("0x%08x%c ", i, (memcmp (a + i, b + i, 8)) ? ' ' : '!');
-		for (j = 0; j < w; j++)
+		bool eq = !memcmp (a + i, b + i, w);
+		if (eq) {
+			ctx--;
+			if (ctx == -1) {
+				printf ("...\n");
+				continue;
+			}
+			if (ctx < 0) {
+				ctx = -1;
+				continue;
+			}
+		} else {
+			ctx = DUMP_CONTEXT;
+		}
+		printf (eq?Color_GREEN:Color_RED);
+		printf ("0x%08x%c ", i, eq ? ' ' : '!');
+		printf (Color_RESET);
+		for (j = 0; j < w; j++) {
+			bool eq2 = a[i+j] == b[i+j];
+			if (!eq) printf (eq2?Color_GREEN:Color_RED);
 			printf ("%02x", a[i + j]);
+			if (!eq) printf (Color_RESET);
+		}
 		printf (" ");
-		for (j = 0; j < w; j++)
+		for (j = 0; j < w; j++) {
+			bool eq2 = a[i+j] == b[i+j];
+			if (!eq) printf (eq2?Color_GREEN:Color_RED);
 			printf ("%c", IS_PRINTABLE (a[i + j]) ? a[i + j] : '.');
+			if (!eq) printf (Color_RESET);
+		}
 		printf ("   ");
-		for (j = 0; j < w; j++)
+		for (j = 0; j < w; j++) {
+			bool eq2 = a[i+j] == b[i+j];
+			if (!eq) printf (eq2?Color_GREEN:Color_RED);
 			printf ("%02x", b[i + j]);
+			if (!eq) printf (Color_RESET);
+		}
 		printf (" ");
-		for (j = 0; j < w; j++)
+		for (j = 0; j < w; j++) {
+			bool eq2 = a[i+j] == b[i+j];
+			if (!eq) printf (eq2?Color_GREEN:Color_RED);
 			printf ("%c", IS_PRINTABLE (b[i + j]) ? b[i + j] : '.');
+			if (!eq) printf (Color_RESET);
+		}
 		printf ("\n");
 	}
 	if (as != bs)
@@ -206,7 +242,13 @@ static void handle_sha256 (const ut8 *block, int len) {
 	int i = 0;
 	RHash *ctx = r_hash_new (true, R_HASH_SHA256);
 	const ut8 *c = r_hash_do_sha256 (ctx, block, len);
-	for (i = 0; i < R_HASH_SIZE_SHA256; i++) printf ("%02x", c[i]);
+	if (!c) {
+		r_hash_free (ctx);
+		return;
+	}
+	for (i = 0; i < R_HASH_SIZE_SHA256; i++) {
+		printf ("%02x", c[i]);
+	}
 	r_hash_free (ctx);
 }
 
@@ -282,7 +324,7 @@ int main(int argc, char **argv) {
 			return show_help (0);
 		}
 	}
-	
+
 	if (argc < 3 || optind + 2 > argc)
 		return show_help (0);
 
@@ -291,7 +333,7 @@ int main(int argc, char **argv) {
 	} else {
 		file = NULL;
 	}
-	
+
 	if (optind + 1 < argc) {
 		file2 = argv[optind + 1];
 	} else {
@@ -376,7 +418,7 @@ int main(int argc, char **argv) {
 		d = r_diff_new (0LL, 0LL);
 		r_diff_set_delta (d, delta);
 		if (diffmode == 'j') {
-			printf("{\"files\":[{\"filename\":\"%s\", \"size\":%d, \"sha256\":\"", file, sza); 
+			printf("{\"files\":[{\"filename\":\"%s\", \"size\":%d, \"sha256\":\"", file, sza);
 			handle_sha256 (bufa, sza);
 			printf("\"},\n{\"filename\":\"%s\", \"size\":%d, \"sha256\":\"", file2, szb);
 			handle_sha256 (bufb, szb);

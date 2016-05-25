@@ -279,8 +279,7 @@ static int esil_internal_borrow_check(RAnalEsil *esil, ut8 bit) {
 }
 
 static int esil_internal_carry_check(RAnalEsil *esil, ut8 bit) {
-	bit &= 0x3f;
-	return ((esil->cur & genmask (bit)) < (esil->old & genmask (bit)));
+	return esil->cur > (((ut64) 1 << ((ut64) bit + 1)) - 1);
 }
 
 static int esil_internal_parity_check(RAnalEsil *esil) {
@@ -362,7 +361,10 @@ static int esil_internal_read(RAnalEsil *esil, const char *str, ut64 *num) {
 		*num = esil->address;
 		break;
 	case 'z': //zero-flag
-		*num = (esil->cur == 0);
+		{
+			ut64 m = genmask(esil->lastsz - 1);
+			*num = (((ut64) esil->cur & m) == 0);
+		}
 		break;
 	case 'b': //borrow
 		bit = (ut8)r_num_get (NULL, &str[2]);
@@ -456,8 +458,9 @@ R_API int r_anal_esil_get_parm_size(RAnalEsil *esil, const char *str, ut64 *num,
 		if (size) *size = esil->anal->bits;
 		return true;
 	case R_ANAL_ESIL_PARM_REG:
-		if (!r_anal_esil_reg_read (esil, str, num, size))
+		if (!r_anal_esil_reg_read (esil, str, num, size)) {
 			break;
+		}
 		return true;
 	default:
 		IFDBG eprintf ("Invalid arg (%s)\n", str);
@@ -483,6 +486,17 @@ R_API int r_anal_esil_reg_write(RAnalEsil *esil, const char *dst, ut64 num) {
 	if (!ret && esil->cb.reg_write) {
 		ret = esil->cb.reg_write (esil, dst, num);
 	}
+	return ret;
+}
+
+R_API int r_anal_esil_reg_read_nocallback(RAnalEsil *esil, const char *regname, ut64 *num, int *size) {
+	int ret;
+	void *old_hook_reg_read = (void *) esil->cb.hook_reg_read;
+
+	esil->cb.hook_reg_read = NULL;
+	ret = r_anal_esil_reg_read (esil, regname, num, size);
+	esil->cb.hook_reg_read = old_hook_reg_read;
+
 	return ret;
 }
 
@@ -514,7 +528,7 @@ static int esil_eq(RAnalEsil *esil) {
 	char *dst = r_anal_esil_pop (esil);
 	char *src = r_anal_esil_pop (esil);
 
-	if (src && dst && r_anal_esil_reg_read (esil, dst, &num, NULL)) {
+	if (src && dst && r_anal_esil_reg_read_nocallback (esil, dst, &num, NULL)) {
 		if (r_anal_esil_get_parm (esil, src, &num2)) {
 			ret = r_anal_esil_reg_write (esil, dst, num2);
 			if (ret && r_anal_esil_get_parm_type (esil, src) != R_ANAL_ESIL_PARM_INTERNAL) { //necessary for some flag-things
@@ -734,6 +748,9 @@ static int esil_cmp(RAnalEsil *esil) {
 				esil->lastsz = esil_internal_sizeof_reg (esil, dst);
 			} else if (r_reg_get (esil->anal->reg, src, -1)) {
 				esil->lastsz = esil_internal_sizeof_reg (esil, src);
+			} else {
+				// default size is set to 64 as internally operands are ut64
+				esil->lastsz = 64;
 			}
 		}
 	}
@@ -1368,12 +1385,8 @@ static int esil_deceq(RAnalEsil *esil) {
 static int esil_poke_n(RAnalEsil *esil, int bits) {
 	ut64 bitmask = genmask (bits - 1);
 	ut64 num, addr;
-	union {
-		ut8 byte;
-		ut16 word;
-		ut32 dword;
-		ut64 qword;
-	} n, n2;
+	ut8 b[sizeof(ut64)];
+	ut64 n;
 	char *dst = r_anal_esil_pop (esil);
 	char *src = r_anal_esil_pop (esil);
 	int bytes = bits / 8, ret = 0;
@@ -1387,16 +1400,15 @@ static int esil_poke_n(RAnalEsil *esil, int bits) {
 		if (dst && r_anal_esil_get_parm (esil, dst, &addr)) {
 			int type = r_anal_esil_get_parm_type (esil, src);
 			if (type != R_ANAL_ESIL_PARM_INTERNAL) {
-				n.qword = n2.qword = 0;
-				r_anal_esil_mem_read (esil, addr, (ut8 *)&n, bytes);
-				r_mem_copyendian ((ut8 *)&n2, (ut8 *)&n, bytes, !esil->anal->big_endian);
-				esil->old = n2.qword;
-				esil->cur = (num & bitmask);
+				r_anal_esil_mem_read (esil, addr, b, bytes);
+				n = r_read_ble64 (b, esil->anal->big_endian);
+				esil->old = n;
+				esil->cur = num;
 				esil->lastsz = bits;
 				num = num & bitmask;
 			}
-			r_mem_copyendian ((ut8 *)&n, (ut8 *)&num, bytes, !esil->anal->big_endian);
-			ret = r_anal_esil_mem_write (esil, addr, (const ut8 *)&n, bytes);
+			r_write_ble64 (b, num, esil->anal->big_endian);
+			ret = r_anal_esil_mem_write (esil, addr, b, bytes);
 		}
 	}
 	free (src);
@@ -1422,30 +1434,31 @@ static int esil_poke(RAnalEsil *esil) {
 
 static int esil_poke_some(RAnalEsil *esil) {
 	int i, ret = 0;
+	int regsize;
 	ut64 ptr, regs;
 	char *count, *dst = r_anal_esil_pop (esil);
-	if (dst) {
+	if (dst && r_anal_esil_get_parm_size (esil, dst, NULL, &regsize)) {
+		ut8 bytes = regsize / 8;
 		// reg
 		isregornum (esil, dst, &ptr);
 		count = r_anal_esil_pop (esil);
 		if (count) {
 			isregornum (esil, count, &regs);
 			if (regs > 0) {
+				ut8 b[bytes];
 				ut64 num64;
-				ut32 num32;
 				for (i = 0; i < regs; i++) {
 					char *foo = r_anal_esil_pop (esil);
 					isregornum (esil, foo, &num64);
 					/* TODO: implement peek here */
 					// read from $dst
-					num32 = num64;
-					ret = r_anal_esil_mem_write (esil, ptr,
-								(const ut8 *)&num32, sizeof (num32));
-					if (ret != sizeof (num32)) {
+					r_write_ble64 (b, num64, esil->anal->big_endian);
+					ret = r_anal_esil_mem_write (esil, ptr, b, bytes);
+					if (ret != bytes) {
 						//eprintf ("Cannot write at 0x%08" PFMT64x "\n", ptr);
 						esil->trap = 1;
 					}
-					ptr += 4;
+					ptr += bytes;
 					free (foo);
 				}
 			}
@@ -1470,9 +1483,14 @@ static int esil_peek_n(RAnalEsil *esil, int bits) {
 		return 0;
 	}
 	if (dst && isregornum (esil, dst, &addr)) {
-		ut64 a, b, bitmask = genmask (bits - 1);
-		ret = r_anal_esil_mem_read (esil, addr, (ut8 *)&a, bytes);
-		r_mem_copyendian ((ut8 *)&b, (const ut8 *)&a, bytes, !esil->anal->big_endian);
+		ut64 bitmask = genmask (bits - 1);
+		ut8 a[sizeof(ut64)] = {0};
+		ut64 b;
+		ret = r_anal_esil_mem_read (esil, addr, a, bytes);
+		b = r_read_ble64 (a, 0); //esil->anal->big_endian);
+		if (esil->anal->big_endian) {
+			r_mem_swapendian ((ut8*)&b, (const ut8*)&b, bytes);
+		}
 		snprintf (res, sizeof (res), "0x%" PFMT64x, b & bitmask);
 		r_anal_esil_push (esil, res);
 		esil->lastsz = bits;
@@ -1510,20 +1528,21 @@ static int esil_peek_some(RAnalEsil *esil) {
 			isregornum (esil, count, &regs);
 			if (regs > 0) {
 				ut32 num32;
+				ut8 a[sizeof (ut32)];
 				for (i = 0; i < regs; i++) {
 					char *foo = r_anal_esil_pop (esil);
 					if (!foo) {
 						ERR ("Cannot pop in peek");
 						return 0;
 					}
-					ret = r_anal_esil_mem_read (esil, ptr,
-								(ut8 *)&num32, sizeof (num32));
-					if (ret == sizeof (num32)) {
+					ret = r_anal_esil_mem_read (esil, ptr, a, 4);
+					if (ret == sizeof (ut32)) {
+						num32 = r_read_ble32 (a, esil->anal->big_endian);
 						r_anal_esil_reg_write (esil, foo, num32);
 					} else {
 						eprintf ("Cannot peek from 0x%08" PFMT64x "\n", ptr);
 					}
-					ptr += 4;
+					ptr += sizeof (ut32);
 					free (foo);
 				}
 			}
@@ -1771,16 +1790,20 @@ static int esil_mem_modeq_n(RAnalEsil *esil, int bits) {
 			r_anal_esil_push (esil, dst);
 			ret = (!!esil_peek_n (esil, bits));
 			src1 = r_anal_esil_pop (esil);
-			if (src1 && r_anal_esil_get_parm (esil, src1, &d)) {
+			if (src1 && r_anal_esil_get_parm (esil, src1, &d) && s >= 1) {
+				r_anal_esil_pushnum (esil, d % s);
 				d = d % s;
 				r_anal_esil_pushnum (esil, d);
 				r_anal_esil_push (esil, dst);
 				ret &= (!!esil_poke_n (esil, bits));
-			} else ret = 0;
+			} else {
+				ret = 0;
+			}
 		}
 	}
-	if (!ret)
+	if (!ret) {
 		ERR ("esil_mem_modeq_n: invalid parameters");
+	}
 	free (dst);
 	free (src0);
 	free (src1);

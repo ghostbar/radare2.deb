@@ -28,8 +28,10 @@ static void rol_crypt(struct rol_state *const state, const ut8 *inbuf, ut8 *outb
 }
 
 static struct rol_state st;
+static int flag = 0;
 
 static int rol_set_key(RCrypto *cry, const ut8 *key, int keylen, int mode, int direction) {
+	flag = direction;
 	return rol_init (&st, key, keylen);
 }
 
@@ -42,6 +44,10 @@ static bool rol_use(const char *algo) {
 }
 
 static int update(RCrypto *cry, const ut8 *buf, int len) {
+	if (flag) {
+		eprintf ("Use ROR\n");
+		return false;
+	}
 	ut8 *obuf = calloc (1, len);
 	if (!obuf) return false;
 	rol_crypt (&st, buf, obuf, len);

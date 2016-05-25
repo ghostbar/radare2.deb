@@ -84,13 +84,15 @@ static int on_fcn_rename(void *_anal, void* _user, RAnalFunction *fcn, const cha
 }
 
 static void r_core_debug_breakpoint_hit(RCore *core, RBreakpointItem *bpi) {
-	const char *cmdbp;
-	int oecho = core->cons->echo; // should be configurable by user?
-	core->cons->echo = 1; // should be configurable by user?
-	cmdbp = r_config_get (core->config, "cmd.bp");
-	if (cmdbp && *cmdbp)
+	bool oecho = core->cons->echo;
+	const char *cmdbp = r_config_get (core->config, "cmd.bp");
+	core->cons->echo = true;
+	if (cmdbp && *cmdbp) {
 		r_core_cmd0 (core, cmdbp);
-	r_core_cmd0 (core, bpi->data);
+	}
+	if (bpi->data && bpi->data[0]) {
+		r_core_cmd0 (core, bpi->data);
+	}
 	core->cons->echo = oecho;
 }
 
@@ -120,6 +122,44 @@ R_API ut64 r_core_get_asmqjmps(RCore *core, const char *str) {
 		if (pos <= core->asmqjmps_count) return core->asmqjmps[pos];
 	}
 	return UT64_MAX;
+}
+
+/**
+ * Takes addr and returns already saved shortcut or a new one
+ * The returned buffer needs to be freed
+ */
+R_API char* r_core_add_asmqjmp(RCore *core, ut64 addr) {
+	int i, found = 0;
+	if (!core->asmqjmps) return NULL;
+	if (core->is_asmqjmps_letter) {
+		if (core->asmqjmps_count >= R_CORE_ASMQJMPS_MAX_LETTERS) {
+			return NULL;
+		}
+
+		if (core->asmqjmps_count >= core->asmqjmps_size - 2) {
+			core->asmqjmps = realloc (core->asmqjmps, core->asmqjmps_size * 2 * sizeof (ut64));
+			if (!core->asmqjmps) return NULL;
+			core->asmqjmps_size *= 2;
+		}
+	}
+
+	if (core->asmqjmps_count < core->asmqjmps_size - 1) {
+		char t[R_CORE_ASMQJMPS_LEN_LETTERS + 1];
+		for (i = 0; i < core->asmqjmps_count + 1; i++) {
+			if (core->asmqjmps[i] == addr) {
+				found = 1;
+				break;
+			}
+		}
+		if (!found) {
+			i = ++core->asmqjmps_count;
+			core->asmqjmps[i] = addr;
+		}
+		r_core_set_asmqjmps (core, t, sizeof (t), i);
+		return strdup (t);
+	} else {
+		return NULL;
+	}
 }
 
 /* returns in str a string that represents the shortcut to access the asmqjmp
@@ -208,6 +248,25 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 
 	if (ok) *ok = false;
 	switch (*str) {
+	case '.':
+		if (core->num->nc.curr_tok=='+') {
+			ut64 off = core->num->nc.number_value.n;
+			if (!off) off = core->offset;
+			RAnalFunction *fcn = r_anal_get_fcn_at (core->anal, off, 0);
+			if (fcn) {
+				if (ok) *ok = true;
+				ut64 dst = r_anal_fcn_label_get (core->anal, fcn, str + 1);
+				if (dst == UT64_MAX)
+					dst = fcn->addr;
+				st64 delta = dst - off;
+				if (delta < 0) {
+					core->num->nc.curr_tok = '-';
+					delta = off - dst;
+				}
+				return delta;
+			}
+		}
+		break;
 	case '[':
 {
 		ut64 n = 0LL;
@@ -215,7 +274,6 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 		const char *p = NULL;
 		if (strlen (str)>5)
 			p = strchr (str+5, ':');
-		// TODO: honor LE
 		if (p) {
 			refsz = atoi (str+1);
 			str = p;
@@ -239,15 +297,17 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 		}
 		// pop state
 		if (ok) *ok = 1;
-		ut64 num = 0;
+		ut8 buf[sizeof (ut64)] = {0};
+		(void)r_io_read_at (core->io, n, buf, refsz);
 		switch (refsz) {
 		case 8:
+			return r_read_ble64 (buf, core->print->big_endian);
 		case 4:
+			return r_read_ble32 (buf, core->print->big_endian);
 		case 2:
+			return r_read_ble16 (buf, core->print->big_endian);
 		case 1:
-			(void)r_io_read_at (core->io, n, (ut8*)&num, refsz);
-			r_mem_copyendian ((ut8*)&num, (ut8*)&num, refsz, !core->assembler->big_endian);
-			return num;
+			return r_read_ble8 (buf);
 		default:
 			eprintf ("Invalid reference size: %d (%s)\n", refsz, str);
 			return 0LL;
@@ -330,20 +390,29 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 			return 0LL;
 		case 'w': return r_config_get_i (core->config, "asm.bits") / 8;
 		case 'S':
-			s = r_io_section_vget (core->io, core->offset);
-			return s? (str[2]=='S'? s->size: s->vaddr): 3;
+			if ((s = r_io_section_vget (core->io, core->offset))) {
+				return (str[2]=='S'? s->size: s->vaddr);
+			}
+			return 0LL;
+		case 'D':
+			if (IS_NUMBER (str[2])) {
+				return getref (core, atoi (str+2), 'r', R_ANAL_REF_TYPE_DATA);
+			} else {
+				RDebugMap *map;
+				RListIter *iter;
+				r_list_foreach (core->dbg->maps, iter, map) {
+					if (core->offset >= map->addr && core->offset < map->addr_end) {
+						return (str[2] == 'D')? map->size: map->addr;
+					}
+				}
+			}
+			return 0LL; // maybe // return UT64_MAX;
 		case '?': return core->num->value;
 		case '$': return core->offset;
-		case 'o': return r_io_section_vaddr_to_maddr_try (core->io,
-				core->offset);
-		case 'C': return getref (core, atoi (str+2), 'r',
-				R_ANAL_REF_TYPE_CALL);
-		case 'J': return getref (core, atoi (str+2), 'r',
-				R_ANAL_REF_TYPE_CODE);
-		case 'D': return getref (core, atoi (str+2), 'r',
-				R_ANAL_REF_TYPE_DATA);
-		case 'X': return getref (core, atoi (str+2), 'x',
-				R_ANAL_REF_TYPE_CALL);
+		case 'o': return r_io_section_vaddr_to_maddr_try (core->io, core->offset);
+		case 'C': return getref (core, atoi (str+2), 'r', R_ANAL_REF_TYPE_CALL);
+		case 'J': return getref (core, atoi (str+2), 'r', R_ANAL_REF_TYPE_CODE);
+		case 'X': return getref (core, atoi (str+2), 'x', R_ANAL_REF_TYPE_CALL);
 		case 'B':
 			fcn = r_anal_get_fcn_in (core->anal, core->offset, 0);
 			return fcn? fcn->addr: 0;
@@ -352,7 +421,7 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 			return fcn? fcn->ninstr: 0;
 		case 'F':
 			fcn = r_anal_get_fcn_in (core->anal, core->offset, 0);
-			return fcn? fcn->size: 0;
+			return r_anal_fcn_size (fcn);
 		}
 		break;
 	default:
@@ -384,6 +453,7 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 
 R_API RCore *r_core_new() {
 	RCore *c = R_NEW0 (RCore);
+	if (!c) return NULL;
 	r_core_init (c);
 	return c;
 }
@@ -400,7 +470,7 @@ static const char *radare_argv[] = {
 	"!", "!!",
 	"#sha1", "#crc32", "#pcprint", "#sha256", "#sha512", "#md4", "#md5",
 	"#!python", "#!perl", "#!vala",
-	"V",
+	"V", "v",
 	"aa", "ab", "af", "ar", "ag", "at", "a?", "ax", "ad",
 	"aaa", "aac","aae", "aai", "aar", "aan", "aas", "aat", "aap", "aav",
 	"af", "afa", "afan", "afc", "afi", "afb", "afbb", "afn", "afr", "afs", "af*", "afv", "afvn",
@@ -415,9 +485,9 @@ static const char *radare_argv[] = {
 	"(", "(*", "(-", "()", ".", ".!", ".(", "./",
 	"r", "r+", "r-",
 	"b", "bf", "b?",
-	"/", "//", "/a", "/c", "/m", "/x", "/v", "/v2", "/v4", "/v8", "/r"
+	"/", "//", "/a", "/c", "/h", "/m", "/x", "/v", "/v2", "/v4", "/v8", "/r"
 	"y", "yy", "y?",
-	"wx", "ww", "w?",
+	"wx", "ww", "w?", "wxf",
 	"p6d", "p6e", "p8", "pb", "pc",
 	"pd", "pda", "pdb", "pdc", "pdj", "pdr", "pdf", "pdi", "pdl", "pds", "pdt",
 	"pD", "px", "pX", "po", "pf", "pf.", "pf*", "pf*.", "pfd", "pfd.", "pv", "p=", "p-",
@@ -1148,7 +1218,6 @@ R_API int r_core_init(RCore *core) {
 	core->sdb = sdb_new (NULL, "r2kv.sdb", 0); // XXX: path must be in home?
 	core->lastsearch = NULL;
 	core->incomment = false;
-	core->screen_bounds = 0LL;
 	core->config = NULL;
 	core->http_up = false;
 	core->print = r_print_new ();
@@ -1204,6 +1273,7 @@ R_API int r_core_init(RCore *core) {
 		r_line_hist_load (R2_HOMEDIR"/history");
 	}
 	core->print->cons = core->cons;
+	r_cons_bind (&core->print->consbind);
 	core->cons->num = core->num;
 	core->lang = r_lang_new ();
 	core->lang->cmd_str = (char *(*)(void *, const char *))r_core_cmd_str;
@@ -1228,6 +1298,7 @@ R_API int r_core_init(RCore *core) {
 	r_anal_noreturn_add (core->anal, "sym.imp.__assert_fail", UT64_MAX);
 	r_anal_noreturn_add (core->anal, "sym.__assert_fail", UT64_MAX);
 	r_anal_noreturn_add (core->anal, "sym.abort", UT64_MAX);
+	r_anal_noreturn_add (core->anal, "abort", UT64_MAX);
 	r_anal_noreturn_add (core->anal, "sym.exit", UT64_MAX);
 
 	core->anal->meta_spaces.cb_printf = r_cons_printf;
@@ -1626,7 +1697,6 @@ R_API int r_core_serve(RCore *core, RIODesc *file) {
 	int i, pipefd;
 	RIORap *rior;
 	ut64 x;
-	int LE = 1; // 1 if host is little LE
 
 	rior = (RIORap *)file->data;
 	if (rior == NULL|| rior->fd == NULL) {
@@ -1675,7 +1745,7 @@ reaccept:
 				eprintf ("open (%d): ", cmd);
 				r_socket_read_block (c, &cmd, 1); // len
 				pipefd = -1;
-				ptr = malloc (cmd);
+				ptr = malloc (cmd + 1);
 				//XXX cmd is ut8..so <256 if (cmd<RMT_MAX)
 				if (ptr == NULL) {
 					eprintf ("Cannot malloc in rmt-open len = %d\n", cmd);
@@ -1704,10 +1774,9 @@ reaccept:
 					}
 				}
 				buf[0] = RMT_OPEN | RMT_REPLY;
-				r_mem_copyendian (buf+1, (ut8 *)&pipefd, 4, !LE);
+				r_write_be32 (buf + 1, pipefd);
 				r_socket_write (c, buf, 5);
 				r_socket_flush (c);
-
 #if 0
 				/* Write meta info */
 				RMetaItem *d;
@@ -1778,44 +1847,44 @@ reaccept:
 				break;
 			case RMT_READ:
 				r_socket_read_block (c, (ut8*)&buf, 4);
-				r_mem_copyendian ((ut8*)&i, buf, 4, !LE);
-				ptr = (ut8 *)malloc (i+core->blocksize+5);
-				if (ptr==NULL) {
+				i = r_read_be32 (buf);
+				ptr = (ut8 *)malloc (i + core->blocksize+5);
+				if (ptr == NULL) {
 					eprintf ("Cannot read %d bytes\n", i);
 					r_socket_close (c);
 					// TODO: reply error here
 					return -1;
 				} else {
 					r_core_block_read (core, 0);
-					ptr[0] = RMT_READ|RMT_REPLY;
+					ptr[0] = RMT_READ | RMT_REPLY;
 					if (i>RMT_MAX)
 						i = RMT_MAX;
 					if (i>core->blocksize)
 						r_core_block_size (core, i);
-					r_mem_copyendian (ptr+1, (ut8 *)&i, 4, !LE);
-					memcpy (ptr+5, core->block, i); //core->blocksize);
+					r_write_be32 (ptr+1, i);
+					memcpy (ptr + 5, core->block, i); //core->blocksize);
 					r_socket_write (c, ptr, i+5);
 					r_socket_flush (c);
-					free(ptr);
+					free (ptr);
 					ptr = NULL;
 				}
 				break;
 			case RMT_CMD:
 				{
-				char bufr[8], *bufw = NULL;
 				char *cmd = NULL, *cmd_output = NULL;
+				char bufr[8], *bufw = NULL;
 				ut32 cmd_len = 0;
 				int i;
 
 				/* read */
 				r_socket_read_block (c, (ut8*)&bufr, 4);
-				r_mem_copyendian ((ut8*)&i, (ut8 *)bufr, 4, !LE);
-				if (i>0 && i<RMT_MAX) {
-					if ((cmd=malloc (i+1))) {
+				i = r_read_be32 (bufr);
+				if (i>0 && i < RMT_MAX) {
+					if ((cmd = malloc (i + 1))) {
 						r_socket_read_block (c, (ut8*)cmd, i);
 						cmd[i] = '\0';
-						eprintf ("len: %d cmd: '%s'\n",
-							i, cmd); fflush(stdout);
+						eprintf ("len: %d cmd:'%s'\n", i, cmd);
+						fflush (stdout);
 						cmd_output = r_core_cmd_str (core, cmd);
 						free (cmd);
 					} else eprintf ("rap: cannot malloc\n");
@@ -1827,11 +1896,42 @@ reaccept:
 					cmd_output = strdup ("");
 					cmd_len = 0;
 				}
+
+#if DEMO_SERVER_SENDS_CMD_TO_CLIENT
+				static bool once = true;
+				/* TODO: server can reply a command request to the client only here */
+				if (once) {
+					const char *cmd = "pd 4";
+					int cmd_len = strlen (cmd) + 1;
+					ut8 *b = malloc (cmd_len + 5);
+					b[0] = RMT_CMD;
+					r_write_be32 (b + 1, cmd_len);
+					strcpy ((char *)b+ 5, cmd);
+					r_socket_write (c, b, 5 + cmd_len);
+					r_socket_flush (c);
+
+					/* read response */
+					r_socket_read (c, b, 5);
+					if (b[0] == (RMT_CMD | RMT_REPLY)) {
+						ut32 n = r_read_be32 (b + 1);
+						eprintf ("REPLY %d\n", n);
+						if (n > 0) {
+							ut8 *res = calloc (1, n);
+							r_socket_read (c, res, n);
+							eprintf ("RESPONSE(%s)\n", (const char *)res);
+							free (res);
+						}
+					}
+					r_socket_flush (c);
+					free (b);
+					once = false;
+				}
+#endif
+
 				bufw = malloc (cmd_len + 5);
 				bufw[0] = RMT_CMD | RMT_REPLY;
-				r_mem_copyendian ((ut8*)bufw+1,
-					(ut8 *)&cmd_len, 4, !LE);
-				memcpy (bufw+5, cmd_output, cmd_len);
+				r_write_be32 (bufw + 1, cmd_len);
+				memcpy (bufw + 5, cmd_output, cmd_len);
 				r_socket_write (c, bufw, cmd_len+5);
 				r_socket_flush (c);
 				free (bufw);
@@ -1840,7 +1940,7 @@ reaccept:
 				}
 			case RMT_WRITE:
 				r_socket_read (c, buf, 5);
-				r_mem_copyendian((ut8 *)&x, buf+1, 4, LE);
+				x = r_read_at_be32 (buf, 1);
 				ptr = malloc (x);
 				r_socket_read (c, ptr, x);
 				r_core_write_at (core, core->offset, ptr, x);
@@ -1849,7 +1949,7 @@ reaccept:
 				break;
 			case RMT_SEEK:
 				r_socket_read_block (c, buf, 9);
-				r_mem_copyendian((ut8 *)&x, buf+1, 8, !LE);
+				x = r_read_at_be64 (buf, 1);
 				if (buf[0]!=2) {
 					r_core_seek (core, x, buf[0]);
 					x = core->offset;
@@ -1861,7 +1961,7 @@ reaccept:
 					}
 				}
 				buf[0] = RMT_SEEK | RMT_REPLY;
-				r_mem_copyendian (buf+1, (ut8*)&x, 8, !LE);
+				r_write_be64 (buf+1, x);
 				r_socket_write (c, buf, 9);
 				r_socket_flush (c);
 				break;
@@ -1869,11 +1969,11 @@ reaccept:
 				eprintf ("CLOSE\n");
 				// XXX : proper shutdown
 				r_socket_read_block (c, buf, 4);
-				r_mem_copyendian ((ut8*)&i, buf, 4, LE);
+				i = r_read_be32 (buf);
 				{
 				//FIXME: Use r_socket_close
 				int ret = close (i);
-				r_mem_copyendian (buf+1, (ut8*)&ret, 4, !LE);
+				r_write_be32 (buf+1, ret);
 				buf[0] = RMT_CLOSE | RMT_REPLY;
 				r_socket_write (c, buf, 5);
 				r_socket_flush (c);

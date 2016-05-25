@@ -75,7 +75,6 @@ static int meta_count_for(void *user, int idx) {
 
 R_API RAnal *r_anal_new() {
 	int i;
-	RAnalPlugin *static_plugin;
 	RAnal *anal = R_NEW0 (RAnal);
 	if (!anal) return NULL;
 	anal->os = strdup (R_SYS_OS);
@@ -114,13 +113,10 @@ R_API RAnal *r_anal_new() {
 	anal->refs = r_anal_ref_list_new ();
 	anal->types = r_anal_type_list_new ();
 	r_anal_set_bits (anal, 32);
-	r_anal_set_big_endian (anal, false);
 	anal->plugins = r_list_newf ((RListFree) r_anal_plugin_free);
 	if (anal->plugins) {
 		for (i=0; anal_static_plugins[i]; i++) {
-			static_plugin = R_NEW (RAnalPlugin);
-			*static_plugin = *anal_static_plugins[i];
-			r_anal_add (anal, static_plugin);
+			r_anal_add (anal, anal_static_plugins[i]);
 		}
 	}
 	return anal;
@@ -128,7 +124,7 @@ R_API RAnal *r_anal_new() {
 
 R_API void r_anal_plugin_free (RAnalPlugin *p) {
 	if (p && p->fini) {
-		p->fini (p);
+		p->fini (NULL);
 	}
 }
 
@@ -216,7 +212,7 @@ R_API bool r_anal_set_reg_profile(RAnal *anal) {
 		}
 		free (p);
 	}
-	return false;
+	return ret;
 }
 
 R_API bool r_anal_set_fcnsign(RAnal *anal, const char *name) {
@@ -383,6 +379,7 @@ R_API RAnalOp *r_anal_op_hexstr(RAnal *anal, ut64 addr, const char *str) {
 	}
 	len = r_hex_str2bin (str, buf);
 	r_anal_op (anal, op, addr, buf, len);
+	free (buf);
 	return op;
 }
 

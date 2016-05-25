@@ -117,6 +117,7 @@ R_API int r_core_file_reopen(RCore *core, const char *args, int perm, int loadbi
 		//reopen and attach
 		r_core_setup_debugger (core, "native", true);
 		r_debug_select (core->dbg, newpid, newpid);
+		//
 	}
 
 	if (core->file) {
@@ -138,6 +139,11 @@ R_API int r_core_file_reopen(RCore *core, const char *args, int perm, int loadbi
 		r_core_cmd0 (core, ".dm*");
 		r_core_cmd0 (core, ".dr*");
 		r_core_cmd0 (core, "sr PC");
+	} else {
+		ut64 gp = r_num_math (core->num, "loc._gp");
+		if (gp && gp != UT64_MAX) {
+			r_config_set_i (core->config, "anal.gp", gp);
+		}
 	}
 	// update anal io bind
 	r_io_bind (core->io, &(core->anal->iob));
@@ -365,8 +371,6 @@ static int r_core_file_do_load_for_debug (RCore *r, ut64 baseaddr, const char *f
 	if (plugin && !strcmp (plugin->name, "dex")) {
 		r_core_cmd0 (r, "\"(fix-dex,wx `#sha1 $s-32 @32` @12 ; wx `#adler32 $s-12 @12` @8)\"\n");
 	}
-
-	if (r_config_get_i (r->config, "file.analyze")) r_core_cmd0 (r, "aa");
 	return true;
 }
 
@@ -414,10 +418,46 @@ static int r_core_file_do_load_for_io_plugin (RCore *r, ut64 baseaddr, ut64 load
 	if (plugin && !strcmp (plugin->name, "dex")) {
 		r_core_cmd0 (r, "\"(fix-dex,wx `#sha1 $s-32 @32` @12 ; wx `#adler32 $s-12 @12` @8)\"\n");
 	}
-
-	if (r_config_get_i (r->config, "file.analyze"))
-		r_core_cmd0 (r, "aa");
 	return true;
+}
+
+static int try_loadlib(RCore *core, const char *lib, ut64 addr) {
+	RCoreFile *cf = r_core_file_open (core, lib, 0, addr);
+	if (!cf) {
+		return false;
+	}
+	return true;
+}
+
+R_API bool r_core_file_loadlib(RCore *core, const char *lib, ut64 libaddr) {
+	const char *ldlibrarypath[] = {
+		"/usr/local/lib",
+		"/usr/lib",
+		"/lib",
+		"./",
+		NULL
+	};
+	const char **libpath = (const char **)&ldlibrarypath;
+
+	if (*lib == '/') {
+		if (try_loadlib (core, lib, libaddr)) {
+			return true;
+		}
+	} else {
+		while (*libpath) {
+			bool ret = false;
+			char *s = r_str_newf ("%s/%s", *libpath, lib);
+			if (try_loadlib (core, s, libaddr)) {
+				ret = true;
+			}
+			free (s);
+			if (ret) {
+				return true;
+			}
+			libpath++;
+		}
+	}
+	return false;
 }
 
 R_API int r_core_bin_load(RCore *r, const char *filenameuri, ut64 baddr) {
@@ -426,7 +466,13 @@ R_API int r_core_bin_load(RCore *r, const char *filenameuri, ut64 baddr) {
 	RBinFile *binfile = NULL;
 	RIODesc *desc = cf ? cf->desc : NULL;
 	RBinPlugin *plugin = NULL;
-	int is_io_load = desc && desc->plugin;
+	int is_io_load;
+	// NULL deref guard
+	if (!desc) {
+		is_io_load = false;
+	} else {
+		is_io_load = desc && desc->plugin;
+	}
 
 	if (cf) {
 		if ((filenameuri == NULL || !*filenameuri)) {
@@ -496,8 +542,25 @@ R_API int r_core_bin_load(RCore *r, const char *filenameuri, ut64 baddr) {
 		r_core_cmd0 (r, "\"(fix-dex,wx `#sha1 $s-32 @32` @12 ;"
 			" wx `#adler32 $s-12 @12` @8)\"\n");
 	}
-	if (r_config_get_i (r->config, "file.analyze")) {
-		r_core_cmd0 (r, "aa");
+	if (!r_config_get_i (r->config, "cfg.debug")) {
+		/* load GP for mips */
+		ut64 gp = r_num_math (r->num, "loc._gp");
+		if (gp && gp != UT64_MAX) {
+			r_config_set_i (r->config, "anal.gp", gp);
+		}
+	}
+	if (r_config_get_i (r->config, "bin.libs")) {
+		ut64 libaddr = (r->assembler->bits == 64)
+			? 0x00007fff00000000
+			: 0x7f000000;
+		const char *lib;
+		RListIter *iter;
+		RList *libs = r_bin_get_libs (r->bin);
+		r_list_foreach (libs, iter, lib) {
+			eprintf ("Opening %s\n", lib);
+			r_core_file_loadlib (r, lib, libaddr);
+			libaddr += 0x2000000;
+		}
 	}
 	return true;
 }
@@ -506,6 +569,7 @@ R_API RIOMap *r_core_file_get_next_map (RCore *core, RCoreFile * fh, int mode, u
 	const char *loadmethod = r_config_get (core->config, "file.loadmethod");
 	const char *suppress_warning = r_config_get (core->config, "file.nowarn");
 	ut64 load_align = r_config_get_i (core->config, "file.loadalign");
+	if (!loadmethod || !suppress_warning) return NULL;
 	RIOMap *map = NULL;
 	if (!strcmp (loadmethod, "overwrite"))
 		map = r_io_map_new (core->io, fh->desc->fd, mode, 0, loadaddr, r_io_desc_size (core->io, fh->desc));
@@ -664,6 +728,7 @@ R_API RCoreFile *r_core_file_open (RCore *r, const char *file, int flags, ut64 l
 	fh->map = r_core_file_get_next_map (r, fh, flags, loadaddr);
 	if (!fh->map) {
 		r_core_file_free (fh);
+		fh = NULL;
 		if (!strcmp (suppress_warning, "false"))
 			eprintf("Unable to load file due to failed mapping.\n");
 		goto beach;
@@ -673,6 +738,13 @@ R_API RCoreFile *r_core_file_open (RCore *r, const char *file, int flags, ut64 l
 	r_list_append (r->files, fh);
 	r_core_file_set_by_file (r, fh);
 	r_config_set_i (r->config, "zoom.to", fh->map->from + r_io_desc_size (r->io, fh->desc));
+
+	if (r_config_get_i (r->config, "cfg.debug")) {
+		bool swstep = true;
+		if (r->dbg->h && r->dbg->h->canstep)
+			swstep = false;
+		r_config_set_i (r->config, "dbg.swstep", swstep);
+	}
 beach:
 	r->times->file_open_time = r_sys_now() - prev;
 	return fh;

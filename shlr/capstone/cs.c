@@ -88,7 +88,11 @@ cs_malloc_t cs_mem_malloc = malloc;
 cs_calloc_t cs_mem_calloc = calloc;
 cs_realloc_t cs_mem_realloc = realloc;
 cs_free_t cs_mem_free = free;
+#if defined(_WIN32_WCE)
+cs_vsnprintf_t cs_vsnprintf = _vsnprintf;
+#else // !_WIN32_WCE
 cs_vsnprintf_t cs_vsnprintf = vsnprintf;
+#endif // _WIN32_WCE
 #else
 extern void* kern_os_malloc(size_t size);
 extern void kern_os_free(void* addr);
@@ -233,7 +237,7 @@ cs_err cs_open(cs_arch arch, cs_mode mode, csh *handle)
 		ud->errnum = CS_ERR_OK;
 		ud->arch = arch;
 		ud->mode = mode;
-		ud->big_endian = mode & CS_MODE_BIG_ENDIAN;
+		ud->big_endian = (mode & CS_MODE_BIG_ENDIAN) != 0;
 		// by default, do not break instruction into details
 		ud->detail = CS_OPT_OFF;
 
@@ -557,6 +561,10 @@ size_t cs_disasm(csh ud, const uint8_t *buffer, size_t size, uint64_t offset, si
 	}
 
 	handle->errnum = CS_ERR_OK;
+
+	// reset IT block of ARM structure
+	if (handle->arch == CS_ARCH_ARM)
+		handle->ITBlock.size = 0;
 
 #ifdef CAPSTONE_USE_SYS_DYN_MEM
 	if (count > 0 && count <= INSN_CACHE_SIZE)
