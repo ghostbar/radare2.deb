@@ -201,8 +201,9 @@ static bool string_filter(RCore *core, const char *str) {
 	case 'a': // only alphanumeric - plain ascii
 		for (i = 0; str[i]; i++) {
 			char ch = str[i];
-			if (ch<0 || !IS_PRINTABLE (ch))
+			if (ch < 1 || !IS_PRINTABLE (ch)) {
 				return false;
+			}
 		}
 		break;
 	case 'e': // emails
@@ -224,44 +225,46 @@ static bool string_filter(RCore *core, const char *str) {
 			return false;
 		break;
         case 'i': //IPV4
-                {
-                    int segment = 0;
-                    int segmentsum = 0;
-                    bool prevd = false;
-                    for (i = 0; str[i]; i++) {
-                            char ch = str[i];
-                            if (ch >= '0' && ch <='9') {
-                                segmentsum = segmentsum*10 + (ch - '0');
-                                if (segment == 3 )
-                                    return true;
-                                prevd = true;
-                            } else if (ch == '.') {
-                                if (prevd == true && segmentsum < 256){
-                                    segment++;
-                                    segmentsum = 0;
-                                } else {
-                                    segmentsum = 0;
-                                    segment = 0;
-                                }
-                                prevd = false;
-                            } else {
-                                segmentsum = 0;
-                                prevd = false;
-                                segment = 0;
-                            }
-                    }
-                    return false;
-                }
-
-	case 'p': // path
-		if (str[0] != '/')
+		{
+			int segment = 0;
+			int segmentsum = 0;
+			bool prevd = false;
+			for (i = 0; str[i]; i++) {
+				char ch = str[i];
+				if (ch >= '0' && ch <= '9') {
+					segmentsum = segmentsum*10 + (ch - '0');
+					if (segment == 3) {
+						return true;
+					}
+					prevd = true;
+				} else if (ch == '.') {
+					if (prevd == true && segmentsum < 256){
+						segment++;
+						segmentsum = 0;
+					} else {
+						segmentsum = 0;
+						segment = 0;
+					}
+					prevd = false;
+				} else {
+					segmentsum = 0;
+					prevd = false;
+					segment = 0;
+				}
+			}
 			return false;
+		}
+	case 'p': // path
+		if (str[0] != '/') {
+			return false;
+		}
 		break;
 	case '8': // utf8
 		for (i = 0; str[i]; i++) {
 			char ch = str[i];
-			if (ch<0)
+			if (ch < 0) {
 				return true;
+			}
 		}
 		return false;
 		break;
@@ -314,8 +317,9 @@ static int bin_strings(RCore *r, int mode, int va) {
 	r_list_foreach (list, iter, string) {
 		const char *section_name, *type_string;
 		ut64 paddr, vaddr, addr;
-		if (!string_filter (r, string->string))
+		if (!string_filter (r, string->string)) {
 			continue;
+		}
 		paddr = string->paddr;
 		vaddr = r_bin_get_vaddr (bin, paddr, string->vaddr);
 		addr = va ? vaddr : paddr;
@@ -345,7 +349,7 @@ static int bin_strings(RCore *r, int mode, int va) {
 			r_cons_printf ("0x%"PFMT64x" %d %d %s\n", addr,
 				string->size, string->length, string->string);
 		} else if (IS_MODE_SIMPLEST (mode)) {
-			r_cons_printf ("%s\n", string->string);
+			r_cons_println (string->string);
 		} else if (IS_MODE_JSON (mode)) {
 			q = r_base64_encode_dyn (string->string, -1);
 			r_cons_printf ("%s{\"vaddr\":%"PFMT64d
@@ -429,9 +433,9 @@ static int bin_info(RCore *r, int mode) {
 	havecode = is_executable (obj) | (obj->entries != NULL);
 	compiled = get_compile_time (binfile->sdb);
 	snprintf (size_str, sizeof (size_str),
-		"%"PFMT64d,  r_bin_get_size (r->bin));
+		"%"PFMT64u,  r_bin_get_size (r->bin));
 	snprintf (baddr_str, sizeof (baddr_str),
-		"%"PFMT64d,  info->baddr);
+		"%"PFMT64u,  info->baddr);
 
 	if (IS_MODE_SET (mode)) {
 		r_config_set (r->config, "file.type", info->rclass);
@@ -443,6 +447,19 @@ static int bin_info(RCore *r, int mode) {
 			if (info->lang) {
 				r_config_set (r->config, "bin.lang", info->lang);
 			}
+			if (info->os && !strcmp (info->os, "windows")) {
+				char *dbpath;
+				Sdb *db;
+#define TYPESPATH R2_LIBDIR"/radare2/"R2_VERSION"/fcnsign"
+				dbpath = sdb_fmt (-1, TYPESPATH"/windows-x86-%d.sdb", r->anal->bits);
+				if (r_file_exists (dbpath)) {
+					db = sdb_new (0, dbpath, 0);
+					sdb_merge (r->anal->sdb_types, db);
+					sdb_close (db);
+					sdb_free (db);
+				}
+			}
+#undef TYPESPATH
 			r_config_set (r->config, "asm.os", info->os);
 			r_config_set (r->config, "asm.arch", info->arch);
 			r_config_set (r->config, "anal.arch", info->arch);
@@ -1086,7 +1103,7 @@ static int bin_imports(RCore *r, int mode, int va, const char *name) {
 		if (IS_MODE_SET (mode)) {
 			// TODO(eddyb) symbols that are imports.
 		} else if (IS_MODE_SIMPLE (mode)) {
-			r_cons_printf ("%s\n", escname);
+			r_cons_println (escname);
 		} else if (IS_MODE_JSON (mode)) {
 			str = r_str_utf16_encode (symname, -1);
 			str = r_str_replace (str, "\"", "\\\"", 1);
@@ -1252,13 +1269,16 @@ static int bin_symbols_internal(RCore *r, int mode, ut64 laddr, int va, ut64 at,
 		snInit (r, &sn, symbol, lang);
 
 		if (IS_MODE_SET (mode)) {
-			if (is_arm) {
+			if (is_arm && info->bits < 33) { // 16 or 32
 				int force_bits = 0;
-				if (va && symbol->bits == 16)
+				if (symbol->paddr & 1) {
 					force_bits = 16;
-				if (info->bits == 16 && symbol->bits == 32)
+				} else if (info->bits == 16) {
 					force_bits = 32;
-				r_anal_hint_set_bits (r->anal, addr, force_bits);
+				}
+				if (force_bits) {
+					r_anal_hint_set_bits (r->anal, addr, force_bits);
+				}
 			}
 
 			if (!strncmp (symbol->name, "imp.", 4)) {
@@ -1812,15 +1832,15 @@ static int bin_classes(RCore *r, int mode) {
 }
 
 static int bin_size(RCore *r, int mode) {
-	int size = r_bin_get_size (r->bin);
+	ut64 size = r_bin_get_size (r->bin);
 	if (IS_MODE_SIMPLE (mode) || IS_MODE_JSON (mode)) {
-		r_cons_printf ("%d\n", size);
+		r_cons_printf ("%"PFMT64u"\n", size);
 	} else if (IS_MODE_RAD (mode)) {
-		r_cons_printf ("f bin_size @ %d\n", size);
+		r_cons_printf ("f bin_size @ %"PFMT64u"\n", size);
 	} else if (IS_MODE_SET (mode)) {
-		r_core_cmdf (r, "f bin_size @ %d\n", size);
+		r_core_cmdf (r, "f bin_size @ %"PFMT64u"\n", size);
 	} else {
-		r_cons_printf ("%d\n", size);
+		r_cons_printf ("%"PFMT64u"\n", size);
 	}
 	return true;
 }
@@ -1845,7 +1865,7 @@ static int bin_libs(RCore *r, int mode) {
 			r_cons_printf ("%s\"%s\"", iter->p ? "," : "", lib);
 		} else {
 			// simple and normal print mode
-			r_cons_printf ("%s\n", lib);
+			r_cons_println (lib);
 		}
 		i++;
 	}
@@ -2113,8 +2133,8 @@ static int bin_signature(RCore *r, int mode) {
 	RBinPlugin *plg = r_bin_file_cur_plugin (cur);
 	if (!plg) return false;
 	if (plg->signature) {
-	    	const char *signature = plg->signature (cur);
-		r_cons_printf ("%s\n", signature);
+		const char *signature = plg->signature (cur);
+		r_cons_println (signature);
 		return true;
 	}
 	return false;

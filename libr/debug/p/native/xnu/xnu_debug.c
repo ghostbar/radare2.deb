@@ -462,7 +462,8 @@ task_t pid_to_task (int pid) {
 		kr = mach_port_deallocate (mach_task_self (), task_dbg);
 		if (kr != KERN_SUCCESS) {
 			eprintf ("fail to deallocate port %s:%d\n", __FILE__, __LINE__);
-			return 0;
+			/* ignore on purpose to not break process reload: ood */
+			//return 0;
 		}
 
 	}
@@ -1202,12 +1203,14 @@ RList *xnu_dbg_maps(RDebug *dbg, int only_modules) {
 			depth++;
 			continue;
 		}
+		module_name[0] = 0;
+#ifndef __POWERPC__
 		{
-			module_name[0] = 0;
 			int ret = proc_regionfilename (tid, address, module_name,
 							 sizeof (module_name));
 			module_name[ret] = 0;
 		}
+#endif
 		if (true) {
 			char maxperm[32];
 			char depthstr[32];

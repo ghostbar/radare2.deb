@@ -20,7 +20,7 @@
 #if !defined(CAPSTONE_HAS_OSXKERNEL)
 #include <ctype.h>
 #endif
-#include "../../myinttypes.h"
+#include <capstone/platform.h>
 #if defined(CAPSTONE_HAS_OSXKERNEL)
 #include <libkern/libkern.h>
 #else
@@ -367,7 +367,7 @@ static void printImm(int syntax, SStream *O, int64_t imm, bool positive)
 		// always print this number in positive form
 		if (syntax == CS_OPT_SYNTAX_MASM) {
 			if (imm < 0) {
-				if (imm == 0x8000000000000000)  // imm == -imm
+				if (imm == 0x8000000000000000LL)  // imm == -imm
 					SStream_concat0(O, "8000000000000000h");
 				else if (need_zero_prefix(imm))
 					SStream_concat(O, "0%"PRIx64"h", imm);
@@ -395,7 +395,7 @@ static void printImm(int syntax, SStream *O, int64_t imm, bool positive)
 	} else {
 		if (syntax == CS_OPT_SYNTAX_MASM) {
 			if (imm < 0) {
-				if (imm == 0x8000000000000000)  // imm == -imm
+				if (imm == 0x8000000000000000LL)  // imm == -imm
 					SStream_concat0(O, "8000000000000000h");
 				else if (imm < -HEX_THRESHOLD) {
 					if (need_zero_prefix(imm))
@@ -415,7 +415,7 @@ static void printImm(int syntax, SStream *O, int64_t imm, bool positive)
 			}
 		} else {	// Intel syntax
 			if (imm < 0) {
-				if (imm == 0x8000000000000000)  // imm == -imm
+				if (imm == 0x8000000000000000LL)  // imm == -imm
 					SStream_concat0(O, "0x8000000000000000");
 				else if (imm < -HEX_THRESHOLD)
 					SStream_concat(O, "-0x%"PRIx64, -imm);
@@ -811,7 +811,7 @@ static void printPCRelImm(MCInst *MI, unsigned OpNo, SStream *O)
 			if (MI->flat_insn->detail->x86.op_count > 0)
 				MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = MI->flat_insn->detail->x86.operands[0].size;
 			else if (opsize > 0)
-				MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = opsize;
+				MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = (uint8_t)opsize;
 			else
 				MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = MI->imm_size;
 			MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].imm = imm;
@@ -928,7 +928,7 @@ static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 
 				MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].type = X86_OP_IMM;
 				if (opsize > 0)
-					MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = opsize;
+					MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = (uint8_t)opsize;
 				else if (MI->flat_insn->detail->x86.op_count > 0) {
 					if (MI->flat_insn->id != X86_INS_LCALL && MI->flat_insn->id != X86_INS_LJMP) {
 						MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size =

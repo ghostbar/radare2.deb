@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2015 - pancake, nibble */
+/* radare - LGPL - Copyright 2009-2016 - pancake, nibble */
 
 #include <r_anal.h>
 #include <r_util.h>
@@ -11,40 +11,25 @@ R_LIB_VERSION(r_anal);
 static RAnalPlugin *anal_static_plugins[] =
 	{ R_ANAL_STATIC_PLUGINS };
 
-static void r_anal_type_init(RAnal *anal) {
-	Sdb *D = anal->sdb_types;
-	sdb_set (D, "unsigned int", "type", 0);
-	sdb_set (D, "unsigned char", "type", 0);
-	sdb_set (D, "unsigned short", "type", 0);
-	sdb_set (D, "short", "type", 0);
-	sdb_set (D, "int", "type", 0);
-	sdb_set (D, "long", "type", 0);
-	sdb_set (D, "long long", "type", 0);
-	sdb_set (D, "void *", "type", 0);
-	sdb_set (D, "char", "type", 0);
-	sdb_set (D, "char *", "type", 0);
-	sdb_set (D, "const char*", "type", 0);
-	sdb_set (D, "uint8_t", "type", 0);
-	sdb_set (D, "uint16_t", "type", 0);
-	sdb_set (D, "uint32_t", "type", 0);
-	sdb_set (D, "uint64_t", "type", 0);
-	sdb_set (D, "type.unsigned int", "i", 0);
-	sdb_set (D, "type.unsigned char", "b", 0);
-	sdb_set (D, "type.unsigned short", "w", 0);
-	sdb_set (D, "type.short", "w", 0);
-	sdb_set (D, "type.int", "d", 0);
-	sdb_set (D, "type.long", "x", 0);
-	sdb_set (D, "type.long long", "q", 0);
-	sdb_set (D, "type.void *", "p", 0);
-	sdb_set (D, "type.char", "b", 0);
-	sdb_set (D, "type.char *", "*z", 0);
-	sdb_set (D, "type.const char*", "*z", 0);
-	sdb_set (D, "type.uint8_t", "b", 0);
-	sdb_set (D, "type.uint16_t", "w", 0);
-	sdb_set (D, "type.uint32_t", "d", 0);
-	sdb_set (D, "type.uint64_t", "q", 0);
+R_API void r_anal_type_init(RAnal *anal) {
+	const char *anal_arch =  anal->cur->arch;
+	char *dbpath;
+	if (!strcmp (anal_arch, "x86")) {
+		Sdb *db;
+#define TYPESPATH R2_LIBDIR"/radare2/"R2_VERSION"/fcnsign"
+		dbpath = sdb_fmt (-1, TYPESPATH"/types-%s-%d.sdb", anal_arch,
+			anal->bits);
+		if (r_file_exists (dbpath)) {
+			db = sdb_new (0, dbpath, 0);
+			sdb_merge (anal->sdb_types, db);
+			sdb_close (db);
+			sdb_free (db);
+		}
+	} else {
+		//TODO add other architectures and profiles at libr/anal
+	}
 }
-
+#undef TYPESPATH
 R_API void r_anal_set_limits(RAnal *anal, ut64 from, ut64 to) {
 	free (anal->limit);
 	anal->limit = R_NEW0 (RAnalRange);
@@ -55,8 +40,7 @@ R_API void r_anal_set_limits(RAnal *anal, ut64 from, ut64 to) {
 }
 
 R_API void r_anal_unset_limits(RAnal *anal) {
-	free (anal->limit);
-	anal->limit = NULL;
+	R_FREE (anal->limit);
 }
 
 static void meta_unset_for(void *user, int idx) {
@@ -95,9 +79,8 @@ R_API RAnal *r_anal_new() {
 	anal->sdb_xrefs = sdb_ns (anal->sdb, "xrefs", 1);
 	anal->sdb_types = sdb_ns (anal->sdb, "types", 1);
 	anal->cb_printf = (PrintfCallback) printf;
-	r_anal_pin_init (anal);
-	r_anal_type_init (anal);
-	r_anal_xrefs_init (anal);
+	(void)r_anal_pin_init (anal);
+	(void)r_anal_xrefs_init (anal);
 	anal->diff_thbb = R_ANAL_THRESHOLDBB;
 	anal->diff_thfcn = R_ANAL_THRESHOLDFCN;
 	anal->split = true; // used from core
@@ -160,8 +143,9 @@ R_API void r_anal_set_user_ptr(RAnal *anal, void *user) {
 }
 
 R_API int r_anal_add(RAnal *anal, RAnalPlugin *foo) {
-	if (foo->init)
+	if (foo->init) {
 		foo->init (anal->user);
+	}
 	r_list_append (anal->plugins, foo);
 	return true;
 }
@@ -285,15 +269,17 @@ R_API int r_anal_set_big_endian(RAnal *anal, int bigend) {
 }
 
 R_API char *r_anal_strmask (RAnal *anal, const char *data) {
-	RAnalOp *op;
-	ut8 *buf;
+	RAnalOp *op = NULL;
+	ut8 *buf = NULL;
 	char *ret = NULL;
 	int oplen, len, idx = 0;
 
-	ret = strdup (data);
-	buf = malloc (1+strlen (data));
-	op = r_anal_op_new ();
-	if (op == NULL || ret == NULL || buf == NULL) {
+	if (data && *data) {
+		ret = strdup (data);
+		buf = malloc (1 + strlen (data));
+		op = r_anal_op_new ();
+	}
+	if (!op || !ret || !buf) {
 		free (op);
 		free (buf);
 		free (ret);
@@ -339,7 +325,7 @@ R_API void r_anal_trace_bb(RAnal *anal, ut64 addr) {
 	fcni = r_anal_get_fcn_in (anal, addr, 0);
 	if (fcni) {
 		r_list_foreach (fcni->bbs, iter2, bbi) {
-			if (addr>=bbi->addr && addr<(bbi->addr+bbi->size)) {
+			if (addr >= bbi->addr && addr < (bbi->addr + bbi->size)) {
 				bbi->traced = true;
 				break;
 			}
@@ -354,25 +340,28 @@ R_API RList* r_anal_get_fcns (RAnal *anal) {
 	return anal->fcns;
 }
 
-R_API int r_anal_project_load(RAnal *anal, const char *prjfile) {
-	if (prjfile && *prjfile)
+R_API bool r_anal_project_load(RAnal *anal, const char *prjfile) {
+	if (prjfile && *prjfile) {
 		return r_anal_xrefs_load (anal, prjfile);
+	}
 	return false;
 }
 
-R_API int r_anal_project_save(RAnal *anal, const char *prjfile) {
-	if (!prjfile || !*prjfile)
-		return false;
-	r_anal_xrefs_save (anal, prjfile);
-	return true;
+R_API bool r_anal_project_save(RAnal *anal, const char *prjfile) {
+	if (prjfile && *prjfile) {
+		return r_anal_xrefs_save (anal, prjfile);
+	}
+	return false;
 }
 
 R_API RAnalOp *r_anal_op_hexstr(RAnal *anal, ut64 addr, const char *str) {
 	int len;
 	ut8 *buf;
 	RAnalOp *op = R_NEW0 (RAnalOp);
-	if (!op) return NULL;
-	buf = malloc (strlen (str)+1);
+	if (!op) {
+		return NULL;
+	}
+	buf = calloc (1, strlen (str) + 1);
 	if (!buf) {
 		free (op);
 		return NULL;
@@ -384,6 +373,9 @@ R_API RAnalOp *r_anal_op_hexstr(RAnal *anal, ut64 addr, const char *str) {
 }
 
 R_API bool r_anal_op_is_eob (RAnalOp *op) {
+	if (op->eob) {
+		return true;
+	}
 	switch (op->type) {
 	case R_ANAL_OP_TYPE_JMP:
 	case R_ANAL_OP_TYPE_UJMP:

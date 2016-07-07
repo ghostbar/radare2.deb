@@ -29,6 +29,7 @@ static RCore *core = NULL;
 static const char *arch = NULL;
 static int bits = 0;
 static int anal_all = 0;
+static bool verbose = false;
 
 static RCore* opencore(const char *f) {
 	const ut64 baddr = UT64_MAX;
@@ -45,7 +46,7 @@ static RCore* opencore(const char *f) {
 		r_core_bin_load (c, NULL, baddr);
 	}
 	// TODO: must enable io.va here if wanted .. r_config_set_i (c->config, "io.va", va);
-	if (anal_all) {
+	if (f && anal_all) {
 		const char *cmd = "aac";
 		switch (anal_all) {
 		case 1: cmd = "aaa"; break;
@@ -147,7 +148,7 @@ static int cb(RDiff *d, void *user, RDiffOp *op) {
 }
 
 static int show_help(int v) {
-	printf ("Usage: radiff2 [-abcCdjrspOxv] [-g sym] [-t %%] [file] [file]\n");
+	printf ("Usage: radiff2 [-abcCdjrspOxvV] [-g sym] [-t %%] [file] [file]\n");
 	if (v) printf (
 		"  -a [arch]  specify architecture plugin to use (x86, arm, ..)\n"
 		"  -A [-A]    run aaa or aaaa after loading each binary (see -C)\n"
@@ -165,7 +166,8 @@ static int show_help(int v) {
 		"  -s         compute text distance\n"
 		"  -t [0-100] set threshold for code diff (default is 70%%)\n"
 		"  -x         show two column hexdump diffing\n"
-		"  -v         show version information\n");
+		"  -v         show version information\n"
+		"  -V         be verbose (current only for -s)\n");
 	return 1;
 }
 
@@ -252,6 +254,40 @@ static void handle_sha256 (const ut8 *block, int len) {
 	r_hash_free (ctx);
 }
 
+static ut8 *slurp(RCore **c, const char *file, int *sz) {
+	RIODesc *d;
+	RIO *io;
+	if (c && strstr (file, "://")) {
+		ut8 *data = NULL;
+		ut64 size;
+		if (!*c) {
+			*c = opencore (NULL);
+		}
+		io = (*c)->io;
+		d = r_io_open (io, file, 0, 0);
+		if (!d) {
+			return NULL;
+		}
+		size = r_io_size (io);
+		if (size > 0 || size < ST32_MAX) {
+			data = calloc (1, size);
+			if (r_io_read_at (io, 0, data, size) == size) {
+				if (sz) {
+					*sz = size;
+				}
+			} else {
+				eprintf ("slurp: read error\n");
+				R_FREE (data);
+			}
+		} else {
+			eprintf ("slurp: File is too big\n");
+		}
+		r_io_close (io, d);
+		return data;
+	}
+	return (ut8*)r_file_slurp (file, sz);
+}
+
 int main(int argc, char **argv) {
 	const char *addr = NULL;
 	RCore *c, *c2;
@@ -263,7 +299,7 @@ int main(int argc, char **argv) {
 	int threshold = -1;
 	double sim;
 
-	while ((o = getopt (argc, argv, "Aa:b:CDnpg:Ojrhcdsvxt:")) != -1) {
+	while ((o = getopt (argc, argv, "Aa:b:CDnpg:OjrhcdsVvxt:")) != -1) {
 		switch (o) {
 		case 'a':
 			arch = optarg;
@@ -317,6 +353,9 @@ int main(int argc, char **argv) {
 		case 'v':
 			printf ("radiff2 v"R2_VERSION"\n");
 			return 0;
+		case 'V':
+			verbose = true;
+			break;
 		case 'j':
 			diffmode = 'j';
 			break;
@@ -394,17 +433,19 @@ int main(int argc, char **argv) {
 		r_core_free (c2);
 		return 0;
 	}
-
-	bufa = (ut8*)r_file_slurp (file, &sza);
+	bufa = slurp (&c, file, &sza);
 	if (!bufa) {
 		eprintf ("radiff2: Cannot open %s\n", r_str_get (file));
 		return 1;
 	}
-	bufb = (ut8*)r_file_slurp (file2, &szb);
+	bufb = slurp (&c, file2, &szb);
 	if (!bufb) {
 		eprintf ("radiff2: Cannot open: %s\n", r_str_get (file2));
 		free (bufa);
 		return 1;
+	}
+	if (sza != szb) {
+		eprintf ("File size differs %d vs %d\n", sza, szb);
 	}
 
 	switch (mode) {
@@ -427,13 +468,19 @@ int main(int argc, char **argv) {
 		}
 		r_diff_set_callback (d, &cb, 0);//(void *)(size_t)diffmode);
 		r_diff_buffers (d, bufa, sza, bufb, szb);
-		if (diffmode == 'j')
-			printf("]\n");
+		if (diffmode == 'j') {
+			printf ("]\n");
+		}
 		r_diff_free (d);
 		break;
 	case MODE_DIST:
-		r_diff_buffers_distance (NULL, bufa, sza, bufb, szb, &count, &sim);
-		printf ("similarity: %.2f\n", sim);
+		{
+			RDiff *d = r_diff_new ();
+			d->verbose = true;
+			r_diff_buffers_distance (d, bufa, sza, bufb, szb, &count, &sim);
+			r_diff_free (d);
+		}
+		printf ("similarity: %.3f\n", sim);
 		printf ("distance: %d\n", count);
 		break;
 	}
