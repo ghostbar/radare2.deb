@@ -1296,7 +1296,7 @@ R_API RBinJavaField* r_bin_java_read_next_method(RBinJavaObj *bin, const ut64 of
 		eprintf ("Unable to allocate memory for method information\n");
 		return NULL;
 	}
-	method->metas = (RBinJavaMetaInfo *) R_NEW0(RBinJavaMetaInfo);
+	method->metas = (RBinJavaMetaInfo *) R_NEW0 (RBinJavaMetaInfo);
 	if (method->metas == NULL) {
 		eprintf ("Unable to allocate memory for meta information\n");
 		free(method);
@@ -2012,6 +2012,8 @@ R_API ut64 r_bin_java_read_class_file2(RBinJavaObj *bin, const ut64 offset, cons
 		ut16 this_class;
 		ut16 super_class;
 	*/
+	if (cf2_buf + 6 > obuf + len)
+	    	return 0;
 	bin->cf2.cf2_size = 6;
 	bin->cf2.access_flags = R_BIN_JAVA_USHORT (cf2_buf, 0);
 	bin->cf2.this_class = R_BIN_JAVA_USHORT (cf2_buf, 2);
@@ -2078,6 +2080,10 @@ R_API ut64 r_bin_java_parse_interfaces (RBinJavaObj *bin, const ut64 offset, con
 	bin->interfaces_offset = offset;
 	r_list_free (bin->interfaces_list);
 	bin->interfaces_list = r_list_newf (r_bin_java_interface_free);
+	if (offset + 2 > len) {
+		bin->interfaces_size = 0;
+		return 0;
+	}
 	bin->interfaces_count = R_BIN_JAVA_USHORT (if_buf, 0);
 	adv += 2;
 	IFDBG eprintf ("Interfaces count: %d\n", bin->interfaces_count);
@@ -2360,7 +2366,7 @@ R_API RBinAddr * r_bin_java_get_entrypoint(RBinJavaObj* bin, int sym) {
 }
 
 R_API ut64 r_bin_java_get_method_code_size(RBinJavaField *fm_type) {
-	RListIter *attr_iter=NULL, *attr_iter_tmp=NULL;
+	RListIter *attr_iter = NULL, *attr_iter_tmp = NULL;
 	RBinJavaAttrInfo *attr = NULL;
 	ut64 sz = 0;
 	r_list_foreach_safe (fm_type->attributes, attr_iter, attr_iter_tmp, attr) {
@@ -2943,6 +2949,8 @@ R_API void r_bin_java_attribute_free (void/*RBinJavaAttrInfo*/* a) {
 	if (attr) {
 		IFDBG eprintf ("Deleting attr %s, %p\n", attr->name, attr);
 		((RBinJavaAttrMetas *) attr->metas->type_info)->allocs->delete_obj (attr);
+		//free (attr->metas);
+		//free (attr);
 	}
 }
 
@@ -3791,8 +3799,12 @@ R_API RBinJavaAttrInfo* r_bin_java_source_code_file_attr_new (ut8 *buffer, ut64 
 	ut64 offset = 0;
 	RBinJavaAttrInfo* attr = r_bin_java_default_attr_new (buffer, sz, buf_offset);
 	offset += 6;
-	if (!attr) return NULL;
+	if (!attr || !sz) {
+		//free (attr); //r_bin_java_attribute_free (attr);
+	    	return NULL;
+	}
 	attr->type = R_BIN_JAVA_ATTR_TYPE_SOURCE_FILE_ATTR;
+	//if (buffer + offset > buffer + sz) return NULL;
 	attr->info.source_file_attr.sourcefile_idx = R_BIN_JAVA_USHORT (buffer, offset);
 	offset += 2;
 	attr->size = offset;
@@ -4829,6 +4841,7 @@ R_API ut8 * r_bin_java_cp_get_fref_bytes (RBinJavaObj *bin, ut32 *out_sz, ut8 ta
 		if (fnt_bytes) {
 			ut8 *tbuf = malloc (fnt_len + *out_sz);
 			if (!tbuf) {
+				free (bytes);
 				free (fnt_bytes);
 				return NULL;
 			}

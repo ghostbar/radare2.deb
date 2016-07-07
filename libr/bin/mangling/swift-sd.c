@@ -118,10 +118,12 @@ static char *swift_demangle_cmd(const char *s) {
 			swift_demangle = r_file_path ("swift-demangle");
 			if (!swift_demangle || !strcmp (swift_demangle, "swift-demangle")) {
 				char *xcrun = r_file_path ("xcrun");
-				if (xcrun && strcmp (xcrun, "xcrun")) {
-					free (swift_demangle);
-					swift_demangle = r_str_newf ("%s swift-demangle", xcrun);
-					have_swift_demangle = 1;
+				if (xcrun) {
+					if (strcmp (xcrun, "xcrun")) {
+						free (swift_demangle);
+						swift_demangle = r_str_newf ("%s swift-demangle", xcrun);
+						have_swift_demangle = 1;
+					}
 					free (xcrun);
 				}
 			}
@@ -249,13 +251,10 @@ char *r_bin_demangle_swift(const char *s, int syscmd) {
 		}
 #endif
 		q = getnum (q, &len);
-		if (len > 0) {
-			eprintf ("LEN = %d\n", len);
-		}
 
 		q = numpos (p);
 		//printf ("(%s)\n", getstring (p, (q-p)));
-		for (i=0, len = 1; len && q < q_end; q += len, i++) {
+		for (i = 0, len = 1; len && q < q_end; q += len, i++) {
 			if (*q == 'P') {
 		//		printf ("PUBLIC: ");
 				q++;
@@ -282,7 +281,7 @@ char *r_bin_demangle_swift(const char *s, int syscmd) {
 			return 0;
 		}
 		p = resolve (flags, q, &attr);
-		if (!p && ((*q=='U') || (*q == 'R'))) {
+		if (!p && ((*q == 'U') || (*q == 'R'))) {
 			p = resolve (metas, q, &attr);
 			if (attr && *q == 'R') {
 				attr = NULL;
@@ -296,20 +295,24 @@ char *r_bin_demangle_swift(const char *s, int syscmd) {
 		}
 		/* parse accessors */
 		if (attr) {
-			int len;
+			int len = 0;
 			const char *name;
 			/* get field name and then type */
 			resolve (types, q, &attr);
 
 			//printf ("Accessor: %s\n", attr);
-			q = getnum (q+1, &len);
+			q = getnum (q + 1, &len);
 			name = getstring (q, len);
 #if 0
 			if (name && *name) {
 				printf ("Field Name: %s\n", name);
 			}
 #endif
-			resolve (types, q+len, &attr2);
+			if (len < strlen (q)) {
+				resolve (types, q + len, &attr2);
+			} else {
+				resolve (types, q, &attr2);
+			}
 //			printf ("Field Type: %s\n", attr2);
 
 			do {
@@ -335,8 +338,10 @@ char *r_bin_demangle_swift(const char *s, int syscmd) {
 		} else {
 			/* parse function parameters here */
 			// type len value/
-			for (i=0; q && q < q_end; i++) {
-				if (*q == 'f') q++;
+			for (i = 0; q && q < q_end; i++) {
+				if (*q == 'f') {
+					q++;
+				}
 				switch (*q) {
 				case 's':
 					{
@@ -466,14 +471,19 @@ char *r_bin_demangle_swift(const char *s, int syscmd) {
 							strcat (out, s);
 							if (is_last) {
 								strcat (out, is_generic?">":")");
-								is_first = 1;
+								is_first = (*s != '_');
+								if (is_generic && !is_first) {
+									break;
+								}
 							} else {
 								strcat (out, ", ");
 							}
 						} else {
-							strcat (out, " -> ");
-							STRCAT_BOUNDS (strlen (attr));
-							strcat (out, attr);
+							if (attr) {
+								strcat (out, " -> ");
+								STRCAT_BOUNDS (strlen (attr));
+								strcat (out, attr);
+							}
 						}
 					} else {
 						if (attr) {
@@ -483,6 +493,7 @@ char *r_bin_demangle_swift(const char *s, int syscmd) {
 						}
 					}
 					q += len;
+					p = q;
 				} else {
 					if (q) {
 						q++;
@@ -535,6 +546,14 @@ typedef struct {
 } Test;
 
 Test swift_tests[] = {
+{
+	"_TWPu0_Rq_Ss14CollectionType_GVSs17MapCollectionViewq_q0__Ss23_CollectionDefaultsTypeSs_8",
+	"<generic _CollectionDefaultsType>"
+},
+{
+	"_TWPurGVSs15CollectionOfOneq__Ss14CollectionTypeSs_248",
+	"CollectionOfOne<generic CollectionType><generic S>"
+},
 {
 	"_TFSSCfT21_builtinStringLiteralBp8byteSizeBw7isASCIIBi1__SS"
 	,"Swift.String.init (_builtinStringLiteral(Builtin.RawPointer byteSize__Builtin.Word isASCII__Builtin.Int1 _) -> String"

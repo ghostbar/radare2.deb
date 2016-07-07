@@ -113,7 +113,7 @@ static ut64 rap__lseek(RIO *io, RIODesc *fd, ut64 offset, int whence) {
 	return offset;
 }
 
-static int rap__plugin_open(RIO *io, const char *pathname, ut8 many) {
+static bool rap__plugin_open(RIO *io, const char *pathname, bool many) {
 	return (!strncmp (pathname, "rap://", 6)) \
 		|| (!strncmp (pathname, "raps://", 7));
 }
@@ -273,6 +273,7 @@ static int rap__system(RIO *io, RIODesc *fd, const char *command) {
 		// run io->cmdstr
 		// return back the string
 		buf[0] |= RMT_REPLY;
+		memset (buf + 1, 0, 4);
 		ret = r_socket_read_block (s, buf + 1, 4);
 		cmdlen = r_read_at_be32 (buf, 1);
 		if (cmdlen + 1 == 0) // check overflow
@@ -328,10 +329,12 @@ static int rap__system(RIO *io, RIODesc *fd, const char *command) {
 		}
 		free (ptr);
 	}
+#if DEAD_CODE
 	/* Clean */
 	if (ret > 0) {
 		ret -= r_socket_read (s, (ut8*)buf, RMT_MAX);
 	}
+#endif
 	return i - j;
 }
 
@@ -343,7 +346,7 @@ RIOPlugin r_io_plugin_rap = {
 	.open = rap__open,
 	.close = rap__close,
 	.read = rap__read,
-	.plugin_open = rap__plugin_open,
+	.check = rap__plugin_open,
 	.lseek = rap__lseek,
 	.system = rap__system,
 	.write = rap__write,

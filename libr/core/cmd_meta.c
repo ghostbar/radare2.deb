@@ -262,7 +262,7 @@ static int cmd_meta_comment(RCore *core, const char *input) {
 			  char *comment = r_meta_get_string (
 					  core->anal, R_META_TYPE_COMMENT, addr);
 			  if (comment) {
-				  r_cons_printf ("%s\n", comment);
+				  r_cons_println (comment);
 				  free (comment);
 			  }
 		  }
@@ -378,7 +378,7 @@ static int cmd_meta_comment(RCore *core, const char *input) {
 						core->anal, R_META_TYPE_COMMENT,
 						addr);
 				if (comment) {
-					char* text = r_str_newf("%s\n%s", comment, p);
+					char* text = r_str_newf ("%s\n%s", comment, p);
 					r_meta_add (core->anal,
 							R_META_TYPE_COMMENT,
 							addr, addr+1, text);
@@ -523,6 +523,178 @@ static int cmd_meta_hsdmf (RCore *core, const char *input) {
 
 	return true;
 }
+void r_comment_var_help (RCore *core, char type) {
+	const char *help_bp[] = {
+		"Usage:", "Cvb", "[name] [comment]",
+		"Cvb?", "", "show this help",
+		"Cvb", "", "list all base pointer args/vars comments in human friendly format",
+		"Cvb*", "", "list all base pointer args/vars comments in r2 format",
+		"Cvb-", "[name]", "delete comments for var/arg at current offset for base pointer",
+		"Cvb", "[name]", "Show comments for var/arg at current offset for base pointer",
+		"Cvb", "[name] [comment]", "add/append comment for the variable with the current name",
+		"Cvb!", "[name]", "edit comment using cfg editor",
+		NULL
+	};
+	const char *help_sp[] = {
+		"Usage:", "Cvs", "[name] [comment]",
+		"Cvs?", "", "show this help",
+		"Cvs", "", "list all stack based args/vars comments in human friendly format",
+		"Cvs*", "", "list all stack based args/vars comments in r2 format",
+		"Cvs-", "[name]", "delete comments for stack pointer var/arg with that name",
+		"Cvs", "[name]", "Show comments for stack pointer var/arg with that name",
+		"Cvs", "[name] [comment]", "add/append comment for the variable",
+		"Cvs!", "[name]", "edit comment using cfg editor",
+		NULL
+	};
+	const char *help_reg[] = {
+		"Usage:", "Cvr", "[name] [comment]",
+		"Cvr?", "", "show this help",
+		"Cvr", "", "list all register based args comments in human friendly format",
+		"Cvr*", "", "list all register based args comments in r2 format",
+		"Cvr-", "[name]", "delete comments for register based arg for that name",
+		"Cvr", "[name]", "Show comments for register based arg for that name",
+		"Cvr", "[name] [comment]", "add/append comment for the variable",
+		"Cvr!", "[name]", "edit comment using cfg editor",
+		NULL
+	};
+
+	switch (type) {
+	case 'b':
+		r_core_cmd_help (core, help_bp);
+		break;
+	case 's':
+		r_core_cmd_help (core, help_sp);
+		break;
+	case 'r':
+		r_core_cmd_help (core, help_reg);
+		break;
+	default:
+		r_cons_printf("See Cvb, Cvs and Cvr\n");
+	}
+}
+void r_comment_vars (RCore *core, const char *input) {
+	//TODO enable base64 and make it the default for C*
+	RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, core->offset, 0);
+	int idx;
+	char *oname = NULL, *name = NULL;
+	char *oldcomment = NULL;
+	char *heap_comment = NULL;
+	RAnalVar *var;
+
+	if (input[1] == '?' || (input[0] != 'b' && input[0] != 'r' && input[0] != 's') ) {
+		r_comment_var_help (core, input[0]);
+		return;
+	}
+	if (!fcn) {
+		eprintf ("Cant find function here\n");
+		return;
+	}
+	oname = name = strdup (input + 2);
+	while (*name == ' ') {
+		name++;
+	}
+	switch (input[1]) {
+	case '*':
+	case '\0': {
+		RList *var_list;
+		RListIter *iter;
+		var_list = r_anal_var_list (core->anal, fcn, input[0]);
+		r_list_foreach (var_list, iter, var) {
+			oldcomment = r_meta_get_var_comment (core->anal, input[0], var->delta, fcn->addr);
+			if (!oldcomment) {
+				continue;
+			}
+			if (!input[1]) {
+				r_cons_printf ("%s : %s\n", var->name, oldcomment);
+			} else {
+				r_cons_printf ("\"Cv%c %s base64:%s @ 0x%08"PFMT64x"\"\n", input[0], var->name,
+					sdb_encode ((const ut8 *) oldcomment, strlen(oldcomment)), fcn->addr);
+			}
+		}
+		}
+		break;
+	case ' ': {
+		// TODO check that idx exist
+		char *comment = strstr (name, " ");
+		if (comment && *comment) {
+			*comment ++=0;
+		}
+		if (!strncmp (comment, "base64:", 7)) {
+			heap_comment = (char *)sdb_decode (comment + 7, NULL);
+			comment = heap_comment;
+		}
+		var = r_anal_var_get_byname (core->anal, fcn, input[0], name);
+		if (var) {
+			idx = var->delta;
+		} else if (!strncmp (name, "0x", 2))  {
+			idx = (int) r_num_get (NULL, name);
+		} else if (!strncmp (name, "-0x", 3)) {
+			idx = -(int) r_num_get (NULL, name+1);
+		} else {
+			eprintf ("cant find variable named `%s`\n",name);
+			free (heap_comment);
+			break;
+		}
+		r_anal_var_free (var);
+		if (!r_anal_var_get (core->anal, fcn->addr, input[0], 1, idx)) {
+			eprintf ("cant find variable at given offset\n");
+		} else {
+			oldcomment = r_meta_get_var_comment (core->anal, input[0], idx, fcn->addr);
+			if (oldcomment) {
+				if (comment && *comment) {
+					char *text = r_str_newf ("%s\n%s", oldcomment, comment);
+					r_meta_set_var_comment (core->anal, input[0], idx, fcn->addr, text);
+					free (text);
+				} else {
+					r_cons_println (oldcomment);
+				}
+			} else {
+				r_meta_set_var_comment (core->anal, input[0], idx, fcn->addr, comment);
+			}
+		}
+		free (heap_comment);
+		}
+		break;
+	case '-':
+		var = r_anal_var_get_byname (core->anal,fcn, input[0], name);
+		if (var) {
+			idx = var->delta;
+		} else if (!strncmp (name, "0x", 2)) {
+			idx = (int) r_num_get (NULL, name);
+		} else if (!strncmp (name, "-0x", 3)) {
+			idx = -(int) r_num_get (NULL, name+1);
+		 }else {
+			eprintf ("cant find variable named `%s`\n",name);
+			break;
+		}
+		r_anal_var_free (var);
+		//XXX TODO here we leak a var
+		if (!r_anal_var_get (core->anal, fcn->addr, input[0],1,idx)) {
+			eprintf ("cant find variable at given offset\n");
+			break;
+		}
+		r_meta_var_comment_del (core->anal, input[0], idx, fcn->addr);
+		break;
+	case '!': {
+		char *comment;
+		var = r_anal_var_get_byname (core->anal,fcn, input[0], name);
+		if (!var) {
+			eprintf ("cant find variable named `%s`\n",name);
+			break;
+		}
+		oldcomment = r_meta_get_var_comment (core->anal, input[0], var->delta, fcn->addr);
+		comment = r_core_editor (core, NULL, oldcomment);
+		if (comment) {
+			r_meta_var_comment_del (core->anal, input[0], var->delta, fcn->addr);
+			r_meta_set_var_comment (core->anal, input[0], var->delta, fcn->addr, comment);
+			free (comment);
+		}
+		r_anal_var_free (var);
+		}
+		break;
+	}
+	free (oname);
+}
 
 static int cmd_meta(void *data, const char *input) {
 	RCore *core = (RCore*)data;
@@ -531,6 +703,9 @@ static int cmd_meta(void *data, const char *input) {
 	int i;
 
 	switch (*input) {
+	case 'v': // Cr
+		r_comment_vars (core, input + 1);
+		break;
 	case 'j':
 	case '*':
 		r_meta_list (core->anal, R_META_TYPE_ANY, *input);
@@ -567,6 +742,9 @@ static int cmd_meta(void *data, const char *input) {
 				"CC!", " [@addr]", "edit comment with $EDITOR",
 				"CCa", "[-at]|[at] [text] [@addr]", "add/remove comment at given address",
 				"CCu", " [comment-text] [@addr]", "add unique comment",
+				"Ca", "[?]", "add comments to base pointer bases args/vars",
+				"Ce", "[?]", "add comments to stack pointer based args/vars",
+				"Cv", "[?]", "add comments to register based args",
 				"Cs", "[-] [size] [@addr]", "add string",
 				"Cz", "[@addr]", "add zero-terminated string",
 				"Ch", "[-] [size] [@addr]", "hide data",

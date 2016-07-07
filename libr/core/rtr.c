@@ -31,7 +31,7 @@ typedef struct {
 typedef struct {
 	RCore *core;
 	int launch;
-	const char *path;
+	char *path;
 } HttpThread;
 
 static char *rtrcmd (TextLog T, const char *str) {
@@ -81,7 +81,7 @@ static void rtr_textlog_chat (RCore *core, TextLog T) {
 			strcpy (msg, "T");
 		}
 		ret = rtrcmd (T, msg);
-		r_cons_printf ("%s\n", ret);
+		r_cons_println (ret);
 		free (ret);
 		ret = rtrcmd (T, "Tl");
 		lastmsg = atoi (ret)-1;
@@ -97,7 +97,7 @@ static void rtr_textlog_chat (RCore *core, TextLog T) {
 			eprintf ("/clear          clear text log messages\n");
 		} else if (!strncmp (buf, "/nick ", 6)) {
 			snprintf (msg, sizeof (msg) - 1, "* '%s' is now known as '%s'", me, buf+6);
-			r_cons_printf ("%s\n", msg);
+			r_cons_println (msg);
 			r_core_log_add (core, msg);
 			r_config_set (core->config, "cfg.user", buf+6);
 			me = r_config_get (core->config, "cfg.user");
@@ -106,7 +106,7 @@ static void rtr_textlog_chat (RCore *core, TextLog T) {
 		} else if (!strcmp (buf, "/log")) {
 			char *ret = rtrcmd (T, "T");
 			if (ret) {
-				r_cons_printf ("%s\n", ret);
+				r_cons_println (ret);
 				free (ret);
 			}
 		} else if (!strcmp (buf, "/clear")) {
@@ -134,7 +134,7 @@ static bool rtr_visual (RCore *core, TextLog T, const char *cmd) {
 			char *ret;
 			r_cons_clear00 ();
 			ret = rtrcmd (T, cmd);
-			r_cons_printf ("%s\n", ret);
+			r_cons_println (ret);
 			free (ret);
 			r_cons_flush ();
 			if (r_cons_singleton ()->breaked)
@@ -152,7 +152,7 @@ static bool rtr_visual (RCore *core, TextLog T, const char *cmd) {
 			r_cons_clear00 ();
 			ret = rtrcmd (T, cmds[cmdidx]);
 			if (ret) {
-				r_cons_printf ("%s\n", ret);
+				r_cons_println (ret);
 				free (ret);
 			}
 			r_cons_flush ();
@@ -213,7 +213,7 @@ TODO:
 					if (buf[3]) {
 						char *res = rtrcmd (T, buf);
 						if (res) {
-							r_cons_printf ("%s\n", res);
+							r_cons_println (res);
 							free (res);
 						}
 						r_cons_flush ();
@@ -246,7 +246,7 @@ TODO:
 							r_line_hist_add (buf);
 							char *res = rtrcmd (T, buf);
 							if (res) {
-								r_cons_printf ("%s\n", res);
+								r_cons_println (res);
 								free (res);
 							}
 							r_cons_flush ();
@@ -612,7 +612,7 @@ static int r_core_rtr_http_run (RCore *core, int launch, const char *path) {
 						res = r_socket_http_get (bar, NULL, &len);
 						if (res) {
 							res[len] = 0;
-							r_cons_printf ("%s\n", res);
+							r_cons_println (res);
 						}
 						free (bar);
 					} else {
@@ -777,10 +777,14 @@ the_end:
 }
 
 static int r_core_rtr_http_thread (RThread *th) {
+	int ret;
+
 	if (!th) return false;
 	HttpThread *ht = th->user;
 	if (!ht || !ht->core) return false;
-	return r_core_rtr_http_run (ht->core, ht->launch, ht->path);
+	ret = r_core_rtr_http_run (ht->core, ht->launch, ht->path);
+	R_FREE (ht->path);
+	return ret;
 }
 
 R_API int r_core_rtr_http(RCore *core, int launch, const char *path) {
@@ -810,7 +814,8 @@ R_API int r_core_rtr_http(RCore *core, int launch, const char *path) {
 			eprintf ("TODO: Use different eval environ for scr. for the web\n");
 			eprintf ("TODO: Visual mode should be enabled on local\n");
 		} else {
-			HttpThread ht = { core, launch, path };
+			const char *tpath = r_str_trim_const (path + 1);
+			HttpThread ht = { core, launch, strdup (tpath) };
 			httpthread = r_th_new (r_core_rtr_http_thread, &ht, 0);
 			r_th_start (httpthread, 1);
 			eprintf ("Background http server started.\n");
@@ -1257,13 +1262,19 @@ R_API void r_core_rtr_cmd(RCore *core, const char *input) {
 		return;
 	}
 	cmd_len = r_read_at_be32 (bufr, 1);
+	if (cmd_len < 1 || cmd_len > 16384) {
+		eprintf ("Error: cmd_len is wrong\n");
+		return;
+	}
 	cmd_output = calloc (1, cmd_len + 1);
 	if (!cmd_output) {
 		eprintf ("Error: Allocating cmd output\n");
 		return;
 	}
 	r_socket_read (fh, (ut8*)cmd_output, cmd_len);
-	r_cons_printf ("%s\n", cmd_output);
+	//ensure the termination
+	cmd_output[cmd_len] = 0;
+	r_cons_println (cmd_output);
 	free ((void *)cmd_output);
 }
 

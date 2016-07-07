@@ -1,7 +1,7 @@
 -include config-user.mk
 include global.mk
 
-PREVIOUS_RELEASE=0.10.1
+PREVIOUS_RELEASE=0.10.3
 
 R2R=radare2-regressions
 R2R_URL=$(shell doc/repo REGRESSIONS)
@@ -129,7 +129,11 @@ windist:
 	#mkdir -p "${WINDIST}/include/libr/sflib"
 	@cp -f doc/fortunes.* "${WINDIST}/share/doc/radare2"
 	@mkdir -p "${WINDIST}/share/radare2/${VERSION}/format/dll"
-	@cp -f libr/bin/d/{elf,pe}* "${WINDIST}/share/radare2/${VERSION}/format"
+	@cp -f libr/bin/d/elf32 "${WINDIST}/share/radare2/${VERSION}/format"
+	@cp -f libr/bin/d/elf64 "${WINDIST}/share/radare2/${VERSION}/format"
+	@cp -f libr/bin/d/elf_enums "${WINDIST}/share/radare2/${VERSION}/format"
+	@cp -f libr/bin/d/pe32 "${WINDIST}/share/radare2/${VERSION}/format"
+	@cp -f libr/bin/d/trx "${WINDIST}/share/radare2/${VERSION}/format"
 	@cp -f libr/bin/d/dll/*.sdb "${WINDIST}/share/radare2/${VERSION}/format/dll"
 	@mkdir -p "${WINDIST}/share/radare2/${VERSION}/cons"
 	@cp -f libr/cons/d/* "${WINDIST}/share/radare2/${VERSION}/cons"
@@ -340,6 +344,9 @@ osx-sign:
 
 osx-sign-libs:
 	$(MAKE) -C binr/radare2 osx-sign-libs
+
+osx-pkg:
+	sys/osx-pkg.sh $(VERSION)
 
 quality:
 	./sys/shellcheck.sh

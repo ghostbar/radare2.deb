@@ -1,18 +1,21 @@
 /* radare2 - LGPL - Copyright 2009-2016 - pancake */
+
 #include <stddef.h>
 #include <stdbool.h>
-
 #include "r_core.h"
 
 static char *curtheme = NULL;
 static bool getNext = false;
 
-static bool nextpal_item(RCore *core, int mode, const char *file) {
+static bool nextpal_item(RCore *core, int mode, const char *file, int ctr) {
 	const char *fn = r_str_lchr (file, '/');
 	if (!fn) fn = file;
 	switch (mode) {
+	case 'j': // json
+		r_cons_printf ("%s\"%s\"", ctr?",":"", fn);
+		break;
 	case 'l': // list
-		r_cons_printf ("%s\n", fn);
+		r_cons_println (fn);
 		break;
 	case 'p': // previous
 		// TODO: move logic here
@@ -39,9 +42,13 @@ static void nextpal(RCore *core, int mode) {
 	RList *files = NULL;
 	RListIter *iter;
 	const char *fn;
+	int ctr = 0;
 	char *home = r_str_home (".config/radare2/cons/");
 
 	getNext = false;
+	if (mode == 'j') {
+		r_cons_printf ("[");
+	}
 	if (home) {
 		files = r_sys_dir (home);
 		r_list_foreach (files, iter, fn) {
@@ -63,7 +70,7 @@ static void nextpal(RCore *core, int mode) {
 						goto done;
 					}
 				} else {
-					if (!nextpal_item (core, mode, fn)) {
+					if (!nextpal_item (core, mode, fn, ctr++)) {
 						r_list_free (files);
 						files = NULL;
 						R_FREE (home);
@@ -92,8 +99,9 @@ static void nextpal(RCore *core, int mode) {
 					goto done;
 				}
 			} else {
-				if (!nextpal_item (core, mode, fn))
+				if (!nextpal_item (core, mode, fn, ctr++)) {
 					goto done;
+				}
 			}
 		}
 	}
@@ -112,6 +120,9 @@ done:
 	}
 	r_list_free (files);
 	files = NULL;
+	if (mode == 'j') {
+		r_cons_printf ("]\n");
+	}
 }
 
 static int cmd_eval(void *data, const char *input) {
@@ -124,7 +135,7 @@ static int cmd_eval(void *data, const char *input) {
 			if (node) {
 				const char *type = r_config_node_type (node);
 				if (type && *type) {
-					r_cons_printf ("%s\n", type);
+					r_cons_println (type);
 				}
 			}
 		} else {
@@ -138,12 +149,12 @@ static int cmd_eval(void *data, const char *input) {
 			if (var) while (*var==' ') var++;
 			p = r_sys_getenv (var);
 			if (p) {
-				r_cons_printf ("%s\n", p);
+				r_cons_println (p);
 				free (p);
 			} else {
 				char **e = r_sys_get_environ ();
 				while (e && *e) {
-					r_cons_printf ("%s\n", *e);
+					r_cons_println (*e);
 					e++;
 				}
 			}
@@ -181,7 +192,7 @@ static int cmd_eval(void *data, const char *input) {
 			"ecr","","set random palette",
 			"ecs","","show a colorful palette",
 			"ecj","","show palette in JSON",
-			"ecc","","show palette in CSS",
+			"ecc"," [prefix]","show palette in CSS",
 			"eco"," dark|white","load white color scheme template",
 			"ecp","","load previous color theme",
 			"ecn","","load next color theme",
@@ -197,10 +208,12 @@ static int cmd_eval(void *data, const char *input) {
 			}
 			break;
 		case 'o': // "eco"
-			if (input[2] == ' ') {
+			if (input[2] == 'j') {
+				nextpal (core, 'j');
+			} else if (input[2] == ' ') {
 				bool failed = false;
 				char *home, path[512];
-				snprintf (path, sizeof (path), ".config/radare2/cons/%s", input+3);
+				snprintf (path, sizeof (path), ".config/radare2/cons/%s", input + 3);
 				home = r_str_home (path);
 				snprintf (path, sizeof (path), R2_DATDIR"/radare2/"
 					R2_VERSION"/cons/%s", input+3);
@@ -209,7 +222,7 @@ static int cmd_eval(void *data, const char *input) {
 						//curtheme = r_str_dup (curtheme, path);
 						curtheme = r_str_dup (curtheme, input + 3);
 					} else {
-						if (r_core_cmd_file (core, input+3)) {
+						if (r_core_cmd_file (core, input + 3)) {
 							curtheme = r_str_dup (curtheme, input + 3);
 						} else {
 							eprintf ("eco: cannot open colorscheme profile (%s)\n", path);
@@ -221,26 +234,33 @@ static int cmd_eval(void *data, const char *input) {
 				if (failed) {
 					eprintf ("Something went wrong\n");
 				}
-			} else if (input[2]=='?') {
-				eprintf ("Usage: eco [themename]  ;load theme from /usr/share/radare2/0.10.2-git/cons/\n");
+			} else if (input[2] == '?') {
+				eprintf ("Usage: eco [themename]  ;load theme from "R2_DATDIR"/radare2/"R2_VERSION"/cons/\n");
 
 			} else {
 				nextpal (core, 'l');
 			}
 			break;
 		case 's': r_cons_pal_show (); break; // "ecs"
-		case '*': r_cons_pal_list (1); break; // "ec*"
+		case '*': r_cons_pal_list (1, NULL); break; // "ec*"
 		case 'h': // echo
 			if (( p = strchr (input, ' ') )) {
 				r_cons_strcat (p+1);
 				r_cons_newline ();
 			} else {
-				r_cons_pal_list ('h'); break; // "ecj"
+				// "ech"
+				r_cons_pal_list ('h', NULL);
 			}
 			break;
-		case 'j': r_cons_pal_list ('j'); break; // "ecj"
-		case 'c': r_cons_pal_list ('c'); break; // "ecc"
-		case '\0': r_cons_pal_list (0); break; // "ec"
+		case 'j': // "ecj"
+			r_cons_pal_list ('j', NULL);
+			break;
+		case 'c': // "ecc"
+			r_cons_pal_list ('c', input + 2);
+			break;
+		case '\0': // "ec"
+			r_cons_pal_list (0, NULL);
+			break;
 		case 'r': // "ecr"
 			r_cons_pal_random ();
 			break;

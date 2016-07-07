@@ -103,6 +103,7 @@ typedef struct r_bin_addr_t {
 	ut64 vaddr;
 	ut64 paddr;
 	int type;
+	int bits;
 } RBinAddr;
 
 typedef struct r_bin_hash_t {
@@ -157,7 +158,7 @@ typedef struct r_bin_object_t {
 	ut64 baddr_shift;
 	ut64 loadaddr;
 	ut64 boffset;
-	int size;
+	ut64 size;
 	ut64 obj_size;
 	RList/*<RBinSection>*/ *sections;
 	RList/*<RBinImport>*/ *imports;
@@ -279,7 +280,7 @@ typedef struct r_bin_plugin_t {
 	Sdb * (*get_sdb)(RBinObject *obj);
 	int (*load)(RBinFile *arch);
 	void *(*load_bytes)(RBinFile *arch, const ut8 *buf, ut64 sz, ut64 loadaddr, Sdb *sdb);
-	int (*size)(RBinFile *bin); // return ut64 maybe? meh
+	ut64 (*size)(RBinFile *bin); // return ut64 maybe? meh
 	int (*destroy)(RBinFile *arch);
 	int (*check)(RBinFile *arch);
 	int (*check_bytes)(const ut8 *buf, ut64 length);
@@ -555,7 +556,7 @@ R_API void r_bin_force_plugin (RBin *bin, const char *pname);
 
 /* dbginfo.c */
 R_API int r_bin_addr2line(RBin *bin, ut64 addr, char *file, int len, int *line);
-R_API char *r_bin_addr2text(RBin *bin, ut64 addr);
+R_API char *r_bin_addr2text(RBin *bin, ut64 addr, bool origin);
 R_API char *r_bin_addr2fileline(RBin *bin, ut64 addr);
 /* bin_write.c */
 R_API bool r_bin_wr_addlib(RBin *bin, const char *lib);
@@ -623,6 +624,7 @@ extern RBinPlugin r_bin_plugin_psxexe;
 extern RBinPlugin r_bin_plugin_spc700;
 extern RBinPlugin r_bin_plugin_vsf;
 extern RBinPlugin r_bin_plugin_dyldcache;
+extern RBinPlugin r_bin_plugin_avr;
 
 #ifdef __cplusplus
 }
