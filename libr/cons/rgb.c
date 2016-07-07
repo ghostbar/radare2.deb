@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2013-2015 - pancake */
+/* radare - LGPL - Copyright 2013-2016 - pancake */
 /* ansi 256 color extension for r_cons */
 /* https://en.wikipedia.org/wiki/ANSI_color */
 
@@ -40,27 +40,26 @@ static void init_color_table () {
 }
 
 static int lookup_rgb (int r, int g, int b) {
-	int i;
-
-	int color = (r << 16) + (g << 8) + b;
-	for (i = 0; i < 256; ++i)
-		if (color_table[i] == color) return i;
-
+	int i, color = (r << 16) + (g << 8) + b;
+	// lookup extended colors only, coz non-extended can be changed by users.
+	for (i = 16; i < 256; ++i) {
+		if (color_table[i] == color) {
+			return i;
+		}
+	}
 	return -1;
 }
 
 static int approximate_rgb (int r, int g, int b) {
+	bool grey = (r > 0 && r < 255 && r == g && r == b);
 	const double k = (256.0 / 6.0);
-	int grey = 0;
-	if (r > 0 && r < 255 && r == g && r == b) grey = 1;
-	if (grey > 0) {
+	if (grey) {
 		return 232 + (double)r / (255 / 24.1);
-	} else {
-		r = R_DIM (r / k, 0, 6);
-		g = R_DIM (g / k, 0, 6);
-		b = R_DIM (b / k, 0, 6);
-		return 16 + (r * 36) + (g * 6) + b;
 	}
+	r = R_DIM (r / k, 0, 5);
+	g = R_DIM (g / k, 0, 5);
+	b = R_DIM (b / k, 0, 5);
+	return 16 + (r * 36) + (g * 6) + b;
 }
 
 static int rgb (int r, int g, int b) {
@@ -70,7 +69,6 @@ static int rgb (int r, int g, int b) {
 }
 
 static void unrgb (int color, int *r, int *g, int *b) {
-	if (color_table[255] == 0) init_color_table ();
 	int rgb = color_table[color];
 	*r = (rgb >> 16) & 0xff;
 	*g = (rgb >> 8) & 0xff;
@@ -88,6 +86,7 @@ static inline void rgbinit (int r, int g, int b) {
 }
 
 R_API void r_cons_rgb_init (void) {
+	if (color_table[255] == 0) init_color_table ();
 	int r, g, b;
 	for (r = 0; r < 6; r++)
 		for (g = 0; g < 6; g++)

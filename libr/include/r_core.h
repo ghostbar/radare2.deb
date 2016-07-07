@@ -227,6 +227,7 @@ R_API int r_core_read_at(RCore *core, ut64 addr, ut8 *buf, int size);
 R_API int r_core_is_valid_offset (RCore *core, ut64 offset);
 R_API int r_core_shift_block(RCore *core, ut64 addr, ut64 b_size, st64 dist);
 R_API void r_core_visual_prompt_input (RCore *core);
+R_API bool r_core_prevop_addr (RCore* core, ut64 start_addr, int numinstrs, ut64* prev_addr);
 R_API bool r_core_visual_hudstuff(RCore *core);
 R_API int r_core_visual_classes(RCore *core);
 R_API int r_core_visual_types(RCore *core);
@@ -244,6 +245,8 @@ R_API int r_core_visual_hud(RCore *core);
 R_API ut64 r_core_get_asmqjmps(RCore *core, const char *str);
 R_API void r_core_set_asmqjmps(RCore *core, char *str, size_t len, int i);
 R_API char* r_core_add_asmqjmp(RCore *core, ut64 addr);
+
+R_API void r_core_list_io(RCore *core);
 /* visual marks */
 R_API void r_core_visual_mark_seek(RCore *core, ut8 ch);
 R_API void r_core_visual_mark(RCore *core, ut8 ch);
@@ -324,11 +327,12 @@ R_API int r_core_process_input_pade(RCore *core, const char *input, char** hex, 
 
 /* anal.c */
 R_API RAnalOp* r_core_anal_op(RCore *core, ut64 addr);
-R_API void r_core_anal_esil (RCore *core, const char *str);
+R_API void r_core_anal_esil (RCore *core, const char *str, const char *addr);
 R_API void r_core_anal_fcn_merge (RCore *core, ut64 addr, ut64 addr2);
 R_API const char *r_core_anal_optype_colorfor(RCore *core, ut64 addr);
 R_API ut64 r_core_anal_address (RCore *core, ut64 addr);
 R_API void r_core_anal_undefine (RCore *core, ut64 off);
+R_API void r_core_anal_hint_print (RAnal* a, ut64 addr);
 R_API void r_core_anal_hint_list (RAnal *a, int mode);
 R_API int r_core_anal_search(RCore *core, ut64 from, ut64 to, ut64 ref);
 R_API int r_core_anal_search_xrefs(RCore *core, ut64 from, ut64 to, int rad);
@@ -351,6 +355,7 @@ R_API RList* r_core_anal_graph_to(RCore *core, ut64 addr, int n);
 R_API int r_core_anal_ref_list(RCore *core, int rad);
 R_API int r_core_anal_all(RCore *core);
 R_API RList* r_core_anal_cycles (RCore *core, int ccl);
+R_API void r_core_anal_hint_print (RAnal* a, ut64 addr);
 
 /* asm.c */
 typedef struct r_core_asm_hit {
@@ -375,6 +380,7 @@ R_API ut32 r_core_asm_bwdis_len (RCore* core, int* len, ut64* start_addr, ut32 l
 R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int len, int lines, int invbreak, int nbytes);
 R_API int r_core_print_disasm_json(RCore *core, ut64 addr, ut8 *buf, int len, int lines);
 R_API int r_core_print_disasm_instructions (RCore *core, int len, int l);
+R_API int r_core_print_disasm_all (RCore *core, ut64 addr, int l, int len, int mode);
 R_API int r_core_print_fcn_disasm(RPrint *p, RCore *core, ut64 addr, int l, int invbreak, int cbytes);
 R_API int r_core_file_bin_raise (RCore *core, ut32 binfile_idx);
 //R_API int r_core_bin_bind(RCore *core, RBinFile *bf);
@@ -451,6 +457,7 @@ R_API void fcn_callconv (RCore *core, RAnalFunction *fcn);
 #define R_CORE_PRJ_ANAL_TYPES	0x0100
 #define R_CORE_PRJ_ANAL_MACROS	0x0200
 #define R_CORE_PRJ_ANAL_SEEK	0x0400
+#define R_CORE_PRJ_DBG_BREAK   0x0800
 #define R_CORE_PRJ_ALL		0xFFFF
 
 typedef struct r_core_bin_filter_t {

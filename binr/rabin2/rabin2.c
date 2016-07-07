@@ -360,7 +360,7 @@ static int rabin_do_operation(const char *op) {
 		if (!plg) break;
 		if (plg->signature) {
 			const char *sign = plg->signature (cur);
-			r_cons_printf ("%s\n", sign);
+			r_cons_println (sign);
 			r_cons_flush ();
 		}
 		}
@@ -394,7 +394,7 @@ error:
 
 static int rabin_show_srcline(ut64 at) {
 	char *srcline;
-	if ((srcline = r_bin_addr2text (bin, at))) {
+	if ((srcline = r_bin_addr2text (bin, at, true))) {
 		printf ("%s\n", srcline);
 		free (srcline);
 		return true;
@@ -739,7 +739,7 @@ int main(int argc, char **argv) {
 		b = r_bin_create (bin, code, codelen, data, datalen);
 		if (b) {
 			if (r_file_dump (file, b->buf, b->length, 0)) {
-				eprintf ("Dumped %d bytes in '%s'\n", b->length, file);
+				eprintf ("Dumped %"PFMT64d" bytes in '%s'\n", b->length, file);
 				r_file_chmod (file, "+x", 0);
 			} else {
 				eprintf ("Error dumping into a.out\n");
@@ -848,7 +848,7 @@ int main(int argc, char **argv) {
 	if (action&x) {\
 		if (isradjson) r_cons_printf ("%s\"%s\":",actions_done?",":"",n);\
 		if (!r_core_bin_info (&core, y, rad, va, &filter, chksum)) {\
-			if (isradjson) r_cons_printf ("false");\
+			if (isradjson) r_cons_print ("false");\
 		};\
 		actions_done++;\
 	}\
@@ -859,7 +859,7 @@ int main(int argc, char **argv) {
 	filter.name = name;
 	r_cons_new ()->is_interactive = false;
 
-	if (isradjson) r_cons_printf ("{");
+	if (isradjson) r_cons_print ("{");
 
 	// List fatmach0 sub-binaries, etc
 	if (action & R_BIN_REQ_LISTARCHS || ((arch || bits || arch_name) &&

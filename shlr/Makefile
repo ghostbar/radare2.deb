@@ -20,9 +20,9 @@ CS_PATCHES=0
 else
 CS_TAR=
 CS_URL=$(GIT_PREFIX)github.com/aquynh/capstone.git
-CS_UPD=20160516
+CS_UPD=20160625
 CS_BRA=next
-CS_TIP=1521ba3fa301b384b497fb85bbcd888e2101de11
+CS_TIP=5ff595c362695803e01d620d559a112cb186a789
 # REVERT THIS COMMIT BECAUSE ITS WRONG
 CS_REV=
 CS_PATCHES=1
@@ -256,3 +256,24 @@ ifneq (${EXT_AR},a)
 	-cp -f capstone/libcapstone.a capstone/libcapstone.${EXT_AR}
 endif
 endif
+
+www-sync-m:
+	cp -rf ../../radare2-webui/dist/m www/m.tmp
+	rm -rf www/m
+	mv www/m.tmp www/m
+	git add www/m
+
+www-sync-p:
+	cp -rf ../../radare2-webui/dist/p www/p.tmp
+	rm -rf www/p
+	mv www/p.tmp www/p
+	git add www/p
+
+www-sync-t:
+	cp -rf ../../radare2-webui/dist/t www/t.tmp
+	rm -rf www/t
+	mv www/t.tmp www/t
+	git add www/p
+
+www-sync: www-sync-m www-sync-p www-sync-t
+	@echo webui sync done
