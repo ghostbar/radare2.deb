@@ -1066,14 +1066,17 @@ static int parse_import_stub(struct MACH0_(obj_t)* bin, struct symbol_t *symbol,
 				eprintf ("mach0: Invalid symbol table size\n");
 			}
 			for (j = 0; j < nsyms; j++) {
-				if (bin->sects)
+				if (bin->sects) {
 					if (bin->sects[i].reserved1 + j >= bin->nindirectsyms)
 						continue;
-				if (bin->indirectsyms)
+				}
+				if (bin->indirectsyms) {
 					if (idx != bin->indirectsyms[bin->sects[i].reserved1 + j])
 						continue;
-					if (idx > bin->nsymtab)
-						continue;
+				}
+				if (idx > bin->nsymtab) {
+					continue;
+				}
 				symbol->type = R_BIN_MACH0_SYMBOL_TYPE_LOCAL;
 				symbol->offset = bin->sects[i].offset + j * bin->sects[i].reserved2;
 				symbol->addr = bin->sects[i].addr + j * bin->sects[i].reserved2;
@@ -1343,32 +1346,27 @@ struct import_t* MACH0_(get_imports)(struct MACH0_(obj_t)* bin) {
 		else symstr = "";
 		if (!*symstr)
 			continue;
-			{
-				int i = 0;
-				int len = 0;
-				len = bin->symstrlen - stridx;
-				if (len>0) {
-					for (i = 0; i<len; i++) {
-						if ((unsigned char)symstr[i] == 0xff || !symstr[i]) {
-							len = i;
-							break;
-						}
+		{
+			int i = 0;
+			int len = 0;
+			char *symstr_dup = NULL;
+			len = bin->symstrlen - stridx;
+			imports[j].name[0] = 0;
+			if (len > 0) {
+				for (i = 0; i < len; i++) {
+					if ((unsigned char)symstr[i] == 0xff || !symstr[i]) {
+						len = i;
+						break;
 					}
-					char *symstr_dup = r_str_ndup (symstr, len);
-					if (!symstr_dup) {
-						imports[j].name[0] = 0;
-					} else {
-						strncpy (imports[j].name, symstr_dup, R_BIN_MACH0_STRING_LENGTH-1);
-						imports[j].name[R_BIN_MACH0_STRING_LENGTH - 2] = 0;
-					}
-					free (symstr_dup);
-				} else {
-					imports[j].name[0] = 0;
 				}
-				imports[j].last = 0;
+				symstr_dup = r_str_ndup (symstr, len);
+				if (symstr_dup) {
+					strncpy (imports[j].name, symstr_dup, R_BIN_MACH0_STRING_LENGTH - 1);
+					imports[j].name[R_BIN_MACH0_STRING_LENGTH - 2] = 0;
+					free (symstr_dup);
+				}
 			}
-		//strncpy (imports[j].name, symstr, R_BIN_MACH0_STRING_LENGTH);
-		//imports[j].name[R_BIN_MACH0_STRING_LENGTH-1] = 0;
+		}
 		imports[j].ord = i;
 		imports[j++].last = 0;
 	}
@@ -1433,7 +1431,7 @@ struct reloc_t* MACH0_(get_relocs)(struct MACH0_(obj_t)* bin) {
 		if (!(relocs = calloc (1, (1 + bind_size + lazy_size) * sizeof (struct reloc_t))))
 			return NULL;
 
-		opcodes = calloc (1, bind_size + lazy_size);
+		opcodes = calloc (1, bind_size + lazy_size + 1);
 		if (!opcodes) {
 			free (relocs);
 			return NULL;
@@ -1670,10 +1668,11 @@ int MACH0_(get_bits)(struct MACH0_(obj_t)* bin) {
 #if R_BIN_MACH064
 	return 64;
 #else
-	if (bin->entry & 1) {
+	//this hack only applies with ARM cpu 
+	if (bin->hdr.cputype == CPU_TYPE_ARM && bin->entry & 1) {
 		return 16;
 	}
-	if ((bin->hdr.cpusubtype & 0xff) == CPU_SUBTYPE_ARM_V7K) {
+	if ((bin->hdr.cpusubtype & CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM_V7K) {
 		return 16;
 	}
 	return 32;
@@ -1681,7 +1680,9 @@ int MACH0_(get_bits)(struct MACH0_(obj_t)* bin) {
 }
 
 int MACH0_(is_big_endian)(struct MACH0_(obj_t)* bin) {
-	return bin && bin->big_endian;
+	bool is_ppc = bin && bin->hdr.cputype == CPU_TYPE_POWERPC64;
+	if (!is_ppc) is_ppc = bin && bin->hdr.cputype == CPU_TYPE_POWERPC;
+	return is_ppc;
 }
 
 const char* MACH0_(get_intrp)(struct MACH0_(obj_t)* bin) {

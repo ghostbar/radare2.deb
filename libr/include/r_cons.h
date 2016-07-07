@@ -402,7 +402,8 @@ R_API void r_cons_set_last_interactive(void);
 /* output */
 R_API void r_cons_printf(const char *format, ...);
 R_API void r_cons_strcat(const char *str);
-#define r_cons_puts(x) r_cons_strcat(x)
+#define r_cons_print(x) r_cons_strcat (x)
+R_API void r_cons_println(const char* str);
 R_API void r_cons_strcat_justify (const char *str, int j, char c);
 R_API void r_cons_memcat(const char *str, int len);
 R_API void r_cons_newline(void);
@@ -410,7 +411,7 @@ R_API void r_cons_filter(void);
 R_API void r_cons_flush(void);
 R_API int r_cons_less_str(const char *str, const char *exitkeys);
 R_API void r_cons_less(void);
-R_API void r_cons_2048(void);
+R_API void r_cons_2048(bool color);
 R_API void r_cons_memset(char ch, int len);
 R_API void r_cons_visual_flush(void);
 R_API void r_cons_visual_write (char *buffer);
@@ -434,7 +435,7 @@ R_API const char *r_cons_pal_get_i (int n);
 R_API const char *r_cons_pal_get_color(int n);
 R_API int r_cons_rgb_parse (const char *p, ut8 *r, ut8 *g, ut8 *b, int *is_bg);
 R_API char *r_cons_rgb_tostring(ut8 r, ut8 g, ut8 b);
-R_API void r_cons_pal_list (int rad);
+R_API void r_cons_pal_list (int rad, const char *arg);
 R_API void r_cons_pal_show (void);
 R_API int r_cons_get_size(int *rows);
 R_API int r_cons_get_cursor(int *rows);
@@ -468,7 +469,7 @@ R_API void r_cons_column(int c);
 R_API int r_cons_get_column (void);
 R_API char *r_cons_message(const char *msg);
 R_API void r_cons_set_title(const char *str);
-R_API int r_cons_enable_mouse(const int enable);
+R_API bool r_cons_enable_mouse(const bool enable);
 R_API void r_cons_bind(RConsBind *bind);
 #endif
 

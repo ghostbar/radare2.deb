@@ -57,11 +57,12 @@ static RIOSection *findMatching (RIO *io, ut64 paddr, ut64 vaddr, ut64 size, ut6
 R_API RIOSection *r_io_section_add(RIO *io, ut64 offset, ut64 vaddr, ut64 size, ut64 vsize, int rwx, const char *name, ut32 bin_id, int fd) {
 	int update = 0;
 	RIOSection *s;
-	if (size == 0 || size > 0xf0000000) {
-		if (size > 0 && size != UT64_MAX && size != UT32_MAX)
+	if (!size || size == UT64_MAX || size == UT32_MAX) { //hacky things which might give bad output in case size == UT32_MAX for 64bit elf. Check on basis of size, offset and file size would be a good idea.
+#if 0
 			eprintf ("Invalid size (0x%08" PFMT64x
 				 ") for section '%s' at 0x%08" PFMT64x "\n",
 				 size, name, vaddr);
+#endif
 		return NULL;
 	}
 	s = findMatching (io, offset, vaddr, size, vsize, rwx, name);
@@ -69,7 +70,7 @@ R_API RIOSection *r_io_section_add(RIO *io, ut64 offset, ut64 vaddr, ut64 size, 
 		return s;
 	}
 	s = r_io_section_get_name (io, name);
-	if (s == NULL) {
+	if (!s) {
 		s = R_NEW0 (RIOSection);
 		s->id = io->next_section_id++;
 	} else {
@@ -470,15 +471,17 @@ R_API RList *r_io_section_get_in_vaddr_range(RIO *io, ut64 addr, ut64 endaddr) {
 	RListIter *iter;
 	RList *sections = r_list_new ();
 	if (!sections) return NULL;
-	sections->free = r_io_section_free;
+	//Here section->free is not needed and wrong since we are appending into
+	//the list sections from io->sections that are widely used so just free the
+	//list but not the elements to avoid UAF. r_io_free will free sections for us
 	ut64 sec_from, sec_to;
 	r_list_foreach (io->sections, iter, s) {
 		if (!(s->rwx & R_IO_MAP)) continue;
 		sec_from = s->vaddr;
 		sec_to = sec_from + s->vsize;
-		if (sec_from <= addr && addr < sec_to) r_list_append(sections, s);
-		if (sec_from < endaddr && endaddr < sec_to) r_list_append(sections, s);
-		if (addr <= sec_from && sec_to <= endaddr) r_list_append(sections, s);
+		if (sec_from <= addr && addr < sec_to) r_list_append (sections, s);
+		if (sec_from < endaddr && endaddr < sec_to) r_list_append (sections, s);
+		if (addr <= sec_from && sec_to <= endaddr) r_list_append (sections, s);
 	}
 	return sections;
 }

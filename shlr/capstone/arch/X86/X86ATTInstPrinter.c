@@ -21,7 +21,7 @@
 #if !defined(CAPSTONE_HAS_OSXKERNEL)
 #include <ctype.h>
 #endif
-#include "../../myinttypes.h"
+#include <capstone/platform.h>
 #if defined(CAPSTONE_HAS_OSXKERNEL)
 #include <libkern/libkern.h>
 #else
@@ -658,7 +658,7 @@ static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 					else
 						SStream_concat(O, "$%"PRIu64, imm);
 				} else {
-					if (imm == 0x8000000000000000)  // imm == -imm
+					if (imm == 0x8000000000000000LL)  // imm == -imm
 						SStream_concat0(O, "$0x8000000000000000");
 					else if (imm < -HEX_THRESHOLD)
 						SStream_concat(O, "$-0x%"PRIx64, -imm);
@@ -727,7 +727,7 @@ static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 				MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].imm = imm;
 
 				if (opsize > 0)
-					MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = opsize;
+					MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = (uint8_t)opsize;
 				else if (MI->op1_size > 0)
 					MI->flat_insn->detail->x86.operands[MI->flat_insn->detail->x86.op_count].size = MI->op1_size;
 				else
@@ -802,6 +802,8 @@ static void printMemReference(MCInst *MI, unsigned Op, SStream *O)
 						SStream_concat(O, "%"PRIu64, DispVal);
 				}
 			}
+		} else {
+			SStream_concat0(O, "0");
 		}
 	}
 

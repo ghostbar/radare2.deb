@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2015 - pancake */
+/* radare - LGPL - Copyright 2009-2016 - pancake */
 
 #include <r_io.h>
 #include <r_util.h>
@@ -17,7 +17,7 @@ R_API void r_io_desc_fini(RIO *io) {
 
 R_API ut64 r_io_desc_size(RIO *io, RIODesc *desc){
 	RIODesc *old = NULL;
-    	ut64 sz = -1;
+	ut64 sz = -1;
 	if (desc && io->desc != desc){
 		old = io->desc;
 		r_io_use_desc (io, desc);
@@ -55,7 +55,9 @@ R_API RIODesc *r_io_desc_new(RIOPlugin *plugin, int fd, const char *name, int fl
 #endif
 
 R_API void r_io_desc_free(RIODesc *desc) {
-	if (!desc) return;
+	if (!desc) {
+		return;
+	}
 	if (desc->io) {
 		RIO* io = (RIO*)desc->io;
 		desc->io = NULL;
@@ -157,7 +159,7 @@ R_API void r_io_desc_list_visual(RIO *io, ut64 seek, ut64 len, int width, int us
 	seek = (io->va || io->debug) ? r_io_section_vaddr_to_maddr_try (io, seek) : seek;
 
 	r_list_foreach (io->maps, iter, s) {
-		if (min == -1 || s->from< min)
+		if (min == -1 || s->from < min)
 			min = s->from;
 		if (max == -1 || s->to > max)
 			max = s->to;

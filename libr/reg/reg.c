@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2015 - pancake */
+/* radare - LGPL - Copyright 2009-2016 - pancake */
 
 #include <r_reg.h>
 #include <r_util.h>
@@ -8,6 +8,33 @@ R_LIB_VERSION (r_reg);
 
 static const char *types[R_REG_TYPE_LAST + 1] = {
 	"gpr", "drx", "fpu", "mmx", "xmm", "flg", "seg", NULL};
+
+// Take the 32bits name of a regester, and return the 64 bit name of it.
+// If there is no equivalent 64 bit register return NULL.
+R_API const char *r_reg_32_to_64(RReg *reg, const char *rreg32) {
+	// OMG this is shit...
+	int i, j = -1;
+	RListIter *iter;
+	RRegItem *item;
+	for (i = 0; i < R_REG_TYPE_LAST; ++i) {
+		r_list_foreach (reg->regset[i].regs, iter, item) {
+			if (!strcasecmp (rreg32, item->name) && item->size == 32) {
+				j = item->offset;
+				break;
+			}
+		}
+	}
+	if (j != -1) {
+		for (i = 0; i < R_REG_TYPE_LAST; ++i) {
+			r_list_foreach (reg->regset[i].regs, iter, item) {
+				if (item->offset == j && item->size == 64) {
+					return item->name;
+				}
+			}
+		}
+	}
+	return NULL;
+}
 
 R_API const char *r_reg_get_type(int idx) {
 	if (idx >= 0 && idx < R_REG_TYPE_LAST)
@@ -114,6 +141,48 @@ R_API void r_reg_free_internal(RReg *reg, bool init) {
 		}
 	}
 	reg->size = 0;
+}
+
+static int regcmp(RRegItem *a, RRegItem *b) {
+	int offa = (a->offset * 16) + a->size;
+	int offb = (b->offset * 16) + b->size;
+	return offa > offb;
+}
+
+R_API void r_reg_reindex(RReg *reg) {
+	int i, index;
+	RListIter *iter;
+	RRegItem *r;
+	RList *all = r_list_newf (NULL);
+	for (i = 0; i < R_REG_TYPE_LAST; i++) {
+		r_list_foreach (reg->regset[i].regs, iter, r) {
+			r_list_append (all, r);
+		}
+	}
+	r_list_sort (all, (RListComparator)regcmp);
+	index = 0;
+	r_list_foreach (all, iter, r) {
+		r->index = index++;
+	}
+	r_list_free (reg->allregs);
+	reg->allregs = all;
+}
+
+R_API RRegItem *r_reg_index_get(RReg *reg, int idx) {
+	RRegItem *r;
+	RListIter *iter;
+	if (idx < 0) {
+		return NULL;
+	}
+	if (!reg->allregs) {
+		r_reg_reindex (reg);
+	}
+	r_list_foreach (reg->allregs, iter, r) {
+		if (r->index == idx) {
+			return r;
+		}
+	}
+	return NULL;
 }
 
 R_API void r_reg_free(RReg *reg) {
