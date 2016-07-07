@@ -1,3 +1,9 @@
+radare2 (0.10.4-rnutrusty1) UNRELEASED; urgency=medium
+
+  * new upstream version.
+
+ -- Jose Luis Rivas <ghostbar@debian.org>  Thu, 07 Jul 2016 11:04:08 -0400
+
 radare2 (0.10.3-rnutrusty1) trusty; urgency=medium
 
   * new upstream version
