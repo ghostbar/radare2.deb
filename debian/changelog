@@ -1,8 +1,8 @@
-radare2 (0.10.4-1) UNRELEASED; urgency=medium
+radare2 (0.10.4-2) UNRELEASED; urgency=medium
 
-  * new upstream version
+  * conflict with anything prior to 0.10.0
 
- -- Jose Luis Rivas <ghostbar@debian.org>  Thu, 07 Jul 2016 00:45:27 -0400
+ -- Jose Luis Rivas <ghostbar@debian.org>  Thu, 14 Jul 2016 13:53:21 -0400
 
 radare2 (0.10.2-1) unstable; urgency=medium
 

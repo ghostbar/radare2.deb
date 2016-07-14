@@ -26,6 +26,7 @@ Vcs-Git: git://anonscm.debian.org/collab-maint/radare2.git
 Package: radare2
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
+Conflicts: radare2 (< 0.10.0), libradare2-0.9.6, libradare2-0.10.0
 Recommends: libradare2-dev
 Description: free and advanced command line hexadecimal editor
  The project aims to create a complete, portable, multi-architecture,
@@ -60,11 +61,12 @@ Description: free and advanced command line hexadecimal editor
 # This package provides the necessary libraries to run Python, Lua and Vala
 # from within radare2.
  
-Package: libradare2-0.10.0
+Package: libradare2
 Section: libs
 Architecture: any
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${shlibs:Depends}, ${misc:Depends}, libradare2-common (>= ${source:Version})
+Conflicts: radare2 (< 0.10.0), libradare2-0.9.6, libradare2-0.10.0
 Multi-Arch: same
 Description: libraries from the radare2 suite
  The project aims to create a complete, portable, multi-architecture,
@@ -85,6 +87,7 @@ Package: libradare2-dev
 Section: libdevel
 Architecture: any
 Depends: ${misc:Depends}, libradare2-0.10.0 (= ${binary:Version}), libmagic-dev
+Conflicts: radare2 (< 0.10.0), libradare2-0.9.6, libradare2-0.10.0
 Description: devel files from the radare2 suite
  The project aims to create a complete, portable, multi-architecture,
  unix-like toolchain for reverse engineering.
@@ -104,6 +107,7 @@ Package: libradare2-common
 Multi-Arch: foreign
 Architecture: all
 Depends: ${misc:Depends}
+Conflicts: radare2 (< 0.10.0), libradare2-0.9.6, libradare2-0.10.0
 Description: arch independent files from the radare2 suite
  The project aims to create a complete, portable, multi-architecture,
  unix-like toolchain for reverse engineering.
