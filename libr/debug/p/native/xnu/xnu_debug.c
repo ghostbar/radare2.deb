@@ -28,21 +28,27 @@ static task_t task_dbg = 0;
 #include "xnu_excthreads.c"
 #endif
 
+/* XXX: right now it just returns the first thread, not the one selected in dbg->tid */
 static thread_t getcurthread (RDebug *dbg) {
 	thread_array_t threads = NULL;
 	unsigned int n_threads = 0;
 	task_t t = pid_to_task (dbg->pid);
-	if (!t)
+	if (!t) {
 		return -1;
-	if (task_threads (t, &threads, &n_threads))
+	}
+	if (task_threads (t, &threads, &n_threads)) {
 		return -1;
-	if (n_threads < 1)
+	}
+	if (n_threads < 1) {
 		return -1;
-	if (n_threads > 1)
+	}
+#if 0
+	if (n_threads > 1) {
 		eprintf ("THREADS: %d\n", n_threads);
+	}
+#endif
 	return threads[0];
 }
-
 
 static xnu_thread_t* get_xnu_thread(RDebug *dbg, int tid) {
 	RListIter *it = NULL;
@@ -62,8 +68,9 @@ static xnu_thread_t* get_xnu_thread(RDebug *dbg, int tid) {
 	tid = getcurthread (dbg);
 	it = r_list_find (dbg->threads, (const void *)(size_t)&tid,
 			  (RListComparator)&thread_find);
-	if (it)
+	if (it) {
 		return (xnu_thread_t *)it->data;
+	}
 	eprintf ("Thread not found get_xnu_thread\n");
 	return NULL;
 }
@@ -98,9 +105,9 @@ static task_t task_for_pid_workaround(int Pid) {
 	}
 
 	/* kernel task */
-	if (Pid == 0)
+	if (Pid == 0) {
 		return tasks[0];
-
+	}
 	for (i = 0; i < numTasks; i++) {
 		int pid;
 		pid_for_task (i, &pid);
@@ -132,7 +139,6 @@ bool xnu_step(RDebug *dbg) {
 		eprintf ("mach-error: %d, %s\n", ret, MACH_ERROR_STRING (ret));
 	}
 	return ret;
-
 #else
 	int ret = 0;
 	//we must find a way to get the current thread not just the first one
@@ -142,8 +148,9 @@ bool xnu_step(RDebug *dbg) {
 		return false;
 	}
 	xnu_thread_t *th = get_xnu_thread (dbg, getcurthread (dbg));
-	if (!th)
+	if (!th) {
 		return false;
+	}
 	ret = set_trace_bit (dbg, th);
 	if (!ret) {
 		eprintf ("xnu_step modificy_trace_bit error\n");
@@ -157,10 +164,10 @@ bool xnu_step(RDebug *dbg) {
 
 int xnu_attach(RDebug *dbg, int pid) {
 #if XNU_USE_PTRACE
-		if (ptrace (PT_ATTACH, pid, 0, 0) == -1) {
-				perror ("ptrace (PT_ATTACH)");
-				return -1;
-		}
+	if (ptrace (PT_ATTACH, pid, 0, 0) == -1) {
+		perror ("ptrace (PT_ATTACH)");
+		return -1;
+	}
 	return pid;
 #else
 	dbg->pid = pid;
@@ -218,8 +225,9 @@ int xnu_continue(RDebug *dbg, int pid, int tid, int sig) {
 		}
 	}
 	kr = task_resume (task);
-	if (kr != KERN_SUCCESS)
+	if (kr != KERN_SUCCESS) {
 		eprintf ("Failed to resume task xnu_continue\n");
+	}
 	return true;
 #endif
 }
@@ -254,8 +262,9 @@ const char *xnu_reg_profile(RDebug *dbg) {
 int xnu_reg_write(RDebug *dbg, int type, const ut8 *buf, int size) {
 	bool ret;
 	xnu_thread_t *th = get_xnu_thread (dbg, getcurthread (dbg));
-	if (!th)
+	if (!th) {
 		return 0;
+	}
 	switch (type) {
 	case R_REG_TYPE_DRX:
 #if __x86_64__ || __i386__
@@ -263,9 +272,9 @@ int xnu_reg_write(RDebug *dbg, int type, const ut8 *buf, int size) {
 
 #elif __arm || __arm64 || __aarch64
 #if defined (ARM_DEBUG_STATE32) && (defined (__arm64__) || defined (__aarch64__))
-	memcpy (&th->debug.drx32, buf, R_MIN (size, sizeof (th->debug.drx32)));
+		memcpy (&th->debug.drx32, buf, R_MIN (size, sizeof (th->debug.drx32)));
 #else
-	memcpy (&th->debug.drx, buf, R_MIN (size, sizeof (th->debug.drx)));
+		memcpy (&th->debug.drx, buf, R_MIN (size, sizeof (th->debug.drx)));
 #endif
 #endif
 		ret = xnu_thread_set_drx (dbg, th);
@@ -317,14 +326,15 @@ RDebugMap *xnu_map_alloc(RDebug *dbg, ut64 addr, int size) {
 	ut8 *base = (ut8 *)addr;
 	xnu_thread_t *th = get_xnu_thread (dbg, dbg->tid);
 	bool anywhere = !VM_FLAGS_ANYWHERE;
-	if (!th)
+	if (!th) {
 		return NULL;
+	}
 	if (addr == -1)
 		anywhere = VM_FLAGS_ANYWHERE;
 	ret = vm_allocate (th->port, (vm_address_t *)&base,
 			  (vm_size_t)size, anywhere);
 	if (ret != KERN_SUCCESS) {
-		printf("vm_allocate failed\n");
+		eprintf ("vm_allocate failed\n");
 		return NULL;
 	}
 	r_debug_map_sync (dbg); // update process memory maps
@@ -333,10 +343,10 @@ RDebugMap *xnu_map_alloc(RDebug *dbg, ut64 addr, int size) {
 
 int xnu_map_dealloc (RDebug *dbg, ut64 addr, int size) {
 	xnu_thread_t *th = get_xnu_thread (dbg, dbg->tid);
-	if (!th)
+	if (!th) {
 		return false;
-	int ret = vm_deallocate (th->port,
-		(vm_address_t)addr, (vm_size_t)size);
+	}
+	int ret = vm_deallocate (th->port, (vm_address_t)addr, (vm_size_t)size);
 	if (ret != KERN_SUCCESS) {
 		perror ("vm_deallocate");
 		return false;
@@ -354,16 +364,17 @@ static int xnu_get_kinfo_proc (int pid, struct kinfo_proc *kp) {
 		perror ("sysctl");
 		return -1;
   	}
-  	if (kpl <= 0) return -1;
+  	if (kpl < 1) {
+		return -1;
+	}
 	return 0;
 }
 
 RDebugInfo *xnu_info (RDebug *dbg, const char *arg) {
+	struct kinfo_proc kp; // XXX This need to be freed?
 	int kinfo_proc_error = 0;
 	RDebugInfo *rdi = R_NEW0 (RDebugInfo);
 	if (!rdi) return NULL;
-
-	struct kinfo_proc kp; // XXX This need to be freed?
 
 	kinfo_proc_error = xnu_get_kinfo_proc(dbg->pid, &kp);
 
@@ -395,6 +406,7 @@ static void xnu_free_threads_ports (RDebugPid *p) {
 	}
 }
 */
+
 RList *xnu_thread_list (RDebug *dbg, int pid, RList *list) {
 #if __arm__ || __arm64__ || __aarch_64__
 	#define CPU_PC (dbg->bits == R_SYS_BITS_64) ? \
@@ -433,15 +445,19 @@ static vm_prot_t unix_prot_to_darwin(int prot) {
 
 int xnu_map_protect (RDebug *dbg, ut64 addr, int size, int perms) {
 	int ret;
+	task_t task = pid_to_task (dbg->tid);
 	// TODO: align pointers
+#if 0
 	xnu_thread_t *th = get_xnu_thread (dbg, dbg->tid);
-	if (!th)
+	if (!th) {
 		return false;
-	ret = vm_protect (th->port, (vm_address_t)addr,
-			 (vm_size_t)size, (boolean_t)0,
-			 VM_PROT_COPY | perms);
+	}
+#endif
+#define xwr2rwx(x) ((x&1)<<2) | (x&2) | ((x&4)>>2)
+	int xnu_perms = xwr2rwx (perms);
+	ret = mach_vm_protect (task, (vm_address_t)addr, (vm_size_t)size, (boolean_t)0, xnu_perms); //VM_PROT_COPY | perms);
 	if (ret != KERN_SUCCESS) {
-		printf("vm_protect failed\n");
+		perror ("vm_protect");
 		return false;
 	}
 	return true;
@@ -666,9 +682,10 @@ static int xnu_write_mem_maps_to_buffer (RBuffer *buffer, RList *mem_maps, int s
 		sc->nsects = 0;
 #endif
 
-		if ((curr_map->perm & VM_PROT_READ) == 0) 
+		if ((curr_map->perm & VM_PROT_READ) == 0) {
 			mach_vm_protect (task_dbg, curr_map->addr, curr_map->size, FALSE,
 				curr_map->perm | VM_PROT_READ);
+		}
 
 		/* Acording to osxbook, the check should be like this: */
 #if 0

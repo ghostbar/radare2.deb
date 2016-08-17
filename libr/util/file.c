@@ -154,6 +154,8 @@ R_API char *r_file_abspath(const char *file) {
 		if (abspath) {
 			free (ret);
 			ret = abspath;
+		} else {
+			free (resolved_path);
 		}
 	}
 #endif
@@ -222,8 +224,6 @@ R_API char *r_stdin_slurp (int *sz) {
 #endif
 }
 
-//r_file_slurp: load file *str, alloc new buffer, close file. ret &buffer
-//Caller must free(buffer)
 R_API char *r_file_slurp(const char *str, int *usz) {
 	size_t rsz;
 	char *ret;
@@ -263,9 +263,10 @@ R_API char *r_file_slurp(const char *str, int *usz) {
 		sz = rsz;
 	}
 	fclose (fd);
-	ret[sz]='\0';
-	if (usz)
-		*usz = (ut32)sz;
+	ret[sz] = '\0';
+	if (usz) {
+		*usz = (int)sz;
+	}
 	return ret;
 }
 

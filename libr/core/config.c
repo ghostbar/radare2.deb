@@ -75,7 +75,7 @@ static void rasm2_list(RCore *core, const char *arch, int fmt) {
 }
 
 static inline void __setsegoff(RConfig *cfg, const char *asmarch, int asmbits) {
-	int autoseg = (!strncmp (asmarch, "x86", 3) && asmbits==16);
+	int autoseg = (!strncmp (asmarch, "x86", 3) && asmbits == 16);
 	r_config_set (cfg, "asm.segoff", r_str_bool (autoseg));
 }
 
@@ -185,7 +185,6 @@ static int cb_asmarch(void *user, void *data) {
 	if (core->anal->bits) {
 		bits = core->anal->bits;
 	}
-
 	if (*node->value == '?') {
 		rasm2_list (core, NULL, node->value[1]);
 		return false;
@@ -195,18 +194,21 @@ static int cb_asmarch(void *user, void *data) {
 	if (!*node->value) {
 		return false;
 	}
-
 	if (!r_asm_use (core->assembler, node->value)) {
 		eprintf ("asm.arch: cannot find (%s)\n", node->value);
 		return false;
 	}
-
 	if (core->assembler && core->assembler->cur) {
 		bits = core->assembler->cur->bits;
-		if (8 & bits) bits = 8;
-		else if (16 & bits) bits = 16;
-		else if (32 & bits) bits = 32;
-		else bits = 64;
+		if (8 & bits) {
+			bits = 8;
+		} else if (16 & bits) {
+			bits = 16;
+		} else if (32 & bits) {
+			bits = 32;
+		} else {
+			bits = 64;
+		}
 	}
 	snprintf (asmparser, sizeof (asmparser), "%s.pseudo", node->value);
 	r_config_set (core->config, "asm.parser", asmparser);
@@ -220,7 +222,9 @@ static int cb_asmarch(void *user, void *data) {
 		char *p, *s = strdup (node->value);
 		if (s) {
 			p = strchr (s, '.');
-			if (p) *p = 0;
+			if (p) {
+				*p = 0;
+			}
 			if (!r_config_set (core->config, "anal.arch", s)) {
 				/* fall back to the anal.null plugin */
 				r_config_set (core->config, "anal.arch", "null");
@@ -231,11 +235,13 @@ static int cb_asmarch(void *user, void *data) {
 	// set pcalign
 	{
 		int v = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_ALIGN);
-		if (v != -1) r_config_set_i (core->config, "asm.pcalign", v);
-		else r_config_set_i (core->config, "asm.pcalign", 0);
+		if (v != -1) {
+			r_config_set_i (core->config, "asm.pcalign", v);
+		} else {
+			r_config_set_i (core->config, "asm.pcalign", 0);
+		}
 	}
-	if (!r_syscall_setup (core->anal->syscall, node->value,
-				asmos, core->anal->bits)) {
+	if (!r_syscall_setup (core->anal->syscall, node->value, asmos, core->anal->bits)) {
 		//eprintf ("asm.arch: Cannot setup syscall '%s/%s' from '%s'\n",
 		//	node->value, asmos, R2_LIBDIR"/radare2/"R2_VERSION"/syscall");
 	}
@@ -256,6 +262,9 @@ static int cb_asmarch(void *user, void *data) {
 		// set endian of display to match binary
 		core->print->big_endian = bigbin;
 	}
+	/* reload types and cc info */
+	r_core_anal_type_init (core);
+	r_core_anal_cc_init (core);
 	return true;
 }
 
@@ -287,7 +296,7 @@ static int cb_asmbits(void *user, void *data) {
 
 	if (bits > 0) {
 		ret = r_asm_set_bits (core->assembler, bits);
-		if (ret == false) {
+		if (!ret) {
 			RAsmPlugin *h = core->assembler->cur;
 			if (h) {
 				eprintf ("Cannot set bits %d to '%s'\n", bits, h->name);
@@ -296,7 +305,7 @@ static int cb_asmbits(void *user, void *data) {
 				ret = true;
 			}
 		}
-		if (!r_anal_set_bits (core->anal, node->i_value)) {
+		if (!r_anal_set_bits (core->anal, bits)) {
 			eprintf ("asm.arch: Cannot setup '%d' bits analysis engine\n", bits);
 		}
 		core->print->bits = bits;
@@ -334,8 +343,11 @@ static int cb_asmbits(void *user, void *data) {
 	/* set pcalign */
 	{
 		int v = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_ALIGN);
-		if (v != -1) r_config_set_i (core->config, "asm.pcalign", v);
-		else r_config_set_i (core->config, "asm.pcalign", 0);
+		if (v != -1) {
+			r_config_set_i (core->config, "asm.pcalign", v);
+		} else {
+			r_config_set_i (core->config, "asm.pcalign", 0);
+		}
 	}
 	return ret;
 }
@@ -392,7 +404,9 @@ static int cb_asm_pcalign(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
 	int align = node->i_value;
-	if (align<0) align = 0;
+	if (align < 0) {
+		align = 0;
+	}
 	core->assembler->pcalign = align;
 	core->anal->pcalign = align;
 	return true;
@@ -903,7 +917,7 @@ static int cb_iobuffer(void *user, void *data) {
 	} else {
 		r_io_buffer_close (core->io);
 	}
-	r_core_block_read (core, 0);
+	r_core_block_read (core);
 	return true;
 }
 
@@ -933,7 +947,7 @@ static int cb_iova(void *user, void *data) {
 		core->io->va = node->i_value;
 		/* ugly fix for r2 -d ... "r2 is going to die soon ..." */
 		if (r_io_desc_get (core->io, core->io->raised)) {
-			r_core_block_read (core, 0);
+			r_core_block_read (core);
 		}
 		/* reload symbol information */
 		if (r_list_length (r_bin_get_sections (core->bin)) > 0) {
@@ -1807,6 +1821,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB("esil.iotrap", "true", &cb_iotrap, "invalid read or writes produce a trap exception");
 	SETPREF("esil.romem", "false", "Set memory as read-only for ESIL");
 	SETPREF("esil.stats", "false", "Statistics from ESIL emulation stored in sdb");
+	SETPREF("esil.nonull", "false", "Prevent memory read, memory write at null pointer");
 
 	/* scr */
 #if __EMSCRIPTEN__
