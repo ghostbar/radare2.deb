@@ -170,16 +170,6 @@ R_API ut64 r_str_bits_from_string(const char *buf, const char *bitz) {
 	return out;
 }
 
-/* int c; ret = hex2int(&c, 'c'); */
-// Converts a SINGLE hexchar to it's integer value.
-static int hex2int(ut8 *val, ut8 c) {
-	if ('0' <= c && c <= '9') *val = (ut8)(*val) * 16 + ( c - '0');
-	else if (c >= 'A' && c <= 'F') *val = (ut8)(*val) * 16 + ( c - 'A' + 10);
-	else if (c >= 'a' && c <= 'f') *val = (ut8)(*val) * 16 + ( c - 'a' + 10);
-	else return 1;
-	return 0;
-}
-
 R_API int r_str_binstr2bin(const char *str, ut8 *out, int outlen) {
 	int n, i, j, k, ret, len;
 	len = strlen (str);
@@ -655,13 +645,13 @@ R_API int r_str_ccmp(const char *dst, const char *src, int ch) {
 // NOTE: this is not useful as a comparitor, as it returns true or false.
 R_API int r_str_cmp(const char *a, const char *b, int len) {
 	if (a==b)
-		return R_TRUE;
+		return true;
 	for (;len--;) {
 		if (*a=='\0'||*b=='\0'||*a!=*b)
-			return R_TRUE;
+			return true;
 		a++; b++;
 	}
-	return R_FALSE;
+	return false;
 }
 
 // Copies all characters from src to dst up until the character 'ch'.
@@ -955,8 +945,8 @@ R_API int r_str_unescape(char *buf) {
 				eprintf ("Unexpected end of string.\n");
 				return 0;
 			}
-			err |= hex2int (&ch,  buf[i+2]);
-			err |= hex2int (&ch2, buf[i+3]);
+			err |= r_hex_to_byte (&ch,  buf[i+2]);
+			err |= r_hex_to_byte (&ch2, buf[i+3]);
 			if (err) {
 				eprintf ("Error: Non-hexadecimal chars in input.\n");
 				return 0; // -1?
@@ -995,18 +985,20 @@ R_API void r_str_sanitize(char *c) {
 
 /* Internal function. dot_nl specifies wheter to convert \n into the
  * graphiz-compatible newline \l */
-static char *r_str_escape_ (const char *buf, const int dot_nl) {
+static char *r_str_escape_(const char *buf, const int dot_nl) {
 	char *new_buf, *q;
 	const char *p;
 
-	if (!buf)
+	if (!buf) {
 		return NULL;
-
+	}
+	
 	/* Worst case scenario, we convert every byte */
 	new_buf = malloc (1 + (strlen (buf) * 4));
 
-	if (!new_buf)
+	if (!new_buf) {
 		return NULL;
+	}
 
 	p = buf;
 	q = new_buf;
@@ -1047,8 +1039,9 @@ static char *r_str_escape_ (const char *buf, const int dot_nl) {
 				 * set ones are supported) */
 				if (*p == '\0') goto out;
 				if (*p == '[')
-					for (p++; *p != 'm'; p++)
+					for (p++; *p != 'm'; p++) {
 						if (*p == '\0') goto out;
+					}
 				break;
 			default:
 				/* Outside the ASCII printable range */
@@ -1071,12 +1064,12 @@ out:
 	return new_buf;
 }
 
-R_API char *r_str_escape (const char *buf) {
-	return r_str_escape_ (buf, R_FALSE);
+R_API char *r_str_escape(const char *buf) {
+	return r_str_escape_ (buf, false);
 }
 
-R_API char *r_str_escape_dot (const char *buf) {
-	return r_str_escape_ (buf, R_TRUE);
+R_API char *r_str_escape_dot(const char *buf) {
+	return r_str_escape_ (buf, true);
 }
 
 /* ansi helpers */
@@ -1550,7 +1543,7 @@ R_API int r_str_len_utf8char (const char *s, int left) {
 	return i;
 }
 
-R_API int r_str_len_utf8 (const char *s) {
+R_API int r_str_len_utf8(const char *s) {
 	int i = 0, j = 0;
 	while (s[i]) {
 		if ((s[i] & 0xc0) != 0x80) j++;

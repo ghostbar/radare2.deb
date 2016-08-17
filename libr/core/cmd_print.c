@@ -102,10 +102,11 @@ static void cmd_pDj (RCore *core, const char *arg) {
 		ut8 *buf = malloc (bsize);
 		if (buf) {
 			r_io_read_at (core->io, core->offset, buf, bsize);
-			r_core_print_disasm_json (core, core->offset, buf,
-				bsize, 0);
+			r_core_print_disasm_json (core, core->offset, buf, bsize, 0);
 			free (buf);
-		} else eprintf ("cannot allocate %d bytes\n", bsize);
+		} else {
+			eprintf ("cannot allocate %d bytes\n", bsize);
+		}
 	}
 	r_cons_newline ();
 }
@@ -1051,7 +1052,7 @@ static int pdi(RCore *core, int nb_opcodes, int nb_bytes, int fmt) {
 	} else {
 		if (len > core->blocksize) {
 			r_core_block_size (core, len);
-			r_core_block_read (core, 0);
+			r_core_block_read (core);
 		}
 	}
 	r_cons_break (NULL, NULL);
@@ -1646,6 +1647,15 @@ static void cmd_print_pv(RCore *core, const char *input) {
 	int i, n = core->assembler->bits / 8;
 	int type = 'v';
 	bool fixed_size = true;
+	const char* help_msg[] = {
+		 "Usage: pv[j][1,2,4,8,z]", "", "",
+		 "pv", "",  "print bytes based on asm.bits",
+		 "pv1", "", "print 1 byte in memory",
+		 "pv2", "", "print 2 bytes in memory",
+		 "pv4", "", "print 4 bytes in memory",
+		 "pv8", "", "print 8 bytes in memory",
+		 "pvz", "", "print value as string (alias for ps)",
+		 NULL};
 	switch (input[0]) {
 	case '1':
 		n = 1;
@@ -1669,7 +1679,7 @@ static void cmd_print_pv(RCore *core, const char *input) {
 	}
 	// variables can be
 	switch (input[0]) {
-	case 'z': // "prz"
+	case 'z': // "pvz"
 		type = 'z';
 		if (input[1]) {
 			input++;
@@ -1677,7 +1687,7 @@ static void cmd_print_pv(RCore *core, const char *input) {
 			r_core_cmdf (core, "ps");
 			break;
 		}
-		/* fallthrough */
+	/* fallthrough */
 	case ' ':
 		for (i = 0; stack[i]; i++) {
 			if (!strcmp (input + 1, stack[i])) {
@@ -1708,12 +1718,11 @@ static void cmd_print_pv(RCore *core, const char *input) {
 		}
 		break;
 	case '?':
-		eprintf ("Usage: pv[z] [ret arg#]\n");
+		r_core_cmd_help (core, help_msg);
 		break;
 	default:
 		{
 			ut64 v;
-			ut64 mask = UT64_MAX;
 			if (!fixed_size) n = 0;
 			switch (n) {
 			case 1:
@@ -1733,14 +1742,14 @@ static void cmd_print_pv(RCore *core, const char *input) {
 				r_cons_printf ("0x%016" PFMT64x "\n", v);
 				break;
 			default:
+				v = r_read_ble64 (core->block, core->print->big_endian);
 				switch (core->assembler->bits / 8) {
-				case 1: mask = UT8_MAX; break;
-				case 2: mask = UT16_MAX; break;
-				case 4: mask = UT32_MAX; break;
+				case 1: r_cons_printf ("0x%02" PFMT64x "\n", v & UT8_MAX); break;
+				case 2: r_cons_printf ("0x%04" PFMT64x "\n", v & UT16_MAX); break;
+				case 4: r_cons_printf ("0x%08" PFMT64x "\n", v & UT32_MAX); break;
+				case 8: r_cons_printf ("0x%016" PFMT64x "\n", v & UT64_MAX); break;
 				default: break;
 				}
-				v = r_read_ble64 (core->block, core->print->big_endian);
-				r_cons_printf ("0x%0x\n", v & mask);
 				break;
 			}
 		}
@@ -2012,16 +2021,18 @@ static int cmd_print(void *data, const char *input) {
 		}// else l = 0;
 	} else l = len;
 
-	if (len > core->blocksize)
+	if (len > core->blocksize) {
 		len = core->blocksize;
+	}
 
 	if (input[0] != 'd' && input[0] != 'm' && input[0]!='a' && input[0] != 'f') {
 		n = core->blocksize_max;
 		i = (int)n;
 		if (i != n) i = 0;
 		if (i && l > i) {
-			eprintf ("This block size is too big (%d<%d). Did you mean 'p%c @ %s' instead?\n",
-					i, l, *input, input+2);
+			eprintf ("This block size is too big (0x%"PFMT64x
+				" < 0x%x). Did you mean 'p%c @ %s' instead?\n",
+				n, l, *input, input+2);
 			goto beach;
 		}
 	}
@@ -2540,24 +2551,35 @@ static int cmd_print(void *data, const char *input) {
 						}
 					}
 					r_list_sort (f->bbs, (RListComparator)bbcmp);
-					// TODO: sort by addr
-					bool asm_lines = r_config_get_i (core->config, "asm.lines");
-					r_config_set_i (core->config, "asm.lines", 0);
-					//r_list_sort (f->bbs, &r_anal_ex_bb_address_comparator);
-					r_list_foreach (f->bbs, iter, b) {
-						r_core_cmdf (core, "pD %"PFMT64d" @0x%"PFMT64x, b->size, b->addr);
-#if 1
-						if (b->jump != UT64_MAX) {
-							r_cons_printf ("| ----------- true: 0x%08"PFMT64x, b->jump);
-							//r_cons_printf ("-[true]-> 0x%08"PFMT64x"\n", b->jump);
+					if (input[2] == 'j') {
+						r_cons_printf ("[");
+						r_list_foreach (f->bbs, iter, b) {
+							r_core_cmdf (core, "pDj %"PFMT64d" @0x%"PFMT64x, b->size, b->addr);
+							if (iter->n) {
+								r_cons_printf (",");
+							}
 						}
-						if (b->fail != UT64_MAX) {
-							r_cons_printf ("  false: 0x%08"PFMT64x, b->fail);
+						r_cons_printf ("]");
+					} else {
+						// TODO: sort by addr
+						bool asm_lines = r_config_get_i (core->config, "asm.lines");
+						r_config_set_i (core->config, "asm.lines", 0);
+						//r_list_sort (f->bbs, &r_anal_ex_bb_address_comparator);
+						r_list_foreach (f->bbs, iter, b) {
+							r_core_cmdf (core, "pD %"PFMT64d" @0x%"PFMT64x, b->size, b->addr);
+	#if 1
+							if (b->jump != UT64_MAX) {
+								r_cons_printf ("| ----------- true: 0x%08"PFMT64x, b->jump);
+								//r_cons_printf ("-[true]-> 0x%08"PFMT64x"\n", b->jump);
+							}
+							if (b->fail != UT64_MAX) {
+								r_cons_printf ("  false: 0x%08"PFMT64x, b->fail);
+							}
+							r_cons_newline ();
+	#endif
 						}
-						r_cons_newline ();
-#endif
+						r_config_set_i (core->config, "asm.lines", asm_lines);
 					}
-					r_config_set_i (core->config, "asm.lines", asm_lines);
 				} else {
 					eprintf ("Cannot find function at 0x%08"PFMT64x"\n", core->offset);
 					core->num->value = 0;
@@ -2613,7 +2635,7 @@ static int cmd_print(void *data, const char *input) {
 			} else {
 				ut32 bsz = core->blocksize;
 				RAnalFunction *f = r_anal_get_fcn_in (core->anal, core->offset,
-						R_ANAL_FCN_TYPE_FCN|R_ANAL_FCN_TYPE_SYM);
+						R_ANAL_FCN_TYPE_FCN | R_ANAL_FCN_TYPE_SYM);
 				if (f && input[2] == 'j') { // "pdfj"
 					ut8 *buf;
 					ut32 fcn_size = r_anal_fcn_size (f);
@@ -2709,14 +2731,15 @@ static int cmd_print(void *data, const char *input) {
 
 			if (bw_disassemble) {
 				block = malloc (core->blocksize);
-				if (l<0) l = -l;
+				if (l < 0) {
+					l = -l;
+				}
 				if (block) {
 					if (*input == 'D'){ //pD
 						free (block);
 						block = malloc (l);
 						r_core_read_at (core, addr-l, block, l); //core->blocksize);
-						core->num->value = r_core_print_disasm (core->print,
-							core, addr-l, block, l, l, 0, 1);
+						core->num->value = r_core_print_disasm (core->print, core, addr-l, block, l, l, 0, 1);
 					} else { //pd
 						const int bs = core->blocksize;
 						int instr_len;
