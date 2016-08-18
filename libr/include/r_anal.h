@@ -49,6 +49,7 @@ typedef struct r_anal_meta_item_t {
 	int space;
 } RAnalMetaItem;
 
+
 typedef struct {
 	struct r_anal_t *anal;
 	int type;
@@ -61,6 +62,7 @@ typedef struct {
 typedef struct r_anal_range_t {
 	ut64 from;
 	ut64 to;
+	int bits;
 } RAnalRange;
 
 #define R_ANAL_UNMASK_TYPE(x) (x&R_ANAL_VAR_TYPE_SIZE_MASK)
@@ -179,56 +181,20 @@ enum {
 };
 
 /*--------------------Function Convnetions-----------*/
-#define	R_ANAL_CC_TYPE_CDECL 'a'
-#define	R_ANAL_CC_TYPE_STDCALL 0
+//XXX dont use then in the future
+#define R_ANAL_CC_TYPE_STDCALL 0
+#define R_ANAL_CC_TYPE_PASCAL 1
 #define R_ANAL_CC_TYPE_FASTCALL 'A' // syscall
-#define	R_ANAL_CC_TYPE_PASCAL 1
-#define R_ANAL_CC_TYPE_WINAPI 2 // Microsoft's pascal call clone
-#define R_ANAL_CC_TYPE_MSFASTCALL 3 // microsoft fastcall
-#define R_ANAL_CC_TYPE_BOFASTCALL 4 // borland fastcall
-#define R_ANAL_CC_TYPE_WAFASTCALL 5 // wacom fastcall
-#define R_ANAL_CC_TYPE_CLARION 6 // TopSpeed/Clarion/JPI
-	/* Clarion:
-	 *	first four integer parameters are passed in registers:
-	 *	eax, ebx, ecx, edx. Floating point parameters are passed
-	 *	on the floating point stack - registers
-	 *	st0, st1, st2, st3, st4, st5, st6. Structure parameters
-	 *	are always passed on the stack. Additional parameters
-	 *	are passed on the stack after registers are exhausted.
-	 *	Integer values are returned in eax, pointers in edx
-	 *	and floating point types in st0.
-	 */
-#define R_ANAL_CC_TYPE_SAFECALL 7 // Delphi and Free Pascal on Windows
 #define R_ANAL_CC_TYPE_SYSV 8
-#define R_ANAL_CC_TYPE_THISCALL 9
-
-#define R_ANAL_CC_ARGS 16
-
-typedef struct r_anal_cc_t {
-	int type;
-	int bits; // 8, 16, 32, ...
-	int rel; // relative or absolute?
-	ut64 off; // offset of the call instruction (caller)
-	ut64 jump; // offset of the call instruction (caller)
-	int nargs;
-	ut64 args[R_ANAL_CC_ARGS];
-	// TODO: Store arguments someway
-} RAnalCC;
-
-typedef struct r_anal_cc_type_t {
-	int rtl; // right-to-left? if false use left-to-right
-	int alignstack;
-	//
-	//const char **reglist; //
-} RAnalCCType;
 
 enum {
 	R_ANAL_FCN_TYPE_NULL = 0,
-	R_ANAL_FCN_TYPE_FCN = 1,
-	R_ANAL_FCN_TYPE_LOC = 2,
-	R_ANAL_FCN_TYPE_SYM = 4,
-	R_ANAL_FCN_TYPE_IMP = 8,
-	R_ANAL_FCN_TYPE_ROOT = 16  /* matching flag */
+	R_ANAL_FCN_TYPE_FCN = 1 << 0,
+	R_ANAL_FCN_TYPE_LOC = 1 << 1,
+	R_ANAL_FCN_TYPE_SYM = 1 << 2,
+	R_ANAL_FCN_TYPE_IMP = 1 << 3,
+	R_ANAL_FCN_TYPE_INT = 1 << 4, /* priviledged function - ends with iret/reti/.. */
+	R_ANAL_FCN_TYPE_ROOT = 1 << 5  /* matching flag */
 };
 
 #define R_ANAL_VARSUBS 32
@@ -293,12 +259,11 @@ typedef struct r_anal_type_function_t {
 	char* dsc; // For producing nice listings
 	ut32 _size;
 	int bits; // ((> bits 0) (set-bits bits))
-	short type;
+	int type;
 	/*item_list *rets; // Type of return value */
 	char *rets;
 	short fmod; //  static, inline or volatile?
-	/* TODO: Change to RAnalCC ??? */
-	short call; // calling convention
+	const char *cc; // calling convention
 	char* attr; // __attribute__(()) list
 	ut64 addr;
 	int stack; //stack frame size
@@ -435,7 +400,7 @@ typedef enum {
 	R_ANAL_OP_TYPE_NOT   = 30,
 	R_ANAL_OP_TYPE_STORE = 31,  /* store from register to memory */
 	R_ANAL_OP_TYPE_LOAD  = 32,  /* load from memory to register */
-	R_ANAL_OP_TYPE_LEA   = 33,
+	R_ANAL_OP_TYPE_LEA   = 33, /* TODO add ulea */
 	R_ANAL_OP_TYPE_LEAVE = 34,
 	R_ANAL_OP_TYPE_ROR   = 35,
 	R_ANAL_OP_TYPE_ROL   = 36,
@@ -646,12 +611,14 @@ typedef struct r_anal_t {
 #endif
 	Sdb *sdb_hints; // OK
 	Sdb *sdb_fcnsign; // OK
+	Sdb *sdb_cc; // calling conventions
 	//RList *hints; // XXX use better data structure here (slist?)
 	RAnalCallbacks cb;
 	RAnalOptions opt;
 	RList *reflines;
 	RList *reflines2;
 	RList *noreturn;
+	RList /*RAnalRange*/ *bits_ranges;
 } RAnal;
 
 typedef struct r_anal_hint_t {
@@ -673,20 +640,22 @@ typedef struct r_anal_var_access_t {
 	int set;
 } RAnalVarAccess;
 
+#define R_ANAL_VAR_KIND_ANY 0
 #define R_ANAL_VAR_KIND_ARG 'a'
-#define R_ANAL_VAR_KIND_VAR 'v'
 #define R_ANAL_VAR_KIND_REG 'r'
+#define R_ANAL_VAR_KIND_BPV 'b'
+#define R_ANAL_VAR_KIND_SPV 's'
 
 // generic for args and locals
 typedef struct r_anal_var_t {
-	char *name;		/* name of the variable */
-	char *type; // cparse type of the variable
-	char kind; // 'a'rg, 'v'ar ..
-	ut64 addr;		// not used correctly?
-	ut64 eaddr;		// not used correctly?
+	char *name;  /* name of the variable */
+	char *type;  // cparse type of the variable
+	char kind;   // 'a'rg, 'v'ar ..
+	ut64 addr;   // not used correctly?
+	ut64 eaddr;  // not used correctly?
 	int size;
-	int delta;		/* delta offset inside stack frame */
-	int scope;		/* global, local... | in, out... */
+	int delta;   /* delta offset inside stack frame */
+	int scope;   /* global, local... | in, out... */
 	/* probably dupped or so */
 	RList/*RAnalVarAccess*/ *accesses; /* list of accesses for this var */
 	RList/*RAnalValue*/ *stores;   /* where this */
@@ -1151,9 +1120,13 @@ R_API int r_anal_type_link (RAnal *anal, const char *val, ut64 addr);
 R_API int r_anal_type_unlink(RAnal *anal, ut64 addr);
 R_API char *r_anal_type_format (RAnal *anal, const char *t);
 R_API int r_anal_type_set(RAnal *anal, ut64 at, const char *field, ut64 val);
-
+R_API int r_anal_type_func_exist(RAnal *anal, const char *func_name);
+R_API const char *r_anal_type_func_cc(RAnal *anal, const char *func_name);
+R_API int r_anal_type_func_args_count(RAnal *anal, const char *func_name);
+R_API char *r_anal_type_func_args_type(RAnal *anal, const char *func_name, int i);
+R_API char *r_anal_type_func_args_name(RAnal *anal, const char *func_name, int i);
+R_API char *r_anal_type_func_guess(RAnal *anal, char *func_name);
 /* anal.c */
-R_API void r_anal_type_init(RAnal *anal);
 R_API RAnal *r_anal_new(void);
 R_API int r_anal_purge (RAnal *anal);
 R_API RAnal *r_anal_free(RAnal *r);
@@ -1208,7 +1181,7 @@ R_API void r_anal_esil_trace (RAnalEsil *esil, RAnalOp *op);
 R_API void r_anal_esil_trace_list (RAnalEsil *esil);
 R_API void r_anal_esil_trace_show (RAnalEsil *esil, int idx);
 R_API bool r_anal_esil_set_pc (RAnalEsil *esil, ut64 addr);
-R_API int r_anal_esil_setup (RAnalEsil *esil, RAnal *anal, int romem, int stats);
+R_API int r_anal_esil_setup (RAnalEsil *esil, RAnal *anal, int romem, int stats, int nonull);
 R_API void r_anal_esil_free (RAnalEsil *esil);
 R_API int r_anal_esil_parse (RAnalEsil *esil, const char *str);
 R_API int r_anal_esil_dumpstack (RAnalEsil *esil);
@@ -1271,20 +1244,16 @@ R_API int r_anal_fcn_local_del_index(RAnal *anal, RAnalFunction *fcn, ut32 index
 #define R_ANAL_FCN_VARKIND_ARG 'a'
 #define R_ANAL_FCN_VARKIND_FASTARG 'A'
 
-#define r_anal_fcn_local_add(x,y,z,n,t) r_anal_fcn_var_add(x, y->addr, z,\
-R_ANAL_FCN_VARKIND_LOCAL, n, t)
 #define r_anal_fcn_local_del_index(x,y,z) r_anal_fcn_var_del_byindex(x, y,\
 R_ANAL_FCN_VARKIND_LOCAL, z)
 #define r_anal_fcn_local_del_name(x,y,z) error
 
-R_API int r_anal_fcn_arg_add (RAnal *a, ut64 fna, int scope, int delta, const char *type, const char *name);
 
 R_API int r_anal_fcn_var_del_bydelta (RAnal *a, ut64 fna, const char kind, int scope, ut32 delta);
-R_API int r_anal_fcn_var_add (RAnal *a, ut64 fna, int scope, int delta, const char *type, const char *name);
 R_API int r_anal_fcn_var_del_byindex (RAnal *a, ut64 fna, const char kind,
 		int scope, ut32 idx);
 /* args */
-R_API int r_anal_var_count(RAnal *a, RAnalFunction *fcn, int kind);
+R_API int r_anal_var_count(RAnal *a, RAnalFunction *fcn, int kind, int type);
 
 /* vars // globals. not here  */
 
@@ -1360,12 +1329,10 @@ R_API const char *r_anal_var_scope_to_str(RAnal *anal, int scope);
 R_API int r_anal_var_access_add(RAnal *anal, RAnalVar *var, ut64 from, int set);
 R_API int r_anal_var_access_del(RAnal *anal, RAnalVar *var, ut64 from);
 R_API RAnalVarAccess *r_anal_var_access_get(RAnal *anal, RAnalVar *var, ut64 from);
-R_API RAnalVar *r_anal_var_get_byname (RAnal *anal, RAnalFunction *fcn, char kind, const char* name);
+R_API RAnalVar *r_anal_var_get_byname (RAnal *anal, RAnalFunction *fcn, const char* name);
 
 /* project */
-R_API bool r_anal_project_load(RAnal *anal, const char *prjfile);
 R_API bool r_anal_project_save(RAnal *anal, const char *prjfile);
-R_API bool r_anal_xrefs_load(RAnal *anal, const char *prjfile);
 R_API bool r_anal_xrefs_init (RAnal *anal);
 
 #define R_ANAL_THRESHOLDFCN 0.7F
@@ -1412,17 +1379,11 @@ R_API void r_anal_var_list_show(RAnal *anal, RAnalFunction *fcn, int kind, int m
 R_API RList *r_anal_var_list(RAnal *anal, RAnalFunction *fcn, int kind);
 
 // calling conventions API
-R_API RAnalCC* r_anal_cc_new (void);
-R_API void r_anal_cc_init (RAnalCC *cc);
-R_API RAnalCC* r_anal_cc_new_from_string (const char *str, int type);
-R_API void r_anal_cc_free (RAnalCC* cc);
-R_API void r_anal_cc_reset (RAnalCC *cc);
-R_API char *r_anal_cc_to_string (RAnal *anal, RAnalCC* cc);
-R_API bool r_anal_cc_update (RAnal *anal, RAnalCC *cc, RAnalOp *op);
-R_API const char *r_anal_cc_type2str(int type);
-R_API int r_anal_cc_str2type (const char *str);
-//R_API int r_anal_cc_register (RAnal *anal, RAnalCC *cc);
-//R_API int r_anal_cc_unregister (RAnal *anal, RAnalCC *cc);
+R_API int r_anal_cc_exist (RAnal *anal, const char *convention);
+R_API const char *r_anal_cc_arg(RAnal *anal, const char *convention, int n);
+R_API const char *r_anal_cc_ret(RAnal *anal, const char *convention);
+R_API const char *r_anal_cc_default(RAnal *anal);
+R_API const char *r_anal_cc_to_constant(RAnal *anal, char *convention);
 R_API bool r_anal_noreturn_at(RAnal *anal, ut64 addr);
 
 typedef struct r_anal_data_t {
@@ -1453,7 +1414,6 @@ R_API int r_meta_set_string(RAnal *m, int type, ut64 addr, const char *s);
 R_API int r_meta_set_var_comment (RAnal *a, int type, ut64 idx, ut64 addr, const char *s);
 R_API int r_meta_del(RAnal *m, int type, ut64 from, ut64 size, const char *str);
 R_API int r_meta_var_comment_del(RAnal *a, int type, ut64 idx, ut64 addr);
-R_API RAnalVar *r_anal_var_get_byname (RAnal *anal, RAnalFunction *fcn, char kind, const char* name);
 R_API int r_meta_add(RAnal *m, int type, ut64 from, ut64 size, const char *str);
 R_API RAnalMetaItem *r_meta_find(RAnal *m, ut64 off, int type, int where);
 R_API int r_meta_cleanup(RAnal *m, ut64 from, ut64 to);
@@ -1468,6 +1428,8 @@ R_API int r_anal_fcn_xref_add (RAnal *anal, RAnalFunction *fcn, ut64 at, ut64 ad
 R_API int r_anal_fcn_xref_del (RAnal *anal, RAnalFunction *fcn, ut64 at, ut64 addr, int type);
 
 /* hints */
+
+R_API void r_anal_build_range_on_hints (RAnal *a);
 //R_API void r_anal_hint_list (RAnal *anal, int mode);
 R_API RAnalHint *r_anal_hint_from_string(RAnal *a, ut64 addr, const char *str);
 R_API void r_anal_hint_del (RAnal *anal, ut64 addr, int size);
@@ -1537,7 +1499,7 @@ R_API int r_anal_noreturn_drop(RAnal *anal, const char *expr);
 
 /* plugin pointers */
 extern RAnalPlugin r_anal_plugin_null;
-extern RAnalPlugin r_anal_plugin_csr;
+extern RAnalPlugin r_anal_plugin_xap;
 extern RAnalPlugin r_anal_plugin_tms320;
 extern RAnalPlugin r_anal_plugin_avr;
 extern RAnalPlugin r_anal_plugin_arm_gnu;

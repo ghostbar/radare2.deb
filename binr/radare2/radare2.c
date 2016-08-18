@@ -457,6 +457,7 @@ int main(int argc, char **argv, char **envp) {
 		case 'q':
 			r_config_set (r.config, "scr.interactive", "false");
 			r_config_set (r.config, "scr.prompt", "false");
+			r_config_set (r.config, "cfg.fortunes", "false");
 			quiet = true;
 			break;
 		case 'R':
@@ -597,7 +598,7 @@ int main(int argc, char **argv, char **envp) {
 			fh = r_core_file_open (&r, path, perms, mapaddr);
 			if (fh) {
 				r_io_write_at (r.io, 0, buf, sz);
-				r_core_block_read (&r, 0);
+				r_core_block_read (&r);
 				free (buf);
 				// TODO: load rbin thing
 			} else {
@@ -896,7 +897,8 @@ int main(int argc, char **argv, char **envp) {
 	r_list_free (cmds);
 	r_list_free (files);
 	if (ret) {
-		return 0;
+		ret = 0;
+		goto beach;
 	}
 	if (r_config_get_i (r.config, "scr.prompt")) {
 		if (run_rc && r_config_get_i (r.config, "cfg.fortunes")) {
@@ -936,6 +938,7 @@ int main(int argc, char **argv, char **envp) {
 				int err = r_core_prompt (&r, false);
 				if (err < 1) {
 					// handle ^D
+					r.num->value = 0;
 					break;
 				}
 				if (lock) r_th_lock_enter (lock);
@@ -958,23 +961,46 @@ int main(int argc, char **argv, char **envp) {
 			debug = r_config_get_i (r.config, "cfg.debug");
 			if (ret != -1 && r_config_get_i (r.config, "scr.interactive")) {
 				char *question;
+				bool no_question_debug = ret & 1;
+				bool no_question_save = (ret & 2) >> 1;
+				bool y_kill_debug = (ret & 4) >> 2;
+				bool y_save_project = (ret & 8) >> 3;
+
 				if (debug) {
-					if (r_cons_yesno ('y', "Do you want to quit? (Y/n)")) {
-						if (r_config_get_i (r.config, "dbg.exitkills") &&
-								r_cons_yesno ('y', "Do you want to kill the process? (Y/n)"))
+					if (no_question_debug) {
+						if (r_config_get_i (r.config, "dbg.exitkills") && y_kill_debug){
 							r_debug_kill (r.dbg, 0, false, 9); // KILL
-					} else continue;
+						} 
+					} else {
+						if (r_cons_yesno ('y', "Do you want to quit? (Y/n)")) {
+							if (r_config_get_i (r.config, "dbg.exitkills") &&
+									r_cons_yesno ('y', "Do you want to kill the process? (Y/n)")) {
+								r_debug_kill (r.dbg, 0, false, 9); // KILL
+							}
+						} else continue;
+					}
 				}
+
 				prj = r_config_get (r.config, "file.project");
-				question = r_str_newf ("Do you want to save the '%s' project? (Y/n)", prj);
-				if (prj && *prj && r_cons_yesno ('y', question))
-					r_core_project_save (&r, prj);
-				free (question);
+				if (no_question_save) {
+					if (prj && *prj && y_save_project){
+						r_core_project_save (&r, prj);
+					} 
+				}
+				else {
+					question = r_str_newf ("Do you want to save the '%s' project? (Y/n)", prj);
+					if (prj && *prj && r_cons_yesno ('y', question)) {
+						r_core_project_save (&r, prj);
+					}
+					free (question);
+				}
+				
 			} else {
 				// r_core_project_save (&r, prj);
 				if (debug && r_config_get_i (r.config, "dbg.exitkills")) {
 					r_debug_kill (r.dbg, 0, false, 9); // KILL
 				}
+				
 			}
 			break;
 		}
@@ -993,6 +1019,8 @@ int main(int argc, char **argv, char **envp) {
 
 	/* capture return value */
 	ret = r.num->value;
+
+beach:
 	// not really needed, cause r_core_fini will close the file
 	// and this fh may be come stale during the command
 	// exectution.

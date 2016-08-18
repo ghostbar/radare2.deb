@@ -108,7 +108,7 @@ static void r_core_file_info (RCore *core, int mode) {
 				cf->desc->flags & 7 ));
 			r_cons_printf (",\"obsz\":%"PFMT64d, (ut64)core->io->desc->obsz);
 			if (cf->desc->referer && *cf->desc->referer)
-				r_cons_printf ("\"referer\":\"%s\"", cf->desc->referer);
+				r_cons_printf (",\"referer\":\"%s\"", cf->desc->referer);
 		}
 		r_cons_printf (",\"block\":%d", core->blocksize);
 		if (binfile) {
@@ -229,7 +229,7 @@ static int cmd_info(void *data, const char *input) {
 			// plugin that will be used to load the bin (e.g. malloc://)
 			// TODO: Might be nice to reload a bin at a specified offset?
 			r_core_bin_reload (core, NULL, baddr);
-			r_core_block_read (core, 0);
+			r_core_block_read (core);
 			newline = false;
 			}
 			break;
@@ -299,7 +299,12 @@ static int cmd_info(void *data, const char *input) {
 			if ((input[1] == 'm' && input[2] == 'z') || !input[1]) {
 				RBININFO ("sections", R_CORE_BIN_ACC_SECTIONS, NULL);
 			} else  { //iS entropy,sha1
-				RBININFO ("sections", R_CORE_BIN_ACC_SECTIONS, input + 2);
+		        	if (mode == R_CORE_BIN_RADARE || mode == R_CORE_BIN_JSON || mode == R_CORE_BIN_SIMPLE) {
+		                    RBININFO ("sections", R_CORE_BIN_ACC_SECTIONS, input + 3);
+		                }
+		                else {
+		                    RBININFO ("sections", R_CORE_BIN_ACC_SECTIONS, input + 2);
+		                }
 				//we move input until get '\0'
 				while (*(++input));
 				//input-- because we are inside a while that does input++
@@ -323,8 +328,13 @@ static int cmd_info(void *data, const char *input) {
 		case 'C': RBININFO ("signature", R_CORE_BIN_ACC_SIGNATURE, NULL); break;			  
 		case 'z':
 			if (input[1] == 'z') {
-				char *biname;
-				char *ret;
+				char *biname = NULL;
+				char *ret = NULL;
+				int fd = -1;
+				int xtr_idx = 0;
+				int rawstr = 1;
+				RCore *tmpcore = r_core_new ();
+				RCore *p2core = core;
 				const int min = core->bin->minstrlen;
 				const int max = core->bin->maxstrlen;
 				/* TODO: reimplement in C to avoid forks */
@@ -333,28 +343,44 @@ static int cmd_info(void *data, const char *input) {
 					return 0;
 				}
 				biname = r_str_escape (core->file->desc->name);
+				if (!tmpcore) {
+	                                eprintf ("Cannot create core\n");
+				        return 0;
+	                        }
+				tmpcore->bin->minstrlen = min;
+				tmpcore->bin->maxstrlen = max;
+				if (!r_bin_load (tmpcore->bin, biname, UT64_MAX, UT64_MAX, xtr_idx, fd, rawstr)){
+	                                eprintf ("Cannot load information\n");
+					return 0;
+	                        }
+				core = tmpcore;
 				switch (input[2]) {
 				case '*':
-					ret = r_sys_cmd_strf ("rabin2 -N %d:%d -rzz %s", min, max, biname);
+				        mode = R_CORE_BIN_RADARE;
+					RBININFO ("strings", R_CORE_BIN_ACC_STRINGS, NULL);
 					break;
 				case 'q':
 					if (input[3] == 'q') {
 						ret = r_sys_cmd_strf ("rabin2 -N %d:%d -qqzz %s", min, max, biname);
 						input++;
 					} else {
-						ret = r_sys_cmd_strf ("rabin2 -N %d:%d -qzz %s", min, max, biname);
+		                                mode = R_CORE_BIN_SIMPLE;
+						RBININFO ("strings", R_CORE_BIN_ACC_STRINGS, NULL);
 					}
 					break;
 				case 'j':
-					ret = r_sys_cmd_strf ("rabin2 -N %d:%d -jzz %s", min, max, biname);
+				        mode = R_CORE_BIN_JSON;
+					RBININFO ("strings", R_CORE_BIN_ACC_STRINGS, NULL);
 					break;
 				default:
-					ret = r_sys_cmd_strf ("rabin2 -N %d:%d -zz %s", min, max, biname);
+					RBININFO ("strings", R_CORE_BIN_ACC_STRINGS, NULL);
 					break;
 				}
 				if (ret && *ret) {
 					r_cons_strcat (ret);
 				}
+				core = p2core;
+				r_core_free (tmpcore);
 				free (ret);
 				free (biname);
 				input++;

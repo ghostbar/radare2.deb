@@ -23,6 +23,11 @@ static int usage (int v) {
 	return !v;
 }
 
+static int showversion() {
+	printf (R2_VERSION"\n");
+	return 0;
+}
+
 int main(int argc, char **argv) {
 	RSocket *s;
 	RSocketHTTPRequest *rs;
@@ -32,7 +37,7 @@ int main(int argc, char **argv) {
 	bool listenlocal = true;
 	const char *port = "8080";
 
-	while ((c = getopt (argc, argv, "ahp:ds")) != -1) {
+	while ((c = getopt (argc, argv, "adhp:sv")) != -1) {
 		switch (c) {
 		case 'a':
 			listenlocal = false;
@@ -45,6 +50,8 @@ int main(int argc, char **argv) {
 			break;
 		case 'h':
 			return usage (1);
+		case 'v':
+			return showversion ();
 		case 'p':
 			port = optarg;
 			break;
@@ -65,7 +72,7 @@ int main(int argc, char **argv) {
 			return 0;
 		}
 	}
-	s = r_socket_new (R_FALSE);
+	s = r_socket_new (false);
 	s->local = listenlocal;
 	if (!r_socket_listen (s, port, NULL)) {
 		eprintf ("Cannot listen on %d\n", s->port);
@@ -74,7 +81,7 @@ int main(int argc, char **argv) {
 	}
 	
 	eprintf ("http://localhost:%d/\n", s->port);
-	if (dosandbox && !r_sandbox_enable (R_TRUE)) {
+	if (dosandbox && !r_sandbox_enable (true)) {
 		eprintf ("sandbox: Cannot be enabled.\n");
 		return 1;
 	}
