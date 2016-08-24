@@ -1,3 +1,9 @@
+radare2 (0.10.5-rnds1) stable; urgency=medium
+
+  * new upstream release
+
+ -- Jose Luis Rivas <ghostbar@debian.org>  Tue, 23 Aug 2016 23:38:52 -0400
+
 radare2 (0.10.4-rnds1) stable; urgency=medium
 
   * new upstream release
@@ -6,9 +12,9 @@ radare2 (0.10.4-rnds1) stable; urgency=medium
 
 radare2 (0.10.3-rnds1) stable; urgency=medium
 
-  * new upstream version
+  * conflict with anything prior to 0.10.0
 
- -- Jose Luis Rivas <ghostbar@debian.org>  Thu, 07 Jul 2016 00:45:27 -0400
+ -- Jose Luis Rivas <ghostbar@debian.org>  Thu, 14 Jul 2016 13:53:21 -0400
 
 radare2 (0.10.2-1) unstable; urgency=medium
 
