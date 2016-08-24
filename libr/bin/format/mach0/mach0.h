@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2010-2014 - pancake, nibble */
+/* radare - LGPL - Copyright 2010-2016 - pancake, nibble */
 
 #include <r_bin.h>
 #include <r_types.h>
@@ -72,7 +72,7 @@ struct blob_index_t {
 
 struct blob_t {
     ut32 magic;
-    ut32  length;
+    ut32 length;
 };
 
 struct super_blob_t {
@@ -146,13 +146,17 @@ struct lib_t* MACH0_(get_libs)(struct MACH0_(obj_t)* bin);
 ut64 MACH0_(get_baddr)(struct MACH0_(obj_t)* bin);
 char* MACH0_(get_class)(struct MACH0_(obj_t)* bin);
 int MACH0_(get_bits)(struct MACH0_(obj_t)* bin);
-int MACH0_(is_big_endian)(struct MACH0_(obj_t)* bin);
+bool MACH0_(is_big_endian)(struct MACH0_(obj_t)* bin);
 int MACH0_(is_pie)(struct MACH0_(obj_t)* bin);
 const char* MACH0_(get_intrp)(struct MACH0_(obj_t)* bin);
 const char* MACH0_(get_os)(struct MACH0_(obj_t)* bin);
 char* MACH0_(get_cputype)(struct MACH0_(obj_t)* bin);
 char* MACH0_(get_cpusubtype)(struct MACH0_(obj_t)* bin);
+char* MACH0_(get_cpusubtype_from_hdr)(struct MACH0_(mach_header) *hdr);
 char* MACH0_(get_filetype)(struct MACH0_(obj_t)* bin);
+char* MACH0_(get_filetype_from_hdr)(struct MACH0_(mach_header) *hdr);
 ut64 MACH0_(get_main)(struct MACH0_(obj_t)* bin);
-
+char* MACH0_(get_cputype_from_hdr)(struct MACH0_(mach_header) *hdr);
+int MACH0_(get_bits_from_hdr)(struct MACH0_(mach_header)* hdr);
+struct MACH0_(mach_header)* MACH0_(get_hdr_from_bytes)(RBuffer *buf);
 #endif

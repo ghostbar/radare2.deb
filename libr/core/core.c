@@ -237,6 +237,28 @@ static ut64 getref (RCore *core, int n, char t, int type) {
 	return UT64_MAX;
 }
 
+static ut64 bbBegin(RAnalFunction *fcn, ut64 addr) {
+	RListIter *iter;
+	RAnalBlock *bb;
+	r_list_foreach (fcn->bbs, iter, bb) {
+		if (R_BETWEEN (bb->addr, addr, bb->addr + bb->size)) {
+			return bb->addr;
+		}
+	}
+	return UT64_MAX;
+}
+
+static ut64 bbSize(RAnalFunction *fcn, ut64 addr) {
+	RListIter *iter;
+	RAnalBlock *bb;
+	r_list_foreach (fcn->bbs, iter, bb) {
+		if (R_BETWEEN (bb->addr, addr, bb->addr + bb->size)) {
+			return bb->size;
+		}
+	}
+	return 0;
+}
+
 static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 	RCore *core = (RCore *)userptr; // XXX ?
 	RAnalFunction *fcn;
@@ -428,6 +450,9 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 				case 'E': return fcn->addr + fcn->_size; // end
 				case 'S': return r_anal_fcn_size (fcn);
 				case 'I': return fcn->ninstr;
+				/* basic blocks */
+				case 'b': return bbBegin (fcn, core->offset);
+				case 's': return bbSize (fcn, core->offset);
 				}
 				return fcn->addr;
 			}
@@ -587,7 +612,7 @@ static int autocomplete(RLine *line) {
 			RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, core->offset, 0);
 			RList *vars;
 			if (!strncmp (line->buffer.data, "afvn ", 5)) {
-				vars = r_anal_var_list (core->anal, fcn, R_ANAL_VAR_KIND_VAR);
+				vars = r_anal_var_list (core->anal, fcn, R_ANAL_VAR_KIND_BPV);
 			} else {
 				vars = r_anal_var_list (core->anal, fcn, R_ANAL_VAR_KIND_ARG);
 			}
@@ -1217,7 +1242,7 @@ R_API const char *r_core_anal_optype_colorfor(RCore *core, ut64 addr) {
 
 static void r_core_setenv (RCore *core) {
 	char *e = r_sys_getenv ("PATH");
-	char *h = r_str_home (".config/radare2/bin");
+	char *h = r_str_home (".config/radare2/prefix/bin");
 	char *n = r_str_newf ("%s:%s", h, e);
 	r_sys_setenv ("PATH", n);
 	free (n);
@@ -1352,6 +1377,7 @@ R_API int r_core_init(RCore *core) {
 	r_io_undo_enable (core->io, 1, 0); // TODO: configurable via eval
 	core->fs = r_fs_new ();
 	core->flags = r_flag_new ();
+	core->flags->cb_printf = r_cons_printf;
 	core->graph = r_agraph_new (r_cons_canvas_new (1, 1));
 	core->graph->need_reload_nodes = false;
 	core->asmqjmps_size = R_CORE_ASMQJMPS_NUM;
@@ -1400,8 +1426,6 @@ R_API int r_core_init(RCore *core) {
 	// TODO: get arch from r_bin or from native arch
 	r_asm_use (core->assembler, R_SYS_ARCH);
 	r_anal_use (core->anal, R_SYS_ARCH);
-	r_anal_type_init (core->anal);
-
 	if (R_SYS_BITS & R_SYS_BITS_64)
 		r_config_set_i (core->config, "asm.bits", 64);
 	else
@@ -1547,8 +1571,6 @@ static void set_prompt (RCore *r) {
 	const char *END = "";
 	const char *remote = "";
 
-	// hacky fix fo rio
-	r_core_block_read (r, 0);
 	if (cmdprompt && *cmdprompt)
 		r_core_cmd (r, cmdprompt, 0);
 
@@ -1663,7 +1685,7 @@ R_API int r_core_block_size(RCore *core, int bsize) {
 		core->block = bump;
 		core->blocksize = bsize;
 		memset (core->block, 0xff, core->blocksize);
-		r_core_block_read (core, 0);
+		r_core_block_read (core);
 	}
 	return ret;
 }
@@ -1883,7 +1905,7 @@ reaccept:
 					// TODO: reply error here
 					return -1;
 				} else {
-					r_core_block_read (core, 0);
+					r_core_block_read (core);
 					ptr[0] = RMT_READ | RMT_REPLY;
 					if (i>RMT_MAX)
 						i = RMT_MAX;
@@ -1967,29 +1989,35 @@ reaccept:
 				break;
 				}
 			case RMT_WRITE:
-				r_socket_read (c, buf, 5);
-				x = r_read_at_be32 (buf, 1);
+				r_socket_read (c, buf, 4);
+				x = r_read_at_be32 (buf, 0);
 				ptr = malloc (x);
 				r_socket_read (c, ptr, x);
-				r_core_write_at (core, core->offset, ptr, x);
+				int ret = r_core_write_at (core, core->offset, ptr, x);
+				buf[0] = RMT_WRITE | RMT_REPLY;
+				r_write_be32 (buf + 1, ret);
+				r_socket_write (c, buf, 5);
+				r_socket_flush (c);
 				free (ptr);
 				ptr = NULL;
 				break;
 			case RMT_SEEK:
 				r_socket_read_block (c, buf, 9);
 				x = r_read_at_be64 (buf, 1);
-				if (buf[0]!=2) {
-					r_core_seek (core, x, buf[0]);
-					x = core->offset;
-				} else {
+				if (buf[0] == 2) {
 					if (core->file) {
 						x = r_io_desc_size (core->io, core->file->desc);
 					} else {
 						x = 0;
 					}
+				} else {
+					if (buf[0] == 0) {
+						r_core_seek (core, x, 1); //buf[0]);
+					}
+					x = core->offset;
 				}
 				buf[0] = RMT_SEEK | RMT_REPLY;
-				r_write_be64 (buf+1, x);
+				r_write_be64 (buf + 1, x);
 				r_socket_write (c, buf, 9);
 				r_socket_flush (c);
 				break;
@@ -2108,9 +2136,9 @@ R_API RBuffer *r_core_syscallf (RCore *core, const char *name, const char *fmt, 
 }
 
 R_API RBuffer *r_core_syscall (RCore *core, const char *name, const char *args) {
-	int i, num;
 	RBuffer *b = NULL;
 	char code[1024];
+	int i, num;
 
 	num = r_syscall_get_num (core->anal->syscall, name);
 	if (!num) {
@@ -2125,14 +2153,17 @@ R_API RBuffer *r_core_syscall (RCore *core, const char *name, const char *args) 
 	// TODO: setup arch/bits/os?
 	r_egg_load (core->egg, code, 0);
 
-	if (!r_egg_compile (core->egg))
+	if (!r_egg_compile (core->egg)) {
 		eprintf ("Cannot compile.\n");
-	if (!r_egg_assemble (core->egg))
+	}
+	if (!r_egg_assemble (core->egg)) {
 		eprintf ("r_egg_assemble: invalid assembly\n");
+	}
 	if ((b = r_egg_get_bin (core->egg))) {
-		if (b->length>0) {
-			for (i=0; i<b->length; i++)
+		if (b->length > 0) {
+			for (i = 0; i < b->length; i++) {
 				r_cons_printf ("%02x", b->buf[i]);
+			}
 			r_cons_printf ("\n");
 		}
 	}

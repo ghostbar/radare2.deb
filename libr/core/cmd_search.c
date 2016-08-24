@@ -6,6 +6,7 @@
 #include "r_io.h"
 #include "r_list.h"
 #include "r_types_base.h"
+#include "cmd_search_rop.c"
 
 static int preludecnt = 0;
 static int searchflags = 0;
@@ -362,13 +363,14 @@ static char *getstring(char *b, int l) {
 
 static int __cb_hit(RSearchKeyword *kw, void *user, ut64 addr) {
 	RCore *core = (RCore *)user;
-	const bool use_color = core->print->flags & R_PRINT_FLAGS_COLOR;
 	ut64 base_addr = 0;
+	bool use_color;
 
 	if (!core) {
 		eprintf ("Error: Callback has an invalid RCore.\n");
 		return false;
 	}
+	use_color = core->print->flags & R_PRINT_FLAGS_COLOR;
 	if (maxhits && searchhits >= maxhits) {
 		//eprintf ("Error: search.maxhits reached.\n");
 		return false;
@@ -400,7 +402,7 @@ static int __cb_hit(RSearchKeyword *kw, void *user, ut64 addr) {
 				pos = getstring (buf + ctx + len, ctx);
 				free (buf);
 				if (use_color) {
-					s = r_str_newf (".%s"Color_BYELLOW"%s"Color_RESET"%s.", pre, wrd, pos);
+					s = r_str_newf (".%s"Color_YELLOW"%s"Color_RESET"%s.", pre, wrd, pos);
 				} else {
 					// s = r_str_newf ("\"%s"Color_INVERT"%s"Color_RESET"%s\"", pre, wrd, pos);
 					s = r_str_newf ("\"%s%s%s\"", pre, wrd, pos);
@@ -911,14 +913,25 @@ static void print_rop (RCore *core, RList *hitlist, char mode, bool *json_first)
 	const char *otype;
 	RCoreAsmHit *hit = NULL;
 	RListIter *iter;
+	RList *ropList;
 	char *buf_asm;
 	unsigned int size = 0;
 	RAnalOp analop = {0};
 	RAsmOp asmop;
+	Sdb *db = NULL;
 	const bool colorize = r_config_get_i (core->config, "scr.color");
 	const bool rop_comments = r_config_get_i (core->config, "rop.comments");
 	const bool esil = r_config_get_i (core->config, "asm.esil");
 	const bool rop_db = r_config_get_i (core->config, "rop.db");
+
+	if (rop_db) {
+		db = sdb_ns (core->sdb, "rop", true);
+		ropList = r_list_newf (free);
+		if (!db) {
+			eprintf ("Error: Could not create SDB 'rop' namespace\n");
+			return;
+		}
+	}
 
 	switch (mode) {
 	case 'j':
@@ -936,6 +949,10 @@ static void print_rop (RCore *core, RList *hitlist, char mode, bool *json_first)
 			r_asm_disassemble (core->assembler, &asmop, buf, hit->len);
 			r_anal_op (core->anal, &analop, hit->addr, buf, hit->len);
 			size += hit->len;
+			if (analop.type != R_ANAL_OP_TYPE_RET) {
+				char *opstr_n = r_str_newf (" %s", R_STRBUF_SAFEGET (&analop.esil));
+				r_list_append (ropList, (void*)opstr_n);
+			}
 			r_cons_printf ("{\"offset\":%"PFMT64d",\"size\":%d,"
 				"\"opcode\":\"%s\",\"type\":\"%s\"}%s",
 				hit->addr, hit->len, asmop.buf_asm,
@@ -943,7 +960,13 @@ static void print_rop (RCore *core, RList *hitlist, char mode, bool *json_first)
 				iter->n?",":"");
 			free (buf);
 		}
-		if (hit) {
+		if (db && hit) {
+			const ut64 addr = ((RCoreAsmHit *)hitlist->head->data)->addr;
+			//r_cons_printf ("Gadget size: %d\n", (int)size);
+			const char *key = sdb_fmt (0, "0x%08"PFMT64x, addr);
+			rop_classify (core, db, ropList, key, size);
+			r_cons_printf ("],\"retaddr\":%"PFMT64d",\"size\":%d}", hit->addr, size);
+		} else if (hit) {
 			r_cons_printf ("],\"retaddr\":%"PFMT64d",\"size\":%d}", hit->addr, size);
 		}
 		break;
@@ -959,7 +982,11 @@ static void print_rop (RCore *core, RList *hitlist, char mode, bool *json_first)
 			r_asm_disassemble (core->assembler, &asmop, buf, hit->len);
 			r_anal_op (core->anal, &analop, hit->addr, buf, hit->len);
 			size += hit->len;
-			char *opstr = (R_STRBUF_SAFEGET (&analop.esil));
+			const char *opstr = R_STRBUF_SAFEGET (&analop.esil);
+			if (analop.type != R_ANAL_OP_TYPE_RET) {
+				char *opstr_n = r_str_newf (" %s", opstr);
+				r_list_append (ropList, (void*)opstr_n);
+			}
 			if (esil) {
 				r_cons_printf ("%s\n", opstr);
 			} else if (colorize) {
@@ -972,12 +999,11 @@ static void print_rop (RCore *core, RList *hitlist, char mode, bool *json_first)
 			}
 			free (buf);
 		}
-		if (rop_db && hit) {
+		if (db && hit) {
 			const ut64 addr = ((RCoreAsmHit *)hitlist->head->data)->addr;
 			//r_cons_printf ("Gadget size: %d\n", (int)size);
-			Sdb *db = sdb_ns (core->sdb, "rop", true);
 			const char *key = sdb_fmt (0, "0x%08"PFMT64x, addr);
-			sdb_num_set (db, key, size, 0);
+			rop_classify (core, db, ropList, key, size);
 		}
 		break;
 	default:
@@ -996,6 +1022,10 @@ static void print_rop (RCore *core, RList *hitlist, char mode, bool *json_first)
 			r_asm_disassemble (core->assembler, &asmop, buf, hit->len);
 			r_anal_op (core->anal, &analop, hit->addr, buf, hit->len);
 			size += hit->len;
+			if (analop.type != R_ANAL_OP_TYPE_RET) {
+				char *opstr_n = r_str_newf (" %s", R_STRBUF_SAFEGET (&analop.esil));
+				r_list_append (ropList, (void*)opstr_n);
+			}
 			if (colorize) {
 				buf_asm = r_print_colorize_opcode (asmop.buf_asm,
 						core->cons->pal.reg, core->cons->pal.num);
@@ -1019,8 +1049,15 @@ static void print_rop (RCore *core, RList *hitlist, char mode, bool *json_first)
 			}
 			free (buf);
 		}
+		if (db && hit) {
+			const ut64 addr = ((RCoreAsmHit *)hitlist->head->data)->addr;
+			//r_cons_printf ("Gadget size: %d\n", (int)size);
+			const char *key = sdb_fmt (0, "0x%08"PFMT64x, addr);
+			rop_classify (core, db, ropList, key, size);
+		}
 	}
 	if (mode != 'j') r_cons_newline ();
+	r_list_free (ropList);
 }
 
 R_API RList* r_core_get_boundaries_ok(RCore *core) {
@@ -1360,6 +1397,7 @@ static void do_esil_search(RCore *core, struct search_parameters *param, const c
 		const int kwidx = r_config_get_i (core->config, "search.kwidx");
 		const int iotrap = r_config_get_i (core->config, "esil.iotrap");
 		const int stacksize = r_config_get_i (core->config, "esil.stacksize");
+		int nonull = r_config_get_i (core->config, "esil.nonull");
 		int hit_happens = 0;
 		int hit_combo = 0;
 		char *res;
@@ -1373,7 +1411,7 @@ static void do_esil_search(RCore *core, struct search_parameters *param, const c
 		core->anal->esil->cb.user = core;
 		r_anal_esil_set_op (core->anal->esil, "AddrInfo", esil_addrinfo);
 		/* hook addrinfo */
-		r_anal_esil_setup (core->anal->esil, core->anal, 1, 0);
+		r_anal_esil_setup (core->anal->esil, core->anal, 1, 0, nonull);
 		r_anal_esil_stack_free (core->anal->esil);
 		core->anal->esil->debug = 0;
 		for (; addr<param->to; addr++) {
@@ -1808,6 +1846,51 @@ static void do_string_search(RCore *core, struct search_parameters *param) {
 	if (json) r_cons_printf("]");
 }
 
+static void rop_kuery(void *data, const char *input) {
+	RCore *core = (RCore *)data;
+	Sdb *db_rop = sdb_ns (core->sdb, "rop", false);
+	bool json_first = true;
+	SdbListIter *sdb_iter;
+	SdbList *sdb_list;
+	SdbKv *kv;
+	char *out;
+
+	if (!db_rop) {
+		eprintf ("Error: could not find SDB 'rop' namespace\n");
+		return;
+	}
+
+	switch (*input) {
+	case 'q':
+		sdb_list = sdb_foreach_list (db_rop);
+		ls_foreach (sdb_list, sdb_iter, kv) {
+			r_cons_printf ("%s ", kv->key);
+		}
+		r_cons_newline ();
+		break;
+	case 'j':
+		r_cons_print ("{\"gadgets\":[");
+		sdb_list = sdb_foreach_list (db_rop);
+		ls_foreach (sdb_list, sdb_iter, kv) {
+			if (json_first) {
+				json_first = false;
+			} else {
+				r_cons_print (",");
+			}
+			r_cons_printf ("{\"address\":%s,\"size\":%s}", kv->key, kv->value);
+		}
+		r_cons_printf ("]}\n");
+		break;
+	default:
+		out = sdb_querys (core->sdb, NULL, 0, "rop/*");
+		if (out) {
+			r_cons_println (out);
+		}
+		free (out);
+		break;
+	}
+}
+
 static int cmd_search(void *data, const char *input) {
 	struct search_parameters param;
 	bool dosearch = false;
@@ -1955,7 +2038,7 @@ reread:
 		}
 		break;
 	case 'R':
-		if (input[1]=='?') {
+		if (input[1] == '?') {
 			const char* help_msg[] = {
 				"Usage: /R", "", "Search for ROP gadgets",
 				"/R", " [filter-by-string]" , "Show gadgets",
@@ -1964,10 +2047,23 @@ reread:
 				"/R/l", " [filter-by-regexp]" , "Show gadgets in a linear manner [regular expression]",
 				"/Rj", " [filter-by-string]", "JSON output",
 				"/R/j", " [filter-by-regexp]", "JSON output [regular expression]",
+				"/Rk", "", "Query stored ROP gadgets",
 				NULL};
 			r_core_cmd_help (core, help_msg);
 		} else if (input[1] == '/') {
 			r_core_search_rop (core, param.from, param.to, 0, input+1, 1);
+		} else if (input[1] == 'k') {
+			if (input[2] == '?') {
+				const char* help_msg[] = {
+					"Usage: /Rk", "", "Query stored ROP gadgets",
+					"/Rk", "", "Show gadgets",
+					"/Rkj", "", "JSON output",
+					"/Rkq", "", "List Gadgets offsets",
+					NULL};
+				r_core_cmd_help (core, help_msg);
+			} else {
+				rop_kuery (core, input + 2);
+			}
 		} else r_core_search_rop (core, param.from, param.to, 0, input+1, 0);
 		goto beach;
 	case 'r': // "/r"
@@ -2372,7 +2468,7 @@ reread:
 			eprintf ("Usage: /+ [string]\n");
 		}
 		break;
-	case 'z': /* search asm */
+	case 'z': /* search strings of min-max range*/
 		{
 		char *p;
 		ut32 min, max;
@@ -2380,14 +2476,14 @@ reread:
 			eprintf ("Usage: /z min max\n");
 			break;
 		}
-		if ((p = strchr (input+2, ' '))) {
+		if ((p = strchr (input + 2, ' '))) {
 			*p = 0;
 			max = r_num_math (core->num, p+1);
 		} else {
 			eprintf ("Usage: /z min max\n");
 			break;
 		}
-		min = r_num_math (core->num, input+2);
+		min = r_num_math (core->num, input + 2);
 		if (!r_search_set_string_limits (core->search, min, max)) {
 			eprintf ("Error: min must be lower than max\n");
 			break;
@@ -2395,8 +2491,11 @@ reread:
 		r_search_reset (core->search, R_SEARCH_STRING);
 		r_search_set_distance (core->search, (int)
 				r_config_get_i (core->config, "search.distance"));
-		r_search_kw_add (core->search,
-			r_search_keyword_new_hexmask ("00", NULL)); //XXX
+		{
+			RSearchKeyword *kw = r_search_keyword_new_hexmask ("00", NULL);
+			kw->type = R_SEARCH_KEYWORD_TYPE_STRING;
+			r_search_kw_add (core->search, kw);
+		}
 		r_search_begin (core->search);
 		dosearch = true;
 		}

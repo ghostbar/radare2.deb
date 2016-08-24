@@ -16,9 +16,13 @@ static int rap__write(RIO *io, RIODesc *fd, const ut8 *buf, int count) {
 	ut8 *tmp;
 	int ret;
 
+	if (count < 1) {
+		return count;
+	}
 	// TOOD: if count > RMT_MAX iterate !
-	if (count > RMT_MAX)
+	if (count > RMT_MAX) {
 		count = RMT_MAX;
+	}
 	if (!(tmp = (ut8 *)malloc (count + 5))) {
 		eprintf ("rap__write: malloc failed\n");
 		return -1;
@@ -32,9 +36,10 @@ static int rap__write(RIO *io, RIODesc *fd, const ut8 *buf, int count) {
 	if (r_socket_read (s, tmp, 5) != 5) { // TODO read_block?
 		eprintf ("rap__write: error\n");
 		ret = -1;
+	} else {
+		ret = r_read_be32 (tmp + 1);
 	}
 	free (tmp);
-	// TODO: get reply
 	return ret;
 }
 
@@ -53,8 +58,9 @@ static int rap__read(RIO *io, RIODesc *fd, ut8 *buf, int count) {
 	ut8 tmp[5];
 
 	// XXX. if count is > RMT_MAX, just perform multiple queries
-	if (count > RMT_MAX)
+	if (count > RMT_MAX) {
 		count = RMT_MAX;
+	}
 	// send
 	tmp[0] = RMT_READ;
 	r_write_be32 (tmp + 1, count);
@@ -104,12 +110,15 @@ static ut64 rap__lseek(RIO *io, RIODesc *fd, ut64 offset, int whence) {
 	r_socket_write (s, &tmp, 10);
 	r_socket_flush (s);
 	// get reply
+	memset (tmp, 0, 9);
 	ret = r_socket_read_block (s, (ut8*)&tmp, 9);
 	if (ret != 9 || tmp[0] != (RMT_SEEK | RMT_REPLY)) {
+		// eprintf ("%d %d  - %02x %02x %02x %02x %02x %02x %02x\n", 
+		// ret, whence, tmp[0], tmp[1], tmp[2], tmp[3], tmp[4], tmp[5], tmp[6]);
 		eprintf ("Unexpected lseek reply\n");
 		return -1;
 	}
-	offset = r_read_at_be64 (tmp, 1);
+	offset = r_read_at_be64 (tmp + 1, 1);
 	return offset;
 }
 
@@ -228,9 +237,9 @@ static RIODesc *rap__open(RIO *io, const char *pathname, int rw, int mode) {
 		}
 #endif
 	} else {
-		r_socket_free (rap_fd);
-		free (rior);
-		return NULL;
+	//	r_socket_free (rap_fd);
+	//	free (rior);
+		//return NULL;
 	}
 	//r_socket_free (rap_fd);
 	return r_io_desc_new (&r_io_plugin_rap, rior->fd->fd,
