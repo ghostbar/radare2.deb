@@ -1,3 +1,9 @@
+radare2 (0.10.5-rnuwily1) wily; urgency=medium
+
+  * new upstream release. 
+
+ -- Jose Luis Rivas <ghostbar@debian.org>  Wed, 24 Aug 2016 00:01:17 -0400
+
 radare2 (0.10.4-rnuwily2) wily; urgency=medium
 
   * conflict with anything prior to 0.10.0
