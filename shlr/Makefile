@@ -20,9 +20,9 @@ CS_PATCHES=0
 else
 CS_TAR=
 CS_URL=$(GIT_PREFIX)github.com/aquynh/capstone.git
-CS_UPD=20160625
+CS_UPD=20160813
 CS_BRA=next
-CS_TIP=5ff595c362695803e01d620d559a112cb186a789
+CS_TIP=a0f082d32ca3e9d7e6d0b8fbc9b19f2a0978d8e9
 # REVERT THIS COMMIT BECAUSE ITS WRONG
 CS_REV=
 CS_PATCHES=1
@@ -219,7 +219,8 @@ capstone: capstone-$(CS_VER).tar.gz
 	rm -rf capstone
 	mv capstone-$(CS_VER) capstone
 ifeq ($(CS_PATCHES),1)
-	cd capstone ; for PATCH in ../capstone-patches/* ; do patch -tp1 < $$PATCH ; done
+	#cd capstone ; for PATCH in ../capstone-patches/* ; do patch -tp1 < $$PATCH ; done
+	cd capstone ; for PATCH in ../capstone-patches/* ; do patch -p1 < $$PATCH ; done
 endif
 	mkdir -p capstone/include/capstone
 	cp -rf capstone/include/*.h capstone/include/capstone
@@ -234,7 +235,8 @@ capstone-sync:
 	"$(SHELL)" capstone.sh "${CS_URL}" "${CS_BRA}" "${CS_TIP}" "${CS_REV}"
 ifeq ($(CS_PATCHES),1)
 	-cd capstone ; $(GIT) reset --hard
-	cd capstone ; for PATCH in ../capstone-patches/* ; do patch -tp1 < $$PATCH ; done
+	#cd capstone ; for PATCH in ../capstone-patches/* ; do patch -tp1 < $$PATCH ; done
+	cd capstone ; for PATCH in ../capstone-patches/* ; do patch -p1 < $$PATCH ; done
 endif
 
 .PHONY: capstone

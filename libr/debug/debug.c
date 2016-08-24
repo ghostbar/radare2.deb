@@ -39,8 +39,12 @@ R_API void r_debug_info_free (RDebugInfo *rdi) {
 static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem **pb) {
 	RBreakpointItem *b;
 
+	if (!pb) {
+		eprintf ("BreakpointItem is NULL!\n");
+		return false;
+	}
 	/* initialize the output parameter */
-	if (pb) *pb = NULL;
+	*pb = NULL;
 
 	/* if we are tracing, update the tracing data */
 	if (dbg->trace->enabled) {
@@ -177,9 +181,29 @@ static int r_debug_recoil(RDebug *dbg, RDebugRecoilMode rc_mode) {
 	return r_debug_bps_enable (dbg);
 }
 
+static int get_bpsz_arch(RDebug *dbg) {
+#define CMP_ARCH(x) strncmp (dbg->arch, (x), R_MIN (len_arch, strlen ((x))))
+	int bpsz , len_arch = strlen (dbg->arch);
+	if (!CMP_ARCH ("arm")) {
+		//TODO add better handle arm/thumb
+		bpsz = 4;
+	} else if (!CMP_ARCH ("mips")) {
+		bpsz = 4;
+	} else if (!CMP_ARCH ("ppc")) {
+		bpsz = 4;
+	} else if (!CMP_ARCH ("sparc")) {
+		bpsz = 4;
+	} else if (!CMP_ARCH ("sh")) {
+		bpsz = 2;
+	} else {
+		bpsz = 1;
+	}
+	return bpsz;
+}
+
 /* add a breakpoint with some typical values */
 R_API RBreakpointItem *r_debug_bp_add(RDebug *dbg, ut64 addr, int hw, char *module, st64 m_delta) {
-	int bpsz = strcmp (dbg->arch, "arm") ? 1 : 4;
+	int bpsz = get_bpsz_arch (dbg);
 	RBreakpointItem *bpi;
 	const char *module_name = module;
 	RListIter *iter;

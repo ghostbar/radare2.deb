@@ -107,11 +107,11 @@ static int init_phdr(struct Elf_(r_bin_elf_obj_t) *bin) {
 	if (bin->ehdr.e_phnum == 0)
 		return false;
 	if (bin->phdr) return true;
-	if (!UT32_MUL (&phdr_size, bin->ehdr.e_phnum, sizeof (Elf_(Phdr))))
+	if (!UT32_MUL (&phdr_size, (ut32)bin->ehdr.e_phnum, sizeof (Elf_(Phdr))))
 		return false;
 	if (!phdr_size)
 		return false;
-	if (phdr_size > bin->size)
+	if (phdr_size > (ut32)bin->size)
 		return false;
 	if (bin->ehdr.e_phoff > bin->size)
 		return false;
@@ -411,7 +411,7 @@ static Sdb *store_versioninfo_gnu_versym(struct Elf_(r_bin_elf_obj_t) *bin, Elf_
 		return NULL;
 
 	int i;
-	const int num_entries = shdr->sh_size / sizeof (Elf_(Versym));
+	const int num_entries = sz / sizeof (Elf_(Versym));
 	const char *section_name = "";
 	const char *link_section_name = "";
 	Elf_(Shdr) *link_shdr = &bin->shdr[shdr->sh_link];
@@ -440,8 +440,9 @@ static Sdb *store_versioninfo_gnu_versym(struct Elf_(r_bin_elf_obj_t) *bin, Elf_
 	sdb_num_set (sdb, "link", shdr->sh_link, 0);
 	sdb_set (sdb, "link_section_name", link_section_name, 0);
 
-	for (i = num_entries; i--;)
+	for (i = num_entries; i--;) {
 		data[i] = *(ut16*)&edata[i * sizeof (ut16)];
+	}
 
 	R_FREE (edata);
 
@@ -778,23 +779,31 @@ static Sdb *store_versioninfo(struct Elf_(r_bin_elf_obj_t) *bin) {
 		char key[32] = {0};
 		int size = bin->shdr[i].sh_size;
 
-		if (size < 0 || size > bin->size) {
+		if (size - (i*sizeof(Elf_(Shdr)) > bin->size)) {
+			size = bin->size - (i*sizeof(Elf_(Shdr)));
+		}
+		if (bin->shdr[i].sh_offset + ((i + 1) * sizeof (Elf_(Shdr))) > bin->size) {
 			eprintf ("Warning: Too big version info field %d (%d)\n", i, size);
+			break;
+		}
+		int left = size - (i * sizeof (Elf_(Shdr)));
+		left = R_MIN (left, bin->shdr[i].sh_size);
+		if (left < 0) {
 			break;
 		}
 		switch (bin->shdr[i].sh_type) {
 		case SHT_GNU_verdef:
-			sdb = store_versioninfo_gnu_verdef (bin, &bin->shdr[i], bin->shdr[i].sh_size);
+			sdb = store_versioninfo_gnu_verdef (bin, &bin->shdr[i], left);
 			snprintf (key, sizeof (key), "verdef%d", num_verdef++);
 			sdb_ns_set (sdb_versioninfo, key, sdb);
 			break;
 		case SHT_GNU_verneed:
-			sdb = store_versioninfo_gnu_verneed (bin, &bin->shdr[i], bin->shdr[i].sh_size);
+			sdb = store_versioninfo_gnu_verneed (bin, &bin->shdr[i], left);
 			snprintf (key, sizeof (key), "verneed%d", num_verneed++);
 			sdb_ns_set (sdb_versioninfo, key, sdb);
 			break;
 		case SHT_GNU_versym:
-			sdb = store_versioninfo_gnu_versym (bin, &bin->shdr[i], bin->shdr[i].sh_size);
+			sdb = store_versioninfo_gnu_versym (bin, &bin->shdr[i], left);
 			snprintf (key, sizeof (key), "versym%d", num_versym++);
 			sdb_ns_set (sdb_versioninfo, key, sdb);
 			break;
@@ -1179,15 +1188,23 @@ ut64 Elf_(r_bin_elf_get_fini_offset)(struct Elf_(r_bin_elf_obj_t) *bin) {
 
 ut64 Elf_(r_bin_elf_get_entry_offset)(struct Elf_(r_bin_elf_obj_t) *bin) {
 	ut64 entry;
-	if (!bin) return 0LL;
-	entry = r_read_ble32 (&bin->ehdr.e_entry, 0);
-	if (entry == 0LL) {
+	if (!bin) {
+		return 0LL;
+	}
+	entry = bin->ehdr.e_entry;
+	if (entry == 0LL) { 
 		entry = Elf_(r_bin_elf_get_section_offset)(bin, ".init.text");
-		if (entry != UT64_MAX) return entry;
+		if (entry != UT64_MAX) {
+			return entry;
+		}
 		entry = Elf_(r_bin_elf_get_section_offset)(bin, ".text");
-		if (entry != UT64_MAX) return entry;
+		if (entry != UT64_MAX) {
+			return entry;
+		}
 		entry = Elf_(r_bin_elf_get_section_offset)(bin, ".init");
-		if (entry != UT64_MAX) return entry;
+		if (entry != UT64_MAX) {
+			return entry;
+		}
 	}
 	return Elf_(r_bin_elf_v2p) (bin, entry);
 }
@@ -2183,7 +2200,7 @@ RBinElfSymbol* Elf_(r_bin_elf_get_symbols)(struct Elf_(r_bin_elf_obj_t) *bin, in
 					goto beach;
 				}
 				if (strtab_section->sh_offset > bin->size ||
-				  strtab_section->sh_offset + strtab_section->sh_size > bin->size) {
+					strtab_section->sh_offset + strtab_section->sh_size > bin->size) {
 					goto beach;
 				}
 				if (r_buf_read_at (bin->b, strtab_section->sh_offset,
@@ -2221,6 +2238,7 @@ RBinElfSymbol* Elf_(r_bin_elf_get_symbols)(struct Elf_(r_bin_elf_obj_t) *bin, in
 				eprintf ("Warning: read (sym)\n");
 				goto beach;
 			}
+			free (ret);
 			ret = calloc (nsym, sizeof (RBinElfSymbol));
 			if (!ret) {
 				eprintf ("Cannot allocate %d symbols\n", nsym);
@@ -2376,7 +2394,7 @@ struct Elf_(r_bin_elf_obj_t)* Elf_(r_bin_elf_new_buf)(RBuffer *buf) {
 	struct Elf_(r_bin_elf_obj_t) *bin = R_NEW0 (struct Elf_(r_bin_elf_obj_t));
 	bin->kv = sdb_new0 ();
 	bin->b = r_buf_new ();
-	bin->size = buf->length;
+	bin->size = (ut32)buf->length;
 	if (!r_buf_set_bytes (bin->b, buf->buf, buf->length)) {
 		return Elf_(r_bin_elf_free) (bin);
 	}
@@ -2394,6 +2412,7 @@ static int is_in_vphdr (Elf_(Phdr) *p, ut64 addr) {
 	return addr >= p->p_vaddr && addr < p->p_vaddr + p->p_memsz;
 }
 
+
 /* converts a physical address to the virtual address, looking
  * at the program headers in the binary bin */
 ut64 Elf_(r_bin_elf_p2v) (struct Elf_(r_bin_elf_obj_t) *bin, ut64 paddr) {
@@ -2409,9 +2428,13 @@ ut64 Elf_(r_bin_elf_p2v) (struct Elf_(r_bin_elf_obj_t) *bin, ut64 paddr) {
 	}
 	for (i = 0; i < bin->ehdr.e_phnum; ++i) {
 		Elf_(Phdr) *p = &bin->phdr[i];
-		if (!p) break;
-
+		if (!p) {
+			break;
+		}
 		if (p->p_type == PT_LOAD && is_in_pphdr (p, paddr)) {
+			if (!p->p_vaddr && !p->p_offset) {
+				continue;
+			}
 			return p->p_vaddr + paddr - p->p_offset;
 		}
 	}
@@ -2434,8 +2457,13 @@ ut64 Elf_(r_bin_elf_v2p) (struct Elf_(r_bin_elf_obj_t) *bin, ut64 vaddr) {
 	}
 	for (i = 0; i < bin->ehdr.e_phnum; ++i) {
 		Elf_(Phdr) *p = &bin->phdr[i];
-		if (!p) break;
+		if (!p) {
+			break;
+		}
 		if (p->p_type == PT_LOAD && is_in_vphdr (p, vaddr)) {
+			if (!p->p_offset && !p->p_vaddr) {
+				continue;
+			}
 			return p->p_offset + vaddr - p->p_vaddr;
 		}
 	}

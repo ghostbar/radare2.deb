@@ -158,7 +158,7 @@ static char *getarg(struct Getarg* gop, int n, int set, char *setop) {
 
 		if (component_count > 1) {
 			if (component_count > 2) {
-				snprintf (buf_, sizeof (buf), "%s+", buf);
+				snprintf (buf_, sizeof (buf), "%s+,", buf);
 				strncpy (buf, buf_, sizeof (buf));
 			}
 			if (disp < 0) {
@@ -175,9 +175,9 @@ static char *getarg(struct Getarg* gop, int n, int set, char *setop) {
 		// set = 2 is reserved for lea, where the operand is a memory address,
 		// but the corresponding memory is not loaded.
 		if (set == 1) {
-			snprintf (buf_, sizeof (buf), "%s,%s=[%d]", buf, setarg, op.size);
+			snprintf (buf_, sizeof (buf), "%s,%s=[%d]", buf, setarg, op.size==10?8:op.size);
 		} else if (set == 0) {
-			snprintf (buf_, sizeof (buf), "%s,[%d]", buf, op.size);
+			snprintf (buf_, sizeof (buf), "%s,[%d]", buf, op.size==10? 8: op.size);
 		}
 
 		strncpy (buf, buf_, sizeof (buf));
@@ -229,6 +229,8 @@ static void anop_esil (RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len
 		(a->bits==32)?"esp":"rsp";
 	const char *bp = (a->bits==16)?"bp":
 		(a->bits==32)?"ebp":"rbp";
+	const char *si = (a->bits==16)?"si":
+		(a->bits==32)?"esi":"rsi";
 	struct Getarg gop = {
 		.handle = *handle,
 		.insn = insn,
@@ -510,10 +512,10 @@ static void anop_esil (RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len
 			r_strbuf_appendf (&op->esil, "rax,rdi,=[8],df,?{,8,edi,-=,},df,!,?{,8,edi,+=,}");
 		break;
 	case X86_INS_LODSB:
-			r_strbuf_appendf (&op->esil, "esi,[1],al,=,df,?{,1,esi,-=,},df,!,?{,1,esi,+=,}");
+			r_strbuf_appendf (&op->esil, "%s,[1],al,=,df,?{,1,%s,-=,},df,!,?{,1,%s,+=,}", si, si, si);
 		break;
 	case X86_INS_LODSW:
-			r_strbuf_appendf (&op->esil, "esi,[2],ax,=,df,?{,2,esi,-=,},df,!,?{,2,esi,+=,}");
+			r_strbuf_appendf (&op->esil, "%s,[2],ax,=,df,?{,2,%s,-=,},df,!,?{,2,%s,+=,}", si, si, si);
 		break;
 	case X86_INS_LODSD:
 			r_strbuf_appendf (&op->esil, "esi,[4],eax,=,df,?{,4,esi,-=,},df,!,?{,4,esi,+=,}");
@@ -548,12 +550,12 @@ static void anop_esil (RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len
 			int width = INSOP(0).size;
 			const char *src = cs_reg_name(*handle, INSOP(1).mem.base);
 			const char *dst = cs_reg_name(*handle, INSOP(0).mem.base);
-			r_strbuf_appendf (&op->esil, 
+			r_strbuf_appendf (&op->esil,
 					"%s,[%d],%s,=[%d],"\
 					"df,?{,%d,%s,-=,%d,%s,-=,},"\
 					"df,!,?{,%d,%s,+=,%d,%s,+=,}",
-					src, width, dst, width, 
-					width, src, width, dst, 
+					src, width, dst, width,
+					width, src, width, dst,
 					width, src, width, dst);
 		} else {
 			int width = INSOP(0).size;
@@ -561,7 +563,7 @@ static void anop_esil (RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len
 			const char *dst = cs_reg_name(*handle, INSOP(0).mem.base);
 			esilprintf (op, "%s,[%d],%s,=[%d],df,?{,%d,%s,-=,%d,%s,-=,},"\
 					"df,!,?{,%d,%s,+=,%d,%s,+=,}",
-					src, width, dst, width, width, src, width, 
+					src, width, dst, width, width, src, width,
 					dst, width, src, width, dst);
 		}
 		break;
@@ -792,13 +794,13 @@ static void anop_esil (RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len
 				"%s,[%d],%d,%s,+=,%s,=,"
 				"%s,[%d],%d,%s,+=,%s,=,"
 				"%s,=",
-				sp, rs, rs, sp, "edi", 
-				sp, rs, rs, sp, "esi", 
-				sp, rs, rs, sp, "ebp", 
-				sp, rs, rs, sp, 
-				sp, rs, rs, sp, "ebx", 
-				sp, rs, rs, sp, "edx", 
-				sp, rs, rs, sp, "ecx", 
+				sp, rs, rs, sp, "edi",
+				sp, rs, rs, sp, "esi",
+				sp, rs, rs, sp, "ebp",
+				sp, rs, rs, sp,
+				sp, rs, rs, sp, "ebx",
+				sp, rs, rs, sp, "edx",
+				sp, rs, rs, sp, "ecx",
 				sp, rs, rs, sp, "eax",
 				sp
 				);
@@ -1769,6 +1771,7 @@ static void anop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len, csh 
 		op->type = R_ANAL_OP_TYPE_LEA;
 		switch (INSOP(1).type) {
 		case X86_OP_MEM:
+			// op->type = R_ANAL_OP_TYPE_ULEA;
 			op->ptr = INSOP(1).mem.disp;
 			op->refptr = INSOP(1).size;
 			switch (INSOP(1).mem.base) {
@@ -1786,8 +1789,9 @@ static void anop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len, csh 
 			}
 			break;
 		case X86_OP_IMM:
-			if (INSOP(1).imm > 10)
+			if (INSOP(1).imm > 10) {
 				op->ptr = INSOP(1).imm;
+			}
 			break;
 		default:
 			break;
@@ -1836,13 +1840,15 @@ static void anop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len, csh 
 		op->stackop = R_ANAL_STACK_INC;
 		op->stackptr = -regsz * 8;
 		break;
-	case X86_INS_RET:
-	case X86_INS_RETF:
-	case X86_INS_RETFQ:
 	case X86_INS_IRET:
 	case X86_INS_IRETD:
 	case X86_INS_IRETQ:
 	case X86_INS_SYSRET:
+		op->family = R_ANAL_OP_FAMILY_PRIV;
+		/* fallthrough */
+	case X86_INS_RET:
+	case X86_INS_RETF:
+	case X86_INS_RETFQ:
 		op->type = R_ANAL_OP_TYPE_RET;
 		op->stackop = R_ANAL_STACK_INC;
 		op->stackptr = -regsz;
@@ -2071,9 +2077,8 @@ static void anop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len, csh 
 	case X86_INS_DIV:
 		op->type = R_ANAL_OP_TYPE_DIV;
 		break;
+	case X86_INS_AAM:
 	case X86_INS_IMUL:
-		op->type = R_ANAL_OP_TYPE_MUL;
-		break;
 	case X86_INS_MUL:
 	case X86_INS_MULX:
 	case X86_INS_MULPD:
@@ -2229,7 +2234,7 @@ static int analop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len) {
 		anop (a, op, addr, buf, len, &handle, insn);
 		if (a->decode) {
 			anop_esil (a, op, addr, buf, len, &handle, insn);
-		}	
+		}
 	}
 //#if X86_GRP_PRIVILEGE>0
 	if (insn) {
@@ -2326,12 +2331,15 @@ static char *get_reg_profile(RAnal *anal) {
 		"gpr	si	.16	12	0\n"
 		"gpr	di	.16	16	0\n"
 		"seg	cs	.16	52	0\n"
+		"seg	ss	.16	52	0\n"
+		"seg	ds	.16	54	0\n"
+		"seg	es	.16	58	0\n"
 		"gpr	flags	.16	56	0\n"
-		"gpr	cf	.1	.448	0\n"
+		"flg	cf	.1	.448	0\n"
 		"flg	pf	.1	.449	0\n"
 		"flg	af	.1	.450	0\n"
-		"gpr	zf	.1	.451	0\n"
-		"gpr	sf	.1	.452	0\n"
+		"flg	zf	.1	.451	0\n"
+		"flg	sf	.1	.452	0\n"
 		"flg	tf	.1	.453	0\n"
 		"flg	if	.1	.454	0\n"
 		"flg	df	.1	.455	0\n"
@@ -2390,20 +2398,20 @@ static char *get_reg_profile(RAnal *anal) {
 		"seg	xcs	.32	52	0\n"
 		"seg	cs	.16	52	0\n"
 		"seg	xss	.32	52	0\n"
-		"gpr	eflags	.32	.448	0	c1p.a.zstido.n.rv\n"
-		"gpr	flags	.16	.448	0\n"
-		"gpr	cf	.1	.448	0\n"
-		"gpr	pf	.1	.450	0\n"
-		"gpr	af	.1	.452	0\n"
-		"gpr	zf	.1	.454	0\n"
-		"gpr	sf	.1	.455	0\n"
-		"gpr	tf	.1	.456	0\n"
-		"gpr	if	.1	.457	0\n"
-		"gpr	df	.1	.458	0\n"
-		"gpr	of	.1	.459	0\n"
-		"gpr	nt	.1	.462	0\n"
-		"gpr	rf	.1	.464	0\n"
-		"gpr	vm	.1	.465	0\n"
+		"flg	eflags	.32	.448	0	c1p.a.zstido.n.rv\n"
+		"flg	flags	.16	.448	0\n"
+		"flg	cf	.1	.448	0\n"
+		"flg	pf	.1	.450	0\n"
+		"flg	af	.1	.452	0\n"
+		"flg	zf	.1	.454	0\n"
+		"flg	sf	.1	.455	0\n"
+		"flg	tf	.1	.456	0\n"
+		"flg	if	.1	.457	0\n"
+		"flg	df	.1	.458	0\n"
+		"flg	of	.1	.459	0\n"
+		"flg	nt	.1	.462	0\n"
+		"flg	rf	.1	.464	0\n"
+		"flg	vm	.1	.465	0\n"
 		"drx	dr0	.32	0	0\n"
 		"drx	dr1	.32	4	0\n"
 		"drx	dr2	.32	8	0\n"
@@ -2501,19 +2509,19 @@ static char *get_reg_profile(RAnal *anal) {
 		 "gpr	bp	.16	32	0\n"
 		 "gpr	bpl	.8	32	0\n"
 		 "seg	cs	.64	136	0\n"
-		 "gpr	rflags	.64	144	0	c1p.a.zstido.n.rv\n"
-		 "gpr	eflags	.32	144	0	c1p.a.zstido.n.rv\n"
-		 "gpr	cf	.1	144.0	0	carry\n"
-		 "gpr	pf	.1	144.2	0	parity\n"
+		 "flg	rflags	.64	144	0	c1p.a.zstido.n.rv\n"
+		 "flg	eflags	.32	144	0	c1p.a.zstido.n.rv\n"
+		 "flg	cf	.1	144.0	0	carry\n"
+		 "flg	pf	.1	144.2	0	parity\n"
 		 //"gpr	cf	.1	.1152	0	carry\n"
 		 //"gpr	pf	.1	.1154	0	parity\n"
-		 "gpr	af	.1	144.4	0	adjust\n"
-		 "gpr	zf	.1	144.6	0	zero\n"
-		 "gpr	sf	.1	144.7	0	sign\n"
-		 "gpr	tf	.1	.1160	0	trap\n"
-		 "gpr	if	.1	.1161	0	interrupt\n"
-		 "gpr	df	.1	.1162	0	direction\n"
-		 "gpr	of	.1	.1163	0	overflow\n"
+		 "flg	af	.1	144.4	0	adjust\n"
+		 "flg	zf	.1	144.6	0	zero\n"
+		 "flg	sf	.1	144.7	0	sign\n"
+		 "flg	tf	.1	.1160	0	trap\n"
+		 "flg	if	.1	.1161	0	interrupt\n"
+		 "flg	df	.1	.1162	0	direction\n"
+		 "flg	of	.1	.1163	0	overflow\n"
 
 		 "gpr	rsp	.64	152	0\n"
 		 "gpr	esp	.32	152	0\n"
@@ -2633,11 +2641,11 @@ static char *get_reg_profile(RAnal *anal) {
 		 "seg	cs	.64	136	0\n"
 		 //"flg	eflags	.64	144	0\n"
 		 "gpr	eflags	.32	144	0	c1p.a.zstido.n.rv\n"
-		 "gpr	cf	.1	.1152	0\n"
+		 "flg	cf	.1	.1152	0\n"
 		 "flg	pf	.1	.1153	0\n"
 		 "flg	af	.1	.1154	0\n"
-		 "gpr	zf	.1	.1155	0\n"
-		 "gpr	sf	.1	.1156	0\n"
+		 "flg	zf	.1	.1155	0\n"
+		 "flg	sf	.1	.1156	0\n"
 		 "flg	tf	.1	.1157	0\n"
 		 "flg	if	.1	.1158	0\n"
 		 "flg	df	.1	.1159	0\n"

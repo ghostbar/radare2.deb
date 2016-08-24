@@ -1,8 +1,14 @@
+radare2 (0.10.5-rnuxenial1) xenial; urgency=medium
+
+  * new upstream release.
+
+ -- Jose Luis Rivas <ghostbar@debian.org>  Wed, 24 Aug 2016 00:02:49 -0400
+
 radare2 (0.10.4-rnuxenial1) xenial; urgency=medium
 
-  * new upstream version
+  * conflict with anything prior to 0.10.0
 
- -- Jose Luis Rivas <ghostbar@debian.org>  Thu, 07 Jul 2016 00:45:27 -0400
+ -- Jose Luis Rivas <ghostbar@debian.org>  Thu, 14 Jul 2016 13:53:21 -0400
 
 radare2 (0.10.2-1) unstable; urgency=medium
 
