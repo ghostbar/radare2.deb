@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <getopt.c>
 #include <r_core.h>
+#include <r_types.h>
+#include <r_util.h>
 #include "../blob/version.c"
 #include "../../libr/bin/pdb/pdb_downloader.h"
 
@@ -17,6 +19,7 @@ static char* file = NULL;
 static char *name = NULL;
 static int rw = false;
 static int va = true;
+static char *stdin_buf = NULL;
 static const char *do_demangle = NULL;
 static ut64 at = 0LL;
 static RLib *l;
@@ -89,11 +92,18 @@ static int rabin_show_help(int v) {
 }
 
 static char *stdin_gets() {
-        static char buf[96096];
-        fgets (buf, sizeof (buf)-1, stdin);
-        if (feof (stdin)) return NULL;
-        buf[strlen (buf)-1] = 0;
-        return strdup (buf);
+#define STDIN_BUF_SIZE 96096
+	if (!stdin_buf) {
+		/* XXX: never freed. leaks! */
+		stdin_buf = malloc (STDIN_BUF_SIZE);
+	}
+	memset (stdin_buf, 0, STDIN_BUF_SIZE);
+        fgets (stdin_buf, sizeof (stdin_buf) - 1, stdin);
+        if (feof (stdin)) {
+		return NULL;
+	}
+        stdin_buf[strlen (stdin_buf) - 1] = 0;
+        return strdup (stdin_buf);
 }
 
 static void __sdb_prompt(Sdb *sdb) {
@@ -112,25 +122,33 @@ static bool isBinopHelp(const char *op) {
 	return false;
 }
 
-static bool extract_binobj (const RBinFile *bf, const RBinObject *o, int idx) {
-	ut64 boffset = o ? o->boffset : 0;
-	ut64 bin_size = o ? o->obj_size : 0;
-	const ut8 *bytes;
+static bool extract_binobj(const RBinFile *bf, const RBinXtrData *data, int idx) {
+	ut64 bin_size = data ? data->size : 0;
+	ut8 *bytes;
+	ut8 *bytes_encoded;
 	//ut64 sz = bf ? r_buf_size (bf->buf) : 0;
-	RBinInfo *info = o ? o->info : NULL;
-	const char *arch = info ? info->arch : "unknown";
-	char bits = info ? info->bits : 0;
+	char *arch = "unknown";
+	int bits = 0;
+	char *libname = NULL;
 	const char *filename = bf ? bf->file : NULL;
 	char *path = NULL, *outpath = NULL, *outfile = NULL, *ptr = NULL;
 	ut32 outfile_sz = 0, outpath_sz = 0;
 	bool res = false;
 
-	if (!bf || !o || !filename ) return false;
+	if (!bf || !data || !filename ) return false;
+	if (data->metadata) {
+		arch = data->metadata->arch;
+		bits = data->metadata->bits;
+		libname = data->metadata->libname;
+	}
 	if (bin_size == bf->size && bin_size) {
 		eprintf ("This is not a fat bin\n");
 		return false;
 	}
-	bytes = r_buf_buffer (bf->buf);
+	bytes_encoded = (ut8 *) sdb_get (data->sdb, sdb_fmt (0, "%d", data->offset), 0);
+	bytes = sdb_decode ((const char *)bytes_encoded, NULL);
+	free (bytes_encoded);
+
 	if (!bytes) {
 		eprintf ("error: BinFile buffer is empty\n");
 		return false;
@@ -166,34 +184,39 @@ static bool extract_binobj (const RBinFile *bf, const RBinObject *o, int idx) {
 	}
 
 	outfile_sz = outpath_sz + strlen (ptr) + strlen (arch) + 23;
-	if (outfile_sz)
+	if (outfile_sz) {
 		outfile = malloc (outfile_sz);
+	}
 
-	if (outfile)
-		snprintf (outfile, outfile_sz, "%s/%s.%s_%i.%d",
-			outpath, ptr, arch, bits, idx);
+	if (outfile) {
+		if (libname) {
+			snprintf (outfile, outfile_sz, "%s/%s.%s.%s_%i.%d",
+					  outpath, ptr, arch, libname, bits, idx);
+		} else {
+			snprintf (outfile, outfile_sz, "%s/%s.%s_%i.%d",
+					  outpath, ptr, arch, bits, idx);
+		}
+	}
 
-	if (boffset > r_buf_size (bf->buf)) {
-		eprintf ("Invalid offsets\n");
+
+	if (!outfile || !r_file_dump (outfile, bytes, bin_size, 0)) {
+		eprintf ("Error extracting %s\n", outfile);
 		res = false;
 	} else {
-		if (!outfile || !r_file_dump (outfile, bytes+boffset, bin_size, 0)) {
-			eprintf ("Error extracting %s\n", outfile);
-			res = false;
-		} else {
-			printf ("%s created (%"PFMT64d")\n", outfile, bin_size);
-			res = true;
-		}
+		printf ("%s created (%"PFMT64d")\n", outfile, bin_size);
+		res = true;
 	}
 
 	free (outfile);
 	free (outpath);
 	free (path);
+	free (bytes);
+
 	return res;
 }
 
 static int rabin_extract(int all) {
-	RBinObject *obj = NULL;
+	RBinXtrData *data = NULL;
 	int res = false;
 	RBinFile *bf = r_bin_cur (bin);
 
@@ -201,13 +224,14 @@ static int rabin_extract(int all) {
 	if (all) {
 		int idx = 0;
 		RListIter *iter;
-		r_list_foreach (bf->objs, iter, obj) {
-			res = extract_binobj (bf, obj, idx++);
+		r_list_foreach (bf->xtr_data, iter, data) {
+			res = extract_binobj (bf, data, idx++);
+			if (!res) break;
 		}
 	} else {
-		obj = r_bin_cur_object (bin);
-		if (!obj) return res;
-		res = extract_binobj (bf, obj, 0);
+		data = r_list_get_n (bf->xtr_data, 0);
+		if (!data) return res;
+		res = extract_binobj (bf, data, 0);
 	}
 	return res;
 }
@@ -623,17 +647,25 @@ int main(int argc, char **argv) {
 		case 'p': va = false; break;
 		case 'r': rad = true; break;
 		case 'v': return blob_version ("rabin2");
-		case 'L': r_bin_list (bin, rad == R_CORE_BIN_JSON); return 1;
+		case 'L':
+			bin->cb_printf = (PrintfCallback)printf;
+			r_bin_list (bin, rad == R_CORE_BIN_JSON);
+			return 1;
 		case 'G':
 			laddr = r_num_math (NULL, optarg);
-			if (laddr == UT64_MAX)
+			if (laddr == UT64_MAX) {
 				va = false;
+			}
 			break;
 		case 'B':
 			baddr = r_num_math (NULL, optarg);
 			break;
-		case '@': at = r_num_math (NULL, optarg); break;
-		case 'n': name = optarg; break;
+		case '@':
+			at = r_num_math (NULL, optarg);
+			break;
+		case 'n':
+			name = optarg;
+			break;
 		case 'N':
 			tmp = strchr (optarg, ':');
 			r_config_set (core.config, "bin.minstr", optarg);
@@ -973,6 +1005,7 @@ int main(int argc, char **argv) {
 		printf ("}");
 	r_cons_flush ();
 	r_core_fini (&core);
+	free (stdin_buf);
 
 	return 0;
 }

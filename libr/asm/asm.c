@@ -17,13 +17,17 @@ static int r_asm_pseudo_align(RAsmOp *op, char *input) {
 }
 
 static int r_asm_pseudo_string(RAsmOp *op, char *input, int zero) {
-	int len = strlen (input)-1;
-	if (len<1) return 0;
+	int len = strlen (input) - 1;
+	if (len < 1) {
+		return 0;
+	}
 	// TODO: if not starting with '"'.. give up
-	if (input[len]=='"')
+	if (input[len] == '"') {
 		input[len] = 0;
-	if (*input=='"')
+	}
+	if (*input == '"') {
 		input++;
+	}
 	len = r_str_unescape (input)+zero;
 	r_hex_bin2str ((ut8*)input, len, op->buf_hex);
 	strncpy ((char*)op->buf, input, R_ASM_BUFSIZE-1);
@@ -339,16 +343,18 @@ R_API int r_asm_set_pc(RAsm *a, ut64 pc) {
 R_API int r_asm_disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	int oplen, ret = op->payload = 0;
 	op->size = 4;
-	if (len < 1)
+	if (len < 1) {
 		return 0;
+	}
 	op->buf_asm[0] = '\0';
 	if (a->pcalign) {
 		if (a->pc % a->pcalign) {
 			op->size = a->pcalign - (a->pc % a->pcalign);
 			strcpy (op->buf_asm, "unaligned");
 			*op->buf_hex = 0;
-			if ((op->size*4) >= sizeof (op->buf_hex))
+			if ((op->size * 4) >= sizeof (op->buf_hex)) {
 				oplen = (sizeof (op->buf_hex)/4)-1;
+			}
 			r_hex_bin2str (buf, op->size, op->buf_hex);
 			return -1;
 		}
@@ -356,7 +362,9 @@ R_API int r_asm_disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	if (a->cur && a->cur->disassemble) {
 		ret = a->cur->disassemble (a, op, buf, len);
 	}
-	if (ret<0) ret = 0;
+	if (ret < 0) {
+		ret = 0;
+	}
 	// WAT
 	oplen = r_asm_op_get_size (op);
 	oplen = op->size;
@@ -417,6 +425,9 @@ static Ase findAssembler(RAsm *a, const char *kw) {
 R_API int r_asm_assemble(RAsm *a, RAsmOp *op, const char *buf) {
 	int ret = 0;
 	char *b = strdup (buf);
+	if (!b) {
+		return 0;
+	}
 	if (a->ifilter) {
 		r_parse_parse (a->ifilter, buf, b);
 	}
