@@ -1,3154 +1,886 @@
-commit 092e859c5c3ad61e9d447691d3aa2a17eededdd6
+commit 940f2d311d8e011ad76ed54122d46beea4b6db90
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Jul 7 00:32:59 2016 +0200
+Date:   Wed Aug 17 01:28:34 2016 +0200
 
-    Release 0.10.4 - codename: padron peppers
+    Release 0.10.5 - codename: PreCon
 
-commit 5586355bb80571628f4c856a05fa3b0507035a57
-Author: Ahmed Mohamed Abd El-MAwgood <oddcoder@users.noreply.github.com>
-Date:   Thu Jul 7 01:14:06 2016 +0300
-
-    autoloading windows types when file is windows executable (#5304)
-    
-    and few other adjustements
-
-commit e971fd810e27b0b386a6e7ccc38edcdcaadcb310
+commit 4eafce512f7416138638cd73023925b3f387a99d
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Jul 6 23:59:29 2016 +0200
+Date:   Tue Aug 16 19:54:13 2016 +0200
 
-    Implement dmh* and fix some indents in previous commit
+    Remove noisy printf for mach0
 
-commit 2a84841a67ea7a35b0fda8175f18f36e4e739144
-Author: n4x0r <kalianon2816@gmail.com>
-Date:   Wed Jul 6 23:41:43 2016 +0200
+commit c647c23182f0ec543b088808ec77d64111223129
+Author: Alexandru Caciulescu <alex.darredevil@gmail.com>
+Date:   Tue Aug 16 19:41:58 2016 +0200
 
-    dmhc feature for dmh extension update (#5302)
+    Adding ArithmeticConst pattern (#5531)
 
-commit 8890d0650e0000dd54da2b8a477f626dcca8192f
-Author: leberus <osalvador.vilardaga@gmail.com>
-Date:   Wed Jul 6 17:49:35 2016 +0200
-
-    Fix: segfault and #ifdef vs #if
-
-commit d39d9b83e03e9dd25eda55417210d728763873e6
+commit fb7ecedf737c15f6513d2260a278d54695bb28b0
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Jul 6 17:03:34 2016 +0200
+Date:   Tue Aug 16 19:35:25 2016 +0200
 
-    Update SDB from git fixing some possible null derefs
+    Add edges and ebbs info in function
 
-commit 39c4a0c35f2f78d91c294bb5a0c453d2cd3a7c19
-Author: skuater <=skuater@hotmail.com>
-Date:   Tue Jun 28 05:24:30 2016 +0200
-
-    some fix in windows debugger
-
-commit 887897e02b0af497a0e2b91cfbac492f7f02cbbc
+commit 123d1f1964ad0b51e4ac3b5482f27f59e44ab529
 Author: pancake <pancake@nopcode.org>
-Date:   Wed Jul 6 01:05:07 2016 +0200
+Date:   Tue Aug 16 19:27:55 2016 +0200
 
-    Fix cmd_rop tests
+    Fix android-x86 build
 
-commit f345656ec64b16abd53f12a3d3cd3b8220acb9b9
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jul 6 00:20:42 2016 +0200
-
-    Fix cmd_search
-
-commit 4493f22e2977c28cfc90d33cf25b1386195e01f8
-Author: Maijin <maijin21@gmail.com>
-Date:   Wed Jul 6 00:09:55 2016 +0200
-
-    Fix -I in the man
-
-commit 8cefeeb7b6bdf2ecbc338a89bec81a9d26d53f36
-Author: Maijin <maijin21@gmail.com>
-Date:   Wed Jul 6 00:02:49 2016 +0200
-
-    Add @o help
-
-commit a3f818f7e03d9d27d4270bc731a7073b2339cb5e
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jul 5 23:41:29 2016 +0200
-
-    Add rop.db and remove the misuse of asm.esil in /Rl
-
-commit bc218f8b2682a671f1f8525edef59ed55899f95f
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Tue Jul 5 23:38:59 2016 +0200
-
-    change int to const bool config_get_i rop search
-
-commit 0f8a5c8635d70fde943e7cc297e4b77bdc67b728
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jul 5 23:25:16 2016 +0200
-
-    Fixes and enhancements for the previous commits
-
-commit 8434da3f2adc068bcc6c432a5df6ade1b460bb75
-Author: Alexandru Razvan Caciulescu <alexandru.razvan.c@gmail.com>
-Date:   Tue Jul 5 15:01:14 2016 +0200
-
-    ESIL output for /Rl command (and save gadgets in SDB)
-
-commit 4c8a1b212fed096ba6108e1a3c6fcc689b9a6dbe
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jul 5 22:57:09 2016 +0200
-
-    Fix warning in elf.c
-
-commit 79601b49492d87bc9cfdd67fa3c4733c5128f7e8
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Tue Jul 5 22:48:48 2016 +0200
-
-    dmh - show heap info (#5251)
-
-commit 85dcb19daee8de1334942005fecd8182e65b1cdf
-Author: Ahmed Mohamed Abd El-MAwgood <oddcoder@users.noreply.github.com>
-Date:   Tue Jul 5 23:44:53 2016 +0300
-
-    fixing type link consumes no bytes (#5288)
-    
-    implementing initial api for types
-    Adding types profiles for x86 and x86_64 architectures
-
-commit 57d7bdfdfc4f67d62e6841168d81cfe68ccaedf6
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jul 5 22:19:36 2016 +0200
-
-    Fix #4928 - Show string context in search results
-
-commit 48b44e8488c44e38279bc044e7f22dc93a4e0124
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jul 5 18:33:04 2016 +0200
-
-    Fix #5271 - Support capstone3 again
-
-commit f85536ac76e6ab1cf756ebe9841d9a05787cfe59
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jul 5 15:58:09 2016 +0200
-
-    Add agC for full program callgraph
-    
-    Fix afi indentation issues
-
-commit a745a9a6f8fbdad3cca0691e3f5a531692409e9e
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jul 5 15:31:51 2016 +0200
-
-    Update SDB from git (optimizations and new apis)
-
-commit 339a5b7b1868e6d1043ffaeabc12a92c0610fb55
-Author: Rakholiya Jenish <P4N74@users.noreply.github.com>
-Date:   Tue Jul 5 16:16:28 2016 +0530
-
-    fix iZ and negative o for large files (#5242)
-    
-    correct the add section check
-    
-    keep commented part to it's original code
-    
-    int to ut64
-    
-    minor fix and limit buffer size in case file size cannot be allocted
-    
-    remove section check
-    
-    show size in readable format
-    
-    minor changes
-
-commit ce1ce1cf6334be25a5ae6d9c49b43dbc0e4467d2
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jul 5 12:31:25 2016 +0200
-
-    Add +/- for the bit editor
-
-commit 8532e0c6da013f5ecba6fcfd4bea35c5d76bdb1f
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jul 5 05:25:29 2016 +0200
-
-    Initial implementation of Vd1, the bit editor
-
-commit d8d6d1a073b3ebba40468b359497ba456a8ff04f
-Author: nevun <meep@abc.se>
-Date:   Tue Jul 5 04:13:10 2016 +0200
-
-    kvm_openfiles can fail so make sure we print the error message. (#5285)
-    
-    * kvm_openfiles can fail so make sure we print the error message.
-    
-    On OpenBSD you can use the kvm interface without /dev/kmem access but on FreeBSD
-    you need root or kmem access which one do not want to give a user.
-    
-    Look at ps(1) on FreeBSD and see how they do it.
-
-commit 04de3e657f5401c17ede01571b0dcd492fe2a03a
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jul 4 16:28:58 2016 +0200
-
-    Assume AVR bins have no strings
-
-commit a81d667b537df1f94632fb54bbcbb85ece562ba7
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jul 4 16:12:28 2016 +0200
-
-    Fix avr esil string
-
-commit f41b70643718a3802ab2bd3967d2f1f051a16227
-Author: nevun <meep@abc.se>
-Date:   Mon Jul 4 15:06:51 2016 +0200
-
-    Fix OpenBSD build. Cannot do sizeof on a macro argument, compiler does not know what it is yet. (#5284)
-
-commit f4f26582c73b5b0f764cb2d878b3f56cd874cf3a
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jul 4 14:38:35 2016 +0200
-
-    Fix RSP esil warnings
-
-commit 5803182cbefcc95ae80224f82f2764821269041c
-Author: nevun <meep@abc.se>
-Date:   Mon Jul 4 14:32:11 2016 +0200
-
-    Fixes issue #5279: kvm interface differs a bit between Open and FreeBSD. (#5282)
-
-commit be2df13c2d1a8e2d42a21424c4414c9d2221803a
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jul 4 14:18:07 2016 +0200
-
-    Check for GNU Make in sys/install.sh for FreeBSD
-
-commit 3773a1d088abb7c93b053c899b6d6d33811f2ced
-Author: Eugene <l4l@users.noreply.github.com>
-Date:   Mon Jul 4 15:59:00 2016 +0400
-
-    Added vars init in linux corefile gen (#5281)
-
-commit de37c7d71d0231b6494038c0397773c479c99d70
-Author: Rene Laemmert <rlaemmert@gmail.com>
-Date:   Mon Jul 4 13:01:13 2016 +0200
-
-    removed double quotes from json result for search (#5280)
-
-commit 2f5ead1efd481af5864acad26fc7307d2555e8f3
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jul 4 03:50:33 2016 +0200
-
-    Update www-m again
-
-commit df7c33f297ccd05d5b7dbe5b052535ab7516dde9
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jul 4 01:45:44 2016 +0200
-
-    Fix build for Linux <= 2.6.32 (coredump not supported)
-
-commit fdfd731a302924cfd1feb49b4c6b739a7bd9a544
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jul 4 01:33:49 2016 +0200
-
-    Update www/m with new statusbar and split view
-
-commit 4c97858e3116c91ada8749ccbbf9cd593068b637
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Jul 3 22:36:42 2016 +0200
-
-    malloc:// forces rw and fix regression in 'f'
-
-commit 622e828e1de104c58fcbc6866cee69c26122284c
-Author: bsmiles32 <bobby.smiles32@gmail.com>
-Date:   Sun Jul 3 22:03:26 2016 +0200
-
-    Add basic support for N64 RSP processor. (#5269)
-    
-    * Add basic support for N64 RSP processor.
-    This includes:
-    * a table driven instruction decoder (rsp_idec)
-    * a disassembler
-    * a very primitive anal plugin
-
-commit 87ccfd34f5720193846a796b49c1a61ed2c05c9b
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Jul 3 21:57:00 2016 +0200
-
-    Add fi[jn*] command to list flags in range
-
-commit fe06f16b44b17ba7e4bfe7c5db36c70bffab4825
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Jul 3 21:04:50 2016 +0200
-
-    Add core.iorw in i command (merge fdmode + io.cache
-
-commit 7436ce01ee25c27d61ff8dddc94f0fb429e72341
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Jul 3 20:56:44 2016 +0200
-
-    ecc [arg] - show color palete in css prefixing the CSS keys
-
-commit 6361f20f3d6411dbb947d02be807f03d73d44bc6
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Jul 3 20:05:01 2016 +0200
-
-    Fix indentation in core.config
-
-commit d21ee9f00fe5825965029c75d6686b45367e6f19
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Sun Jul 3 19:32:06 2016 +0200
-
-    fix crash due to UAF with io.vio option
-
-commit 5cd31d7aa44b8d35b9b6b869167c5884c5091280
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Sat Jul 2 21:36:06 2016 +0300
-
-    Fix help of eco cmd
-
-commit 20801a3ee4b3d8ea9296b8ae9f10bc26b2532dd5
-Author: nevun <meep@abc.se>
-Date:   Sat Jul 2 13:22:28 2016 +0200
-
-    Make dm work on OpenBSD by adding a native r_debug_native_map_alloc() (#5267)
-    
-    Note that OpenBSD can have mappings with zero size so relax the assert.
-    
-    Also note that the protection bits are flipped. Different bit order. Will fix that later.
-
-commit b5ec7a714550df105897463087838f9da8a71454
-Author: nevun <meep@abc.se>
-Date:   Sat Jul 2 12:35:25 2016 +0200
-
-    Add support for dp and dp* on OpenBSD. (#5266)
-    
-    * Add support for dp and dp* on OpenBSD.
-    
-    kvm_getprocs exists on Net and Free as well so it might work there as well
-    
-    * Cosmetic changes after feedback. Thanks.
-
-commit 34fae270dd50413ff6df2ac6891dc6067b8446d2
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Sat Jul 2 11:50:30 2016 +0200
-
-    added free function into RHashTable (#5249)
-
-commit 09435c7317a716fb62a29cd45196bcbe14d86b36
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Fri Jul 1 16:23:14 2016 -0500
-
-    Don't print SIGTRAP signals or stops
-    
-    A TRAP signal signifes expected stops for breakpoints and so on. There's no
-    need to display these as signals or stops since they will be communicated
-    inside r_debug_bp_hit.
-
-commit 329acd33e47798d8d7ebf7f0c7f97219e748709a
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Fri Jul 1 16:06:13 2016 -0500
-
-    Fix #5196: Make tracepoints work again
-    
-    To accomplish this, we add a new debug stop reason R_DEBUG_REASON_TRACEPOINT
-    and return it from r_debug_wait whenever a tracing breakpoint is hit. Then, in
-    r_debug_continue_kill, we recognize this state and do the old r_debug_step
-    trick to progress the session. Previous rework of r_debug_recoil takes care of
-    the heavy lifting and we continue on our way.
-
-commit 2cc433cefa9f50e838588b0ce0a3d5c35d1489e5
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Jul 2 02:34:37 2016 +0200
-
-    Fixes for avr to make travis green
-
-commit cea1c14750b022e7e148fad917fcc3188a70456b
-Author: monosource <monosource@users.noreply.github.com>
-Date:   Fri Jul 1 20:46:01 2016 +0300
-
-    Typo fix "afss-" -> "afvs-" (#5261)
-
-commit 70ef08de796c608130adb0b7baeb5a63dffb1ac9
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Fri Jul 1 10:41:13 2016 -0500
-
-    Address feedback from PR #5198 (#5260)
-
-commit d380a83d23a7432172af3f0a42a662dace570954
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Fri Jul 1 09:15:42 2016 -0500
-
-    Invert some logic to avoid nested brace hell (#5198)
-
-commit b31dd8072453692305a31fe702a2e67c736c0340
-Author: Ahmed Mohamed Abd El-MAwgood <oddcoder@users.noreply.github.com>
-Date:   Fri Jul 1 17:15:29 2016 +0300
-
-    Args/vars the last commit (#5245)
-    
-    renaming afa, afv and afe to afvb afvr, and afvs respectively
-    making arguments analysis obeys e anal.vars
-    improving the json format for args/vars
-    fixing varsub to use the new comands for x86 and arm
-    fixing var commenting commands to use the new commands var configuration
-
-commit a7fff5fb49ec3175994f4ff39b821927b8051b8a
-Author: resilar <def@lelantos.org>
-Date:   Fri Jul 1 17:04:19 2016 +0300
-
-    Use UT32_MAX as a magic value (#5256)
-
-commit 9864ef88415510417aeecc485e35f8cfddf2e004
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jul 1 15:22:23 2016 +0200
-
-    Lowercase all registers to match RReg rules in AVR
-
-commit 4c21937caabd23d8f6bf75759e29227e439f2e45
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jul 1 15:22:10 2016 +0200
-
-    Reuse 6502 regsize hack for AVR
-
-commit 77eb8656a46e36c6d422d446006bdfd8fd0ac9a0
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jul 1 15:08:13 2016 +0200
-
-    Initial import of the bin.avr plugin for atmega8 chips
-
-commit 9447bfa9b9bc38e7dd3e208e0b6d2961b5aae790
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jul 1 15:07:52 2016 +0200
-
-    Fix analysis and add ESIL for avr's rjmp
-
-commit a2a032833eb97545da4fffe0702bdfb12d402c1e
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jul 1 14:08:25 2016 +0200
-
-    Show file size if not matching in radiff2
-
-commit 8361f2ea831eabea7296fab19b78dff2183ddbf8
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jul 1 14:02:46 2016 +0200
-
-    Honor RIO in radiff's slurp - thanks @brainstorm for the tip
-
-commit 6fba9278045abe7ab0d9bea04ecfd96c9c465512
-Author: def <def@lelantos.org>
-Date:   Fri Jul 1 08:43:46 2016 +0300
-
-    Use UT32_MAX as a magic value
-
-commit fe9c419fa5200f2f50ec17adaca325c7a7aabdac
-Author: Pavel Borzenkov <pavel.borzenkov@gmail.com>
-Date:   Fri Jul 1 13:13:57 2016 +0400
-
-    libr/debug: fix native debugger on Linux (#5259)
-    
-    Linux kernel checks for unknown flags passed via the last argument to
-    waitpid() and fails waitpid() with EINVAL if it encounters one:
-    
-    From kernel/exit.c:sys_wait4()
-    
-    	if (options & ~(WNOHANG|WUNTRACED|WCONTINUED|
-    			__WNOTHREAD|__WCLONE|__WALL))
-    		return -EINVAL;
-    
-    This makes it impossible to use debugger on Linux.
-    
-    WAIT_ANY macro is actually supposed to be used as PID argument to wait
-    for all children without specifying particular PID.
-    
-    Signed-off-by: Pavel Borzenkov <pavel.borzenkov@gmail.com>
-
-commit 365547ef82bb454d1b0e6899fd2e0d3d3a93ffb1
+commit 57b357fb0a7103afe5c4fa18fff4eb049eb6f890
 Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Fri Jul 1 01:00:06 2016 -0400
+Date:   Tue Aug 16 15:42:15 2016 +0000
 
-    libr/core/yank.c fix memleak
-
-commit 73bddffbf01f62f823809eb132f727d82d8a1d64
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Fri Jul 1 00:57:38 2016 -0400
-
-    /libr/bin/format/pe/pe.c fix off by one in strcpy
-
-commit d9fc1ce9fc342e49886b6d78bde0b04c9e595ed5
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Fri Jul 1 00:56:35 2016 -0400
-
-    fix random color switch statement
-
-commit c3139b096d0b81146718863925fa5214acb4bd95
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Fri Jul 1 00:16:31 2016 +0200
-
-    fix mem leak
-
-commit c671b1c02c5e546530a81477766bfe1f662066fd
-Author: def <def@lelantos.org>
-Date:   Fri Jul 1 00:44:46 2016 +0300
-
-    Fix collisions in ht.c
-
-commit 0e4e39db79eee1cf573da9f4388785c0f9cca616
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Thu Jun 30 23:38:08 2016 +0200
-
-    fix somes coverities
-
-commit 4ebae2ee63fa3d698d114f7bdf45a04fb50e9c7b
-Author: Roman Valls Guimera <brainstorm@nopcode.org>
-Date:   Thu Jun 30 19:56:52 2016 +0200
-
-    Add output ports for AVR Atmel8A. Thanks @radare and @oddcoder
-
-commit 4396598081feb7c42d4df0e426f2ce83f2f3babe
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Thu Jun 30 23:15:25 2016 +0200
-
-    Fix oob read reported by revskill on mk68 code
-
-commit d69a502eb56b439c6f8e1b6e4a977dc3d582d169
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Thu Jun 30 23:01:24 2016 +0200
-
-    fix indentation m68k_disasm
-
-commit 1652fccab436a6df41bb3af92a877bdd835cdd28
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Wed Jun 29 23:57:59 2016 +0200
-
-    Fix crash due to ht.c implementation
-
-commit f983244e92f543138ac8dea3714099948460d3cc
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Thu Jun 30 22:24:38 2016 +0300
-
-    Do not trust input for cmd length
-
-commit 33ec5b986544f79de22e5f2168271cc39b021cc7
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Thu Jun 30 22:11:09 2016 +0300
-
-    Fix coverities
+    eprintf on pattern that is longer than we can do
     
-    CID 1357120
-    CID 1357121
-    CID 1357112
-    CID 1357099
+    closes  #5513
 
-commit 22e4a1d74ccba84bbf908929049812b64d3be4c5
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Thu Jun 30 21:26:36 2016 +0300
+commit 1cab8b93b6140ae9a87d64c5d8d92ae66e29d8d2
+Author: @bezjaje <mrmacete@protonmail.ch>
+Date:   Tue Aug 16 17:42:42 2016 +0200
 
-    Fix Android build - 2nd try
+    arj with flags quick fix (#5538)
 
-commit 35f81786327d995c90e3c3459d05bfbe69643d1e
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Thu Jun 30 21:17:31 2016 +0300
+commit 58a58574e1c5dee885bcc0bddf99c1624c1d84b4
+Author: Inndy <inndy.tw@gmail.com>
+Date:   Tue Aug 16 23:35:33 2016 +0800
+
+    Fix null defrefs and memory leak in var_cmd
+
+commit 0b4c00440a823eb07f189ecdcaee0463b5dce40e
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 16 14:46:32 2016 +0200
+
+    Remove some unused vars from the ms demangler
+
+commit 00d0aedb9b19fdef6c3aa40777326c392281261c
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 16 14:40:08 2016 +0200
 
     Fix Android build
 
-commit bfb0d6206e560a3e4b35db0c6db9dd1b896d850a
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Wed Jun 29 22:40:19 2016 +0200
+commit 8efaec08324924da0bff40ccb46bbce5ab14d9b4
+Author: Damien Zammit <damien@zamaudio.com>
+Date:   Tue Aug 16 22:22:26 2016 +1000
 
-    added oob fix in capstone
+    Big Endian fixes, mainly for ELF (WIP) (#5535)
 
-commit d6811288b3737ee87b7bd59c82e91c44b0b84d64
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Wed Jun 29 11:34:18 2016 -0400
-
-    bump capstone for speed.
-
-commit 98e90dd3cfb97a0b8cffd0c611a0e2a17cb7e8be
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 29 16:17:41 2016 +0200
-
-    Implement RSyscall.IO in disasm loop for X86 and AVR
-
-commit c3bfbcd66d7b04a25c2affa8c7f8493f78faca37
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 29 14:24:22 2016 +0200
-
-    Fix anal.arm.cs crash for 32bit
-
-commit ad85da85ffd69b05271c73588448e465a3f00994
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 29 12:33:31 2016 +0200
-
-    Fix code indentation in libr_cons
-
-commit 6479943c46ee3c65f8f86e908d826dae40a6ff96
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 29 11:35:16 2016 +0200
-
-    More boolification and code cleanup -70LOC
-
-commit a05003fd5cf22344265e344d698b19acc71cbb62
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 29 10:54:27 2016 +0200
-
-    Code cleanup -20LOC and get pagesize from target task in io.mach
-
-commit 4b08d38cb1bf92725a417eb2c5236af17b7d8ad7
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Mon Jun 27 23:26:13 2016 +0200
-
-    more mem leak fixes
-
-commit 83dffe4e5360ca12800ccbbb1d89684d43594a72
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Wed Jun 29 00:08:08 2016 +0200
-
-    Fix oob read in java
-
-commit 5317508cdbcd2b08c47644fb813051f2f8bf14d7
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Tue Jun 28 23:54:57 2016 -0400
-
-    fix build
-
-commit 682a255f1d57db0c08570ffbc833003b811989f1
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 29 00:52:29 2016 +0200
-
-    Fix #4665 - Add more core.num.value updates after write ops
-
-commit 59524ac8c43cec071fd5d5be3c6d1c4c2cb623a4
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 29 00:41:46 2016 +0200
-
-    Fix #4665 - Add wxs and fix crash in dbg println
-
-commit 3d2e922dc9a12b128aed4f9a294d3d542661d5fd
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Wed Jun 29 00:03:36 2016 +0200
-
-    Fix oob in elf parser
-
-commit dcf5c45963991d49c73c2d2b47e41c37903c6738
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Tue Jun 28 23:57:00 2016 +0200
-
-    Fix #5229 - 31e973c21f0d27b959d0b97d7b23216c by revskills
-
-commit 95db0cee52b22a8f7023a1f8b76cb1a5c6820bd9
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Tue Jun 28 23:50:11 2016 +0200
-
-    Fix oob 52961b39cfb9782c336c8a8247a6317f by revskills
-
-commit 1660237a249966343e77a63dc1b245168b8be734
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 28 23:46:09 2016 +0200
-
-    Fix #5230 - Fix oob read in mach0.objc parser
-
-commit f4e493166b6c99859628b347bb1e8b58a2cf8065
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 28 23:44:18 2016 +0200
-
-    Fix #5224 - Fix UAF in RBinObject.mem
-
-commit bf6f2434985b594901ea2de992821587f860fdd7
-Author: Boris <lonely.ruyk@yandex.ru>
-Date:   Wed Jun 29 00:21:46 2016 +0300
-
-    fix disassembling 'backwards' (#5228)
-    
-    (e.g. pdj -1) producing wrong output, same as #5105
-
-commit 3cedcc1c4b419acefc64f0405238b03722a45c5a
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Tue Jun 28 23:14:16 2016 +0200
-
-    Trying to fix memleaks (#5218)
-    
-    * Trying to fix memleaks
-    * fix null dereference in r_anal_var_list
-
-commit 5de44950cdb8d91f9813a457a6137960ca10812a
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Mon Jun 27 23:07:20 2016 +0200
-
-    Fix get_bits in mach0
-
-commit 283c8ab2bc59426b1bdbd33677c6bf1d7a42acc1
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Mon Jun 27 16:40:24 2016 +0200
-
-    updated warning message in dwarf
-
-commit fe644e60ff181f24d047e90e6a4a82b4593a0423
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 27 15:58:43 2016 +0200
-
-    Fix crash in r2 -a arm -b32 -c'wa str r0'
-
-commit d978b2cde421237ec6eca8fa5c82c008cc52d2c2
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Mon Jun 27 12:17:25 2016 +0200
-
-    fix oob in version elf
-
-commit 97b6bdbc40fb06401ff11e1d86db037560e20cb6
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Sun Jun 26 23:44:14 2016 +0200
-
-    Fix null dereference introduced before
-
-commit 4b497540a1dd9a7b12a275ac3105afeb3b1255f0
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Sun Jun 26 23:21:41 2016 +0200
-
-    try to fix oob
-
-commit a18bd797247e4701f1207763096ca510b5de08f4
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Sun Jun 26 23:07:47 2016 +0200
-
-    fix regression version info
-
-commit 76522930b0f992f803e8884886f4c04fec2a0e25
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Sun Jun 26 22:34:07 2016 +0200
-
-    Fix oob in store_versioninfo_gnu_verneed
-
-commit 5a582d3a13e3b37ca37c1b50fa25855c35af0f94
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Sun Jun 26 22:29:43 2016 +0200
-
-    Fix oob in debug_info pe.c
-
-commit c1457400308a98f88bed2a4b8f5b533f12dc8a77
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Sun Jun 26 00:51:17 2016 -0400
-
-    replace r_cons_printf("%s\n",p) r_cons_println(p)
-    
-    move from 10% of code in vfprintf to just 6% \o/ for simple tests of r2
-    -c "aaa" -q /bin/ls
-
-commit 10b9fc1db097126a38b45a58f536a1afae403b30
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Sun Jun 26 00:16:57 2016 -0400
-
-    rm unneeded calls to r_cons_printf
-
-commit 40af6b60656f253bf732dd5ee9ab03af6121984c
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Sun Jun 26 00:16:37 2016 -0400
-
-    fix macro for r_cons_println
-
-commit dd6a168f82cecd3f08343aa75770b4c5645f02cf
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Jun 26 04:51:44 2016 +0200
-
-    Fix ood on OSX and clear raised on close
-
-commit ee6be75b6ed2b93c5b89ec38c8d909891aac5823
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Jun 26 04:44:59 2016 +0200
-
-    Fix bin/d installation and w32dist
-
-commit b53a99aca2ed2bb4b3f15129cb287c69196906c0
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Jun 26 03:56:08 2016 +0200
-
-    Mark some x86-specific code only for x86
-
-commit cde7804087a4ec633642b243a2386c427a0faf80
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Jun 26 03:16:11 2016 +0200
-
-    Fix undefined behaviour in zlib
-
-commit 1a4177fed523b933b1f6ff96fde7915b7b26ace1
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Jun 26 02:00:53 2016 +0200
-
-    Fix exit in =! after o- a debugged process
-
-commit b676e0acb3a086a5eda35d5a242511c0e8c5c8b2
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Jun 26 01:52:53 2016 +0200
-
-    Fix #5217 - Add anal.vars variable
-
-commit 9eef523bf9546ff9a28498d23d3635be4539e66e
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Jun 26 01:34:42 2016 +0200
-
-    Fix previous commit
-
-commit 564f63d9c328391a82cd28d4934b93174154890e
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Jun 25 20:43:08 2016 +0200
-
-    Fix oobread in elf parser for 004e_00000000652b6080_000000000b3b7000.inp
-
-commit 1aa3b6bf7551788c6ad748a4bda2562ec34c0011
-Author: condret <condr3t@protonmail.com>
-Date:   Sat Jun 25 18:37:02 2016 +0000
-
-    fix #4420, fix #4423 and refix #4422 (#5215)
-
-commit badad8ffef9598f24f296ff074f1829efe185957
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Jun 25 20:36:25 2016 +0200
-
-    Fix oobread in PE with 004e_00007fff4a3d9a9e_000000000b47b000.inp
-
-commit 1d73868932040b1f79e61963145b76ddb8479d77
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Jun 25 20:10:01 2016 +0200
-
-    Update capstone from git
-
-commit 8f205587ba3b3e141af9d2f599dd487277bd6126
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Sat Jun 25 13:49:58 2016 -0400
-
-    kill r_cons_puts add r_cons_print/r_cons_println
-
-commit fe57aefe672423391d48fc2e08b2cd7adba467ec
-Author: dx <dx@dxzone.com.ar>
-Date:   Sat Jun 25 14:43:05 2016 -0300
-
-    Some memleak fixes in 'agj' (#5213)
-
-commit 2b0124100ad4759154ce9ece712ad27cfcc619f7
-Author: condret <condr3t@protonmail.com>
-Date:   Sat Jun 25 17:17:12 2016 +0000
-
-    fix #4432 (#5212)
-
-commit dcc02e87c511439fdbbddb345ec2c13023e75119
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Jun 25 18:48:26 2016 +0200
-
-    More if DEBUGGER for linux
-
-commit e3f7749f56706fe853b51f74b0440506ba40f3a4
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Jun 25 18:26:34 2016 +0200
-
-    Aim to fix the sdb_version race condition issue
-
-commit 7436b510950e70783eb4ae757083ab12704b68d6
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Sat Jun 25 00:03:44 2016 -0400
-
-    add r_reg_32_to_64 for @condret
-    
-    closes #5206
-
-commit 30deb7e3f210feb2d77b6b481b630031bf34e3a5
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Jun 25 04:44:19 2016 +0200
-
-    Fix 004e_00007ffd2a9dc86.. from gamozo
-
-commit 4f785d398f774c041207ab163d75cbe573959a7c
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Jun 25 04:26:07 2016 +0200
-
-    Fix --disable-debugger on OSX
-
-commit 6ace96c3a5a810bbb5cb226bb94fca2c27af9c56
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Jun 25 04:17:31 2016 +0200
-
-    Fix #5160 - make afbj great again
-
-commit 7e4cb2749e3ad74c5bebbf4aab055d9aaffd5672
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Jun 25 03:43:32 2016 +0200
-
-    Fix #5002 - @o is a new modifier to temporary switch to another fd
-
-commit b9e9d7fe4ca6ca1bbd486f80a89150c202d9f782
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Jun 25 03:27:04 2016 +0200
-
-    Fix #4936 - Verify call destination in aac
-
-commit baca25dc736b1827dd77d5a8b12a7465bc7a316e
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Jun 25 03:20:19 2016 +0200
-
-    Fix #5200 - __WALL is a linuxism, better use WAIT_ANY
-
-commit b8f26d248b06d65c8fabec372f3b44307a6f621f
-Author: condret <condr3t@protonmail.com>
-Date:   Sat Jun 25 01:19:10 2016 +0000
-
-    fix #4422 (#5203)
-
-commit 90d42c04181616720f1c1445db25d0500d2a5767
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Jun 25 03:09:30 2016 +0200
-
-    Refactor pia/pda and implement pdaj and pda=
-
-commit c351c3d767742b0df522e8c6d2fc09dde32920e0
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 24 21:27:34 2016 +0200
-
-    Fix oobread in dwarf die values
-
-commit 7dab05df70659eb8db56f4fa74500b3f183b63a3
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 24 21:24:24 2016 +0200
-
-    Fix oobread in dwarf decls
-
-commit 36650442f517b2d2b294eff5a47dc3252297874f
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Fri Jun 24 14:58:47 2016 +0000
-
-    fix heap oob-read in dwarf parser
-    
-    https://gist.github.com/4352a2f4a239a96b90e7b23bb22e8ef1
-    for repro file
-
-commit 2c086751b979486d796db0de8db3a9355607a803
-Author: Sven Steinbauer <sven@unlogic.co.uk>
-Date:   Fri Jun 24 14:08:52 2016 +0100
-
-    Add fsincos instruction [fix #5204] (#5205)
-
-commit 311a3394736ae3c85259e40c47be69cc2b9496f5
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 23 17:46:37 2016 +0200
-
-    Fix memleak in spawn swift-demangler
-
-commit a55bcd628f3b1381f353f78e8bf2c1bac8a46644
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 23 17:11:17 2016 +0200
-
-    Fix two swift demangler crashes and add tests
-
-commit 99678d2fe03d3ec9f8c2692bc3bfc259d6d56d87
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Thu Jun 23 03:19:39 2016 -0500
-
-    Fix return consistency and clarify variable naming (#5199)
-
-commit efd4ece4c294a4f680319eee9cb53128321058c5
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Wed Jun 22 23:54:21 2016 +0200
-
-    fix warning comparing unsigned int >= 0
-
-commit d65889d15d0ea94a24e728e07ea283787db56256
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Sun Jun 19 13:41:48 2016 +0200
-
-    add name to section when is empty
-
-commit 42e507ebfabbc7b1e1004e4dcba7ab1ad8fe735a
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Sun Jun 19 13:40:48 2016 +0200
-
-    comment out hackaround for huge number of sections
-
-commit 8e6b857cdf17132893bf5c46e8673f4b88ce7d28
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Sun Jun 19 13:11:22 2016 +0200
-
-    more work in PE loader
-
-commit e4eb7e5ee97d73d979041c18df9688fba1bfc435
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 22 19:43:19 2016 +0200
-
-    Workaround for enum vs type swig hack
-
-commit feff5b59e482582f0c93e627fd34327e6f3d76d0
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 22 19:20:59 2016 +0200
-
-    Do not use %p for ut64 values
-
-commit 995c952c5dac09ad0af11fae0c82146dfe1d0393
-Author: Sven Steinbauer <sven@unlogic.co.uk>
-Date:   Wed Jun 22 12:04:23 2016 +0100
-
-    Fix #5097 : mov instruction with rex regs
-    
-    sil, dil, spl, and bpl, registers now supported
-
-commit db76ef6497a88f051b7fc4118594ad57f97b3eef
-Author: Sven Steinbauer <sven@unlogic.co.uk>
-Date:   Wed Jun 22 11:31:08 2016 +0100
-
-    Add `bt` instruction [fix #1277] (#5194)
-
-commit aaf3ff314c1b4ad77a6b71f31597010ebf14c104
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 22 11:08:51 2016 +0200
-
-    Fix #5138 - crash in swift demangler
-
-commit 722c62827b65d297924a6866501fd85df4a5b0a7
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Wed Jun 22 03:34:45 2016 -0500
-
-    Major rework to the native debugger (esp on Linux) (#5185)
-    
-    The major contribution here is completely re-worked breakpoint hit/recoil
-    handling. This work fixes #4907 and lays the ground work for future native
-    debugger improvements (multi-threading, etc).
-    
-    * Give a human friendly type to enums
-    * Change many wait functions to return RDebugReasonType
-    * Better return checking (from r_debug_reg_sync, r_bp_restore)
-    * Optimized register synchronization
-    * Lots of comments and whitespace changes
-    * Improved inferior death detection
-    
-    Handle EXIT_PID events differently than DEAD process events
-    
-    * Move breakpoint/recoil handling to wait/cont/step
-    
-    Rather than handing breakpoint related things inside cmd_debug.c, do that
-    inside the r_debug API functions. This seems like the most logical place for it
-    to live since it should apply to just about any platform/architecture.  This
-    also centralizes calling into "cmd.bp" handling via the CoreBind callback.
-    
-    * Track how the caller wishes to continue
-    
-    It turns out that handling break point recoils is very complicated. The ptrace
-    API on Linux returns SIGTRAP for just about every type of operation (not just
-    breakpoints getting hit). Add the "recoil_mode" flag to indicate whether we are
-    single-stepping or continuing and whether or not we are inside the recoil.
-    
-    * Proper handling for swstep=true
-    
-    Since r_debug_step_soft calls r_debug_continue, it's already hitting the recoil
-    case there. Move the recoil handling from r_debug_step to r_debug_step_hard
-    only.
-    
-    For the swstep=true case, special handling is required inside r_debug_recoil.
-    By resetting all of the breakpoints except the one we just hit, we ensure we
-    can step the original instruction and hit the new swstep breakpoint. Add a new
-    bp function called r_bp_restore_except to do this.
-    
-    To make matters worse, we cannot use a BreakpointItem pointer because that
-    leads to a use-after-free condition. Instead, we the breakpoint address
-    instead.
-    
-    Now breakpoints should work regardless of the swtep setting.
-    
-    * Always call the recoil before continuing
-    
-    Some callers of r_debug_continue might not have ever inserted any breakpoints
-    before. If we don't restore breakpoints before each call to the underlying
-    continue we won't hit them.
-    
-    * Hide software step breakpoint events from the user
-    
-    When a breakpoint even happens due to a software-step, hide it from the user.
-    They aren't really breakpoints as far as they are concerned.
-    
-    * Improve process exit handling on Linux
-    
-    There are three types of process exiting events on Linux:
-    
-    1. PTRACE_EVENT_EXIT occurs just before a process exits. It's not possible to
-    prevent it from exiting, but it can be used to inspect the pre-exit state.
-    2. The process can exit for a variety of reasons and we can notice when we call
-    waitpid(2).
-    3. The process could die randomly on us :-/
-    
-    On Windows, h->wait will return R_DEBUG_REASON_EXIT_PID, but it's more likely
-    on Linux to find out the process is already dead.
-    
-    * Check more bits within waitpid status
-    
-    We can often make a decision about what happened strictly by looking at the
-    status returned from waitpid. In other cases, we need to call
-    r_debug_handle_signals.
-    
-    If we reach the end of this function without knowing what happened, consider it
-    an error.
-
-commit 50aed82b662d133a94809219c3ee59ff6effaf50
-Author: Sylvain Pelissier <sylvain.pelissier@gmail.com>
-Date:   Wed Jun 22 10:29:26 2016 +0200
-
-    Add lfence, mfence and sfence to x86.nz (#5193)
-
-commit bc02cdb4b18e3e39c77c0193b769ed1ed657ae8c
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 22 10:29:16 2016 +0200
-
-    Fix regression in afl/afi
-
-commit b553c1346d616b83b86096cdfe05bf02d7a673d5
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 22 04:30:19 2016 +0200
-
-    Update to the latest /m (1.7 -> 1.1MB)
-
-commit f9482bcae763efc64e928dcdf06c164c14b4cd0e
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 22 03:19:10 2016 +0200
-
-    Add console.html
-
-commit bb00b4e91da8b51a20072017fa0b47b45e28dd81
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 22 02:27:32 2016 +0200
-
-    Fix Android build, update Capstone and use Android's Studio NDK if available
-
-commit 8b957f851227d7a41b94bba3c95130b5e2872829
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Tue Jun 21 23:01:09 2016 +0200
-
-    fix two uaf in anal.c
-
-commit db28a0b20d122f87f2067d40201e087e54390301
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Tue Jun 21 16:11:10 2016 +0200
-
-    fix hang in version info ELF
-
-commit ab5f7bb9eefc314047f37f4fdfefabcd16c2af4a
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 21 13:16:00 2016 +0200
-
-    Update depgraph.pl
-
-commit c5b6c78637f15524c9b7c1026ea96547755d5c7b
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Tue Jun 21 12:44:43 2016 +0200
-
-    fix oob in dex
-
-commit 136d1d722d42bc5685245109c84e2a96747d0fd9
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 20 23:42:08 2016 +0200
-
-    Fix #5184 - Remove useless warning message in r_debug_set_arch
-
-commit 1b216289640cb1c929b23ad3ed20b38741417ba7
-Author: danielps <mrdanielps@users.noreply.github.com>
-Date:   Mon Jun 20 23:39:01 2016 +0200
-
-    V810: Fix floating-point instructions (#5186)
-
-commit f7c2cdfdcede919d00cf7279c8dbf59b77919dab
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 20 23:11:01 2016 +0200
-
-    Remove r_db from the pkg-config templates and update capstone
-
-commit 55e0804d1d264e687a71ae88ddfe72641edafb43
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 20 18:22:25 2016 +0200
-
-    Fix some null-terminated strings issues in the procfs parsing
-
-commit b3236816d9c924e77e58b61a6a82d52ae0057506
-Author: Maijin <maijin21@gmail.com>
-Date:   Mon Jun 20 17:28:36 2016 +0200
-
-    Fix #5169 Update syscall table for iOS-32
-
-commit bc4ae90206a5c60d6325cd7d1d80c29dc42fad1f
-Author: Maijin <maijin21@gmail.com>
-Date:   Mon Jun 20 17:27:32 2016 +0200
-
-    Fix #5169 Update syscall table for iOS
-
-commit b03c1e2b3e6671a1b844fbc3d1d9b1aa6bb463e9
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Sat May 14 19:14:07 2016 -0500
-
-    Improve dkp and drp
-    
-    Distinguish between "dXX" and "dXXYY" or "dXX?". Treat the latter two the same.
-    This provides the least surprise to the user when they mistype something.
-    
-    Improve default handling in arp/drp
-    
-    * Adds a new command "drp." for showing the register profile size.
-    * Provides better help for drpXXX commands.
-    * Provides help in the default case (eg. drpz)
-    * Fixes indentation
-    * Provides correct help strings for arp vs. drp
-    
-    Improve default handling for "dko"
-    
-    * Rework "dko" handling to simplify
-    * Use r_core_cmd_help
-    * Show help when things like "dkox" are used
-    * Prevent allocation/free when not necessary
-
-commit 16c27891a0278b81aa3122ce6f03b7ed852657ab
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Mon May 16 02:49:30 2016 -0500
-
-    Switch to r_sys_perror for errors and fix two typos
-
-commit 3bac42eda7cf6a5eadd88ac9adec1f630dc6de47
-Author: Ahmed Mohamed Abd El-MAwgood <oddcoder@users.noreply.github.com>
-Date:   Mon Jun 20 16:22:09 2016 +0300
-
-    Improving variables on ARM (16, 32, 64) (#5146)
-    
-    removing argument detection extension used in af now args are seperately detected by afCa
-    aa = af + afCa
-    using aliases as well as real registers
-    rewritten varsub
-    Fixing some of Arm esil and optimizing them for arg/var detection
-
-commit 1d5df40044d178c7c47186e50aceb8921534b967
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 20 12:02:43 2016 +0200
-
-    Fix r2 -nq - regression
-
-commit 90325a3ac019532ce4e0a702ec7a663951b118e1
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 20 11:29:49 2016 +0200
-
-    Fix r2 -qc regression
-
-commit 0429420ee490c0df4e7148e18c849d19259fd6e1
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 20 11:08:21 2016 +0200
-
-    Fix the r_io regression thing
-
-commit 414aef609f30d667535e0251e33d0f08a248d0ca
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 10 11:00:40 2016 +0200
-
-    Refix the ELF phdr max size issue
-
-commit 8c435e1a2267d324c6164c30ef1032a369cb1176
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 10 10:58:10 2016 +0200
-
-    Fix doublefree issue
-
-commit ab691c3a0f7c78dfcdb69d1598d2bc0b554f67f2
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 20 10:04:50 2016 +0200
-
-    Fix r2 -i regression and add r2 -I for pre-scripting
-
-commit 550a91a17e6a24929b5f88b700a2843573a03432
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 20 09:46:03 2016 +0200
-
-    Add asm.leahints to make @defragger happy
-
-commit 2a29662dbd943742a46321417b9a78850dea68df
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 20 09:30:29 2016 +0200
-
-    More r_io cleanup
-
-commit ddeb71b83b467017cf7bb6093e5f1f6e42271432
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 20 09:22:34 2016 +0200
-
-    Fix regression in r_io_seek
-
-commit e3bcc9e7a2ef82c4bcabd44e7f7ba9e999379f68
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 20 09:12:44 2016 +0200
-
-    More refactorings, reindent and cleanup on r_io
-
-commit 6d4c16923d0bcd34d12ab9415502d2f9c1d97adc
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 20 01:41:09 2016 +0200
-
-    Run commands a bit before
-
-commit ab1c8e313e2383b21ddad217f1cb709caf08b2ad
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 20 01:27:23 2016 +0200
-
-    Fix for io.default
-
-commit 4caafc964d9c24ac3870467d4a1661016490176c
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 20 00:29:41 2016 +0200
-
-    Refactor r_io, while fixing some bugs and use more RList
-
-commit 81c977c979ad61072ed981d0d621c0c733766972
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Jun 19 23:19:30 2016 +0200
-
-    Refactor r2 -iL and add oL (load plugins before r2 -L)
-
-commit 564803d5c21545a11941f3059fdbad65109044ed
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Sun Jun 19 14:04:23 2016 +0200
-
-    express db breakpoints as dbm due to ASLR
-
-commit 1117f5e19c1df1dda588adacfaad2a1c0d1eda71
-Author: Maijin <maijin21@gmail.com>
-Date:   Sun Jun 19 12:30:30 2016 +0200
-
-    Fix #3874
-
-commit 59f63e5f8dee85dd49f234f59def850ccf320fd9
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Jun 19 12:26:58 2016 +0200
-
-    Handle Windows's noreturn call to ExitProcess
-
-commit 769bcf98f68e50522304b2079c17abd293edc0c1
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Sun Jun 19 05:10:59 2016 -0400
-
-    add RBitmap to the rapi (#5176)
-
-commit 387c2ce4792ea82a45c29b99c941ee975ca7ce22
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Sat Jun 18 21:32:33 2016 -0400
-
-    fix SIGFPE when queue is created with size <=0
-
-commit 93105250abe3bc1f5b44b6262a5bdf2c2e1f6848
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Tue Jun 14 23:04:15 2016 +0200
-
-    Handle bad PE files
-
-commit e90668c429070afccf068b44f8c9d18ad328260e
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Sat Jun 18 13:28:29 2016 -0400
-
-    use kcov with unit tests
-
-commit 59303f16b5ed024b6f47b7756456f5d282601be7
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Sat Jun 18 00:21:58 2016 -0400
-
-    export PKG_CONFIG_PATH in .travis.yml
-
-commit 43781f390abea39de72dbb10eac4639bee0e477b
-Author: pancake <pancake@nopcode.org>
-Date:   Sat Jun 18 01:12:19 2016 +0200
-
-    Code cleanup
-
-commit 60220bc52518125d724fe32c3c5e99a1e0e97ca3
-Author: ekse <ekse.0x@gmail.com>
-Date:   Fri Jun 17 17:17:24 2016 -0400
-
-    Check that a required argument was passed for a couple of commands. (#5166)
-
-commit e2ab783250aa314f1aaa714ee7cabbe939718613
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 17 23:05:13 2016 +0200
-
-    Fix for regression in thumb/arm detection
-
-commit 016f5ec8ed2584862b4313aa99b788498c34f156
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 17 19:38:13 2016 +0200
-
-    Fix arm on thumb bins issue
-
-commit 3b0b7db100232ef37a6dcf9850db0eddf3366fe9
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 17 18:42:50 2016 +0200
-
-    Fix another oobread caused by callconv
-
-commit bfa8eb740a9570a06796af7eef83faed3a8e24ea
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 17 18:38:25 2016 +0200
-
-    Optimize callconv and fix two bugs related to op_pos
-
-commit a46689b1b4e8b51ac21c9af11ec9f8562d2b2bae
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 17 17:16:41 2016 +0200
-
-    Fix oobread in ELF with 70d23ff5faa2716094f1fd1f081f9281678455dd
-
-commit 2074db03f26593136529ae72732cd1d38731dbfc
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Fri Jun 17 14:44:41 2016 +0000
-
-    also needs .pyc for ycm extras in gitignore
-
-commit 4d90f07d12b27b00a68c6c4f69d5278cb842108d
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Fri Jun 17 14:32:54 2016 +0000
-
-    add youcompleteme files to gitignore
-
-commit fb3be2c58f16f7fc1ea8a4d459235894e6a99265
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 17 15:52:57 2016 +0200
-
-    Do not nullify RAnalOp after fini()
-
-commit d8f907bc8387f65d0b89b5b971900fc13ba345e8
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 17 14:46:20 2016 +0200
-
-    Update capstone from git
-
-commit dc61e8c511ec2746d935725adb5682e7d870d042
-Author: monosource <monosource@users.noreply.github.com>
-Date:   Fri Jun 17 15:26:46 2016 +0300
-
-    Change afbr description (#5163)
-    
-    `afbr`'s description isn't worded properly. It doesn't actually print addresses of `ret` instructions, but of instructions which cause the flow of the program to leave the function body, like `call`, `jmp`, `hlt` etc.
-
-commit 1629dd2b64920ff75ef5791dd8cdfb4d9dcf68c9
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 17 14:26:24 2016 +0200
-
-    Remove two unused fields in RAnalOp and some deadcode
-
-commit 281d79da58701cdf5ef18668cf49bd4b8c5af7c8
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 17 12:53:21 2016 +0200
-
-    Remove some DEAD code and a copypaste error in coredump
-
-commit 3bbb4d098b89941adf122bf4e178cb726979a9ac
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 17 12:37:18 2016 +0200
-
-    Refix CDIV deoptimization
-
-commit f96f00d62ddfcc8ace4540d82081bf5dd6b02cf4
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 17 12:14:39 2016 +0200
-
-    Fix #5158 - Merge r_db into r_util
-
-commit bec3566eef80d8525feb6b2ba3bfddb2f723cc45
-Author: Maijin <maijin21@gmail.com>
-Date:   Fri Jun 17 11:37:04 2016 +0200
-
-    Add doc/ references in the debug-internals.md
-
-commit 5f6275bcad413169e94256da5a909cf383f84012
-Author: Anton Kochkov <xvilka@gmail.com>
-Date:   Fri Jun 17 12:35:12 2016 +0300
-
-    Clarify more information in debug-internals doc.
-
-commit 0431a0efdfa5281cacd8304561a3e682574beec3
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Thu Jun 16 21:20:18 2016 -0500
-
-    Properly handle forks on Linux 2.5.46+ (#5153)
-    
-    Linux 2.5.46 made changes to the ptrace(2) API to inform a tracer when various
-    events occur. These are known as PTRACE_EVENTs. Start handling PTRACE_EVENTs
-    by:
-    
-     * Handling PTRACE_EVENT_FORK and PTRACE_EVENT_EXIT
-     * For _FORK, stores the newly created pid in dbg->forked_pid
-     * Add the "dpc" command to select the most recently forked child process.
-     * Add the "dpc*" command to show the recently forked process' pid.
-    
-    Additional minor changes to white space are included.
-    
-    NOTE: This partially addresses #3549. It does handleLinux before 2.5.46.
-
-commit 9f570114c773fd6d9bf31aa5c101efb16ad984f7
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Thu Jun 16 21:19:31 2016 -0500
-
-    Add "clone" to the "dcf" command (#5161)
-    
-    Previously, "dcf" didn't not consider that "clone" may be used to create child
-    processes. Look for that and also update the text shown to the user.
-
-commit 43472476c5b3d48706b0990ec67b7da0c9052f96
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 17 03:34:50 2016 +0200
-
-    Fix w32 build
-
-commit cf043002e2c680220274a7f78f0c5a4cde59bdff
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Thu Jun 16 19:53:38 2016 -0500
-
-    Add a document about debugger internals (#5157)
-
-commit 911fef209a7da9dee332edbe884bb7fdc476c0a4
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 17 02:49:41 2016 +0200
-
-    Implement afbr and * sub-variants to list return addresses of current function
-
-commit 9c21df927217396e2274cf664cf1c6bef8150fea
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Thu Jun 16 18:59:10 2016 -0500
-
-    Minor cleanups to process handling (#5152)
-    
-    * Fixed 'dpk' handling (signal wasn't being groked)
-    * Mostly comments added
-    * Some eprintfs added
-
-commit e76cd015648a383b44e0002d218a3586866a4474
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Thu Jun 16 18:43:16 2016 -0500
-
-    Fix io_w32dbg build (#5159)
-
-commit ac2a80a1ef6086da755bf9e0d6a1cd7d1c531ea3
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 16 23:48:01 2016 +0200
-
-    Fix bugs in CDIV implementation
-
-commit 66e783965f2be47e1fecc12e0b1e97ca9c2281da
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 16 23:42:11 2016 +0200
-
-    Fix build and oobreads in =!pid
-
-commit 691dd0a5c5d1ad850ffabffc2eaba21a8ce533f0
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Thu Jun 16 15:57:44 2016 -0500
-
-    Make "dbt" output aligned to columns based on dbg->bits (#5151)
-    
-    * Make "dbt" output aligned to columns based on dbg->bits
-    * Add spaces between sizeof and paren
-
-commit 2b9edf8dc4c6eaab4bfd6dc11912600064c40b92
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Thu Jun 16 15:57:10 2016 -0500
-
-    Fixes #5154: Stop including source-file whitespace (#5155)
-
-commit e97e011426bbf78f1026677ac117242170210889
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Thu Jun 16 15:56:21 2016 -0500
-
-    Have r_debug_select change IO pids too (#5145)
-
-commit 5186afdbe407fb0683026b5699c17be10e5bc540
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 16 22:56:02 2016 +0200
-
-    Only attach io.pid when its different
-
-commit 4e67a310872078ec45b1dd8dda777b966b274d88
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 16 22:52:25 2016 +0200
-
-    Fix some more =!pid cmd parsing issues
-
-commit 565c97f8f5a58dfa7d514f4e601f3ffe4595e673
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 16 22:49:14 2016 +0200
-
-    Fix =!pid for io.w32dbg
-
-commit fb820f9c8eabd6cb9b4e9ad8c011f9614b298d32
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Thu Jun 16 15:39:11 2016 -0500
-
-    Fixes #4875: Refactor process listing (#5144)
-    
-    * Fixes #4875: Refactor process listing
-    * Move procfs-based process listing into linux_debug.c, guarded by __linux__
-    * Provide a warning and eprintf a TODO on the remaining platforms.
-    * Break reusable parts into linux_get_proc_pid and call it as needed.
-    * Add/remove comments for clarity
-    * Address feedback and re-enable non-Linux
-
-commit db8414d1861068ae78e7a21fce20570afcba4b4c
-Author: Lev Aronsky <aronsky@gmail.com>
-Date:   Thu Jun 16 17:53:09 2016 +0300
-
-    Fixed order of arguments in ESIL representation of MUL.
-
-commit 5e7c93fc37d0edb950a66b7c66d7c9514577d0e4
-Author: UsusDei <ususdei@googlemail.com>
-Date:   Wed Jun 15 15:18:04 2016 +0200
-
-    Add asm.hints and handle CDOV deoptimization
-    
-    CDIV deoptimization
-    ===================
-    
-    This patch implements hints in the disassembler that
-    aim to assist the user in reading compiler-optimized divisions
-    by analysing the involved magic number.
-    
-    Background
-    ==========
-    
-    Since integer divisions are usually very expensive on most architectures,
-    compilers try very hard to substitute them with cheaper operations.
-    
-    One of the more advanced substitutions is described in the book __Hacker's Delight__,
-    chapter 10.
-    An actual implementation of the described algorithm in LLVM can be found in the
-    functions: `TargetLowering::BuildSDIV()` and `APInt::magic()`.
-    
-    The optimization approximately transforms e.g.
-    
-    ```asm
-    xor edx, edx
-    idiv 39
-    ```
-    
-    into
-    
-    ```asm
-    mov eax, edi
-    mov edx, 0xd20d20d3
-    imul edx
-    lea eax, [rdx + rdi]
-    sar edi, 0x1f
-    sar eax, 5
-    sub eax, edi
-    ```
-    
-    Reading the optimized version and __seeing__ the constant 39 seems difficult.
-    Therefore I try to provide a small hint to the user.
-    
-    Limitations
-    ===========
-    
-    * The current implementation only takes the magic number into account,
-      therefore it may result in false positives.
-    
-    * Due to the nature of the optimization, the given hint may be off by a power of two.
-      Fixing this would require to analyse the following shift instructions.
-    
-    * The hint is only shown in the line containing the magic number.
-      The user still has to know which of the following instructions belong to the optimization.
-    
-    TODO
-    ====
-    
-    * Implement the corresponding analysis for unsigned integers
-    
-    * Implement the corresponding analysis for 64-bit integers.
-    
-    * Improve the heuristic by also looking at the next few instructions.
-      ( I don't really know how to iterate over the instructions in the disassember
-      in a non-deprecated way. Maybe someone can drop me a hint? )
-    
-    * Implement an exact analysis using the actual dataflow in radeco and use it
-      to revert the optimization. ( I suppose this is outside the scope of radare )
-
-commit 48e5f8fc7e76e9e7b93a316ce4532f3b48c6e687
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 16 22:18:10 2016 +0200
-
-    Fix ELF crash (null deref when missing shdr
-
-commit 176054c0068f1a3859a0a0aa2e5968355191ee57
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Thu Jun 16 09:43:04 2016 -0500
-
-    Fix ELF section size validation (#5148)
-
-commit 285cd3b32ff54c8651fbd5c58c1f89b87fab1291
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Wed Jun 15 14:50:32 2016 -0500
-
-    Minor tweaks to breakpoint handling
-    
-    * Fix "dbm" help string
-    * Save <module>+<offset> as the name when using dbm
-    * Fix allocation patterns for "module"
-    * Remove commented out code
-    * White space fixes
-
-commit d3cae9d5a9ed5d2486ee67885d38a66e4f1d349d
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 16 12:30:38 2016 +0200
-
-    Show classname for static methods in DEX
-
-commit b843aaf05437ff46b9561be8e5813aedbb97cda9
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 16 05:04:00 2016 +0200
-
-    Fix imports and enhance parsing virtual methods in DEX
-
-commit 1111c00ea233a98de7777a218e4ad7955e662015
+commit 9620e0e992b9c3771659be5432b72d428d3393e2
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 16 02:42:54 2016 +0200
-
-    Better names for virtual Dalvik methods
-
-commit b50a06f57cb0e392ebe56ed2bc2dc08f7710ce84
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 16 02:33:59 2016 +0200
-
-    Load virtual methods from Dex files
-
-commit 5c14841299e378455211821e50f2188b169ddf2f
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 16 01:43:41 2016 +0200
-
-    Support op->family and some op->cycle for anal.arm64
-
-commit 2f6d778aefa0ebb9db4216d4a30ae039c4e14d50
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Wed Jun 15 19:42:03 2016 +0000
-
-    cleanup usages of r_str_newf to meet style guide
-
-commit d45101eebe36d0fd3b407afeb6ca5d89b8eddb4d
-Author: Sven Steinbauer <sven@unlogic.co.uk>
-Date:   Wed Jun 15 14:33:14 2016 +0100
-
-    Add offset support to `add` instruction (#5137)
-    
-    support syntax for
-    
-    add eax, [ecx]
-    add ecx, [eba +/- 3]
-
-commit 794c60bf1899fa39a05b830cfcb536720f3de211
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 15 15:30:51 2016 +0200
-
-    Fix #5138 - huge load times for fuzzed versioninfo ELFs
-
-commit 0e9e80c578ec3a7090539012cc20e9b4c77012ee
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 15 15:13:41 2016 +0200
-
-    Fix #5138 - crash in elf parser
-
-commit 84aa6782f1513d2e595e0bd69a305dc404962dbe
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 15 13:41:17 2016 +0200
-
-    Add trailing newline in afbj
-
-commit 04190287c1a3fe9f1aea39bb9c8a4f872a96e1ca
-Author: Riccardo Schirone <sirmy15@gmail.com>
-Date:   Wed Jun 15 11:15:42 2016 +0200
-
-    core: fix uber confusing indentation in cmd_anal "afl" command
-
-commit 1bdcb740dcc907bff361ee79cce7487171c1783d
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 15 00:23:44 2016 +0200
-
-    Fix regressions introduced in last commit
-
-commit e032a48cbe58f6a6973b78f3422520e4f32cb69c
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 23:42:40 2016 +0200
-
-    Fix latest 26 COVs
-
-commit 7fa01a72ed86c4dde7760812eceed2a9714c56cb
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Tue Jun 14 23:34:42 2016 +0200
-
-    add breakpoints into project file
-
-commit 2582e5fd0e0a786783ec177bfe9f46a2c873e3df
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 20:29:31 2016 +0200
-
-    Fix #5134 - rahash2 -K entropy was randomized by uninitalized values
-
-commit a772452d273edf1fdbfa1d0c9201d610bcacfcae
-Author: robbje <robbje@aachen.ccc.de>
-Date:   Tue Jun 14 17:54:17 2016 +0200
-
-    Cgs (#5126)
-    
-    * refactor function listing code
-    
-    * adhere to style guide
-    
-    * use tabs instead of spaces
-    
-    * recover default behaviour for afi commands
-    
-    * work in commentary and fix the two regression tests I broke
-    
-    * some more cosmetic changes
-    
-    * shorten function names
-
-commit f5cb1db49b0cbd6abd58fdd93826bf228acfdffa
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 17:00:31 2016 +0200
-
-    Fix identifying classes#.dex as DEX (not a BIOS)
-
-commit 6bd3f5199bf21ed1e5fbbe77bf937eb079053aea
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 14:36:15 2016 +0200
-
-    Fix #4980 - Fix apk:// and implement ipa://
-
-commit e4af7f9b2397f3fb6fd03571953e3c7c379fd4e3
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 14:36:03 2016 +0200
-
-    Fixes for ELF/Thumb detection handling
-
-commit ecef139c996395d14553f919e64ff1831819d190
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 09:48:36 2016 +0200
-
-    Fix io.ptrace.write on ARM
-
-commit 1bb7efd76caa284e778db925316b611c69e3b849
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 03:44:26 2016 +0200
-
-    Some more COV checks in socket.run
-
-commit 21a01d08fee841cf1b041c2b2bc91ac02f5c5216
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 10 04:20:28 2016 +0200
-
-    Fix warnings in debug.linux.coredump
-
-commit e9f14cb4a0d9518e316d8f03e4b67e46e0215943
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 03:14:48 2016 +0200
-
-    Fix 4b85cff3312965cc7d7a38943cfa06373cef41f9 util.calc regression
-
-commit 8d9e4a7836467da258db5f27c48db4c34dc6ec3f
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 03:10:47 2016 +0200
-
-    Fix double close in thread-list and non-null terminated string in debug.linux.core
-
-commit 7ff42b590f07497364d84e80f68d99e0725f1400
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 02:52:52 2016 +0200
-
-    Fix build and bring back java memleak to avoid crash
-
-commit 69e7b3df281abea6155eddf86bd79cf2f898719b
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 02:44:52 2016 +0200
-
-    Fix UAF in bin.psxexe
-
-commit 59f94c63aadbb4294e2330c48fd81214de1b7e47
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 02:42:24 2016 +0200
-
-    Fix some critical COVs in RBin
-
-commit 69d62e85c377b4f41f45c74f7c701539232f8abc
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 02:30:22 2016 +0200
-
-    Fix deadcode in rbuf
-
-commit 46433dbf534e8e4d9b252745827fb819ead42017
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 02:22:14 2016 +0200
-
-    Fix some COVs in util/file
-
-commit 4b85cff3312965cc7d7a38943cfa06373cef41f9
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 02:19:20 2016 +0200
-
-    Fix buffer overflow in r_num_math
-
-commit 010c2c68ab4d078e73ee62bcc9b6bff981b4e14d
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 02:14:52 2016 +0200
-
-    Fix all COVs in r_io
-
-commit 93910d9ce060ea4a7b280253be470b59bde5523b
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 02:04:26 2016 +0200
-
-    Fix memleak in shlr/java
-
-commit 702394caf937ee7e9a56a957978a2fc11cbd8cb1
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 01:52:46 2016 +0200
-
-    Fix string flags realignment in disasm
-
-commit f8b5a6602ae5820c93d9d18bc3903ecb0dbdf9c9
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 01:40:46 2016 +0200
-
-    Boolify anal.xrefs/projects
-
-commit 56af25e5b532aa1ce595719d5e1f3db4518a8e75
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 01:33:46 2016 +0200
-
-    Update r_core_sysenv_end
-
-commit eda7899adc937678a43a47f980119a10e4e04567
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 01:30:40 2016 +0200
-
-    Various enhancements to aae
-
-commit ed06c5bcb6abed60fa3428586b0f60373da29c9e
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 14 00:13:04 2016 +0200
-
-    Fix arm64 analysis issue
-
-commit 60ac486de1b7f0052382eac2889d5ab2aa289f2f
-Merge: 0027246 e935aca
-Author: radare <pancake@nopcode.org>
-Date:   Mon Jun 13 17:26:16 2016 +0200
-
-    Merge pull request #5117 from radare/arm-fixes
-    
-    ARM fixes
-
-commit e935aca270cfdd51a77a71b0e5a0cb4d80ee47f5
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 13 15:05:48 2016 +0200
-
-    Set esil->address before calling esil.parse
-
-commit 0027246ec4a9373683acfd3f90fdd87c118387f1
-Author: Ahmed Mohamed Abd El-MAwgood <oddcoder@users.noreply.github.com>
-Date:   Mon Jun 13 14:09:46 2016 +0300
-
-    Fixing arguments docs
-
-commit c883c0354fe6d689aab79c6768bbf47193e9263b
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 13 11:57:21 2016 +0200
-
-    Simplify some arm esil expressions
-
-commit 38610326862aff3c5da7e3a3a0925d8cd79c9648
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 13 11:31:08 2016 +0200
-
-    LDR PC is considered UJMP
-
-commit 8a82e5cae6ef6b734194c063d98ced1d2c65eff9
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 13 11:12:20 2016 +0200
-
-    Implement 'cbz' in armass-thumb
-
-commit 3d9bea75ab6b0ed1ab47ae98e4e4e3ff34cf2f19
-Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 13 10:13:28 2016 +0200
-
-    Fixing some ARM regressions
-
-commit 26f71f342b9c11b14de30873e81d904d927a93bd
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Jun 12 23:47:34 2016 +0200
-
-    Update capstone from -next
-
-commit 889ff52f3711ad4233d36acf8bf62742a6ee1b72
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 10 19:54:00 2016 +0200
-
-    Bring back the previous disasm changes
-
-commit b829244c19b577a00c68ef866a0fb319de3f4fd4
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 10 19:09:13 2016 +0200
-
-    Fixes for thumb/arm string references and endian refptr
-
-commit 8f6c4716e0b1272eebff9cb74c289b1033a6da9b
-Author: Lukas Dresel <Lukas-Dresel@users.noreply.github.com>
-Date:   Sun Jun 12 23:40:58 2016 +0200
-
-    Fixed 64bit enum support for structures where size was calculated incorrectly (#5122)
-    
-    * Implemented 8 byte enumeration format size
-    
-    Bug found with
-    po elf64
-    pf [4]? (elf_shdr)h
-    
-    Notice how the name of the next section overlaps in address with the previous
-    section's entsize
-    
-    * Adjusted coding style
-
-commit 13d8e654269503e81264c318e91c0d987f343c02
-Author: Ahmed Mohamed Abd El-MAwgood <oddcoder@users.noreply.github.com>
-Date:   Mon Jun 13 00:39:40 2016 +0300
-
-    Enhancing comments for vars/aegs (#5127)
-    
-    Adding locality properity to variable and argument comments
-    
-    the old implementation made use of the standard r_meta functions to create comments using the frame offset as the address. this caused problems because more than one function might have variable at the same offset (with respect to each ones stackframe). so they will overwride each others comments.
-    
-    adding `base64:` feature
-    
-    prevening CC from processing var/args comment (in wrong manner)
-
-commit f7b8f4c1ea2e24ae8609c072db66924bdd9971fe
-Author: jnahorny <jaroslaw.gorny@gmail.com>
-Date:   Sun Jun 12 23:16:36 2016 +0200
-
-    Get rid of the error when 'mkdir' wanted to remove unexisting directory (#5128)
-
-commit 3081b3b5d60a171ea99730490755404090205a33
-Author: pancake <pancake@nopcode.org>
-Date:   Sun Jun 12 22:50:20 2016 +0200
-
-    Fix ? floating point values
-
-commit f3ee97836141ef7dbe6d4254bd1b2ec1538b998b
-Author: Maijin <maijin21@gmail.com>
-Date:   Sat Jun 11 12:55:09 2016 +0200
-
-    Fix typo Cr -> Cv
-    
-    @oddcoder
-
-commit 534cc69a793c53040d833e76d8386f6b5c858916
-Author: megabug <mattd@bugfuzz.com>
-Date:   Sat Jun 11 22:09:39 2016 +1200
-
-    Fix trimbits (#5120)
-
-commit b7c4d1eeb01e13f2c0964a8b61e10834e7860883
-Author: Ahmed Mohamed Abd El-MAwgood <oddcoder@users.noreply.github.com>
-Date:   Sat Jun 11 12:07:58 2016 +0300
-
-    enabling Commenting using both index as well as name (#5118)
-
-commit 7c3fb53a5eadd812d611f010345ae2344c06696d
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Sat Jun 11 02:12:41 2016 +0000
-
-    fix disassembling 'backwards'
-    
-    (e.g. pd -5) producing wrong output
-    
-    fixes #5105
-
-commit 20bd6003ae8f9ba79dbf55569deed26889405834
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 10 19:13:15 2016 +0200
-
-    Fix undefined behaviour issue in zip.inflate
-
-commit 2d76ac03836294c4ac8e3f33223d6ea3d0d0818b
-Author: Ahmed Mohamed Abd El-MAwgood <oddcoder@users.noreply.github.com>
-Date:   Fri Jun 10 19:08:12 2016 +0300
-
-    Implementing comments on arguments and vars (#5115)
-
-commit deebcc5f46f8955f23a09386fb4a72ba9a93f079
-Author: Sven Steinbauer <sven@unlogic.co.uk>
-Date:   Fri Jun 10 16:02:51 2016 +0100
-
-    Add check for 64bit overflow (#5116)
-
-commit 11fde024c05f28543cca6c749f119cb83c3665d4
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 10 16:14:07 2016 +0200
-
-    Fix asm.emu issue
-
-commit d1b5737a590082de5cba937caeda58a2e8a7778a
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 10 15:31:38 2016 +0200
-
-    Add anal.vinfunr
-
-commit b25c5204286987ab366e4674520d2fd2909f6dec
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 10 12:18:32 2016 +0200
-
-    Do not realign non-code ARM symbols (strings and such)
-
-commit 3ffffd367fcb521678b76e6cc26b57503d26c268
-Author: pancake <pancake@nopcode.org>
-Date:   Fri Jun 10 10:57:43 2016 +0200
-
-    Only show fcn bit mode if different than current one
-
-commit 412f81590c7908a62648eaae51d4e7d9a2266627
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Fri Jun 10 03:11:26 2016 +0000
-
-    note a caveat in r_str_ichr
-
-commit ef59d3aa7fe225e3bc5f971c238cc2ac38f2360d
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Fri Jun 10 02:17:31 2016 +0000
-
-    make a note of TODO in str.c
-
-commit 3e8a0cc693b8b33c75986afc44fb551b87f34131
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Fri Jun 10 01:12:07 2016 +0000
-
-    replace usage of killed r_str_trim
-
-commit 50417301a99f132947fd9b6504586bb7ef5cc4f8
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Thu Jun 9 23:47:41 2016 +0000
-
-    fix description of r_str_word_set0
-
-commit 32037244cecc224ce66d7cd262bde7fcf416eb2e
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Thu Jun 9 23:43:33 2016 +0000
-
-    kill r_str_trim
-
-commit 4cd58acacaedff9bca2e1b7b1f8972277b11a3ef
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Thu Jun 9 23:43:02 2016 +0000
-
-    comment more string functions, kill some duplicated functions.
-
-commit b9aea669d398aed1a305f4ae060d4d9cf3ccb052
-Author: HummyPkg <af123@hummypkg.org.uk>
-Date:   Wed Jun 8 13:46:24 2016 +0100
-
-    Background web server does not honour port parameter
-
-commit c65edef137f216477f87b06f72f847e7db456f26
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 9 23:34:07 2016 +0200
-
-    Always store fcn->bits info on analyze
-
-commit 91e6b11b117e5be06bd2c9b5e9d378c7afb2c201
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 9 23:09:40 2016 +0200
-
-    Add another noreturn function for uclibc
-
-commit ed47ce4fb37aaf07406eb59937531c1483b970cb
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Thu Jun 9 21:16:02 2016 +0000
-
-    add missing ; in debug_native.c
-
-commit 6b1a46be233dd7be698df6a0748b0b02ad31318f
-Author: leberus <osalvador.vilardaga@gmail.com>
-Date:   Thu Jun 9 22:23:39 2016 +0200
-
-    Add: Generate Coredump - added support for threads and x86 (#5104)
-    
-    * Add: Generate Coredump - added support for threads and x86
-    
-    * Fix: debug_native.c allow coredump for i386 too
-
-commit a4b21680d8ea5f950764d25004a17a630a1b678a
-Author: Joshua J. Drake <github.jdrake@qoop.org>
-Date:   Thu Jun 9 15:12:16 2016 -0500
-
-    Re-work r_debug_native_map_get to fix issues (#5108)
-    
-    * Fixes #4972
-    * Check more return values
-    * Improve error reporting
-    * Minor formatting fixes
-
-commit 2ca927caea4e3dd920601493e7b360fe7b742d00
-Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 9 21:52:25 2016 +0200
-
-    Add anal.vinfun for aav (only grab values outside function boundaries)
-
-commit 1b1578e25efab645ee9672cdd31d5e9b8284abb5
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Thu Jun 9 18:40:52 2016 +0000
-
-    fix accidental commit that broke hex2int
-
-commit 98d258339af305ac04ef0297af3ab210fbb39a25
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Thu Jun 9 18:16:47 2016 +0000
-
-    more r_util comments
-
-commit b4c39b5b356a774613383c5b9758f6fd92950ca2
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Thu Jun 9 17:42:27 2016 +0000
-
-    begin adding some documentation to r_str functions
-    
-    r_util needs some documentation if it is to be unit tested.
-
-commit 21d554846d19a613f57b8af3a6c5f1764e538a76
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Thu Jun 9 18:27:55 2016 +0200
-
-    fix mem leak java code
-
-commit f018c2e72764660fb2aa76261f53d3d79c4304c7
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Thu Jun 9 18:17:51 2016 +0200
-
-    Fix #5106
-
-commit c85a6dd9a32ebfaa99a77c8ca7a4ad962edaaab1
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Thu Jun 9 15:31:39 2016 +0000
-
-    reenable unit tests now that they link properly
-
-commit 5456670208fcf3558c6de9148c877cfbbcd7da5a
-Author: Anton Kochkov <xvilka@gmail.com>
-Date:   Thu Jun 9 11:45:47 2016 +0300
-
-    Add basic r2pm information
-
-commit bfe3debc5013328ea654ec5d4775e6ec98226e94
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Thu Jun 9 00:31:23 2016 -0400
-
-    disable unit tests for now...
-
-commit 4d5630ed30088bc735396aa2d3380b3df1e8a5ab
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Thu Jun 9 00:11:59 2016 -0400
-
-    make r_str_replace_char_once actually do only once
-
-commit 8340b342c4a6fb55b37f931787b5ce7716cd666a
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 8 23:33:31 2016 +0200
-
-    Fix crash in last commit
-
-commit df8fba3364e726d5832508ab3b6c4a9910addfd8
-Author: Karol Harasim <karol.harasim@gmail.com>
-Date:   Wed Jun 8 21:16:00 2016 +0200
-
-    Get rid of global ESIL vars in disasm.c (#5102)
-
-commit a25ef5b3bbf56f52d5647a1c76591591ce98224a
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Wed Jun 8 16:40:44 2016 +0000
-
-    remove duplicate char counting functions in r_util
-
-commit 000c6023488f8fa4b08816dc326ac3388911c75a
-Author: Ahmed Mohamed Abd El-MAwgood <oddcoder@users.noreply.github.com>
-Date:   Wed Jun 8 19:13:36 2016 +0300
-
-    FIX #5096 (#5101)
-
-commit 31c4c89e9f3bdac913762133eeb33b03abbb1d63
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Wed Jun 8 13:14:36 2016 +0200
-
-    Fix #5071 & #5070 (#5084)
-
-commit 832abcca8cf95158dd8799a99499f94be8f6cc05
-Author: reenz0h <reenz0h@users.noreply.github.com>
-Date:   Wed Jun 8 12:43:07 2016 +0200
-
-    pX command removal (#5099)
-    
-    pX command is a left off from some old docs. Removing it from help message 'p?'
-
-commit dba2fe70f092a3a8a5026d2cd2fb0c910e51e15c
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 8 11:59:19 2016 +0200
-
-    Fix w32 build
-
-commit 10bbfc7d22ad38c21f9909e0c2257b0818d9bdee
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 8 11:51:52 2016 +0200
-
-    Trim strbits by block
-
-commit 6e68c8de6bdd072a9d26768690befed61ab84629
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 8 09:32:54 2016 +0200
-
-    Use /m as default webui on all platforms
-
-commit a1bdabf787398b1bd0b3a653d4a7d1bfade8508f
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Wed Jun 8 01:48:43 2016 -0400
-
-    fix offbyone in r_str_bits64
-    
-    manifested in odd numbers having leading 1
-
-commit 0e688df3088ec6cea27a883060f38a636b154a5e
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Wed Jun 8 01:39:07 2016 -0400
-
-    style fixup for str.c r_util.h
-
-commit f92b37956a41f8d07cd15b9d5476824edc388834
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Wed Jun 8 01:30:58 2016 -0400
-
-    fix eval command truncating binary to 8 bits
-    
-    closes #4975
-    
-    add new function r_str_bits64 to convert any number to a 64bit binary
-    value.
-
-commit 98e9692572ac5eda35bd02ef8b91db8e7c1ff2d2
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 8 00:14:28 2016 +0200
-
-    Do not install/uninstall the package database
-
-commit 3bf418016f2e166b7e11f91851333d582ce78035
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 7 23:46:26 2016 +0200
-
-    r2pm: d -> db
-
-commit cf544b794f0c26953ce2bb12c7811852597d32b0
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 7 23:42:08 2016 +0200
-
-    Completely move r2pm packages to radare2-pm
-
-commit 8b78da200e04fbd3a3ec4023b601f4908fa372a1
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 7 23:19:42 2016 +0200
-
-    Implement 'ecoj' command to list themes in JSON format
-
-commit 95af521700ebd2e4bd3ac5c25ff2243c54021655
-Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 7 22:38:29 2016 +0200
-
-    Fix #5087 - properly reload project files
-
-commit 15f22752b4a9500c03e04f832ef943fee0614ab0
-Author: monosource <monosource@users.noreply.github.com>
-Date:   Tue Jun 7 15:00:48 2016 +0300
-
-    Add _R to document pxA (#5095)
-
-commit 00e964e9b682c0e365f94533bb7961caedf12b51
-Author: Sven Steinbauer <sven@unlogic.co.uk>
-Date:   Tue Jun 7 11:23:44 2016 +0100
-
-    Add support to mov for negative immediates (#5090)
-    
-    mov eax, -3
-
-commit 6e4a1b55b1e783573d51386f2612c85b345bf938
-Author: Sven Steinbauer <sven@unlogic.co.uk>
-Date:   Tue Jun 7 10:01:35 2016 +0100
+Date:   Tue Aug 16 13:54:59 2016 +0200
 
-    Error if moving 64bit val to 32bit reg (#5088)
-    
-    mov eax, 0x1122334455667788 now errors if trying to assemble with -b64.
+    Rest has_description in the right places
 
-commit 24aec5be8ce7b4831099f25c882c1cabe7500b29
+commit f5f923aea5fcf02245340805855372ee043d4c35
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 7 10:03:04 2016 +0200
+Date:   Tue Aug 16 13:38:40 2016 +0200
 
     Fix all latest COVs
 
-commit 0845add4cf6e582467b6a4864613b76660064ff5
+commit 33e97661403b0d925f07fec3dd16c3c1483aa119
 Author: pancake <pancake@nopcode.org>
-Date:   Tue Jun 7 00:12:45 2016 +0200
+Date:   Tue Aug 16 12:19:02 2016 +0200
 
-    Implement relocs for ELF-powerpc
+    Fix #5248 - Do not show asm.describe if IO desc is found already
 
-commit e8b8831b834e7089ebe02c4d7ce282d9c7a65c16
+commit ed4e5afbbb2395e662b116be86b81889178e55b4
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 6 23:18:21 2016 +0200
+Date:   Tue Aug 16 11:56:55 2016 +0200
 
-    Fix elf-ppc endian bit
+    Load types and cc info on asm.arch change
 
-commit ecb0734988d9ad1898fa4abdd7db07414ba28b73
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Mon Jun 6 22:57:34 2016 +0200
-
-    Fix #5069
-
-commit eb9feef231a81e8cab12c03eb4135cb1836218a0
+commit 3be9aa12bee34dab0ad3820dd30d99c6e0d2e70c
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 6 22:55:26 2016 +0200
+Date:   Tue Aug 16 11:05:45 2016 +0200
 
-    Fixes for powerpc endian in mach0 and other issues
+    Workaround for the anal op.size capstone problem
 
-commit 649748a8f2bcbfbd95d8f9a48793059f53ffbe98
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Mon Jun 6 22:40:34 2016 +0200
-
-    Fix #5074
-
-commit 6b3fea1344882c961d4dbbda015a14a788311118
+commit bf7a6fa9731c6ee498d72df1eea31e16d108320e
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 6 17:42:56 2016 +0200
+Date:   Tue Aug 16 10:59:30 2016 +0200
 
-    Fix #5068 - stack overflow in bin.xbe
+    Refix #5526 - Use f.** to save all function flags
 
-commit 608b79d2b457d67524bffb1b1308b95f5062be2c
+commit d76dfbfd5dc517532e996a7c1d942993130c22ba
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 6 17:30:07 2016 +0200
+Date:   Tue Aug 16 10:43:33 2016 +0200
 
-    Finally fix the build on osx-ppc
+    Fix #5533 - Honor ^C in aftm
 
-commit 4f51606b6d231cf20c600833c7f81697578a168a
+commit 796a03d8b481695dbad5842d3db02da63c5b1df6
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 6 16:55:15 2016 +0200
+Date:   Tue Aug 16 10:41:16 2016 +0200
 
-    More osx-ppc build fixes..
+    Fix #5533 - Fix aftm segfault
 
-commit 5903bc0d10b6b42905d1e9668f96fc82e4b900a4
+commit 273964a27c424da449f2fca9773052c0e8e34993
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 6 16:53:56 2016 +0200
+Date:   Tue Aug 16 03:26:26 2016 +0200
 
-    Fix #5083 - null deref in armass
+    Fix two null derefs pointed out by Coverity
 
-commit bd5e22c17e86a99bb53fafb5ec4e0c2ae25a1039
+commit acae6fc18866c4fa4d38294f415d5d8c9a5237ff
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 6 16:20:03 2016 +0200
+Date:   Tue Aug 16 03:21:50 2016 +0200
 
-    Some more osx-ppc fixes
+    Fix COV 1361613
 
-commit c04b32e6aa14c8f8d6af31dc3d022f716f6bd6b1
+commit 83266a0a4e9bd76774a17465f11b98de23f50239
+Author: SkUaTeR <skuater@hotmail.com>
+Date:   Tue Aug 16 03:19:15 2016 +0200
+
+    Add socket timeout on windows connect
+
+commit 70c9face23d9ae26b5d7f47568e204ef687d689b
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 6 16:06:57 2016 +0200
+Date:   Tue Aug 16 03:17:36 2016 +0200
 
-    Fix GCC warning in anal.gb
+    Properly fix the esil regression
 
-commit b53d06550450cbd0610d2e662cdfd495b7384438
+commit de227c40c6c0e7d3a7bbe0eb883e4e65bf122299
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 6 14:40:58 2016 +0200
+Date:   Tue Aug 16 03:05:43 2016 +0200
 
-    Update sdb and cleanup r2pipe-w32
+    Update pkg-config template files
 
-commit c1eb8253c2f65817f6a8df1c7ed938cec47d909f
-Author: Karol Harasim <karol.harasim@gmail.com>
-Date:   Mon Jun 6 10:36:09 2016 +0200
-
-    Add support for 'pf [size]D' (#5063)
-
-commit 12d8fbca15ab3fa51e2ae49c9d80a869997ab0e8
+commit fe938ae91dd07929f9ef5c6b120d017888bd7347
 Author: pancake <pancake@nopcode.org>
-Date:   Mon Jun 6 10:16:26 2016 +0200
+Date:   Tue Aug 16 02:52:37 2016 +0200
 
-    Fix crash in aoe
+    Fix infinite loop issue in esil expressions with ,,
 
-commit 68a7fb5ebdf9f7aa5e5d968c710659763cfc2d02
-Author: chinmaydd <chinmay1dd@gmail.com>
-Date:   Mon May 30 23:33:18 2016 -0700
+commit 63ef956a754901c1f6e63c3cbf92ec79545df5f1
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 16 02:42:27 2016 +0200
 
-    Adds initial support for aoe and aor
+    Fix #5522 - rap:// write operation wrongly processed
 
-commit 7f48af333295aaa9ae55c04759d9aba778652335
-Author: Ahmed Mohamed Abd El-MAwgood <oddcoder@users.noreply.github.com>
-Date:   Mon Jun 6 01:33:42 2016 +0300
+commit dfebbd6252725fb27147a3844eaae3b4fbb6f0e2
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 16 01:49:32 2016 +0200
 
-    re construction argument/var commands (#5082)
-    
-    afa for base pointer arguments/vars
-    afe for stack pointet arguments/vaes
-    afv for registers
-    fixing the J and \0 suffix
-    using the right register indexer
-    fixng the negative offsets of afa
-    fixing the afa afe afv views of pdf
-    fixing errors in aa
-    fixing the stack bases arg/var
-    fixing the varsub
-    fixing afa*
-    fixing afat
-    making afx- space neutral
-    enabling register renaming at varsub
-    updating the built-in help
-    adding r_reg as dependency for r_parse
+    Fix #4928 - Show string context in /z
 
-commit f06e11b6f44d8b2c6c13e5bc501f2a8a51da38dd
-Author: oblique <psyberbits@gmail.com>
-Date:   Mon Jun 6 01:33:11 2016 +0300
+commit 026ccc7202e7f36341fcd447213df9ff91bb9374
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 16 01:37:38 2016 +0200
 
-    Fix warnings (#5078)
-    
-    * Fix gcc warnings
-    
-    * Fix strtoull return
+    Add help for VV_ and VVF
 
-commit d3b85151ba60d9a3c8712050f65d896c550c87e1
-Author: Jack Baker <Qwokka@users.noreply.github.com>
-Date:   Sat Jun 4 11:32:11 2016 -0700
+commit 2498a61ebeb929949c60368110af160488d19728
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 16 01:32:44 2016 +0200
 
-    Change inline asm constraints to "r" (#5065) (#5073)
+    Fix #5524 - Add 'F' and '_' in graph
 
-commit 63f474706b198308388fd1e587f4cce7572bc3b1
+commit 533d325cdc6d0396164a77a551c126a9715b1cb2
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 16 01:32:31 2016 +0200
+
+    Speedup RCons.hud
+
+commit fbdbd09b262bf118df5f0d4dee93343d4a346c0f
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 16 01:18:44 2016 +0200
+
+    Support cfg.big_endian in pxd
+
+commit b5e57379cde163954d25d3336c533267bff05579
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 16 01:14:02 2016 +0200
+
+    Implement pxd8 and fix warnings
+
+commit 61b7f4af379e25fecc69afa90a27db1a2f04c999
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 16 00:59:31 2016 +0200
+
+    Fix #4195 - Remove r_cons dependency from r_flags
+
+commit 4b263b3475bc8c4dfe9e3d7605f18396eec4ca55
 Author: dx <dx@dxzone.com.ar>
-Date:   Sat Jun 4 15:31:51 2016 -0300
+Date:   Mon Aug 15 19:45:33 2016 -0300
 
-    rahash2: Don't try to unescape inputs provided as hex strings (-x) (#5075)
+    Fix a handful of boring leaks (#5518)
     
-    Fixes #4642, which is about using '-x 5c', which is a backslash.
+    Valgrinding to get exp. Testing with "r2 -Aqcq /bin/ls"
+    
+    Before:
+    
+           definitely lost: 22,735 bytes in 250 blocks
+           indirectly lost: 23,542 bytes in 605 blocks
+             possibly lost: 2,464 bytes in 7 blocks
+           still reachable: 3,876,216 bytes in 80,761 blocks
+    
+    After:
+    
+           definitely lost: 25,216 bytes in 58 blocks
+           indirectly lost: 24,830 bytes in 739 blocks
+             possibly lost: 0 bytes in 0 blocks
+           still reachable: 20,105 bytes in 34 blocks
+    
+    The "goto beach" (named like that for consistency) change resulted in
+    freeing most of the "still reachable" stuff on quit, which also moved
+    stuff out of "possibly lost", so.. it looks like it's leaking more now.
+    Yay.
 
-commit 5b13a92c508113ccaef1b4d8114a3698884f6880
-Author: oblique <psyberbits@gmail.com>
-Date:   Sat Jun 4 17:51:59 2016 +0300
+commit 93cb2941d3233487b11e1bffa5087fcf103b3bac
+Merge: bc5eff1 9b47635
+Author: radare <pancake@nopcode.org>
+Date:   Tue Aug 16 00:40:59 2016 +0200
 
-    behelit theme: Better color for swi (#5080)
+    Merge pull request #5527 from crorvick/cr/fix-backward-seek
+    
+    Fix backward seek
 
-commit fc058e750181956c9406e37b12dde64c5530e311
+commit bc5eff1a164873b0759aa043c7c0233b18e4672c
+Author: Alexandru Caciulescu <alex.darredevil@gmail.com>
+Date:   Tue Aug 16 00:40:17 2016 +0200
+
+    Fix false positives for LoadConst + optimize Nop pattern (#5515)
+
+commit 9b47635f0cd8ab8f5ebd5a60f97e4d37ea92aa22
+Author: Chris Rorvick <chris@rorvick.com>
+Date:   Mon Aug 15 13:56:23 2016 -0500
+
+    remove `next' param from r_core_block_read()
+    
+    This was originally used to cause a seek to the next block prior to
+    reading such that successive calls to r_core_block_read() would progress
+    through memory one block at a time.  This was broken, though, by commit
+    452669d94113 ("more cleanup in r_core_block_read") when when it used
+    `next' to directly calculate the offset rather than via a seek.
+    
+    Only one call site remains that attempts to read the next block instead
+    of the current, and this probably was not even observable due to the
+    "hacky fix" added in commit 3bfa61946eca ("Cleaner pvj, fix tinype load,
+    and honor 'ao N's").
+    
+    The current of semantics of `next' appear to be broken and there is very
+    little dependence on it.  If the original behavior should be restored
+    anywhere, it would be much better to add a new function, or just do the
+    seek explicitly, rather than parameterizing r_core_block_read() on it.
+
+commit 97cea6343565b1f033c004e8c68dfd6e4cd84fb2
+Author: Chris Rorvick <chris@rorvick.com>
+Date:   Mon Aug 15 10:53:46 2016 -0500
+
+    fix backwards seek
+    
+    Commit 57b199789d6a ("Reread block after undo seek. Fixes dbg.status
+    issue") reads the *next* block into the buffer rather than the current.
+    This breaks backwards seeking as can be seen in the following example:
+    
+      $ r2 -N malloc://0x4000
+      [0x00000000]> b 64
+      [0x00000000]> wb 38
+      [0x00000000]> s 64
+      [0x00000040]> wb deadbeef
+      [0x00000040]> s-32
+      [0x00000020]> px
+      - offset -   0 1  2 3  4 5  6 7  8 9  A B  C D  E F  0123456789ABCDEF
+      0x00000020  dead beef dead beef dead beef dead beef  ................
+      0x00000030  dead beef dead beef dead beef dead beef  ................
+      0x00000040  0000 0000 0000 0000 0000 0000 0000 0000  ................
+      0x00000050  0000 0000 0000 0000 0000 0000 0000 0000  ................
+      [0x00000020]> s+16
+      [0x00000030]> px
+      - offset -   0 1  2 3  4 5  6 7  8 9  A B  C D  E F  0123456789ABCDEF
+      0x00000030  3838 3838 3838 3838 3838 3838 3838 3838  8888888888888888
+      0x00000040  dead beef dead beef dead beef dead beef  ................
+      0x00000050  dead beef dead beef dead beef dead beef  ................
+      0x00000060  dead beef dead beef dead beef dead beef  ................
+    
+    The first block to a string of ASCII '8' bytes and the second to
+    0xdeadbeef.  We then seek backwards 32 bytes from our current 64 byte
+    offset but a dump at the resulting offset shows data from half way into
+    the second block (i.e., offset 0x60.)  Dumping again after seeking 16
+    bytes forward shows the expected last bit of the first block.  Clearly
+    the intent was to reread the current block, not the next block, after an
+    undo or backward seek.
+    
+    NOTE: The above example will only work after applying the previous
+    commit as rereading the buffer when displaying the prompt hides this
+    bug.
+    
+    Additionally, since the commit intended to reread the buffer only after
+    an undo seek, do not do this at all on a backward seek.
+
+commit ad3034067e82fdfa9ff6cf01783149b94211c228
+Author: Pankaj Kataria <me@pankajkataria.com>
+Date:   Tue Aug 16 00:27:56 2016 +0530
+
+    Added av command for listing virtual tables
+
+commit 62b1e431c06e3b7d9e6659ca91c5668fa2c90730
+Author: Rakholiya Jenish <P4N74@users.noreply.github.com>
+Date:   Tue Aug 16 00:25:52 2016 +0530
+
+    Fix pf for . and :
+
+commit f671097ea7cb6f7f11e93beb2fd19178fb3c8f92
 Author: pancake <pancake@nopcode.org>
-Date:   Sat Jun 4 10:04:14 2016 +0200
+Date:   Mon Aug 15 20:47:46 2016 +0200
 
-    Honor escapechars in rarun2 setenv
+    Fix #5526 - Save function local flags in projects
 
-commit b3b77ac3f12c256a9f73429c8aa655112c2b379c
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Fri Jun 3 22:45:47 2016 -0400
+commit 486fd329498e6213d5f575a054b19fedc24ebfd8
+Author: Chris Rorvick <chris@rorvick.com>
+Date:   Mon Aug 15 12:30:41 2016 -0500
 
-    fixup keystone-lib installer
-
-commit 58c5a333c05ffdf34c4b1edec1aa4f682b110904
-Author: dx <dx@dxzone.com.ar>
-Date:   Fri Jun 3 10:33:09 2016 -0300
-
-    Fix a few anal leaks (#5076)
+    remove hacky fix
     
-    Mostly sdb_get() calls turned into sdb_const_get(), but there are
-    others.
+    Commit 3bfa61946eca ("Cleaner pvj, fix tinype load, and honor 'ao N's
+    help") added a hack to reread the current block when printing the
+    prompt.  This has the drawback of causing scripts loaded via the `-i'
+    command line option to potentially behave differently than reading the
+    commands via stdin.  Remove the hack and fix the bugs.
 
-commit 8a96ec635dedcd153145fe7736f716811f9fca13
+commit 213c6f29d1c19b26980302866ae35991bde4e5ea
+Author: Ahmed Mohamed Abd El-MAwgood <ahmedsoliman0x666@gmail.com>
+Date:   Mon Aug 15 18:34:12 2016 +0300
+
+    Fixing some aftm bugs and null dereferences (#5521)
+
+commit d0fb42aa464d0f6a0eadcbfedc49865d86b96cd3
+Author: Ahmed Mohamed Abd El-MAwgood <ahmedsoliman0x666@gmail.com>
+Date:   Mon Aug 15 18:33:27 2016 +0300
+
+    Fixing Invalid address at var display (#5523)
+
+commit 12dbe30cbbf8e4f34d8f606227ae87ab48d686ce
+Author: Ahmed Mohamed Abd El-MAwgood <ahmedsoliman0x666@gmail.com>
+Date:   Mon Aug 15 10:54:25 2016 +0300
+
+    Fixing coverity CIDs (#5516)
+    
+    fix CID 1361617
+    Resource leaks (RESOURCE_LEAK)
+    /libr/core/tp.c: 148 in stack_clean()
+     Var iable "str" going out of scope leaks the storage it points to.
+    
+    fix CID 1361612
+    Null pointer dereferences (NULL_RETURNS)
+    /libr/core/tp.c: 178 in r_anal_type_match()
+    Dereferencing a null pointer "op".
+    
+    fix CID 1361611
+    /libr/anal/var.c: 112 in r_anal_var_retype()
+    /libr/anal/var.c: 125 in r_anal_var_retype()
+    Dereferencing a null pointer "fcn".
+    
+    fix CID 1361610
+    Incorrect expression (IDENTICAL_BRANCHES)
+    /libr/core/cmd_anal.c: 1616 in __anal_reg_list()
+    Dereferencing null pointer "fcn".
+
+commit 55a76c29e6c0fc31c6d764190bb6a88999895ffa
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 15 09:53:15 2016 +0200
+
+    Fix iV tests
+
+commit 397790250cde0c4a086a83d4a4df7f3e394c9c88
+Author: Ahmed Mohamed Abd El-MAwgood <ahmedsoliman0x666@gmail.com>
+Date:   Mon Aug 15 09:50:46 2016 +0300
+
+    Update types databases
+
+commit 97f3a46100a37a2af18e8f1eec3c2b782a90479b
+Author: Daniel L. Polanco <dlpolanco05@gmail.com>
+Date:   Sun Aug 14 20:42:45 2016 -0600
+
+    Add final dll mfc90u to close issue 5486 (#5514)
+    
+    This is an empty file because I (DanTheColoradan) was unable to
+    obtain any ordinal information. I tried two versions:
+    
+    -  9.0.30729.1
+    -  9.0.30729.6161
+    
+    Both were downloaded from dll-files.com. I also tried a version
+    from MS Windows 10, but I don't know what version it was.
+    
+    This change should close #5486.
+
+commit e33a6acbe71fdffc79e87a8c0919db34a03b4701
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 15 03:09:27 2016 +0200
+
+    Fix version info section sizes
+
+commit c35666ef8a26df5aca68458a8d94434071fefca0
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 15 02:37:45 2016 +0200
+
+    Minor rap:// fixes. More to come
+
+commit 771acc81f6e3cef4a61eb87af3aeee4353cd125a
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 15 02:37:24 2016 +0200
+
+    Fix huge load times for fuzzed versioninfo bins
+
+commit 0f39a486f5be629959c30c8c433eafcb1fda35d8
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 15 01:54:53 2016 +0200
+
+    Fix #5341 - rap:// with no file works now
+
+commit d001066eb447cf60d5b2da9430cbb042b45da170
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 15 01:40:34 2016 +0200
+
+    Support longer wopD.. still not complete
+
+commit 75fd458df8b838cb81d323dc1d570f1cd6f9341e
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 15 01:10:42 2016 +0200
+
+    Fix #5007 - Clarify the difference of hash/encoder/crypto
+
+commit 39fa8c37b125555753f995f261caec96646551d3
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 15 01:04:27 2016 +0200
+
+    Fix build of nocache://
+
+commit 2a5e49ee40a42ff478875f7676eb738e44ea7acb
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 15 01:03:22 2016 +0200
+
+    Fix b64 decode oob vuln ported from sdb
+
+commit e1b94b83438a72e7ca8f829b30be364a0dee5cc2
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 15 01:02:05 2016 +0200
+
+    Update sdb to fix an overflow in the base64 decoder
+
+commit d18a63e9ed8b17817ac74857919ee0ebd6c2c563
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 15 00:14:36 2016 +0200
+
+    Fix #5379 - Implement nocache:// for the posix io plugin
+
+commit deb05ed3830b242f532329828b30ec798569342b
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 14 23:49:13 2016 +0200
+
+    Honor cfg.bigendian in wopO for debrujn patterns
+
+commit 2b35ce2ed42d079972e694fa4250315c6d1b15b3
+Author: Alexandru Caciulescu <alex.darredevil@gmail.com>
+Date:   Sun Aug 14 23:24:32 2016 +0200
+
+    Fix undeclared variable error (#5512)
+    
+    Undeclared variable "i" at line 2215.
+
+commit 6c9af2e69068379364780b79699354f80740f187
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 14 19:55:54 2016 +0200
+
+    Fix #4841 - Restricted r2 shell thing
+
+commit 3495e98545d2a6841b7e72ec250e7b7ef0b85115
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 14 19:46:50 2016 +0200
+
+    Fix Warning: Too big version thing in some ELFs
+
+commit 0d0428b670600f74645b8638db92a50ef8665e64
 Author: Maijin <maijin21@gmail.com>
-Date:   Fri Jun 3 10:56:54 2016 +0200
+Date:   Sun Aug 14 13:38:52 2016 -0400
 
-    Comment installer script part from mingw32
+    Fix  #5508
 
-commit 2702c3f3468389465e6e9d33d0e6b3a5ae17c953
+commit fe0530aa9cc52f09edb5c8ecfe5f6f3b2c3c72fb
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 2 14:16:57 2016 +0200
+Date:   Sun Aug 14 19:35:24 2016 +0200
 
-    Initial regload support for linux-x32/64 coredumps
+    Fix OOB read in vax disassembler
 
-commit 24c0dfc961234e9e831efdff80ea0eb982d7da8f
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Thu Jun 2 08:07:12 2016 +0300
-
-    Do not include coredump.h for non x86
-
-commit c7f1f7a87baa666659e3f61e7abc963db975386a
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Thu Jun 2 07:55:31 2016 +0300
-
-    Add missing header for linux coredump
-
-commit a38176a3b54672b911e0d1b0522e6d4153b1f42d
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Thu Jun 2 07:37:10 2016 +0300
-
-    Shellcheck also r2pm script
-
-commit 68ef35f6351ed2d62d68b655e76c8b60d919588e
-Author: Anton Kochkov <anton.kochkov@gmail.com>
-Date:   Thu Jun 2 07:34:06 2016 +0300
-
-    Uniform name RUndos -> RIOUndos (for bindings)
-
-commit d3394d5a7a2b5bea727dd82b0620bb7c5c4a0de8
+commit be220ec03801b0ee414e0a1d47b7cc1c0e6240ec
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 2 03:19:31 2016 +0200
+Date:   Sun Aug 14 19:29:59 2016 +0200
 
-    Fix latest 28 COVs
+    Fix VRR on windows issues
 
-commit 03294af32b79197290f0f1da89bd768ea8fd285e
+commit 3654e5f33b80a4f934bcc0350137f8c664e52b98
 Author: pancake <pancake@nopcode.org>
-Date:   Thu Jun 2 02:29:44 2016 +0200
+Date:   Sun Aug 14 19:12:52 2016 +0200
 
-    Fix null deref in libr_asm and add lang-python r2pm pkg
+    Fix regression in reg.type=flg
 
-commit 7c7d75b3fa17d45fd2a28f1900fd26a1f7720a3d
+commit e9bd690aa569dae57d5afd9a58acbd15d5e688c6
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 14 14:39:35 2016 +0200
+
+    Remove bashisms from travis.yml
+
+commit 08912e2e67ed3c7343b89b0ea9792f81531ef908
+Author: Maijin <maijin21@gmail.com>
+Date:   Sat Aug 13 23:18:00 2016 -0400
+
+    Temporary disconnect coveralls
+
+commit 6e478431dd02a8b3efe0e02abffe2996ff79ad02
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 14 02:29:37 2016 +0200
+
+    Fix 4 warnings (unused stuff) in cmd_search_rop
+
+commit f4f163afcbf7af375c14c49ef3541128e78a14a2
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 14 02:25:50 2016 +0200
+
+    Update www-m from radare2-webui
+
+commit 138c69f98fb8915419ac57317cc9cb3c70106072
+Author: Alexandru Caciulescu <alex.darredevil@gmail.com>
+Date:   Sun Aug 14 02:24:02 2016 +0200
+
+    Fix flag regs being seen as 'gpr' instead of 'flg'
+
+commit f60597b2eee78d974b1756b22573d26af68ba768
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 14 02:23:47 2016 +0200
+
+    Fix ar 1 to honor RReg.Type.flg
+
+commit f8fa41bac8220ab764a0cc5bc18f3f4db0bfa417
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 14 02:09:38 2016 +0200
+
+    Add gsprop32 and spr32d70 in bin/d/Makefile
+
+commit 5d551c68fbab82d975f948336e7fcb305c0bfffa
+Author: Daniel L. Polanco <dlpolanco05@gmail.com>
+Date:   Sat Aug 13 18:08:53 2016 -0600
+
+    Add spr32d70 and gsprop32 sdb for issue 5486 (#5491)
+    
+    As per Maijin's request, I have added two out of the three dlls
+    I need to run radare2 on an exe I'm trying to disassemble. I was
+    unable to get any useful function exports for the third file,
+    mfc90u.
+
+commit e652a18469783265c343d3685d040f2194948151
+Author: Alexandru Caciulescu <alex.darredevil@gmail.com>
+Date:   Sun Aug 14 02:08:40 2016 +0200
+
+    Implement Arithmetic Pattern matching for ROP classification
+    
+    * /R can now classify nop gadgets
+    * MovRegs and LoadConst pattern classification for /R
+    * Moved classification logic in separate file
+    * Adding Arithmetic Pattern classification for /R (work in progress)
+
+commit 52da64becceaa8b7f2bdefd3359f86545bd36662
+Author: Ahmed Mohamed Abd El-MAwgood <ahmedsoliman0x666@gmail.com>
+Date:   Sun Aug 14 03:07:43 2016 +0300
+
+    Fix for function name decorators (oridinal, sym.blablabla) (#5488)
+    
+    implemented function guess matched name which finds longest function name in sdb_types that is substring of the current function name
+
+commit 4f413e772083636ce62ed83a7a24a824ebab288a
+Author: Ahmed Mohamed Abd El-MAwgood <ahmedsoliman0x666@gmail.com>
+Date:   Sat Aug 13 13:09:14 2016 +0300
+
+    initial support for type matching (#5480)
+    
+    Enabling stepping over
+    Basic (sym.imp.*) call catching routines
+    Fixing esil tracing bug and verbosity
+    Adding some apis for handling function prototypes and abstacting sbd queries
+    Fixing the double execusion bug in esil tracing
+    passing types into vars for `stack`
+    fixing trailing spaces
+    doing the regester branch
+    doing the stack_rev
+
+commit 1f000046415ef5254bf0b7951e37671f67615582
+Author: pancake <pancake@nopcode.org>
+Date:   Sat Aug 13 11:43:44 2016 +0200
+
+    Update capstone from git
+
+commit a7da94ba336aa954d4a85639cb7226c9eaf44984
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Aug 11 11:31:44 2016 +0200
+
+    Update capstone from git
+
+commit 46cec371db40e892a6928853099ab86ebe7ec1cb
+Author: pancake <pancake@nopcode.org>
+Date:   Thu Aug 11 02:32:23 2016 +0200
+
+    Fix asm.filter parse issue for m68k
+
+commit 52656941fe92230dd1f41951d3dea87fd1abc6c9
+Author: Paul <pvt.gord@gmail.com>
+Date:   Wed Aug 10 21:10:00 2016 +0200
+
+    r_core_print_disasm_json fix (#5479)
+    
+    * r_core_print_disasm_json fix
+
+commit dc5673ec3acac01bdd77fe2ff47761984481e840
+Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
+Date:   Wed Aug 10 18:49:44 2016 +0200
+
+    Fix regression with the arm/thumb changes (#5464)
+    
+    Now we build a list of ranges (RAnalRange) based on anal hints to handle the
+    bits in a better way in the case of arm/thumb
+    
+    Now instead of asm.bits that rules the whole binary we can define ranges with
+    anal hints
+
+commit d670aaa77ac63d03f3dee465374b0431ae81ad8c
+Author: Paul <pvt.gord@gmail.com>
+Date:   Wed Aug 10 16:20:15 2016 +0200
+
+    Adding R2PM_GITDIR for easy packages local testing (#5475)
+    
+    * Adding R2PM_GITDIR for easy packages local testing
+    
+    Usage:
+    
+    export R2PM_DBDIR="/path/to/the/folder/with/package/description"
+    export R2PM_GITDIR="/path/to/the/root/folder/of/the/local/repository"
+    r2pm -i package
+
+commit d6ee8fe3009e29b7c623c33d2fa9b568fc870d69
+Author: Daniel Roberson <droberson@users.noreply.github.com>
+Date:   Wed Aug 10 07:07:39 2016 -0700
+
+    PowerPC calling conventions (#5477)
+    
+    * added powerpc-32 calling conventions
+    * added powerpc-64 calling conventions
+    * fixed grammar
+    * added powerpc 32 and 64
+
+commit 72e58c2e010dbd85f397822da338b7c32e1a623c
+Author: Alexandru Caciulescu <alex.darredevil@gmail.com>
+Date:   Tue Aug 9 17:24:25 2016 +0200
+
+    /R gadget classification patches for #5397 (#5448)
+    
+    * /R can now classify nop gadgets
+    * MovRegs and LoadConst pattern classification for /R
+    * Moved classification logic in separate file
+
+commit aca34ee0b3e68111509b6c5113aa07be2354b31c
+Author: Ahmed Mohamed Abd El-MAwgood <oddcoder@users.noreply.github.com>
+Date:   Tue Aug 9 13:58:44 2016 +0300
+
+    fixing watcom calling convention
+
+commit a2d9300d7702c3d8dd4289a18e1b3b768fc3caa0
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 9 11:32:02 2016 +0200
+
+    Fix #5339 - Projects now work with r2pipe
+
+commit 059ad1a51cb564737da36dd33893b69cca96c39f
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 9 01:40:12 2016 +0200
+
+    Differentiate methods from functions in objc parser
+
+commit ac73a4b2dca51bcc096ca91b2e797be59faa732d
+Author: pancake <pancake@nopcode.org>
+Date:   Tue Aug 9 01:16:10 2016 +0200
+
+    Add calling convention definitions for AMD64, ARM, MIPS, SPARC
+
+commit ad1565d9e4c9c8151b2f1507703c1bdd61c1700f
+Author: Ahmed Mohamed Abd El-MAwgood <oddcoder@users.noreply.github.com>
+Date:   Tue Aug 9 01:17:42 2016 +0300
+
+    few enhancements for `afv` FIX #5459 (#5461)
+    
+    replacing afv[bsr]n  with afvn
+    replacing negative sign `n` with `_`
+    being consistent across the documentations (args + locals = vars)
+    refactoring code
+
+commit 4e71ff36fe014f32bb172c54a9dad9c61f94df74
+Author: @bezjaje <mrmacete@protonmail.ch>
+Date:   Mon Aug 8 23:40:56 2016 +0200
+
+    Honor endiannes and size too in reference values in disasm (#5469)
+
+commit 56636c8d09d3f493f482c517a43ac8e08973af07
+Author: javierprtd <javierprtd@gmail.com>
+Date:   Mon Aug 8 18:42:18 2016 +0200
+
+    Update dmh
+
+commit 6d1d02024e4cd7802a688c5a3760eb721d5a7a9e
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 8 13:40:50 2016 +0200
+
+    Remove problematic asprintf defines from libiberty.h
+
+commit b39fb262648181ab2359db53b95c5e72b8ba5ebe
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 8 13:32:23 2016 +0200
+
+    Add $Fb and $Fs to handle basicblock address and size
+
+commit 8f2e4e4f5d0560256b442ae1d25bf05c7a0c1f6e
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 8 11:47:09 2016 +0200
+
+    Fix #5283 - In case of no sudo, just tell the user to run the command by hand
+
+commit 5cafd20194d300c249c3155999b44ca1c2846d77
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 8 11:40:31 2016 +0200
+
+    Show r2pm clone directory in r2pm init
+
+commit e8464e6d75c2db203aac9dcc313f8accf14432c2
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 8 11:35:03 2016 +0200
+
+    Honor endian in reference values in disasm
+
+commit e866c7614731a12968d50c4ca0ce750c36901f6a
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 8 11:07:05 2016 +0200
+
+    Fix #5432 - Implement pdrj
+
+commit 3fe30f5c351c7a0b5fe72c223f421ec009b6162a
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 8 10:56:47 2016 +0200
+
+    Fix #5450 - Implement 'n' key in VV graph to rename function
+
+commit 0777232b1b76ba9dbc78b0b9cbc4ba9bf0bb24c4
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 8 10:45:49 2016 +0200
+
+    Rename core/bin.c as cbin.c to avoid confussion with bin/bin.c
+
+commit bf63107f9ac992d9ea1b995083e1472bca992265
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 8 10:45:32 2016 +0200
+
+    Fix uninitialized entry field for MZ bins (jman issue)
+
+commit 3e5f6368691365bcfd632cf41dc3e01e6d4dec0e
+Author: pancake <pancake@nopcode.org>
+Date:   Mon Aug 8 01:00:47 2016 +0200
+
+    Fix Vcdn to rename local vars - reported by @ret2libc
+
+commit b8363bc5cc2136bf66d8ecc9bd0c307c3c483718
+Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
+Date:   Sun Aug 7 19:58:34 2016 +0200
+
+    another fix due to regression
+
+commit 9f1deb5be654e2035e109cf50697b6c74ba128d7
+Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
+Date:   Sun Aug 7 19:27:50 2016 +0200
+
+    try again to fix the regression
+
+commit 32335f76351699db6c7cc908afc84b09ba204b8d
+Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
+Date:   Sun Aug 7 19:05:55 2016 +0200
+
+    fix regression
+
+commit c793151d584589d961072a8c4a157019ad827701
+Author: pancake <pancake@nopcode.org>
+Date:   Sun Aug 7 18:57:31 2016 +0200
+
+    Fix rabin2 -L empty output issue
+
+commit b765f0e7864249ad95da876ba0f44c21073498b0
+Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
+Date:   Sun Aug 7 18:00:40 2016 +0200
+
+    Fix #4639 - Problem with arm32
+
+commit 0bc983027f6052044b4c3d9fe143229df0f18aab
+Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
+Date:   Sun Aug 7 17:37:33 2016 +0200
+
+    improve arm/thumb  in elf file format and disasm
+
+commit 33c6d01531380c06a604156fa22dbe41ea2325a1
 Author: Roman Valls Guimerà <brainstorm@users.noreply.github.com>
-Date:   Wed Jun 1 22:13:28 2016 +0200
+Date:   Sun Aug 7 17:14:14 2016 +0200
 
-    Build target armel (not armhf), for legacy armv5-like devices (#5060)
-
-commit 8e84edb90276357389f8ec986d74e5d0818686cb
-Author: zlowram <zlowram@gmail.com>
-Date:   Wed Jun 1 15:00:41 2016 +0200
-
-    R2pm fix (#5058)
+    [AVR] First approach to afCl/cdecl for AVR (#5453)
     
-    * Exported R2PM_PLUGDIR
-    
-    * Fixed global path for plugins
-
-commit 95b2e511f5e89f74147719f2a820c0d2c0eaef7a
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 1 12:23:10 2016 +0200
-
-    Fix some warnings
-
-commit 2740e74e4904a5c3e4e8bae28308906da649e21a
-Author: Rene Laemmert <rlaemmert@gmail.com>
-Date:   Wed Jun 1 12:16:00 2016 +0200
-
-    added cursor to undo seek history (#5054)
-    
-    * added cursor to undo seek history
-    
-    * cleanup the mentioned parts
-
-commit 63dd8590d7e61b933a3293043de7287db6980555
-Author: Sven Steinbauer <sven@unlogic.co.uk>
-Date:   Wed Jun 1 11:15:33 2016 +0100
-
-    Refactor `mov` assembly for nz (#5057)
-    
-    * reg offset code consolidated to single location and simplified
-    * Refactor `getreg` for `arg` and `arg2` to use `r0` and `r1` throughout
-            `mov` case
-    
-    Should clean it up a little.
-
-commit bb7dd7833eeb015d0e491d9109592747f2a174df
-Author: @bezjaje <mrmacete@protonmail.ch>
-Date:   Wed Jun 1 12:15:10 2016 +0200
-
-    r2pm: added global R2_RCD variable (#5056)
-    
-    * r2pm: added global R2_RCD variable
-    + removed "local" R2_RCD variable from esilburner and syms2elf
-    + improved esilburner package
-    
-    * r2pm: esilburner: using $() instead of backticks
-    
-    * r2pm: renamed R2_RCD to R2PM_ETCD
-
-commit 7ab3bbb91cf1621dc0c7ff361d4e69e4d24d08c5
-Author: pancake <pancake@nopcode.org>
-Date:   Wed Jun 1 12:13:09 2016 +0200
-
-    Fix some trailing spaces in pf
-
-commit 03b3e95c8d5948f7efeffc2813598f7bc9d373af
-Author: pancake <pancake@nopcode.org>
-Date:   Tue May 31 23:42:53 2016 +0200
-
-    Fix build
-
-commit 88b71663c00b4f780d36d2e401ff9dce3bb370bc
-Author: pancake <pancake@nopcode.org>
-Date:   Tue May 31 23:37:17 2016 +0200
-
-    Fix more trailing spaces in dwarf and comments
-
-commit ae52bb5ded6c1afb2f41f8c641e342dc6e55eb1b
-Author: Jeffrey Crowell <crowell@bu.edu>
-Date:   Tue May 31 20:27:34 2016 +0000
-
-    add keystone-lib package to r2pm
-
-commit f9154122935e6a5a4c58bcd5b7079acaf5464e4e
-Author: pancake <pancake@nopcode.org>
-Date:   Tue May 31 22:13:33 2016 +0200
-
-    Fix some trailing spaces in asm.dwarf
-
-commit d190e0d3c3d7165e078d49679282f85a7f90866f
-Author: Karol Harasim <karol.harasim@gmail.com>
-Date:   Tue May 31 21:48:18 2016 +0200
-
-    Add description for Xtensa instructions
-
-commit 2bd189255e26e9e65c3c19a32e502ec7aa73a8b7
-Author: pancake <pancake@nopcode.org>
-Date:   Tue May 31 21:23:55 2016 +0200
-
-    Remove trailing spaces in px
-
-commit b226545595d005f8588d7d299f8cbf0321fd3fe4
-Author: Karol Harasim <karol.harasim@gmail.com>
-Date:   Tue May 31 17:17:31 2016 +0200
-
-    Fix use before initialization. (#5052)
-
-commit 730761f727c0f8bf6482189375192ddd0cb5560a
-Author: pancake <pancake@nopcode.org>
-Date:   Tue May 31 16:20:21 2016 +0200
-
-    Update capstone
-
-commit 2138ca700ce7995e4a5a62eb8a2f7f2fdd726a77
-Author: pancake <pancake@nopcode.org>
-Date:   Tue May 31 14:11:09 2016 +0200
-
-    Fix #5019 - registers are now accessible by index
-
-commit cdd4f70814888f4320866f28ec28fdc17fd9750c
-Author: Karol Harasim <karol.harasim@gmail.com>
-Date:   Tue May 31 13:33:09 2016 +0200
-
-    Add support for pch (2 byte C dump mode) (#5047)
-
-commit fa15260d2139d050e4c7b26a4b969c7b2f9a6e9b
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Tue May 31 12:16:57 2016 +0200
-
-    some refactoring in pe format code (#5039)
-
-commit 92018cc381350b5dcf717e91695ad7d1139f7c19
-Author: Karol Harasim <karol.harasim@gmail.com>
-Date:   Tue May 31 11:50:35 2016 +0200
-
-    Add ah. command to show hints in current offset. Fix ah? too. (#5045)
-
-commit be4b061eda034f2b543eb0f3576b20b952377bd9
-Author: oblique <psyberbits@gmail.com>
-Date:   Tue May 31 12:50:12 2016 +0300
-
-    r_str_ansi_crop: Reset color on new line (#5048)
-    
-    Fixes #5036
-
-commit aa02c43af9f142134e238ad0e0ff21c90f28c5fd
-Author: @bezjaje <mrmacete@protonmail.ch>
-Date:   Tue May 31 11:49:43 2016 +0200
-
-    r2pm: added esilburner package (#5051)
-
-commit eca8aaedc24f5493fb649565f4ecc9ff2c604a96
-Author: pancake <pancake@nopcode.org>
-Date:   Tue May 31 11:10:30 2016 +0200
-
-    Add C# plugin r2pm package
-
-commit 27ae76a7dcd3d775e2e85aa2272072cc5bd0531f
-Author: pancake <pancake@nopcode.org>
-Date:   Tue May 31 10:39:34 2016 +0200
-
-    Show licenses in rlang plug listing
-
-commit 176a7359271a531c02e44f09a9d7dd80777f0b54
-Author: pancake <pancake@nopcode.org>
-Date:   Tue May 31 02:32:30 2016 +0200
-
-    Add cmdf callback and license in RLang
-
-commit 89399585698e8b4dc1de12f03de7b5dea54b17f4
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Mon May 30 21:51:18 2016 +0200
-
-    Fix #5040
-    
-    oob read in init_dynamic_section elf format code
-
-commit c64eeaa266e2a0bdb473936a2d29a65db2ecfb0e
-Author: pancake <pancake@nopcode.org>
-Date:   Mon May 30 18:53:32 2016 +0200
-
-    Initial implementation of asm.assembler to select different assembler plugin than the disasm
-
-commit e458901033adcaf64c4ccef7cf260308cd9d7b2d
-Author: pancake <pancake@nopcode.org>
-Date:   Mon May 30 15:30:55 2016 +0200
-
-    Fix jmptbl regression
-
-commit cd776862ef138b9aabaeffcdd0410df3f8ca6be5
-Author: pancake <pancake@nopcode.org>
-Date:   Mon May 30 13:18:42 2016 +0200
-
-    Fix some trailing spaces in pc
-
-commit c34181af0273d2df54e7b92f0d83671cf47d464d
-Author: Karol Harasim <karol.harasim@gmail.com>
-Date:   Mon May 30 12:35:39 2016 +0200
-
-    Disasm refactorings. (#5043)
-
-commit f8836c19b52784d8876376546e825418e54a6f4d
-Author: oblique <psyberbits@gmail.com>
-Date:   Mon May 30 05:22:20 2016 +0300
-
-    Fix glitch in disasm (#5031)
-
-commit 216de66e68130fb9953b916a5d102ddb1bce19ee
-Author: Duncan Ogilvie <mr.exodia.tpodt@gmail.com>
-Date:   Mon May 30 04:21:02 2016 +0200
-
-    fixed jcc (#5034)
-
-commit 021a3ea8b2f87f0490d65548ea33c150d216dd12
-Author: Duncan Ogilvie <mr.exodia.tpodt@gmail.com>
-Date:   Mon May 30 04:20:29 2016 +0200
-
-    Update x86 (#5035)
-
-commit 18ffea18ccdcf3cf2450b9f8660795115ce0f698
-Author: Duncan Ogilvie <mr.exodia.tpodt@gmail.com>
-Date:   Mon May 30 04:20:19 2016 +0200
-
-    added/fixed various cmovXX opcodes (#5033)
-    
-    
-    
-    As per the Intel manual:
-    
-    ```
-    CMOVcc - Conditional Move:
-    | Opcode          | Instruction       | Op/En| 64-Bit Mode| Compat/Leg Mode| Description
-    | 0F 47 /r        | CMOVA r16, r/m16  | RM   | Valid      | Valid          | Move if above (CF=0 and ZF=0).
-    | REX.W + 0F 43 /r| CMOVAE r64, r/m64 | RM   | Valid      | N.E.           | Move if above or equal (CF=0).
-    | 0F 42 /r        | CMOVB r16, r/m16  | RM   | Valid      | Valid          | Move if below (CF=1).
-    | REX.W + 0F 46 /r| CMOVBE r64, r/m64 | RM   | Valid      | N.E.           | Move if below or equal (CF=1 or ZF=1).
-    | 0F 42 /r        | CMOVC r16, r/m16  | RM   | Valid      | Valid          | Move if carry (CF=1).
-    | REX.W + 0F 44 /r| CMOVE r64, r/m64  | RM   | Valid      | N.E.           | Move if equal (ZF=1).
-    | 0F 4F /r        | CMOVG r16, r/m16  | RM   | Valid      | Valid          | Move if greater (ZF=0 and SF=OF).
-    | REX.W + 0F 4D /r| CMOVGE r64, r/m64 | RM   | Valid      | N.E.           | Move if greater or equal (SF=OF).
-    | 0F 4C /r        | CMOVL r16, r/m16  | RM   | Valid      | Valid          | Move if less (SF!= OF).
-    | REX.W + 0F 4E /r| CMOVLE r64, r/m64 | RM   | Valid      | N.E.           | Move if less or equal (ZF=1 or SF!= OF).
-    | 0F 46 /r        | CMOVNA r16, r/m16 | RM   | Valid      | Valid          | Move if not above (CF=1 or ZF=1).
-    | REX.W + 0F 42 /r| CMOVNAE r64, r/m64| RM   | Valid      | N.E.           | Move if not above or equal (CF=1).
-    | 0F 43 /r        | CMOVNB r16, r/m16 | RM   | Valid      | Valid          | Move if not below (CF=0).
-    | REX.W + 0F 47 /r| CMOVNBE r64, r/m64| RM   | Valid      | N.E.           | Move if not below or equal (CF=0 and
-    |                 |                   |      |            |                | ZF=0).
-    | 0F 43 /r        | CMOVNC r16, r/m16 | RM   | Valid      | Valid          | Move if not carry (CF=0).
-    | REX.W + 0F 45 /r| CMOVNE r64, r/m64 | RM   | Valid      | N.E.           | Move if not equal (ZF=0).
-    | 0F 4E /r        | CMOVNG r16, r/m16 | RM   | Valid      | Valid          | Move if not greater (ZF=1 or SF!= OF).
-    | REX.W + 0F 4C /r| CMOVNGE r64, r/m64| RM   | Valid      | N.E.           | Move if not greater or equal (SF!= OF).
-    | 0F 4D /r        | CMOVNL r16, r/m16 | RM   | Valid      | Valid          | Move if not less (SF=OF).
-    | REX.W + 0F 4F /r| CMOVNLE r64, r/m64| RM   | Valid      | N.E.           | Move if not less or equal (ZF=0 and
-    |                 |                   |      |            |                | SF=OF).
-    | 0F 41 /r        | CMOVNO r16, r/m16 | RM   | Valid      | Valid          | Move if not overflow (OF=0).
-    | REX.W + 0F 4B /r| CMOVNP r64, r/m64 | RM   | Valid      | N.E.           | Move if not parity (PF=0).
-    | 0F 49 /r        | CMOVNS r16, r/m16 | RM   | Valid      | Valid          | Move if not sign (SF=0).
-    | REX.W + 0F 45 /r| CMOVNZ r64, r/m64 | RM   | Valid      | N.E.           | Move if not zero (ZF=0).
-    | 0F 40 /r        | CMOVO r16, r/m16  | RM   | Valid      | Valid          | Move if overflow (OF=1).
-    | REX.W + 0F 4A /r| CMOVP r64, r/m64  | RM   | Valid      | N.E.           | Move if parity (PF=1).
-    | 0F 4A /r        | CMOVPE r16, r/m16 | RM   | Valid      | Valid          | Move if parity even (PF=1).
-    | REX.W + 0F 4B /r| CMOVPO r64, r/m64 | RM   | Valid      | N.E.           | Move if parity odd (PF=0).
-    | 0F 48 /r        | CMOVS r16, r/m16  | RM   | Valid      | Valid          | Move if sign (SF=1).
-    | REX.W + 0F 44 /r| CMOVZ r64, r/m64  | RM   | Valid      | N.E.           | Move if zero (ZF=1).
-    ```
-    
-    * fixed typo
-    
-    * or -> nor
-
-commit 238cf897b813995998ad1ed2ba169e4f9e0153b1
-Author: oblique <psyberbits@gmail.com>
-Date:   Mon May 30 05:20:04 2016 +0300
-
-    Fix ptr comment colorization (#5032)
-
-commit 4de809061a75e1018810443ebec52f13e538b001
-Author: pancake <pancake@nopcode.org>
-Date:   Mon May 30 04:18:48 2016 +0200
-
-    Add MJMP optype, pxt command and enhance anal.jmptbl for x86-64 (wip)
-
-commit 71537eedf05b099e828c5b5217a4309803f87b67
-Author: pancake <pancake@nopcode.org>
-Date:   Mon May 30 02:12:17 2016 +0200
-
-    LEA instructions get hotkeys in visual disasm too
-
-commit 16d0396b8f305e6ab3268c6d2f36d1f4def13f6a
-Author: pancake <pancake@nopcode.org>
-Date:   Mon May 30 00:38:35 2016 +0200
-
-    Fix /A, add MJMP optype, and op.reg for UJMP
-
-commit c1d2e0223e8db2766d96697fb7d0093a80d9c53b
-Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
-Date:   Sun May 29 21:51:41 2016 +0200
-
-    Fix #5037
-    
-    oob write in anal_x86_cs.c
-
-commit 0c2b3d73917a92c6dee26503e56b73b64bbf29a7
+    * First approach to afCl/cdecl. Thanks @oddcoder.
+    * Remove compilers that do not exist for AVR
+    * Remove unnecessary platform-specific code since 'cc-arch-bits' should be already a stable convention.
+    * Typo on the afC way
+
+commit 5adf93a570c9e08bb5d8e510c411997357b8a62d
 Author: Ahmed Mohamed Abd El-MAwgood <oddcoder@users.noreply.github.com>
-Date:   Sun May 29 18:37:59 2016 +0300
+Date:   Sun Aug 7 18:08:52 2016 +0300
 
-    removing trailing spaces from t commands (#5028)
-
-commit f5ca358aee88b6278008d465139f19aeea0e85bf
-Author: Sushant Dinesh <eternalsushant@gmail.com>
-Date:   Sun May 29 15:41:04 2016 +0530
-
-    Fixes x86 to ESIL lifting memory operands (#5029)
+    fixing aek- (#5454)
     
-    Closes #5027
-    Closes #4431
+    according to `ae?`,  aek- is used to delete all esil->stats key/value pairs, but it wasn't actually implemented.
 
-commit 1cffc55fe0bd104ac52f0953b6d685a89b7d37f0
-Author: Chinmay Deshpande <chinmay1dd@gmail.com>
-Date:   Sun May 29 02:38:17 2016 -0600
-
-    Adds autocompletion for afan (#5016)
-    
-    * Adds autocompletion for afan
-    
-    * Removes duplication
-
-commit 78a26275e1a7f44d32fb2ee348cdbe168a26cf8b
+commit b53a7bb84bc7ef309c045f4dbc342dae51fb5c51
 Author: pancake <pancake@nopcode.org>
-Date:   Sun May 29 01:35:41 2016 +0200
+Date:   Sun Aug 7 14:07:52 2016 +0200
 
-    Monitor opcodes are not traps in dalvik
+    Fix regression in AFR related to io_is_valid
 
-commit dc8bf4d6e8952d59ffe1d31a3de3961f90fe4b1b
-Author: oblique <psyberbits@gmail.com>
-Date:   Sun May 29 01:06:12 2016 +0300
+commit 7a3fddf46cb8f721e54868fe327014c1a19cd043
+Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
+Date:   Sun Aug 7 13:02:51 2016 +0200
 
-    Add 'floc' in palette's keys (#5025)
+    fix crash in hud
 
-commit f4e81720b64535101557e20b868df6a880be00a5
-Author: oblique <psyberbits@gmail.com>
-Date:   Sun May 29 00:04:30 2016 +0300
+commit d0032b08eaff77b868bffedc335711fc4464ff0f
+Author: Álvaro Felipe Melchor <alvaro.felipe91@gmail.com>
+Date:   Sun Aug 7 12:54:29 2016 +0200
 
-    Add behelit theme (#5026)
+    fix crash in dex
 
-commit d692aa441e482870c08fc54405894f0279b4ac10
-Author: oblique <psyberbits@gmail.com>
-Date:   Sat May 28 14:44:48 2016 +0300
-
-    lookup_rgb now looks for the extended colors only
-    
-    We do this because non-extended colors usually are used by users
-    to change the theme of their terminal, so they will be different from
-    the default ones.
-
-commit e6381db6b4b23d810b23afbb5659152b621bed99
-Author: oblique <psyberbits@gmail.com>
-Date:   Sat May 28 13:28:35 2016 +0300
-
-    Initialize 256 color table in the correct place
-    
-    Because `color_table` was initialized only in `unrgb`, `rgb` was returning
-    values only from `approximate_rgb`. So if we call `rgb(0x5f, 0x87, 0xff)` it
-    will return `75` (i.e 5fafff) instead of `69`.
-
-commit 416edaea456140191c5e83c7a2de4ffefc7150e4
-Author: oblique <psyberbits@gmail.com>
-Date:   Sat May 28 13:23:41 2016 +0300
-
-    ANSI 256 colors have RGB values from 0 until 5 inclusive, not 0 until 6
-
-commit c58689bae14c42ea2f6740982c92fb25b5a44680
-Author: Sven Steinbauer <sven@unlogic.co.uk>
-Date:   Fri May 27 17:11:01 2016 +0100
-
-    Fixes for  `mov` op for nz assembler (#5020)
-    
-    A number of fixes and updates to the `mov` command for the nz assembler
-    including:
-    
-    * handling of `esp` register in more cases
-    * able to handle negative offsets for target register both byte and word
-    * able to handle negative offsets for target with immediate value as
-            source, both byte and word
-    * refactor mov block of code to be more consistent (further work needed)
-
-commit 60a7e601cc68b878f9136b7633db9302826b5397
-Author: hummypkg <hummypkg@users.noreply.github.com>
-Date:   Fri May 27 15:12:27 2016 +0100
-
-    add some missing MIPS pseudo instructions, fix others (#5022)
-
-commit dcac88091b22cd26642b87921d6964b313474d06
-Author: @bezjaje <mrmacete@protonmail.ch>
-Date:   Fri May 27 13:24:42 2016 +0200
-
-    Fixed typo in setting "gp" value in disasm (#5017)
-
-commit 62ca3a6d63a7445166ce8df529a1ac543fb06268
+commit a4ff60743f688d3c1013720dea843b38f21bf915
 Author: pancake <pancake@nopcode.org>
-Date:   Fri May 27 13:14:43 2016 +0200
+Date:   Sun Aug 7 09:17:05 2016 +0100
 
-    Fix #5021 - dbc argument parsing issue
+    Follow fcn calls one step further WIP
 
-commit 86b19bf7df608d9cdc48e0a230034e7fdc9723eb
-Author: Sushant <sushant.dinesh94@gmail.com>
-Date:   Fri May 27 15:56:20 2016 +0530
-
-    Fixes esil mips signed compare
-
-commit 75adfbdc6cd134aa1831387ae36f664b157fbd45
-Author: Sushant <sushant.dinesh94@gmail.com>
-Date:   Fri May 27 15:21:03 2016 +0530
-
-    Fixes esil signed comparisons when size != 64
-
-commit b7a81e88b2295b1b42b98f63fcae1349979d51c7
-Author: Sushant Dinesh <eternalsushant@gmail.com>
-Date:   Thu May 26 22:08:40 2016 +0530
-
-    Fixes esil comparison instructions and of computation (#5015)
-    
-    - esil comparison functions esil_(bigger/smaller/bigger_eq/smaller_eq/cmp) are
-    now consistent in setting vars for flag computation as well as pushing the
-    result of a signed comparison onto esil stack.
-
-commit f65e56364aa6e7fe1bed349feb48ba3443e9dc2a
-Author: Ahmed Mohamed Abd El-MAwgood <oddcoder@users.noreply.github.com>
-Date:   Thu May 26 17:58:02 2016 +0300
-
-    Adding colors to r2 2048 (#4994)
-
-commit be26c2d402fee5fede43202e1b7851286a0ac50f
-Author: Karol Harasim <karol.harasim@gmail.com>
-Date:   Thu May 26 16:57:29 2016 +0200
-
-    Increase DEBUG_ABBREV_CAP from 16 to 32. (#5014)
-
-commit 2adcea4a85de267c4f20ddc58d5950edbe9a6ee4
-Author: Sushant Dinesh <eternalsushant@gmail.com>
-Date:   Thu May 26 20:26:46 2016 +0530
-
-    Esil internal set (#5012)
-    
-    * Generalizes set/unset
-    
-    - This commit makes set/unset more generic by allowing any value to be assigned
-    to a register (as opposed to just 0/1 before) without any side effects.
-    - $[0-9]* represents a value to be set, in decimal representation, without
-    having any side effects of changing esil vars old, cur and lastsz and hence
-    not affecting the flag computations. Example: Set rax to 100. ("$100,rax,=").
-
-commit b85f5cca782dbb195e585dd63cac944d76f4c011
+commit d07b7887865007519f019925972bc46c25238c1b
 Author: pancake <pancake@nopcode.org>
-Date:   Thu May 26 12:33:22 2016 +0200
+Date:   Sun Aug 7 00:43:16 2016 +0100
 
-    Bump for 0.10.4-git
+    Fix #5404 - r2agent -v show version
 
-commit 2d3a69b7a04ee56edaddb7963c02df4b31aae498
+commit c37fe01bc3bd90415b0ea8298f9bb81efa24046c
 Author: pancake <pancake@nopcode.org>
-Date:   Thu May 26 12:29:24 2016 +0200
+Date:   Sat Aug 6 12:17:28 2016 +0200
 
-    Fix linux-arm build
+    Update termux
 
-commit 2c50dd0c5982b5129ca903e14a74929717d7af3e
-Author: NikolaiHampton <nikolaih@3583bytesready.net>
-Date:   Wed May 25 17:07:23 2016 +1000
-
-    Memory efficient implemenation of Levenshtein Distance for radiff2 (add -V)
-    
-    Implemented the iterative two matrix row version from here: https://en.wikipedia.org/wiki/Levenshtein_distance
-    and here: http://www.codeproject.com/Articles/13525/Fast-memory-efficient-Levenshtein-algorithm
-    
-    Memory usage was originally 200Gig for a couple of 100K files ~(sizeA*sizeB), now about ~(sizeB*2)...
-
-commit a38b176ba4488ac94e65593df236021765e6c540
-Author: @bezjaje <mrmacete@protonmail.ch>
-Date:   Thu May 26 00:02:19 2016 +0200
-
-    ESIL: poke_some bugfix (#5009)
-    
-    * ESIL: poke_some bugfix
-    
-    * + code style
-
-commit f05c81b0742ca6373bd8e2e3af191e5fb1848471
+commit bb6aae5c4a571419c8429425bba250730a41db35
 Author: pancake <pancake@nopcode.org>
-Date:   Wed May 25 23:37:41 2016 +0200
+Date:   Sat Aug 6 12:17:28 2016 +0200
 
-    Update rapatch documentation
+    Update termux
 
-commit 132b173b87342bd912bacb6b7adff631d29b8c29
+commit 4dbdc4a50ccdbc715171f01de52ea881404d8399
 Author: pancake <pancake@nopcode.org>
-Date:   Wed May 25 23:33:47 2016 +0200
+Date:   Sat Aug 6 12:17:28 2016 +0200
 
-    Refactoring $B and decompose $F into $FB $FE $FS and $FI + code cleanup
-
-commit 36db36f85e31476ceb79640ea8760e25826db1b0
-Author: Sergei Trofimovich <slyfox@inbox.ru>
-Date:   Wed May 25 23:00:52 2016 +0300
-
-    libr/socket/run.c: fix use of uninitialized value (#5010)
-    
-    Noticed by gcc:
-     * QA Notice: Package triggers severe warnings which indicate that it
-     *            may exhibit random runtime failures.
-     * run.c:65:5: warning: ‘p’ is used uninitialized in this function [-Wuninitialized]
-    
-    Signed-off-by: Sergei Trofimovich <slyfox@gentoo.org>
-
-commit 45c36da9c3930d3660b4f5211dc434ced09989eb
-Author: Roi Martin <jroi.martin@gmail.com>
-Date:   Wed May 25 18:20:50 2016 +0200
-
-    Save scr.highlight in project files (#5008)
-
-commit 76a4e0ca7aefd060dbdd327208a2b59b3feed709
-Author: Sven Steinbauer <sven@unlogic.co.uk>
-Date:   Wed May 25 16:22:00 2016 +0100
-
-    Add support for immediate word for `sub` (#5006)
-    
-    `nz` now generates the correct opcode when using a word as an immediate
-    in the `sub` instruction with a register + offset as the target
-    
-    Also adds support for word register offsets and refactors that portion
-    of the code a little
-    
-    For 32bit only so far
-
-commit 6a072439343d6e61342c5ad62bb504e19ba334a4
-Author: Roi Martin <jroi.martin@gmail.com>
-Date:   Wed May 25 16:11:04 2016 +0200
-
-    Fix warning
-
-commit 45efee785567134d1c69a84ebed5717f2ed056e6
-Author: Roi Martin <jroi.martin@gmail.com>
-Date:   Wed May 25 16:03:41 2016 +0200
-
-    Do not output highlighted text when saving projects (#5004)
-
-commit 4b8af71ef4d39bebfb2502162bcd9b4c742c0882
-Author: jvoisin <julien.voisin@dustri.org>
-Date:   Wed May 25 15:24:13 2016 +0200
-
-    Removed a duplicate `loopne` and `loopnz` entry
-    
-    removed a duplicate `loopne` and `loopnz` entry
-
-commit 3b7ab317f6b41d07432ca1826e3811b07d69b9ee
-Author: @bezjaje <mrmacete@protonmail.ch>
-Date:   Wed May 25 10:37:33 2016 +0200
-
-    ESIL: generic endian-agnostic memory write in poke (#5001)
-
-commit 1c57f51254917af7ede59174a37da0f197815a52
-Author: Boris Ryutin <dukebarman@gmail.com>
-Date:   Wed May 25 11:21:14 2016 +0300
-
-    Add output links for fixes (#4992)
+    Update termux

@@ -1,6 +1,12 @@
+radare2 (0.10.5-rndtesting1) testing; urgency=medium
+
+  * new upstream release
+
+ -- Jose Luis Rivas <ghostbar@debian.org>  Tue, 23 Aug 2016 23:59:15 -0400
+
 radare2 (0.10.4-rndtesting1) testing; urgency=medium
 
-  * new upstream version
+  * conflict with anything prior to 0.10.0
 
  -- Jose Luis Rivas <ghostbar@debian.org>  Thu, 07 Jul 2016 12:23:24 -0400
 
