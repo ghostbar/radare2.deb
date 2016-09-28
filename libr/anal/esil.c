@@ -4,6 +4,7 @@
 #include <r_types.h>
 #include <r_util.h>
 #include <r_db.h>
+#include <r_bind.h>
 
 #define IFDBG if (esil->debug)
 #define FLG(x) R_ANAL_ESIL_FLAG_##x
@@ -785,6 +786,18 @@ static int esil_trap(RAnalEsil *esil) {
 		return r_anal_esil_fire_trap (esil, (int)s, (int)d);
 	}
 	ERR ("esil_trap: missing parameters in stack");
+	return false;
+}
+
+static int esil_bits(RAnalEsil *esil) {
+	ut64 s;
+	if (popRN (esil, &s)) {
+		if (esil->anal && esil->anal->coreb.setab) {
+			esil->anal->coreb.setab (esil->anal->coreb.core, NULL, s);
+		}
+		return true;
+	}
+	ERR ("esil_bits: missing parameters in stack");
 	return false;
 }
 
@@ -2112,6 +2125,49 @@ static int esil_swap(RAnalEsil *esil) {
 	return true;
 }
 
+static int __esil_generic_pick(RAnalEsil *esil, int rev) {
+	char *idx = r_anal_esil_pop (esil);
+	ut64 i;
+	int ret = false;
+	if (!idx || !r_anal_esil_get_parm (esil, idx, &i)) {
+		ERR ("esil_pick: invalid index number");
+		goto end;
+	}
+	if (!esil || !esil->stack) {
+		ERR ("esil_pick: stack not initialized");
+		goto end;
+	}
+	if (rev) {
+		i = esil->stackptr + (((st64) i) * -1);
+	}
+	if (esil->stackptr < i) {
+		ERR ("esil_pick: index out of stack bounds");
+		goto end;
+	}
+	if (!esil->stack[esil->stackptr-i]) {
+		ERR ("esil_pick: undefined element");
+		goto end;
+	}
+	if (!r_anal_esil_push (esil, esil->stack[esil->stackptr-i])) {
+		ERR ("ESIL stack is full");
+		esil->trap = 1;
+		esil->trap_code = 1;
+		goto end;
+	}
+	ret = true;
+end:
+	free (idx);
+	return ret;
+}
+
+static int esil_pick(RAnalEsil *esil) {
+	return __esil_generic_pick (esil, 0);
+}
+
+static int esil_rpick(RAnalEsil *esil) {
+	return __esil_generic_pick (esil, 1);
+}
+
 // NOTE on following comparison functions:
 // The push to top of the stack is based on a
 // signed compare (as this causes least surprise to the users).
@@ -2581,8 +2637,11 @@ static void r_anal_esil_setup_ops(RAnalEsil *esil) {
 	OP ("CLEAR", esil_clear);
 	OP ("DUP", esil_dup);
 	OP ("NUM", esil_num);
+	OP ("PICK", esil_pick);
+	OP ("RPICK", esil_rpick);
 	OP ("SWAP", esil_swap);
 	OP ("TRAP", esil_trap);
+	OP ("BITS", esil_bits);
 }
 
 /* register callbacks using this anal module. */

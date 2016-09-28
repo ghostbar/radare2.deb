@@ -114,13 +114,19 @@ R_API int r_core_file_reopen(RCore *core, const char *args, int perm, int loadbi
 		eprintf ("Cannot reopen\n");
 	}
 	if (isdebug) {
+		int newtid = newpid;
 		// XXX - select the right backend
 		if (core->file && core->file->desc) {
 			newpid = core->file->desc->fd;
+#if __WINDOWS__
+			newpid = core->io->winpid;
+			newtid = core->io->wintid;
+			r_debug_select (core->dbg, newpid, newtid);
+#endif
 		}
 		//reopen and attach
 		r_core_setup_debugger (core, "native", true);
-		r_debug_select (core->dbg, newpid, newpid);
+		r_debug_select (core->dbg, newpid, newtid);
 		//
 	}
 
@@ -175,19 +181,19 @@ R_API void r_core_sysenv_help(const RCore* core) {
 	"!=!", "", "enable remotecmd mode",
 	"=!=", "", "disable remotecmd mode",
 	"\nEnvironment:", "", "",
-	"FILE", "", "file name",
+	"R2_FILE", "", "file name",
+	"R2_OFFSET", "", "10base offset 64bit value",
+	"R2_BYTES", "", "TODO: variable with bytes in curblock",
+	"R2_XOFFSET", "", "same as above, but in 16 base",
+	"R2_BSIZE", "", "block size",
+	"R2_ENDIAN", "", "'big' or 'little'",
+	"R2_IOVA", "", "is io.va true? virtual addressing (1,0)",
+	"R2_DEBUG", "", "debug mode enabled? (1,0)",
+	"R2_BLOCK", "", "TODO: dump current block to tmp file",
+	"R2_SIZE", "","file size",
+	"R2_ARCH", "", "value of asm.arch",
 	"RABIN2_LANG", "", "assume this lang to demangle",
 	"RABIN2_DEMANGLE", "", "demangle or not",
-	"SIZE", "","file size",
-	"OFFSET", "", "10base offset 64bit value",
-	"XOFFSET", "", "same as above, but in 16 base",
-	"BSIZE", "", "block size",
-	"ENDIAN", "", "'big' or 'little'",
-	"ARCH", "", "value of asm.arch",
-	"DEBUG", "", "debug mode enabled? (1,0)",
-	"IOVA", "", "is io.va true? virtual addressing (1,0)",
-	"BLOCK", "", "TODO: dump current block to tmp file",
-	"BYTES", "", "TODO: variable with bytes in curblock",
 	"PDB_SERVER", "", "e pdb.server",
 	NULL
 	};
@@ -480,7 +486,7 @@ R_API int r_core_bin_load(RCore *r, const char *filenameuri, ut64 baddr) {
 	}
 
 	if (cf) {
-		if ((filenameuri == NULL || !*filenameuri)) {
+		if (!filenameuri || !*filenameuri) {
 			filenameuri = cf->desc->name;
 		} else if (cf->desc->name && strcmp (filenameuri, cf->desc->name)) {
 			// XXX - this needs to be handled appropriately
@@ -676,7 +682,7 @@ R_API RCoreFile *r_core_file_open_many(RCore *r, const char *file, int flags, ut
 	return top_file;
 }
 
-/* loadaddr is r2 -m (mapaddr */
+/* loadaddr is r2 -m (mapaddr) */
 R_API RCoreFile *r_core_file_open(RCore *r, const char *file, int flags, ut64 loadaddr) {
 	ut64 prev = r_sys_now();
 	const char *suppress_warning = r_config_get (r->config, "file.nowarn");
@@ -694,12 +700,14 @@ R_API RCoreFile *r_core_file_open(RCore *r, const char *file, int flags, ut64 lo
 	}
 	r->io->bits = r->assembler->bits; // TODO: we need an api for this
 	fd = r_io_open_nomap (r->io, file, flags, 0644);
-	if (fd == NULL && openmany > 2) {
+	if (!fd && openmany > 2) {
 		// XXX - make this an actual option somewhere?
 		fh = r_core_file_open_many (r, file, flags, loadaddr);
-		if (fh) goto beach;
+		if (fh) {
+			goto beach;
+		}
 	}
-	if (fd == NULL) {
+	if (!fd) {
 		if (flags & 2) {
 			if (!r_io_create (r->io, file, 0644, 0)) {
 				goto beach;
