@@ -759,28 +759,21 @@ var update = function() {/* nop */};
 var inColor = true;
 var lastView = panelDisasm;
 
-function uiButton(href, label, type) {
-	if (type == 'active') {
-		return '&nbsp;<a href="' + href.replace(/"/g,'\'') + '" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect mdl-color--accent mdl-color-text--accent-contrast" style="background-color:#f04040 !important">' + label + '</a>';
-	}
-	return '&nbsp;<a href="' + href.replace(/"/g,'\'') + '" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect mdl-color--accent mdl-color-text--accent-contrast">' + label + '</a>';
-}
-
 function write() {
 	var str = prompt('hexpairs, quoted string or :assembly');
 	if (str != '') {
 		switch (str[0]) {
-		case ':':
-			str = str.substring(1);
-			r2.cmd('"wa ' + str + '"', update);
-			break;
-		case '"':
-			str = str.replace(/"/g, '');
-			r2.cmd('w ' + str, update);
-			break;
-		default:
-			r2.cmd('wx ' + str, update);
-			break;
+			case ':':
+				str = str.substring(1);
+				r2.cmd('"wa ' + str + '"', update);
+				break;
+			case '"':
+				str = str.replace(/"/g, '');
+				r2.cmd('w ' + str, update);
+				break;
+			default:
+				r2.cmd('wx ' + str, update);
+				break;
 		}
 	}
 }
@@ -848,9 +841,6 @@ function analyze() {
 		panelDisasm();
 	});
 }
-function uiCheckList(grp, id, label) {
-	return '<li> <label for="' + grp + '" class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect"> <input type="checkbox" id="' + id + '" class="mdl-checkbox__input" /><span class="mdl-checkbox__label">' + label + '</span> </label> </li>';
-}
 
 function notes() {
 	var widget = widgetContainer.getWidget('Notes');
@@ -862,24 +852,36 @@ function notes() {
 }
 
 function setFlagspace(fs) {
-	if (!fs) fs = prompt('name');
-	if (!fs) return;
+	if (!fs) {
+		fs = prompt('name');
+	}
+	if (!fs) {
+		return;
+	}
 	r2.cmd('fs ' + fs, function() {
 		flagspaces();
 	});
 }
 
 function renameFlagspace(fs) {
-	if (!fs) fs = prompt('name');
-	if (!fs) return;
+	if (!fs) {
+		fs = prompt('name');
+	}
+	if (!fs) {
+		return;
+	}
 	r2.cmd('fsr ' + fs, function() {
 		flagspaces();
 	});
 }
 
 function delFlagspace(fs) {
-	if (!fs) fs = '.';
-	if (!fs) return;
+	if (!fs) {
+		fs = '.';
+	}
+	if (!fs) {
+		return;
+	}
 	r2.cmd('fs-' + fs, function() {
 		flagspaces();
 	});
@@ -921,12 +923,13 @@ function flagspaces() {
 				var selected = line[2].indexOf('.') == -1;
 				var a = '';
 				a += '<a href="javascript:setFlagspace(\'' + line[3] + '\')">';
-				if (selected) a += '<font color=\'red\'>' + line[3] + '</font>';
-				else a += line[3];
+				if (selected) {
+					a += '<font color=\'red\'>' + line[3] + '</font>';
+				} else {
+					a += line[3];
+				}
 				a += '</a>';
-				body += uiTableRow([
-				'+' + line[1], a
-				]);
+				body += uiTableRow(['+' + line[1], a]);
 			}
 		}
 		body += uiTableEnd();
@@ -936,375 +939,44 @@ function flagspaces() {
 
 function analyzeSymbols() {
 	statusMessage('Analyzing symbols...');
-	r2.cmd('aa',function() {
+	r2.cmd('aa', function() {
 		statusMessage('done');
 		update();
 	});
 }
 function analyzeRefs() {
 	statusMessage('Analyzing references...');
-	r2.cmd('aar',function() {
+	r2.cmd('aar', function() {
 		statusMessage('done');
 		update();
 	});
 }
 function analyzeCalls() {
 	statusMessage('Analyzing calls...');
-	r2.cmd('aac',function() {
+	r2.cmd('aac', function() {
 		statusMessage('done');
 		update();
 	});
 }
 function analyzeFunction() {
 	statusMessage('Analyzing function...');
-	r2.cmd('af',function() {
+	r2.cmd('af', function() {
 		statusMessage('done');
 		update();
 	});
 }
 function analyzeNames() {
 	statusMessage('Analyzing names...');
-	r2.cmd('.afna @@ fcn.*',function() {
+	r2.cmd('.afna @@ fcn.*', function() {
 		statusMessage('done');
 		update();
 	});
 }
 
-function smallDisasm() {
-	r2.cmd('e asm.bytes=false');
-	r2.cmd('e asm.lines=false');
-	r2.cmd('e asm.cmtright=false');
-}
-
-function mediumDisasm() {
-	r2.cmd('e asm.bytes=false');
-	r2.cmd('e asm.lines=true');
-	r2.cmd('e asm.lineswidth=8');
-	r2.cmd('e asm.cmtright=false');
-}
-
-function largeDisasm() {
-	r2.cmd('e asm.bytes=true');
-	r2.cmd('e asm.lines=true');
-	r2.cmd('e asm.lineswidth=12');
-	r2.cmd('e asm.cmtright=true');
-}
-
-function configPseudo() {
-	r2.cmd('e asm.pseudo=1');
-	r2.cmd('e asm.syntax=intel');
-}
-
-function configOpcodes() {
-	r2.cmd('e asm.pseudo=0');
-	r2.cmd('e asm.syntax=intel');
-}
-
-function configATT() {
-	r2.cmd('e asm.pseudo=0');
-	r2.cmd('e asm.syntax=att');
-}
-
 function panelAbout() {
 	r2.cmd('?V', function(version) {
-		alert('radare2 material webui by --pancake @ 2015-2016\n\n'+version.trim());
+		alert('radare2 material webui by --pancake @ 2015-2016\n\n' + version.trim());
 	});
-}
-
-function configColorDefault() {
-	r2.cmd('ecd', function() {
-		update();
-	});
-}
-function configColorRandom() {
-	r2.cmd('ecr', function() {
-		update();
-	});
-}
-
-function configColorTheme(theme) {
-	r2.cmd('eco ' + theme, function() {
-		update();
-	});
-}
-
-function configPA() {
-	r2.cmd('e io.va=false');
-}
-
-function configVA() {
-	r2.cmd('e io.va=true');
-}
-
-function configDebug() {
-	r2.cmd('e io.va=true');
-	r2.cmd('e io.debug=true');
-}
-
-function configArch(name) { r2.cmd('e asm.arch=' + name); }
-function configBits8() { r2.cmd('e asm.bits=8'); }
-function configBits16() { r2.cmd('e asm.bits=16'); }
-function configBits32() { r2.cmd('e asm.bits=32'); }
-function configBits64() { r2.cmd('e asm.bits=64'); }
-function configColorTrue() { inColor = true; }
-function configColorFalse() { inColor = false; }
-
-var comboId = 0;
-
-function uiCombo(d) {
-	var fun_name = 'combo' + (++comboId);
-	var fun = fun_name + ' = function(e) {';
-	fun += ' var sel = document.getElementById("opt_' + fun_name + '");';
-	fun += ' var opt = sel.options[sel.selectedIndex].value;';
-	fun += ' switch (opt) {';
-	for (var a in d) {
-		fun += 'case "' + d[a].name + '": ' + d[a].js + '(' + d[a].name + ');break;';
-	}
-	fun += '}}';
-	// CSP violation here
-	eval(fun);
-	var out = '<select id="opt_' + fun_name + '" onchange="' + fun_name + '()">';
-	for (var a in d) {
-		var def = (d[a].default) ? ' default' : '';
-		out += '<option' + def + '>' + d[a].name + '</option>';
-	}
-	out += '</select>';
-	return out;
-}
-
-function uiSwitch(d) {
-	// TODO: not yet done
-	var out = '' + d +
-	'<label class="mdl-switch mdl-js-switch mdl-js-ripple-effect" for="switch-1">' +
-	'<input type="checkbox" id="switch-1" class="mdl-switch__input" checked />' +
-	'<span class="mdl-switch__label"></span>' +
-	'</label>';
-	return out;
-}
-
-function uiBlock(d) {
-	var out = '<div class="mdl-card__supporting-text mdl-shadow--2dp mdl-color-text--blue-grey-50 mdl-cell" style="display:inline-block;margin:5px;color:black !important;background-color:white !important">';
-	out += '<h3 style="color:black">' + d.name + '</h3>';
-	for (var i in d.blocks) {
-		var D = d.blocks[i];
-		out += '<br />' + D.name + ': ';
-		out += uiCombo(D.buttons);
-	}
-	out += '</div>';
-	return out;
-}
-
-function panelSettings() {
-	var out = '';
-
-	var widget = widgetContainer.getWidget('Settings');
-	var c = widgetContainer.getWidgetDOMWrapper(widget);
-
-	updates.registerMethod(widget.getOffset(), panelSettings);
-
-	c.style.backgroundColor = '#f0f0f0';
-	out += '<div style=\'margin:10px\'>';
-	out += uiBlock({ name: 'Platform', blocks: [
-	{ name: 'Arch', buttons: [
-	{ name: 'x86', js: 'configArch', default: true },
-	{ name: 'arm', js: 'configArch' },
-	{ name: 'mips', js: 'configArch' },
-	{ name: 'java', js: 'configArch' },
-	{ name: 'dalvik', js: 'configArch' },
-	{ name: '6502', js: 'configArch' },
-	{ name: '8051', js: 'configArch' },
-	{ name: 'h8300', js: 'configArch' },
-	{ name: 'hppa', js: 'configArch' },
-	{ name: 'i4004', js: 'configArch' },
-	{ name: 'i8008', js: 'configArch' },
-	{ name: 'lh5801', js: 'configArch' },
-	{ name: 'lm32', js: 'configArch' },
-	{ name: 'm68k', js: 'configArch' },
-	{ name: 'malbolge', js: 'configArch' },
-	{ name: 'mcs96', js: 'configArch' },
-	{ name: 'msp430', js: 'configArch' },
-	{ name: 'nios2', js: 'configArch' },
-	{ name: 'ppc', js: 'configArch' },
-	{ name: 'rar', js: 'configArch' },
-	{ name: 'sh', js: 'configArch' },
-	{ name: 'snes', js: 'configArch' },
-	{ name: 'sparc', js: 'configArch' },
-	{ name: 'spc700', js: 'configArch' },
-	{ name: 'sysz', js: 'configArch' },
-	{ name: 'tms320', js: 'configArch' },
-	{ name: 'v810', js: 'configArch' },
-	{ name: 'v850', js: 'configArch' },
-	{ name: 'ws', js: 'configArch' },
-	{ name: 'xcore', js: 'configArch' },
-	{ name: 'prospeller', js: 'configArch' },
-	{ name: 'gb', js: 'configArch' },
-	{ name: 'z80', js: 'configArch' },
-	{ name: 'arc', js: 'configArch' },
-	{ name: 'avr', js: 'configArch' },
-	{ name: 'bf', js: 'configArch' },
-	{ name: 'cr16', js: 'configArch' },
-	{ name: 'cris', js: 'configArch' },
-	{ name: 'csr', js: 'configArch' },
-	{ name: 'dcpu16', js: 'configArch' },
-	{ name: 'ebc', js: 'configArch' }
-	]},
-	{ name: 'Bits', buttons: [
-	{ name: '64', js: 'configBits64' },
-	{ name: '32', js: 'configBits32', default: true },
-	{ name: '16', js: 'configBits16' },
-	{ name: '8', js: 'configBits8' }
-	]},
-	{ name: 'OS', buttons: [
-	{ name: 'Linux', js: 'configOS_LIN', default: true },
-	{ name: 'Windows', js: 'configOS_W32' },
-	{ name: 'OSX', js: 'configOS_OSX' }
-	]}
-	]
-	});
-	out += uiBlock({ name: 'Disassembly', blocks: [
-	{
-	name: 'Size', buttons: [
-	{ name: 'S', js: 'smallDisasm' },
-	{ name: 'M', js: 'mediumDisasm' },
-	{ name: 'L', js: 'largeDisasm' }
-	]},
-	{
-	name: 'Decoding', buttons: [
-	{ name: 'Pseudo', js: 'configPseudo' },
-	{ name: 'Opcodes', js: 'configOpcodes' },
-	{ name: 'ATT', js: 'configATT' }
-	]},
-		       {
-			name: 'Colors', buttons: [
-			{ name: 'Yes', js: 'configColorTrue', default: true },
-			{ name: 'No', js: 'configColorFalse' }
-			]
-		}, {
-			name: 'Theme', buttons: [
-				{ name: 'Default', js: 'configColorDefault' },
-				{ name: 'Random', js: 'configColorRandom' },
-				{ name: 'Solarized', js: 'configColorTheme("solarized")' },
-				{ name: 'Ogray', js: 'configColorTheme("ogray")' },
-				{ name: 'Twilight', js: 'configColorTheme("twilight")' },
-				{ name: 'Rasta', js: 'configColorTheme("rasta")' },
-				{ name: 'Tango', js: 'configColorTheme("tango")' },
-				{ name: 'White', js: 'configColorTheme("white")' }
-				]}
-						]
-		});
-	out += uiBlock({ name: 'Core/IO', blocks: [
-		{
-			name: 'Mode', buttons: [
-			{ name: 'PA', js: 'configPA' },
-			{ name: 'VA', js: 'configVA' },
-			{ name: 'Debug', js: 'configDebug' }
-			]
-		}
-]});
-	out += uiBlock({ name: 'Analysis', blocks: [
-		{
-			name: 'HasNext', buttons: [
-			{ name: 'Yes', js: 'configAnalHasnextTrue', default: true },
-			{ name: 'No', js: 'configAnalHasnextFalse' }
-			]
-		},{
-			name: 'Skip Nops', buttons: [
-			{ name: 'Yes', js: 'configAnalNopskipTrue', default: true },
-			{ name: 'No', js: 'configAnalNopskipFalse' }
-			]
-		},{
-			name: 'NonCode', buttons: [
-			{ name: 'Yes', js: 'configAnalNoncodeTrue' },
-			{ name: 'No', js: 'configAnalNoncodeFalse', default: true }
-			]
-		}
-		]});
-	out += '</div>';
-	c.innerHTML = out;
-}
-
-function printHeaderPanel(title, cmd, grep) {
-	var widget = widgetContainer.getWidget(title);
-	widget.setDark();
-	var dom = widgetContainer.getWidgetDOMWrapper(widget);
-
-	// TODO, warning? panelFunction // printHeaderPanel (not a complete widget)
-	updates.registerMethod(widget.getOffset(), panelFunctions);
-
-	var c = document.createElement('div');
-	dom.innerHTML = '';
-	dom.appendChild(c);
-
-	c.style.color = '#202020 !important';
-	c.style.backgroundColor = '#202020';
-	var out = '' ; //
-	/*
-	out += ''
-	+' <div class="mdl-tabs mdl-js-tabs">'
-	+'  <div class="mdl-tabs__tab-bar mds-js-ripple-effect">'
-	+'    <a href="#tab1-panel" class="mdl-tabs__tab is-active">Headers</a>'
-	+'    <a href="#tab2-panel" class="mdl-tabs__tab">Symbols</a>'
-	+'    <a href="#tab3-panel" class="mdl-tabs__tab">Imports</a>'
-	+'    <a href="#tab4-panel" class="mdl-tabs__tab">Relocs</a>'
-	+'    <a href="#tab5-panel" class="mdl-tabs__tab">Sections</a>'
-	+'    <a href="#tab6-panel" class="mdl-tabs__tab">SDB</a>'
-	+'  </div>'
-	+'  <div class="mdl-tabs__panel is-active" id="tab1-panel">'
-	+'    <p>Tab 1 Content</p>'
-	+'  </div>'
-	+'  <div class="mdl-tabs__panel" id="tab2-panel">'
-	+'    <p>Tab 2 Content</p>'
-	+'  </div>'
-	+'  <div class="mdl-tabs__panel" id="tab3-panel">'
-	+'    <p>Tab 3 Content</p>'
-	+'  </div>'
-	+'</div>';
-*/
-	out += '<div style=\'position:fixed;margin:0.5em\'>';
-	out += '&nbsp;' + uiRoundButton('javascript:location.href="/m"', 'undo');
-	out += uiButton('javascript:panelHeaders()', 'Headers');
-	out += uiButton('javascript:panelSymbols()', 'Symbols');
-	out += uiButton('javascript:panelImports()', 'Imports');
-	out += uiButton('javascript:panelRelocs()', 'Relocs');
-	out += uiButton('javascript:panelSections()', 'Sections');
-	out += uiButton('javascript:panelStrings()', 'Strings');
-	out += uiButton('javascript:panelSdb()', 'Sdb');
-	out += '</div><br /><br /><br /><br />';
-	c.innerHTML = out;
-
-	if (grep) {
-		cmd += '~' + grep;
-	}
-	r2.cmd(cmd, function(d) {
-		var color = '#f0f0f0';
-		d = clickableOffsets(d);
-		c.innerHTML += '<pre style=\'margin:1.2em;color:' + color + ' !important\'>' + d + '<pre>';
-	});
-}
-
-function panelSdb() {
-	printHeaderPanel('SDB', 'k bin/cur/***');
-}
-function panelSections() {
-	printHeaderPanel('Sections', 'iSq');
-}
-function panelStrings() {
-	printHeaderPanel('Strings', 'izq');
-}
-function panelImports() {
-	printHeaderPanel('Imports', 'isq', ' imp.');
-}
-
-function panelRelocs() {
-	printHeaderPanel('Relocs', 'ir');
-}
-
-function panelSymbols() {
-	printHeaderPanel('Imports', 'isq', '!imp');
-}
-
-function panelHeaders() {
-	printHeaderPanel('Headers', 'ie;i');
 }
 
 function panelFunctions() {
@@ -1325,9 +997,6 @@ function panelFunctions() {
 	c.innerHTML = body;
 	r2.cmd('e scr.utf8=false');
 	r2.cmd('afl', function(d) {
-		//var dis = clickableOffsets (d);
-		//c.innerHTML += "<pre style='font-family:Console,Courier New,monospace' style='color:white !important'>"+dis+"<pre>";
-
 		var table = new Table(
 			['+Address', 'Name', '+Size', '+CC'],
 			[false, true, false, false],
@@ -1335,9 +1004,9 @@ function panelFunctions() {
 
 		var lines = d.split(/\n/); //clickableOffsets (d).split (/\n/);
 		for (var i in lines) {
-			var line = lines[i].split(/ +/);
-			if (line.length >= 3) {
-				table.addRow([line[0], line[3], line[1], line[2]]);
+			var items = lines[i].match(/^(0x[0-9a-f]+)\s+([0-9]+)\s+([0-9]+(\s+\-&gt;\s+[0-9]+)?)\s+(.+)$/);
+			if (items !== null) {
+				table.addRow([items[1], items[5], items[2], items[3]]);
 			}
 		}
 		table.insertInto(c);
@@ -1345,14 +1014,15 @@ function panelFunctions() {
 
 }
 
-var last_console_output = '';
+var lastConsoleOutput = '';
 
 function runCommand(text) {
-	if (!text)
-	text = document.getElementById('input').value;
+	if (!text) {
+		text = document.getElementById('input').value;
+	}
 	r2.cmd(text, function(d) {
-		last_console_output = '\n' + d;
-		document.getElementById('output').innerHTML = last_console_output;
+		lastConsoleOutput = '\n' + d;
+		document.getElementById('output').innerHTML = lastConsoleOutput;
 	});
 }
 
@@ -1375,18 +1045,20 @@ function panelConsole() {
 	updates.registerMethod(widget.getOffset(), panelConsole);
 
 	c.innerHTML = '<br />';
+	var common = 'onkeypress=\'consoleKey()\' class=\'mdl-card--expand mdl-textfield__input\' id=\'input\'';
 	if (inColor) {
 		c.style.backgroundColor = '#202020';
-		c.innerHTML += '<input style=\'position:fixed;padding-left:10px;top:4em;height:1.8em;color:white\' onkeypress=\'consoleKey()\' class=\'mdl-card--expand mdl-textfield__input\' id=\'input\'/>';
+		var styles = 'position:fixed;padding-left:10px;top:4em;height:1.8em;color:white';
+		c.innerHTML += '<input style=\'' + styles + '\' ' + common + ' />';
 		//c.innerHTML += uiButton('javascript:runCommand()', 'Run');
 		c.innerHTML += '<div id=\'output\' class=\'pre\' style=\'color:white !important\'><div>';
 	} else {
 		c.style.backgroundColor = '#f0f0f0';
-		c.innerHTML += '<input style=\'color:black\' onkeypress=\'consoleKey()\' class=\'mdl-card--expand mdl-textfield__input\' id=\'input\'/>';
+		c.innerHTML += '<input style=\'color:black\' ' + common + '/>';
 		c.innerHTML += uiButton('javascript:runCommand()', 'Run');
 		c.innerHTML += '<div id=\'output\' class=\'pre\' style=\'color:black!important\'><div>';
 	}
-	document.getElementById('output').innerHTML = last_console_output;
+	document.getElementById('output').innerHTML = lastConsoleOutput;
 }
 
 function searchKey(e) {
@@ -1406,27 +1078,34 @@ function runSearchMagic() {
 	});
 }
 function runSearchCode(text) {
-	if (!text) text = document.getElementById('search_input').value;
+	if (!text) {
+		text = document.getElementById('search_input').value;
+	}
 	r2.cmd('"/c ' + text + '"', function(d) {
 		document.getElementById('search_output').innerHTML = clickableOffsets(d);
 	});
 }
 function runSearchString(text) {
-	if (!text) text = document.getElementById('search_input').value;
+	if (!text) {
+		text = document.getElementById('search_input').value;
+	}
 	r2.cmd('/ ' + text, function(d) {
 		document.getElementById('search_output').innerHTML = clickableOffsets(d);
 	});
 }
 function runSearchROP(text) {
-	if (!text) text = document.getElementById('search_input').value;
+	if (!text) {
+		text = document.getElementById('search_input').value;
+	}
 	r2.cmd('"/R ' + text + '"', function(d) {
 		document.getElementById('search_output').innerHTML = clickableOffsets(d);
 	});
 }
 
 function runSearch(text) {
-	if (!text)
-	text = document.getElementById('search_input').value;
+	if (!text) {
+		text = document.getElementById('search_input').value;
+	}
 	if (text[0] == '"') {
 		r2.cmd('"/ ' + text + '"', function(d) {
 			document.getElementById('search_output').innerHTML = clickableOffsets(d);
@@ -1440,14 +1119,14 @@ function runSearch(text) {
 
 function indentScript() {
 	var str = document.getElementById('script').value;
-	var indented = js_beautify(str);
+	var indented = /* NOT DEFINED js_beautify*/ (str);
 	document.getElementById('script').value = indented;
-	localStorage['script'] = indented;
+	localStorage.script = indented;
 }
 
 function runScript() {
 	var str = document.getElementById('script').value;
-	localStorage['script'] = str;
+	localStorage.script = str;
 	document.getElementById('scriptOutput').innerHTML = '';
 	try {
 		var msg = '"use strict";' +
@@ -1502,8 +1181,10 @@ function panelSearch() {
 	updates.registerMethod(widget.getOffset(), panelSearch);
 
 	c.style.backgroundColor = '#f0f0f0';
+	var style = 'background-color:white !important;padding-left:10px;top:3.5em;height:1.8em;color:white';
+	var classes = 'mdl-card--expand mdl-textfield__input';
 	var out = '<br />';
-	out += '<input style=\'background-color:white !important;padding-left:10px;top:3.5em;height:1.8em;color:white\' onkeypress=\'searchKey()\' class=\'mdl-card--expand mdl-textfield__input\' id=\'search_input\'/>';
+	out += '<input style=\'' + style + '\' onkeypress=\'searchKey()\' class=\'' + classes + '\' id=\'search_input\'/>';
 	out += '<br />';
 	out += uiButton('javascript:runSearch()', 'Hex');
 	out += uiButton('javascript:runSearchString()', 'String');
@@ -1527,45 +1208,20 @@ function panelFlags() {
 	c.innerHTML += uiButton('javascript:delAllFlags()', 'DeleteAll');
 	c.innerHTML += '<br /><br />';
 	r2.cmd('f', function(d) {
+
+		var table = new Table(
+			['+Offset', '+Size', 'Name'],
+			[true, true, false],
+			'flagsTable');
+
 		var lines = d.split(/\n/); //clickableOffsets (d).split (/\n/);
-		var body = uiTableBegin(['+Offset', '+Size', 'Name']);
 		for (var i in lines) {
 			var line = lines[i].split(/ /);
-			if (line.length >= 3)
-			body += uiTableRow([
-			'+' + line[0],
-			'+' + line[1],
-			line[2]
-			]);
+			if (line.length >= 3) {
+				table.addRow([line[0], line[1], line[2]]);
+			}
 		}
-		body += uiTableEnd();
-		c.innerHTML += body;
-	});
-}
-
-function panelComments() {
-	var widget = widgetContainer.getWidget('Comments');
-	var c = widgetContainer.getWidgetDOMWrapper(widget);
-
-	updates.registerMethod(widget.getOffset(), panelComments);
-
-	c.style.backgroundColor = '#f0f0f0';
-	c.innerHTML = '<br />';
-	c.innerHTML += uiButton('javascript:notes()', 'Notes');
-	c.innerHTML += '<br /><br />';
-	r2.cmd('CC', function(d) {
-		var lines = d.split(/\n/); //clickableOffsets (d).split (/\n/);
-		var body = uiTableBegin(['+Offset', 'Comment']);
-		for (var i in lines) {
-			var line = lines[i].split(/ (.+)?/);
-			if (line.length >= 2)
-			body += uiTableRow([
-			'+' + line[0],
-			'+' + line[1]
-			]);
-		}
-		body += uiTableEnd();
-		c.innerHTML += body;
+		table.insertInto(c);
 	});
 }
 
@@ -1577,14 +1233,6 @@ function up() {
 function down() {
 	r2.cmd('s++');
 	update();
-}
-
-function uiRoundButton(a, b, c) {
-	var out = '';
-	out += '<button onclick=' + a + ' class="mdl-button mdl-js-button mdl-button--fab mdl-js-ripple-effect" ' + c + '>';
-	out += '<i class="material-icons" style="opacity:1">' + b + '</i>';
-	out += '</button>';
-	return out;
 }
 
 var nativeDebugger = false;
@@ -1710,10 +1358,12 @@ function blocks() {
 	var widget = widgetContainer.getWidget('Blocks');
 	var c = widgetContainer.getWidgetDOMWrapper(widget);
 
-	c.style['overflow'] = 'none';
+	c.style.overflow = 'none';
 	var color = inColor ? 'white' : 'black';
+	var cl = 'mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect ';
+	cl += 'mdl-color--accent mdl-color-text--accent-contrast';
 	c.innerHTML = '<br />';
-	c.innerHTML += '&nbsp;<a href="javascript:panelDisasm()" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect mdl-color--accent mdl-color-text--accent-contrast">&lt; INFO</a> <h3 color=white></h3>';
+	c.innerHTML += '&nbsp;<a href="javascript:panelDisasm()" class="' + cl + '">&lt; INFO</a> <h3 color=white></h3>';
 	var tail = inColor ? '@e:scr.color=1,scr.html=1' : '';
 	r2.cmd('pdr' + tail, function(d) {
 		c.innerHTML += '<pre style=\'color:' + color + '\'>' + d + '<pre>';
@@ -1724,10 +1374,12 @@ function pdtext() {
 	var widget = widgetContainer.getWidget('Function');
 	var c = widgetContainer.getWidgetDOMWrapper(widget);
 
-	c.style['overflow'] = 'none';
+	c.style.overflow = 'none';
 	var color = inColor ? 'white' : 'black';
+	var cl = 'mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect ';
+	cl += 'mdl-color--accent mdl-color-text--accent-contrast';
 	c.innerHTML = '<br />';
-	c.innerHTML += '&nbsp;<a href="javascript:panelDisasm()" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect mdl-color--accent mdl-color-text--accent-contrast">&lt; INFO</a> <h3 color=white></h3>';
+	c.innerHTML += '&nbsp;<a href="javascript:panelDisasm()" class="' + cl + '">&lt; INFO</a> <h3 color=white></h3>';
 	var tail = inColor ? '@e:scr.color=1,scr.html=1,asm.lineswidth=0' : '@e:asm.lineswidth=0';
 	r2.cmd('e scr.color=1;s entry0;s $S;pD $SS;e scr.color=0', function(d) {
 		d = clickableOffsets(d);
@@ -1739,10 +1391,12 @@ function pdf() {
 	var widget = widgetContainer.getWidget('Function');
 	var c = widgetContainer.getWidgetDOMWrapper(widget);
 
-	c.style['overflow'] = 'none';
+	c.style.overflow = 'none';
 	var color = inColor ? 'white' : 'black';
+	var cl = 'mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect ';
+	cl += 'mdl-color--accent mdl-color-text--accent-contrast';
 	c.innerHTML = '<br />';
-	c.innerHTML += '&nbsp;<a href="javascript:panelDisasm()" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect mdl-color--accent mdl-color-text--accent-contrast">&lt; INFO</a> <h3 color=white></h3>';
+	c.innerHTML += '&nbsp;<a href="javascript:panelDisasm()" class="' + cl + '">&lt; INFO</a> <h3 color=white></h3>';
 	var tail = inColor ? '@e:scr.color=1,scr.html=1,asm.lineswidth=0' : '@e:asm.lineswidth=0';
 	r2.cmd('pdf' + tail, function(d) {
 		c.innerHTML += '<pre style=\'color:' + color + '\'>' + d + '<pre>';
@@ -1753,10 +1407,12 @@ function decompile() {
 	var widget = widgetContainer.getWidget('Decompile');
 	var c = widgetContainer.getWidgetDOMWrapper(widget);
 
-	c.style['overflow'] = 'none';
+	c.style.overflow = 'none';
 	var color = inColor ? 'white' : 'black';
+	var cl = 'mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect ';
+	cl += 'mdl-color--accent mdl-color-text--accent-contrast';
 	c.innerHTML = '<br />';
-	c.innerHTML += '&nbsp;<a href="javascript:panelDisasm()" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect mdl-color--accent mdl-color-text--accent-contrast">&lt; INFO</a> <h3 color=white></h3>';
+	c.innerHTML += '&nbsp;<a href="javascript:panelDisasm()" class="' + cl + '">&lt; INFO</a> <h3 color=white></h3>';
 	var tail = inColor ? '@e:scr.color=1,scr.html=1' : '';
 	r2.cmd('pdc' + tail, function(d) {
 		c.innerHTML += '<pre style=\'color:' + color + '\'>' + d + '<pre>';
@@ -1768,9 +1424,11 @@ function graph() {
 	widget.setDark();
 	var c = widgetContainer.getWidgetDOMWrapper(widget);
 
-	c.style['overflow'] = 'auto';
+	c.style.overflow = 'auto';
 	var color = inColor ? 'white' : 'black';
-	c.innerHTML = '<br />&nbsp;<a href="javascript:panelDisasm()" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect mdl-color--accent mdl-color-text--accent-contrast">&lt; INFO</a>';
+	var cl = 'mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect ';
+	cl += 'mdl-color--accent mdl-color-text--accent-contrast';
+	c.innerHTML = '<br />&nbsp;<a href="javascript:panelDisasm()" class="' + cl + '">&lt; INFO</a>';
 	var tail = inColor ? '@e:scr.color=1,scr.html=1' : '';
 	r2.cmd('agf' + tail, function(d) {
 		d = clickableOffsets(d);
@@ -1793,108 +1451,6 @@ Array.prototype.forEach.call(document.querySelectorAll('.mdl-card__media'), func
 		location.href = target;
 	});
 });
-
-function updateFortune() {
-	r2.cmd('fo', function(d) {
-		document.getElementById('fortune').innerHTML = d;
-		readFortune();
-	});
-}
-
-// say a message
-function speak(text, callback) {
-    var u = new SpeechSynthesisUtterance();
-    u.text = text;
-    u.lang = 'en-US';
- 
-    u.onend = function () {
-        if (callback) {
-            callback();
-        }
-    };
- 
-    u.onerror = function (e) {
-        if (callback) {
-            callback(e);
-        }
-    };
- 
-    speechSynthesis.speak(u);
-}
-
-function readFortune() {
-	var f = document.getElementById('fortune').innerHTML;
-	speak (f);
-}
-
-function updateInfo() {
-	r2.cmd('i', function(d) {
-		var lines = d.split(/\n/g);
-		var lines1 = lines.slice(0,lines.length / 2);
-		var lines2 = lines.slice(lines.length / 2);
-		var body = '';
-
-		body += '<table style=\'width:100%\'><tr><td>';
-		for (var i in lines1) {
-			var line = lines1[i].split(/ (.+)?/);
-			if (line.length >= 2)
-			body += '<b>' + line[0] + '</b> ' + line[1] + '<br/>';
-		}
-		body += '</td><td>';
-		for (var i in lines2) {
-			var line = lines2[i].split(/ (.+)?/);
-			if (line.length >= 2)
-			body += '<b>' + line[0] + '</b> ' + line[1] + '<br/>';
-		}
-		body += '</td></tr></table>';
-		document.getElementById('info').innerHTML = body;
-	});
-}
-
-function updateEntropy() {
-	var eg = document.getElementById('entropy-graph');
-	var box = eg.getBoundingClientRect();
-	var height = (0 | box.height) - 35 - 19;
-	r2.cmd('p=ej 50 $s @ $M', function(d) {
-		var body = '';
-		var res = JSON.parse(d);
-		var values = new Array();
-
-		for (var i in res['entropy']) values.push(res['entropy'][i]['value']);
-
-		var nbvals = values.length;
-		var min = Math.min.apply(null, values);
-		var max = Math.max.apply(null, values);
-		var inc = 500.0 / nbvals;
-
-		// Minimum entropy has 0.1 transparency. Max has 1.
-		for (var i in values) {
-			var y = 0.1 + (1 - 0.1) * ((values[i] - min) / (max - min));
-			var addr = '0x' + res['entropy'][i]['addr'].toString(16);
-			body += '<rect x="' + (inc * i).toString();
-			body += '" y="0" width="' + inc.toString();
-			body += '" height="' + height + '" style="fill:black;fill-opacity:';
-			body += y.toString() + ';"><title>';
-			body += addr + ' </title></rect>' ;
-
-			if (i % 8 == 0) {
-				body += '<text transform="matrix(1 0 0 1 ';
-				body += (i * inc).toString();
-				body += ' ' + (height + 15) + ')" fill="ff8888" font-family="\'Roboto\'" font-size="9">';
-				body += addr + '</text>';
-			}
-		}
-
-		eg.innerHTML = body;
-		eg.onclick = function(e) {
-			var box = eg.getBoundingClientRect();
-			var pos = e.clientX - box.left;
-			var i = 0 | (pos / (box.width / nbvals));
-			var addr = '0x' + res['entropy'][i]['addr'].toString(16);
-			seek(addr);
-		};
-	});
-}
 
 function onClick(a, b) {
 	var h = document.getElementById(a);
@@ -1948,6 +1504,9 @@ function ready() {
 	}
 	twice = true;
 
+	// Loading configuration from localStorage (see panelSettings)
+	applyConf();
+
 	updates = new UpdateManager();
 	lastViews = new UpdateManager();
 
@@ -1971,8 +1530,6 @@ function ready() {
 	/* left menu */
 	onClick('analyze_button', analyzeButton);
 	onClick('menu_overview', panelOverview);
-	onClick('menu_headers', panelHeaders);
-	onClick('info_headers', panelHeaders);
 	onClick('menu_disasm', panelDisasm);
 	onClick('menu_debug', panelDebug);
 	onClick('menu_hexdump', panelHexdump);
@@ -2009,7 +1566,7 @@ function ready() {
 	});
 
 	// Close the drawer on click with small screens
-	document.querySelector('.mdl-layout__drawer').addEventListener('click', function () {
+	document.querySelector('.mdl-layout__drawer').addEventListener('click', function() {
 		document.querySelector('.mdl-layout__obfuscator').classList.remove('is-visible');
 		this.classList.remove('is-visible');
 	}, false);
@@ -2028,7 +1585,7 @@ document.body.onkeypress = function(e) {
 		panelHexdump,
 		panelFunctions,
 		panelFlags,
-		panelHeaders,
+		panelOverview,
 		panelSettings,
 		panelSearch
 		];
@@ -2038,7 +1595,9 @@ document.body.onkeypress = function(e) {
 		var k = e.charCode - 0x30;
 		if (k >= 0 && k < keys.length) {
 			var fn = keys[k];
-			if (fn) fn();
+			if (fn) {
+				fn();
+			}
 		}
 	}
 };
@@ -2428,6 +1987,156 @@ function clickableOffsets(x) {
 	return x;
 }
 
+function uiButton(href, label, type) {
+	var classes = 'mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect ';
+	classes += 'mdl-color--accent mdl-color-text--accent-contrast';
+	if (type == 'active') {
+		var st = 'style="background-color:#f04040 !important"';
+		return '&nbsp;<a href="' + href.replace(/"/g, '\'') + '" class="' + classes + '" ' + st + '>' + label + '</a>';
+	}
+	return '&nbsp;<a href="' + href.replace(/"/g, '\'') + '" class="' + classes + '">' + label + '</a>';
+}
+
+function uiCheckList(grp, id, label) {
+	var output = '<li>';
+	ouput += '<label for="' + grp + '" class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect">';
+	ouput += '<input type="checkbox" id="' + id + '" class="mdl-checkbox__input" />';
+	ouput += '<span class="mdl-checkbox__label">' + label + '</span>';
+	ouput += '</label></li>';
+
+	return output;
+}
+
+var comboId = 0;
+function uiCombo(d) {
+	var funName = 'combo' + (++comboId);
+	var fun = funName + ' = function(e) {';
+	fun += ' var sel = document.getElementById("opt_' + funName + '");';
+	fun += ' var opt = sel.options[sel.selectedIndex].value;';
+	fun += ' switch (opt) {';
+	for (var a in d) {
+		fun += 'case "' + d[a].name + '": ' + d[a].js + '(' + d[a].name + ');break;';
+	}
+	fun += '}}';
+	// CSP violation here
+	eval(fun);
+	var out = '<select id="opt_' + funName + '" onchange="' + funName + '()">';
+	for (var a in d) {
+		var def = (d[a].default) ? ' default' : '';
+		out += '<option' + def + '>' + d[a].name + '</option>';
+	}
+	out += '</select>';
+	return out;
+}
+
+/**
+ * Add a switch, with a name "label", define default state by isChecked
+ * callbacks are bound when un-checked.
+ */
+var idSwitch = 0;
+function uiSwitch(dom, name, isChecked, onChange) {
+	var id = 'switch-' + (++idSwitch);
+
+	var label = document.createElement('label');
+	label.className = 'mdl-switch mdl-js-switch mdl-js-ripple-effect';
+	label.for = id;
+	dom.appendChild(label);
+
+	var input = document.createElement('input');
+	input.type = 'checkbox';
+	input.className = 'mdl-switch__input';
+	input.checked = isChecked;
+	input.id = id;
+	label.appendChild(input);
+
+	input.addEventListener('change', function(evt) {
+		onChange(name, evt.target.checked);
+	});
+
+	var span = document.createElement('span');
+	span.className = 'mdl-switch__label';
+	span.innerHTML = name;
+	label.appendChild(span);
+}
+
+function uiActionButton(dom, action, label) {
+	var button = document.createElement('a');
+	button.href = '#';
+	button.innerHTML = label;
+	button.addEventListener('click', action);
+	dom.appendChild(button);
+
+	var classes = 'mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect ';
+	classes += 'mdl-color--accent mdl-color-text--accent-contrast';
+	button.className = classes;
+	button.style.margin = '3px';
+}
+
+var selectId = 0;
+function uiSelect(dom, name, list, defaultOffset, onChange) {
+	var id = 'select-' + (++selectId);
+
+	var div = document.createElement('div');
+	div.className = 'mdl-selectfield mdl-js-selectfield mdl-selectfield--floating-label';
+	dom.appendChild(div);
+
+	var select = document.createElement('select');
+	select.className = 'mdl-selectfield__select';
+	select.id = id;
+	select.name = id;
+	div.appendChild(select);
+
+	for (var i = 0 ; i < list.length ; i++) {
+		var option = document.createElement('option');
+		option.innerHTML = list[i];
+		option.value = list[i];
+		select.appendChild(option);
+		if (i === defaultOffset) {
+			option.selected = true;
+		}
+	}
+
+	select.addEventListener('change', function(evt) {
+		onChange(evt.target.value);
+	});
+
+	var label = document.createElement('label');
+	label.className = 'mdl-selectfield__label';
+	label.for = id;
+	label.innerHTML = name;
+	div.appendChild(label);
+}
+
+// function uiSwitch(d) {
+// 	// TODO: not yet done
+// 	var out = d;
+// 	out += '<label class="mdl-switch mdl-js-switch mdl-js-ripple-effect" for="switch-1">';
+// 	out += '<input type="checkbox" id="switch-1" class="mdl-switch__input" checked />';
+// 	out += '<span class="mdl-switch__label"></span>';
+// 	out += '</label>';
+// 	return out;
+// }
+
+function uiBlock(d) {
+	var classes = 'mdl-card__supporting-text mdl-shadow--2dp mdl-color-text--blue-grey-50 mdl-cell';
+	var styles = 'display:inline-block;margin:5px;color:black !important;background-color:white !important';
+	var out = '';
+	for (var i in d.blocks) {
+		var D = d.blocks[i];
+		out += '<br />' + D.name + ': ';
+		out += uiCombo(D.buttons);
+	}
+	return out;
+}
+
+function uiRoundButton(a, b, c) {
+	var out = '';
+	out += '<button onclick=' + a + ' class="mdl-button mdl-js-button mdl-button--fab mdl-js-ripple-effect" ' + c + '>';
+	out += '<i class="material-icons" style="opacity:1">' + b + '</i>';
+	out += '</button>';
+	return out;
+}
+
 /**
  * Handling DataTables with jQuery plugin
  *
@@ -2435,10 +2144,14 @@ function clickableOffsets(x) {
  * @param {Array} nonum - List of booleans, set true if non-numeric
  * @param {String} id - Id (DOM) of the current table, internal usage for DataTable plugin
  */
-function Table(cols, nonum, id) {
+function Table(cols, nonum, id, onChange) {
 	this.cols = cols;
 	this.nonum = nonum;
-	this.clickableOffset = [];
+	this.clickableOffset = new Array(cols.length);
+	this.clickableOffset.fill(false);
+	this.contentEditable = new Array(cols.length);
+	this.contentEditable.fill(false);
+	this.onChange = onChange;
 	this.id = id || false;
 
 	this.init();
@@ -2463,8 +2176,8 @@ Table.prototype.init = function() {
 		if (this.cols[c][0] == '+') {
 			this.clickableOffset[c] = true;
 			this.cols[c] = this.cols[c].substr(1);
-		} else {
-			this.clickableOffset[c] = false;
+		} else if (this.cols[c][0] == '~') {
+			this.contentEditable[c] = true;
 		}
 
 		var th = document.createElement('th');
@@ -2485,8 +2198,44 @@ Table.prototype.addRow = function(cells) {
 		if (this.clickableOffset[i]) {
 			td.innerHTML = clickableOffsets(cells[i]);
 		} else {
-			td.appendChild(document.createTextNode(cells[i]));
+			td.innerHTML = cells[i];
 		}
+
+		if (this.contentEditable[i]) {
+			var _this = this;
+			td.initVal = td.innerHTML;
+			td.contentEditable = true;
+			td.busy = false;
+
+			td.addEventListener('blur', function(evt) {
+				if (evt.target.busy) {
+					return;
+				}
+				if (evt.target.initVal == evt.target.innerHTML) {
+					return;
+				}
+				evt.target.busy = true;
+				_this.onChange(cells, evt.target.innerHTML);
+				evt.target.initVal = evt.target.innerHTML;
+				evt.target.busy = false;
+			});
+
+			td.addEventListener('keydown', function(evt) {
+				if (evt.keyCode != 13 || evt.target.busy) {
+					return;
+				}
+				if (evt.target.initVal == evt.target.innerHTML) {
+					return;
+				}
+				evt.preventDefault();
+				evt.target.busy = true;
+				_this.onChange(cells, evt.target.innerHTML);
+				evt.target.initVal = evt.target.innerHTML;
+				evt.target.busy = false;
+				evt.target.blur();
+			});
+		}
+
 		tr.appendChild(td);
 	}
 };
@@ -2498,16 +2247,14 @@ Table.prototype.insertInto = function(node) {
 	}
 };
 
-
 /**
  * Legacy methods, extracted from main JS
  */
-
-function uiTableBegin(cols, id) {
+function uiTableBegin(cols, domId) {
 	var out = '';
-	var id = id || '';
-	console.log(id.substr(1));
-	out += '<table id="'+id.substr(1)+'" style="margin-left:10px" class="mdl-data-table mdl-js-data-table mdl-data-table--selectable mdl-shadow--2dp">';
+	var id = domId || '';
+	var classes = 'mdl-data-table mdl-js-data-table mdl-data-table--selectable mdl-shadow--2dp';
+	out += '<table id="' + id.substr(1) + '" style="margin-left:10px" class="' + classes + '">';
 	//out += '<table class="mdl-data-table mdl-js-data-table mdl-data-table--selectable">';
 
 	out += '  <thead> <tr>';
@@ -2531,7 +2278,9 @@ function uiTableRow(cols) {
 	var out = '<tr>';
 	for (var i in cols) {
 		var col = cols[i];
-		if (!col) continue;
+		if (!col) {
+			continue;
+		}
 		if (col[0] == '+') {
 			col = clickableOffsets(col.substring(1));
 			type = '';
@@ -2612,885 +2361,11 @@ Widget.prototype.isAlreadyThere = function() {
 
 Widget.prototype.setDark = function() {
 	this.DOMWrapper.style.backgroundColor = 'rgb(32, 32, 32)';
-};
-Disasm.prototype = new RadareInfiniteBlock();
-Disasm.prototype.constructor = Disasm;
-function Disasm(containerElement, lineHeight) {
-	this.container = new FlexContainer(containerElement, 'disasm');
-	this.lineHeight = lineHeight;
-	this.refreshInitialOffset();
-	this.init();
 
-	this.offsetHistory = [this.initialOffset];
-	this.indexOffsetHistory = 0;
-
-	var _this = this;
-	seekAction.registerLocalAction('Disassembly', function(offset) {
-		var gap = (_this.offsetHistory.length - 1) - _this.indexOffsetHistory;
-		for (var i = 0 ; i < gap ; i++) {
-			_this.offsetHistory.pop();
-		}
-		_this.offsetHistory.push(offset);
-		_this.indexOffsetHistory = _this.offsetHistory.length - 1;
-		_this.nav.refreshCurrentOffset();
-		_this.draw();
-	});
-}
-
-/**
- * How many screen we want to retrieve in one round-trip with r2
- */
-Disasm.prototype.infineHeightProvisioning = 3;
-
-/**
- * Fetch and initialize data
- */
-Disasm.prototype.init = function() {
-	var _this = this;
-
-	this.drawContextualMenu();
-	this.drawAnalysisDialog();
-	// 5% (default is 20%) : dynamic sized content, re-drawn
-	this.defineInfiniteParams(0.05);
-
-	this.container.pause('Crunching some data...');
-	this.nav.crunchingData(function() {
-		_this.container.resume();
-	});
-};
-
-Disasm.prototype.resetContainer = function(container) {
-	// TODO: cache, faster
-	this.container.replug(container);
-	this.container.reset();
-	this.refreshInitialOffset();
-	this.defineInfiniteParams(0.05);
-};
-
-/**
- * Gather data and set event to configure infinite scrolling
- */
-Disasm.prototype.defineInfiniteParams = function(trigger) {
-	RadareInfiniteBlock.prototype.defineInfiniteParams.call(this, trigger);
-	this.nav = new DisasmNavigator(this.howManyLines, this.initialOffset);
-};
-
-Disasm.prototype.draw = function(callback) {
-	var _this = this;
-	this.drawControls(this.container.getControls());
-	this.container.drawBody(function(element) {
-		_this.drawContent(element, function() {
-			_this.replaceScrollPosition(_this.nav.currentOffset);
-			if (typeof callback !== 'undefined') {
-				callback();
-			}
-		});
-	});
-};
-
-
-/**
- * Will trigger analysis from checked analysis method
- * of the analysis dialog (<=> analysisMethod by offset)
- */
-Disasm.prototype.processChosenAnalysis = function(endCallback) {
-	for (var i = 0 ; i < this.analysisMethods.length ; i++) {
-		this.analysisMethods[i].action(this.analysisMethods[i].active);
+	// Flex containers compatibility
+	if (typeof this.DOMWrapper.children[1] !== 'undefined') {
+		this.DOMWrapper.children[1].style.backgroundColor = 'rgb(32, 32, 32)';
 	}
-
-	/* TODO, adapt to overview panel context
-		updateFortune();
-		updateInfo();
-		updateEntropy();
-	*/
-
-	// Reprocessing
-	this.nav.crunchingData(function() {
-		// Done
-	});
-
-	// After, we refresh the current display
-	this.draw(endCallback);
-};
-
-Disasm.prototype.drawAnalysisDialog = function() {
-	this.analysisMethods = [{
-		name: 'Analyze symbols',
-		ugly: 'symbols',
-		active: false,
-		action: function(active) {
-			if (!active) {
-				return;
-			}
-			r2.cmd('aa');
-		}
-	},{
-		name: 'Analyse calls',
-		ugly: 'calls',
-		active: false,
-		action: function(active) {
-			if (active) {
-				r2.cmd('e anal.calls=true;aac');
-			} else {
-				r2.cmd('e anal.calls=false');
-			}
-		}
-	},{
-		name: 'Emulate code',
-		ugly: 'code',
-		active: false,
-		action: function(active) {
-			if (active) {
-				r2.cmd('e asm.emu=1;aae;e asm.emu=0');
-			} else {
-				r2.cmd('e asm.emu=false');
-			}
-		}
-	},{
-		name: 'Find preludes',
-		ugly: 'preludes',
-		active: false,
-		action: function(active) {
-			if (!active) {
-				return;
-			}
-			r2.cmd('aap');
-		}
-	},{
-		name: 'Autoname functions',
-		ugly: 'fcts',
-		active: false,
-		action: function(active) {
-			if (!active) {
-				return;
-			}
-			r2.cmd('aan');
-		}
-	}];
-
-	var _this = this;
-	this.analysisDialog = document.createElement('dialog');
-	this.analysisDialog.className = 'mdl-dialog';
-
-	if (!this.analysisDialog.showModal) {
-		dialogPolyfill.registerDialog(this.analysisDialog);
-	}
-
-	var content = document.createElement('div');
-	content.className = 'mdl-dialog__content';
-	this.analysisDialog.appendChild(content);
-
-	var title = document.createElement('p');
-	title.appendChild(document.createTextNode('Pick some analysis method'));
-	title.className = 'mdl-typography--text-center';
-	content.appendChild(title);
-
-	var methods = document.createElement('ul');
-	methods.className = 'mdl-card__supporting-text';
-	this.analysisDialog.appendChild(methods);
-
-	for (var i = 0 ; i < this.analysisMethods.length ; i++) {
-		var li = document.createElement('li');
-		methods.appendChild(li);
-
-		var wrappingLabel = document.createElement('label');
-		wrappingLabel.for = this.analysisMethods[i].ugly;
-		wrappingLabel.className = 'mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect';
-		li.appendChild(wrappingLabel);
-
-		var input = document.createElement('input');
-		input.type = 'checkbox';
-		input.offset = i;
-		input.id = this.analysisMethods[i].ugly;
-		input.checked = this.analysisMethods[i].active;
-		input.className = 'mdl-checkbox__input';
-		wrappingLabel.appendChild(input);
-
-		input.addEventListener('change', function(evt) {
-			_this.analysisMethods[evt.target.offset].active = evt.target.checked;
-		});
-
-		var name = document.createElement('span');
-		name.className = 'mdl-checkbox__label';
-		name.appendChild(document.createTextNode(this.analysisMethods[i].name));
-		wrappingLabel.appendChild(name);
-	}
-
-	var actions = document.createElement('div');
-	actions.className = 'mdl-dialog__actions';
-	this.analysisDialog.appendChild(actions);
-
-	var closeButton = document.createElement('button');
-	closeButton.className = 'mdl-button';
-	closeButton.innerHTML = 'Close';
-	closeButton.addEventListener('click', function() {
-		_this.analysisDialog.close();
-	});
-	actions.appendChild(closeButton);
-
-	var proceedButton = document.createElement('button');
-	proceedButton.className = 'mdl-button';
-	proceedButton.innerHTML = 'Proceed';
-	proceedButton.addEventListener('click', function() {
-		_this.processChosenAnalysis(function() {
-			_this.analysisDialog.close();
-		});
-	});
-	actions.appendChild(proceedButton);
-
-	document.body.appendChild(this.analysisDialog);
-	componentHandler.upgradeDom();
-};
-
-Disasm.prototype.extractOffset_ = function(str) {
-	return parseInt(str.slice(5));
-};
-
-Disasm.prototype.getCurrentOffset = function() {
-	return this.currentOffset;
-};
-
-Disasm.prototype.oncontextmenu = function(evt, offset) {
-	// check with aoj first, if 'val' field exists: open
-	var isUndefined;
-	r2.cmdj('aoj @' + offset, function(info) {
-		isUndefined = typeof info[0].val === 'undefined';
-	});
-
-	if (!isUndefined) {
-		var menu = document.getElementById('contextmenuDisasm');
-		evt.preventDefault();
-
-		if (this.contextMenuOpen) {
-			menu.classList.remove('active');
-		} else {
-			this.currentOffset = offset;
-			menu.classList.add('active');
-			menu.style.left = evt.clientX + 'px';
-			menu.style.top = evt.clientY + 'px';
-		}
-
-		this.contextMenuOpen = !this.contextMenuOpen;
-	} else {
-		console.log('NOT opening ctxt menu');
-	}
-};
-
-Disasm.prototype.getPresentBlock = function() {
-	var blocks = [];
-	var bodyChildren = this.container.getBody();
-	for (var i = 0 ; i < bodyChildren.length ; i++) {
-		blocks.push(this.extractOffset_(bodyChildren[i].className));
-	}
-	return blocks;
-};
-
-Disasm.prototype.drawContent = function(dom, callback) {
-	var _this = this;
-
-	var list = this.nav.getShownOffset();
-	isTopMax = (list[0] === 0);
-
-	// If we are already at top
-	if (this.isTopMax && isTopMax) {
-		return;
-	} else {
-		this.isTopMax = isTopMax;
-	}
-
-	// reset container
-	this.container.getBody().innerHTML = '';
-
-	for (var i = 0 ; i < list.length ; i++) {
-		var domAnchor = document.createElement('span');
-		this.container.getBody().appendChild(domAnchor);
-		this.nav.get(list[i].offset, list[i].size, function(anchor, last) {
-			return function(chunk) {
-				_this.drawChunk(chunk, anchor);
-
-				if (last && typeof callback !== 'undefined') {
-					callback();
-				}
-			};
-		}(domAnchor, (i === list.length - 1)));
-	}
-};
-
-/**
- * Draw a chunk before or after the current content
- */
-Disasm.prototype.drawChunk = function(chunk, domAnchor) {
-	domAnchor.innerHTML = chunk.data;
-	var pre = domAnchor.children[0];
-	var spans = pre.children;
-	var _this = this;
-	for (var i = 0 ; i < spans.length; i++) {
-		if (spans[i].tagName === 'SPAN') {
-			spans[i].addEventListener('contextmenu', function(id) {
-				return function(evt) {
-					return _this.oncontextmenu(evt, id);
-				};
-			}(spans[i].id));
-		}
-	}
-	return document.getElementById(domAnchor);
-};
-
-Disasm.prototype.infiniteDrawingContent = function(where, pos, endCallback) {
-	var _this = this;
-	var firstVisibleOffset = this.firstVisibleOffset();
-	this.drawContent(this.container.getBody(), function() {
-		_this.replaceScrollPosition(firstVisibleOffset);
-		endCallback();
-	}); // TODO Add stop scroll
-};
-
-Disasm.prototype.drawControls = function(dom) {
-	var out = uiRoundButton('javascript:disasm.nav.go(-1);disasm.draw();', 'keyboard_arrow_up');
-	out += uiRoundButton('javascript:disasm.nav.go(1);disasm.draw();', 'keyboard_arrow_down');
-	out += '&nbsp;';
-	out += uiButton('javascript:analyze()', 'ANLZ');
-	out += uiButton('javascript:comment()', 'CMNT');
-	out += uiButton('javascript:info()', 'Info');
-	out += uiButton('javascript:rename()', 'RNME');
-	out += uiButton('javascript:write()', 'Wrte');
-
-	out += uiButton('javascript:disasm.openAnalysisDialog()', 'Process analysis');
-	out += '<ul id="disasm-history"></ul>';
-
-	dom.innerHTML = out;
-
-	this.history = document.getElementById('disasm-history');
-	this.drawHistory(this.history);
-};
-
-Disasm.prototype.drawHistory = function(dom) {
-	var canGoBefore = (this.indexOffsetHistory > 0);
-	var canGoAfter = (this.indexOffsetHistory < this.offsetHistory.length - 1);
-
-	var _this = this;
-	dom.innerHTML = '';
-	for (var i = 0 ; i < this.offsetHistory.length ; i++) {
-		var isCurrent = (i === this.indexOffsetHistory);
-
-		var li = document.createElement('li');
-		li.className = (isCurrent) ? 'active' : '';
-		li.i = i;
-		li.x = this.offsetHistory[i];
-		li.appendChild(document.createTextNode(this.offsetHistory[i]));
-		li.addEventListener('click', function(evt) {
-			var x = evt.target.x;
-			// Global does not trigger the callback for specific widget
-			seekAction.applyGlobal(x.toString());
-			_this.indexOffsetHistory = evt.target.i;
-			_this.nav.refreshCurrentOffset();
-			_this.draw();
-		});
-
-		dom.appendChild(li);
-	}
-
-	var li = document.createElement('li');
-	li.title = 'Seek();';
-	li.appendChild(document.createTextNode('?'));
-	li.addEventListener('click', function() {
-		seek();
-	});
-	dom.appendChild(li);
-};
-
-Disasm.prototype.openAnalysisDialog = function() {
-	this.analysisDialog.showModal();
-};
-
-/**
- * We want to know the first offset currently visible at the moment
- * when the user ask for more data by scrolling
- */
-Disasm.prototype.firstVisibleOffset = function() {
-	// Part of the container already scrolled
-	var hiddenContainerPart = this.container.getBody().scrollTop;
-	if (hiddenContainerPart === 0) {
-		return;
-	}
-
-	// We want to isolate the chunk that it's visible on the first line visible
-	var curSum = 0;
-	var elements = this.container.getBody().children;
-	var selectedChunk = elements[0];
-	for (var i = 1 ; i < elements.length ; i++) {
-		var height = elements[i].getBoundingClientRect().height;
-		curSum += height;
-		// When the current container start in the visible zone
-		// we know it's occurs in the previous, we abort here
-		if (curSum > hiddenContainerPart) {
-			// We restore the previous value, we need it
-			curSum -= height;
-			break;
-		}
-		selectedChunk = elements[i];
-	}
-
-	// Then, we want to guess approximately which offset was that line
-	var visibleSpace = curSum - hiddenContainerPart;
-	var hiddenSpace = selectedChunk.getBoundingClientRect().height - visibleSpace;
-
-	var offsetRelatedToThatChunk = this.extractOffset_(selectedChunk.children[0].id);
-
-	var guessedOffset = offsetRelatedToThatChunk + Math.ceil(hiddenSpace / this.lineHeight);
-
-	return guessedOffset;
-};
-
-/**
- * We know the last approx. visible offset from firstVisibleOffset
- * we want to adjust the current view to set this same offset on
- * a near position.
- */
-Disasm.prototype.replaceScrollPosition = function(offset) {
-	//console.log(offset.toString(16));
-	if (typeof offset === 'undefined') {
-		return;
-	}
-
-	// We select the chunk where the offset belongs
-	var position = this.nav.getChunkPositionFor(offset);
-	if (position === -1) {
-		console.log('Chunk position from offset not found');
-		return;
-	}
-
-	var chunk = this.container.getBody().children[position];
-	var blockOffset = this.extractOffset_(chunk.children[0].id);
-	var startFromTop = chunk.offsetTop;
-	var chunkHeight = chunk.getBoundingClientRect().height;
-
-	var progression = (offset - blockOffset) / this.nav.getSize(blockOffset);
-	var adjustment = Math.floor(progression * chunkHeight);
-	var requiredScroll = startFromTop + adjustment;
-
-	this.container.getBody().scrollTop = requiredScroll;
-};
-
-Disasm.prototype.drawContextualMenu = function() {
-	var _this = this;
-
-	var applyOp = function(offset, cmd) {
-		r2.cmd(cmd + ' @' + offset);
-		_this.nav.cleanOldData();
-		_this.draw();
-	};
-
-	/**
-	 * Take a r2 cmd in parameter, will format output into a dialog to validate stuff
-	 */
-	var presentResults = function(offset, cmd, drawingFct, validationCallback) {
-		var output;
-		r2.cmd(cmd + ' @' + offset, function(d) {
-			output = d;
-		});
-		drawingFct(this.resultDialog, output, validationCallback);
-	};
-
-	var items = [// can add: 'expand' property for expandable menu
-		// { name: 'define flag size', shortcut: '$', fct: function(evt, offset) { return applyOp(offset, '$'); } },
-		// { name: 'edit bits', shortcut: '1', fct: function(evt, offset) { return applyOp(offset, '1'); } },
-		// { name: 'set as byte', shortcut: 'b', fct: function(evt, offset) { return applyOp(offset, 'b'); } },
-		// { name: 'set as short word (2 bytes)', shortcut: 'B', fct: function(evt, offset) { return applyOp(offset, 'B'); } },
-		// { name: 'set as code', shortcut: 'c', fct: function(evt, offset) { return applyOp(offset, 'c'); } },
-		// { name: 'define flag color (fc)', shortcut: 'C', fct: function(evt, offset) { return applyOp(offset, 'C'); } },
-		// { name: 'set as data', shortcut: 'd', fct: function(evt, offset) { return applyOp(offset, 'd'); } },
-		// { name: 'end of function', shortcut: 'e', fct: function(evt, offset) { return applyOp(offset, 'e'); } },
-		{ name: 'analyze function', shortcut: 'f', fct: function(evt, offset) { return applyOp(offset, 'af'); } },
-		// { name: 'format', shortcut: 'F', fct: function(evt, offset) { return applyOp(offset, 'F'); } },
-		{ name: 'immediate base...', shortcut: 'i', expand: [
-			{
-				name: 'binary',
-				fct: function(evt, offset) { return applyOp(offset, 'ahi b'); }
-			},{
-				name: 'octal',
-				fct: function(evt, offset) { return applyOp(offset, 'ahi o'); }
-			},{
-				name: 'decimal',
-				fct: function(evt, offset) { return applyOp(offset, 'ahi d'); }
-			},{
-				name: 'hexadecimal',
-				fct: function(evt, offset) { return applyOp(offset, 'ahi h'); }
-			},{
-				name: 'string',
-				fct: function(evt, offset) { return applyOp(offset, 'ahi s'); }
-			}] },
-		// { name: 'merge down (join this and next functions)', shortcut: 'j', fct: function(evt, offset) { return applyOp(offset, 'j'); } },
-		// { name: 'merge up (join this and previous function)', shortcut: 'k', fct: function(evt, offset) { return applyOp(offset, 'k'); } },
-		// { name: 'highlight word', shortcut: 'h', fct: function(evt, offset) { return applyOp(offset, 'h'); } },
-		// { name: 'manpage for current call', shortcut: 'm', fct: function(evt, offset) { return applyOp(offset, 'm'); } },
-		{ name: 'rename flag used at cursor', shortcut: 'n', fct: function(evt, offset) { return applyOp(offset, 'fr'); } },
-		// { name: 'rename function', shortcut: 'r', fct: function(evt, offset) { return applyOp(offset, 'r'); } },
-		// { name: 'find references /r', shortcut: 'R', fct: function(evt, offset) { return applyOp(offset, 'R'); } },
-		{ name: 'set string', shortcut: 's', fct: function(evt, offset) { return applyOp(offset, 'Cs'); } },
-		// { name: 'set strings in current block', shortcut: 'S', fct: function(evt, offset) { return applyOp(offset, 'S'); } },
-		// { name: 'undefine metadata here', shortcut: 'u', fct: function(evt, offset) { return applyOp(offset, 'u'); } },
-		{ name: 'find xrefs to current address (./r)', shortcut: 'x', fct: function(evt, offset) { return applyOp(offset, 'axt'); } },
-		// { name: 'set as 32bit word', shortcut: 'w', fct: function(evt, offset) { return applyOp(offset, 'w'); } },
-		// { name: 'set as 64bit word', shortcut: 'W', fct: function(evt, offset) { return applyOp(offset, 'W'); } }
-	];
-
-	var menu = document.createElement('nav');
-	menu.id = 'contextmenuDisasm';
-	menu.classList.add('context-menu');
-
-	var ul = document.createElement('ul');
-	menu.appendChild(ul);
-
-	var _this = this;
-	var bindAction = function(element, action) {
-		element.addEventListener('mousedown', (function(fct) {
-			return function(evt) {
-				fct(evt, _this.getCurrentOffset());
-			};
-		}(action)));
-	};
-
-	for (var i = 0 ; i < items.length ; i++) {
-		var li = document.createElement('li');
-		ul.appendChild(li);
-		li.appendChild(document.createTextNode(items[i].name));
-		li.isSubOpen = false;
-
-		li.addEventListener('mouseenter', function(evt) {
-			// Cleaning old "active"
-			var subactives = Array.prototype.slice.call(evt.target.parentNode.getElementsByClassName('subactive'));
-			for (var x = 0 ; x < subactives.length ; x++) {
-				subactives[x].classList.remove('subactive');
-				subactives[x].isSubOpen = false;
-			}
-		});
-
-		// expandable menu
-		if (typeof items[i].expand !== 'undefined') {
-			// Make submenu reachable
-			li.addEventListener('mouseenter', function(evt) {
-				if (evt.target.isSubOpen) {
-					return;
-				} else {
-					evt.target.isSubOpen = true;
-				}
-
-				var subMenu = evt.target.children[0];
-				if (typeof subMenu === 'undefined') {
-					return;
-				}
-
-				var dim = evt.target.getBoundingClientRect();
-				var indexOf = Array.prototype.slice.call(evt.target.parentNode.children).indexOf(evt.target);
-				evt.target.classList.add('subactive');
-				subMenu.style.left = dim.width + 'px';
-				subMenu.style.top = indexOf * dim.height + 'px';
-			});
-
-			// Creating sub menu
-			var subUl = document.createElement('ul');
-			li.appendChild(subUl);
-			for (var j = 0 ; j < items[i].expand.length ; j++) {
-				var subLi = document.createElement('li');
-				subUl.appendChild(subLi);
-				subLi.appendChild(document.createTextNode(items[i].expand[j].name));
-				bindAction(subLi, items[i].expand[j].fct);
-			}
-		} else {
-			bindAction(li, items[i].fct);
-		}
-	}
-
-	document.body.appendChild(menu);
-	componentHandler.upgradeDom();
-
-	var _this = this;
-	this.contextMenuOpen = false;
-	var closeMenu = function() {
-		if (!_this.contextMenuOpen) {
-			return;
-		}
-		menu.classList.remove('active');
-		_this.contextMenuOpen = false;
-	};
-
-	window.onkeyup = function(e) {
-		if (e.keyCode === 27) {
-			closeMenu();
-		}
-	};
-
-	document.addEventListener('click', function() {
-		closeMenu();
-	});
-};
-
-// Should refactor with HexPairNav and go/get methods
-/**
- * DisasmNavigator
- * Based on non-fixed size of "chunk"
- * will use:
- *	this.navigationData, as dictionnary [offset => {size, callback, data}]
- *	this.navigationOffsets, for all ordered [offset]
- * 	this.currentlyShown, as currently shown [offset]
- */
-DisasmNavigator.prototype = new BlockNavigator();
-DisasmNavigator.prototype.constructor = DisasmNavigator;
-function DisasmNavigator(howManyLines, startOffset) {
-	this.currentOffset = startOffset;
-	this.howManyLines = howManyLines;
-	this.gap = this.howManyLines * 2;
-
-	this.providerWorker = new Worker('disasmProvider.js');
-
-	this.optimalLines = this.howManyLines * 3;
-	this.MINFILL = this.optimalLines * 0.8;
-
-	this.items = [];
-
-	this.init();
-}
-
-DisasmNavigator.prototype.init = function() {
-	BlockNavigator.prototype.init.apply(this);
-	this.currentlyShown = [];
-	this.populateFirst();
-};
-
-DisasmNavigator.prototype.line2offset = function(line) {
-	return line * 2;
-};
-
-DisasmNavigator.prototype.offset2line = function(offset) {
-	return offset / 2;
-};
-
-DisasmNavigator.prototype.configureWorker_ = function() {
-	var _this = this;
-	this.providerWorker.onmessage = function(e) {
-		var item;
-		for (var i = 0 ; i < _this.items.length ; i++) {
-			if (_this.items[i].offset === e.data.offset &&
-				_this.items[i].size === e.data.size) {
-				item = _this.items[i];
-			}
-		}
-
-		if (typeof item === 'undefined') {
-			console.log('Unable to find origin item');
-			return;
-		}
-
-		item.data = e.data.data;
-		item.status = _this.Status.COMPLETED;
-		for (var i = 0 ; i < item.callback.length ; i++) {
-			item.callback[i](item);
-		}
-		item.callback = [];
-	};
-};
-
-DisasmNavigator.prototype.cleanOldData = function() {
-	for (var i = 0 ; i < this.items.length ; i++) {
-		delete this.items[i].data;
-		delete this.items[i].status;
-	}
-};
-
-DisasmNavigator.prototype.crunchingData = function(onReadyCallback) {
-	var initWorker = new Worker('disasmNavProvider.js');
-	var _this = this;
-
-	initWorker.onmessage = function(e) {
-		_this.navigationData = e.data;
-		_this.navigationOffsets = Object.keys(e.data);
-		_this.navigationOffsets.sort();
-		initWorker.terminate();
-		onReadyCallback();
-	};
-
-	initWorker.postMessage(true);
-};
-
-DisasmNavigator.prototype.getOverlappingIntervals = function(start, end) {
-	var intervals = [];
-	for (var offset in this.navigationData) {
-		var endInterval = offset + this.navigationData[offset].size;
-		if (start >= offset || end <= endInterval) {
-			intervals.push(offset);
-		}
-	}
-	return intervals;
-};
-
-DisasmNavigator.prototype.populateFirst = function() {
-	return this.populateFrom(this.currentOffset);
-};
-
-/**
- * Create block between [start;end[
- */
-DisasmNavigator.prototype.fillGap = function(start, end, artifical) {
-	var curSize = end - start;
-	if (curSize > this.howManyLines) {
-		var half = Math.round(end / 2);
-		return [{
-			offset: start,
-			size: Math.round(curSize / 2),
-			artifical: artifical
-		}].concat(this.fillGap(start + Math.round(curSize / 2), end));
-	} else {
-		return [{
-			offset: start,
-			size: curSize,
-			artifical: artifical
-		}];
-	}
-};
-
-DisasmNavigator.prototype.populateFrom = function(offset) {
-	// From currentOffset
-	// I want at least 80% of 3 screens
-
-	// go up of 1 screen, take first in order
-
-	var fromOffset = offset - this.line2offset(this.howManyLines);
-	var endOffset = fromOffset + (3 * this.line2offset(this.howManyLines));
-
-	var existingIntervals = this.getOverlappingIntervals(fromOffset, endOffset);
-
-	var requestedIntervals = []; // {offset, size}
-
-	// If they overlap between them, we merge
-	for (var i = 0 ; i < existingIntervals.length - 1 ; i++) {
-		var endCurrent = existingIntervals[i];
-		var startNext = existingIntervals[i + 1];
-		if (startNext < endCurrent) {
-			if (endNext <= endCurrent) { // inclusive
-				requestedIntervals.push({
-					offset: existingIntervals[i],
-					size: this.navigationData[existingIntervals[i]].size
-				});
-			} else {
-				var endNext = startNext + this.navigationData[startNext].size;
-				requestedIntervals.push({
-					offset: existingIntervals[i],
-					size: endNext - existingIntervals[i]
-				});
-			}
-		}
-	}
-
-	if (requestedIntervals.length > 0) {
-		// If there is gap before
-		if (requestedIntervals[0].offset !== fromOffset) {
-			requestedIntervals = requestedIntervals.concat(this.fillGap(fromOffset, requestedIntervals[0].offset));
-		}
-
-		// If there is a gap after
-		var lastInterval = requestedIntervals[requestedIntervals.length - 1];
-		var lastOffsetInterval = (lastInterval.offset + lastInterval.size);
-		if (lastOffsetInterval !== endOffset) {
-			requestedIntervals = requestedIntervals.concat(this.fillGap(lastOffsetInterval + 1, endOffset));
-		}
-
-		// If there is a gap between
-		for (var i = 0 ; i < requestedIntervals.length - 1 ; i++) {
-			var endCurrent = existingIntervals[i];
-			var startNext = existingIntervals[i + 1];
-
-			if (startNext - endCurrent > 1) {
-				requestedIntervals = requestedIntervals.concat(this.fillGap(endCurrent + 1, startNext));
-			}
-		}
-	} else {
-		requestedIntervals = this.fillGap(fromOffset, endOffset, true);
-	}
-
-	this.currentlyShown = requestedIntervals;
-
-	/****
-	TODO: check if existing (data field), if not, ask provider
-	don't care about total length, but need to find approx. the line requested:
-		which interval, starting at? +lineHeight*diff
-	*****/
-};
-
-/**
- * Returns the current chunks to display
- * Will be conciliated with offset (key)
- */
-DisasmNavigator.prototype.getShownOffset = function() {
-	return this.currentlyShown;
-};
-
-DisasmNavigator.prototype.getSize = function(offset) {
-	for (var i = 0 ; i < this.currentlyShown.length ; i++) {
-		if (this.currentlyShown[i].offset === offset) {
-			return this.currentlyShown[i].size;
-		}
-	}
-	return -1;
-};
-
-DisasmNavigator.prototype.getChunkPositionFor = function(offset) {
-	for (var i = 0 ; i < this.currentlyShown.length ; i++) {
-		if (offset >= this.currentlyShown[i].offset &&
-			offset < this.currentlyShown[i].offset + this.currentlyShown[i].size) {
-			return i;
-		}
-	}
-
-	return -1;
-};
-
-DisasmNavigator.prototype.get = function(offset, size, callback) {
-	// TODO: retrieve data (async) and call
-	var item;
-	for (var i = 0 ; i < this.items.length ; i++) {
-		if (this.items[i].offset === offset &&
-			this.items[i].size === size) {
-			item = this.items[i];
-		}
-	}
-
-	if (typeof item === 'undefined') {
-		item = {
-			offset: offset,
-			size: size
-		};
-		this.items.push(item);
-	}
-
-	if (typeof item.data !== 'undefined') {
-		return callback(item);
-	} else { // Not currently here
-		if (typeof item.callback === 'undefined') {
-			item.callback = [];
-		}
-		// Store in callback, could be retrieving or we will start it
-		item.callback.push(callback);
-		if (item.status !== this.Status.LAUNCHED) { // Need to be retrieved
-			item.status = this.Status.LAUNCHED;
-			this.providerWorker.postMessage({
-				offset: item.offset,
-				size: item.size
-			});
-		}
-	}
-};
-
-DisasmNavigator.prototype.go = function(dir) {
-	this.currentOffset += dir * (this.howManyLines * 2);
-	this.populateFrom(this.currentOffset);
-};
-
-DisasmNavigator.prototype.refreshCurrentOffset = function() {
-	var _this = this;
-	r2.cmd('s', function(offset) {
-		_this.currentOffset = parseInt(offset, 16);
-	});
 };
 
 /**
@@ -4920,6 +3795,1072 @@ function basename(path) {
 	return path.split(/[\\/]/).pop();
 }
 
+Disasm.prototype = new RadareInfiniteBlock();
+Disasm.prototype.constructor = Disasm;
+function Disasm(containerElement, lineHeight) {
+	this.container = new FlexContainer(containerElement, 'disasm');
+	this.lineHeight = lineHeight;
+	this.refreshInitialOffset();
+	this.init();
+
+	this.offsetHistory = ['0x' + this.initialOffset.toString(16)];
+	this.indexOffsetHistory = 0;
+
+	var _this = this;
+	seekAction.registerLocalAction('Disassembly', function(offset) {
+		var gap = (_this.offsetHistory.length - 1) - _this.indexOffsetHistory;
+		for (var i = 0 ; i < gap ; i++) {
+			_this.offsetHistory.pop();
+		}
+		_this.offsetHistory.push(offset);
+		_this.indexOffsetHistory = _this.offsetHistory.length - 1;
+		_this.drawControls(_this.container.getControls());
+	});
+}
+
+/**
+ * How many screen we want to retrieve in one round-trip with r2
+ */
+Disasm.prototype.infineHeightProvisioning = 3;
+
+/**
+ * Fetch and initialize data
+ */
+Disasm.prototype.init = function() {
+	var _this = this;
+
+	this.drawContextualMenu();
+	this.drawAnalysisDialog();
+	// 5% (default is 20%) : dynamic sized content, re-drawn
+	this.defineInfiniteParams(0.05);
+
+	this.container.pause('Crunching some data...');
+	this.nav.crunchingData(function() {
+		_this.container.resume();
+	});
+};
+
+Disasm.prototype.resetContainer = function(container) {
+	// TODO: cache, faster
+	this.container.replug(container);
+	this.container.reset();
+	this.refreshInitialOffset();
+	this.defineInfiniteParams(0.05);
+};
+
+/**
+ * Gather data and set event to configure infinite scrolling
+ */
+Disasm.prototype.defineInfiniteParams = function(trigger) {
+	RadareInfiniteBlock.prototype.defineInfiniteParams.call(this, trigger);
+	this.nav = new DisasmNavigator(this.howManyLines, this.initialOffset);
+};
+
+Disasm.prototype.draw = function(callback) {
+	var _this = this;
+	this.drawControls(this.container.getControls());
+	this.container.drawBody(function(element) {
+		_this.drawContent(element, function() {
+			_this.replaceScrollPosition(_this.nav.currentOffset);
+			if (typeof callback !== 'undefined') {
+				callback();
+			}
+		});
+	});
+};
+
+
+/**
+ * Will trigger analysis from checked analysis method
+ * of the analysis dialog (<=> analysisMethod by offset)
+ */
+Disasm.prototype.processChosenAnalysis = function(endCallback) {
+	for (var i = 0 ; i < this.analysisMethods.length ; i++) {
+		this.analysisMethods[i].action(this.analysisMethods[i].active);
+	}
+
+	/* TODO, adapt to overview panel context
+		updateFortune();
+		updateInfo();
+		updateEntropy();
+	*/
+
+	// Reprocessing
+	var _this = this;
+	this.nav.crunchingData(function() {
+		// After, we refresh the current display
+		_this.draw(endCallback);
+	});
+};
+
+Disasm.prototype.drawAnalysisDialog = function() {
+	this.analysisMethods = [{
+		name: 'Analyse current offset',
+		ugly: 'curoffset',
+		active: true,
+		action: function(active) {
+			if (!active) {
+				return;
+			}
+			r2.cmd('af');
+		}
+	},{
+		name: 'Analyze symbols',
+		ugly: 'symbols',
+		active: false,
+		action: function(active) {
+			if (!active) {
+				return;
+			}
+			r2.cmd('aa');
+		}
+	},{
+		name: 'Analyse calls',
+		ugly: 'calls',
+		active: false,
+		action: function(active) {
+			if (active) {
+				r2.cmd('e anal.calls=true;aac');
+			} else {
+				r2.cmd('e anal.calls=false');
+			}
+		}
+	},{
+		name: 'Emulate code',
+		ugly: 'code',
+		active: false,
+		action: function(active) {
+			if (active) {
+				r2.cmd('e asm.emu=1;aae;e asm.emu=0');
+			} else {
+				r2.cmd('e asm.emu=false');
+			}
+		}
+	},{
+		name: 'Find preludes',
+		ugly: 'preludes',
+		active: false,
+		action: function(active) {
+			if (!active) {
+				return;
+			}
+			r2.cmd('aap');
+		}
+	},{
+		name: 'Autoname functions',
+		ugly: 'fcts',
+		active: false,
+		action: function(active) {
+			if (!active) {
+				return;
+			}
+			r2.cmd('aan');
+		}
+	}];
+
+	var _this = this;
+	this.analysisDialog = document.createElement('dialog');
+	this.analysisDialog.className = 'mdl-dialog';
+
+	if (!this.analysisDialog.showModal) {
+		dialogPolyfill.registerDialog(this.analysisDialog);
+	}
+
+	var content = document.createElement('div');
+	content.className = 'mdl-dialog__content';
+	this.analysisDialog.appendChild(content);
+
+	var title = document.createElement('p');
+	title.appendChild(document.createTextNode('Pick some analysis method'));
+	title.className = 'mdl-typography--text-center';
+	content.appendChild(title);
+
+	var methods = document.createElement('ul');
+	methods.className = 'mdl-card__supporting-text';
+	this.analysisDialog.appendChild(methods);
+
+	for (var i = 0 ; i < this.analysisMethods.length ; i++) {
+		var li = document.createElement('li');
+		methods.appendChild(li);
+
+		var wrappingLabel = document.createElement('label');
+		wrappingLabel.for = this.analysisMethods[i].ugly;
+		wrappingLabel.className = 'mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect';
+		li.appendChild(wrappingLabel);
+
+		var input = document.createElement('input');
+		input.type = 'checkbox';
+		input.offset = i;
+		input.id = this.analysisMethods[i].ugly;
+		input.checked = this.analysisMethods[i].active;
+		input.className = 'mdl-checkbox__input';
+		wrappingLabel.appendChild(input);
+
+		input.addEventListener('change', function(evt) {
+			_this.analysisMethods[evt.target.offset].active = evt.target.checked;
+		});
+
+		var name = document.createElement('span');
+		name.className = 'mdl-checkbox__label';
+		name.appendChild(document.createTextNode(this.analysisMethods[i].name));
+		wrappingLabel.appendChild(name);
+	}
+
+	var actions = document.createElement('div');
+	actions.className = 'mdl-dialog__actions';
+	this.analysisDialog.appendChild(actions);
+
+	var closeButton = document.createElement('button');
+	closeButton.className = 'mdl-button';
+	closeButton.innerHTML = 'Close';
+	closeButton.addEventListener('click', function() {
+		_this.analysisDialog.close();
+	});
+	actions.appendChild(closeButton);
+
+	var proceedButton = document.createElement('button');
+	proceedButton.className = 'mdl-button';
+	proceedButton.innerHTML = 'Proceed';
+	proceedButton.addEventListener('click', function() {
+		_this.processChosenAnalysis(function() {
+			_this.analysisDialog.close();
+		});
+	});
+	actions.appendChild(proceedButton);
+
+	document.body.appendChild(this.analysisDialog);
+	componentHandler.upgradeDom();
+};
+
+Disasm.prototype.extractOffset_ = function(str) {
+	return parseInt(str.slice(5));
+};
+
+Disasm.prototype.getCurrentOffset = function() {
+	return this.currentOffset;
+};
+
+Disasm.prototype.oncontextmenu = function(evt, offset) {
+	this.refreshContextMenu(offset);
+	var menu = document.getElementById('contextmenuDisasm');
+	evt.preventDefault();
+
+	if (this.contextMenuOpen) {
+		menu.classList.remove('active');
+	} else {
+		this.currentOffset = offset;
+		menu.classList.add('active');
+		menu.style.left = evt.clientX + 'px';
+		menu.style.top = evt.clientY + 'px';
+	}
+
+	this.contextMenuOpen = !this.contextMenuOpen;
+};
+
+Disasm.prototype.onfctmenu = function(evt, fct) {
+	evt.preventDefault();
+
+	var offset;
+	r2.cmd('?v ' + fct, function(hex) {
+		offset = hex;
+	});
+
+	var newName = prompt('Rename?', fct);
+	if (newName === null || newName === '') {
+		return;
+	}
+
+	r2.cmd('fr ' + newName + '@ ' + offset);
+};
+
+Disasm.prototype.onvarmenu = function(evt, varName) {
+	evt.preventDefault();
+
+	var newName = prompt('Rename?', varName);
+	if (newName === null || newName === '') {
+		return;
+	}
+
+	r2.cmd('afvn ' + varName + ' ' + newName);
+};
+
+Disasm.prototype.refreshContextMenu = function(offset) {
+	// check with aoj first, if 'val' field exists: open
+	var isUndefined;
+	r2.cmdj('aoj @' + offset, function(info) {
+		isUndefined = typeof info[0].val === 'undefined';
+	});
+
+	this.drawContextualMenu(!isUndefined);
+};
+
+Disasm.prototype.getPresentBlock = function() {
+	var blocks = [];
+	var bodyChildren = this.container.getBody();
+	for (var i = 0 ; i < bodyChildren.length ; i++) {
+		blocks.push(this.extractOffset_(bodyChildren[i].className));
+	}
+	return blocks;
+};
+
+Disasm.prototype.drawContent = function(dom, callback) {
+	var _this = this;
+
+	var list = this.nav.getShownOffset();
+	isTopMax = (list[0] === 0);
+
+	// If we are already at top
+	if (this.isTopMax && isTopMax) {
+		return;
+	} else {
+		this.isTopMax = isTopMax;
+	}
+
+	// reset container
+	this.container.getBody().innerHTML = '';
+
+	for (var i = 0 ; i < list.length ; i++) {
+		var domAnchor = document.createElement('span');
+		this.container.getBody().appendChild(domAnchor);
+		this.nav.get(list[i].offset, list[i].size, function(anchor, last) {
+			return function(chunk) {
+				_this.drawChunk(chunk, anchor);
+
+				if (last && typeof callback !== 'undefined') {
+					callback();
+				}
+			};
+		}(domAnchor, (i === list.length - 1)));
+	}
+};
+
+/**
+ * Draw a chunk before or after the current content
+ */
+Disasm.prototype.drawChunk = function(chunk, domAnchor) {
+	domAnchor.innerHTML = chunk.data;
+	var pre = domAnchor.children[0];
+	var spans = pre.children;
+	var _this = this;
+	for (var i = 0 ; i < spans.length; i++) {
+		if (spans[i].tagName === 'SPAN') {
+			if (spans[i].className.indexOf('offset') !== -1) {
+				spans[i].addEventListener('contextmenu', function(id) {
+					return function(evt) {
+						return _this.oncontextmenu(evt, id);
+					};
+				}(spans[i].id));
+			} else if (spans[i].className.indexOf('fcn') !== -1) {
+				spans[i].addEventListener('contextmenu', function(id) {
+					return function(evt) {
+						return _this.onfctmenu(evt, id);
+					};
+				}(spans[i].id));
+			} else if (spans[i].className.indexOf('var') !== -1) {
+				spans[i].addEventListener('contextmenu', function(id) {
+					return function(evt) {
+						return _this.onvarmenu(evt, id);
+					};
+				}(spans[i].id));
+			}
+		}
+	}
+
+	// Highligh current offset (seek)
+	var curElem = document.getElementById(this.nav.getSeekOffset());
+	if (curElem !== null) {
+		curElem.classList.add('currentOffset');
+	}
+
+	return document.getElementById(domAnchor);
+};
+
+Disasm.prototype.infiniteDrawingContent = function(where, pos, endCallback) {
+	var _this = this;
+	var firstVisibleOffset = this.firstVisibleOffset();
+	this.drawContent(this.container.getBody(), function() {
+		_this.replaceScrollPosition(firstVisibleOffset);
+		endCallback();
+	}); // TODO Add stop scroll
+};
+
+Disasm.prototype.drawControls = function(dom) {
+	var out = uiRoundButton('javascript:disasm.nav.go(-1);disasm.draw();', 'keyboard_arrow_up');
+	out += uiRoundButton('javascript:disasm.nav.go(1);disasm.draw();', 'keyboard_arrow_down');
+	out += '&nbsp;';
+	out += uiButton('javascript:disasm.openAnalysisDialog()', 'ANLZ');
+	out += uiButton('javascript:comment()', 'CMNT');
+	out += uiButton('javascript:info()', 'Info');
+	out += uiButton('javascript:rename()', 'RNME');
+	out += uiButton('javascript:write()', 'Wrte');
+
+	out += '<ul id="disasm-history"></ul>';
+
+	dom.innerHTML = out;
+
+	this.history = document.getElementById('disasm-history');
+	this.drawHistory(this.history);
+};
+
+Disasm.prototype.drawHistory = function(dom) {
+	var canGoBefore = (this.indexOffsetHistory > 0);
+	var canGoAfter = (this.indexOffsetHistory < this.offsetHistory.length - 1);
+
+	var _this = this;
+	dom.innerHTML = '';
+	for (var i = 0 ; i < this.offsetHistory.length ; i++) {
+		var isCurrent = (i === this.indexOffsetHistory);
+
+		var li = document.createElement('li');
+		li.className = (isCurrent) ? 'active' : '';
+		li.i = i;
+		li.x = this.offsetHistory[i];
+		li.appendChild(document.createTextNode(this.offsetHistory[i]));
+		li.addEventListener('click', function(evt) {
+			var x = evt.target.x;
+			// Global does not trigger the callback for specific widget
+			seekAction.applyGlobal(x.toString());
+			_this.indexOffsetHistory = evt.target.i;
+			_this.drawControls(_this.container.getControls());
+		});
+
+		dom.appendChild(li);
+	}
+
+	var li = document.createElement('li');
+	li.title = 'Seek();';
+	li.appendChild(document.createTextNode('?'));
+	li.addEventListener('click', function() {
+		seek();
+	});
+	dom.appendChild(li);
+};
+
+Disasm.prototype.openAnalysisDialog = function() {
+	this.analysisDialog.showModal();
+};
+
+/**
+ * We want to know the first offset currently visible at the moment
+ * when the user ask for more data by scrolling
+ */
+Disasm.prototype.firstVisibleOffset = function() {
+	// Part of the container already scrolled
+	var hiddenContainerPart = this.container.getBody().scrollTop;
+	if (hiddenContainerPart === 0) {
+		return;
+	}
+
+	// We want to isolate the chunk that it's visible on the first line visible
+	var curSum = 0;
+	var elements = this.container.getBody().children;
+	var selectedChunk = elements[0];
+	for (var i = 1 ; i < elements.length ; i++) {
+		var height = elements[i].getBoundingClientRect().height;
+		curSum += height;
+		// When the current container start in the visible zone
+		// we know it's occurs in the previous, we abort here
+		if (curSum > hiddenContainerPart) {
+			// We restore the previous value, we need it
+			curSum -= height;
+			break;
+		}
+		selectedChunk = elements[i];
+	}
+
+	// Then, we want to guess approximately which offset was that line
+	var visibleSpace = curSum - hiddenContainerPart;
+	var hiddenSpace = selectedChunk.getBoundingClientRect().height - visibleSpace;
+
+	var offsetRelatedToThatChunk = this.extractOffset_(selectedChunk.children[0].id);
+
+	var guessedOffset = offsetRelatedToThatChunk + Math.ceil(hiddenSpace / this.lineHeight);
+
+	return guessedOffset;
+};
+
+/**
+ * We know the last approx. visible offset from firstVisibleOffset
+ * we want to adjust the current view to set this same offset on
+ * a near position.
+ */
+Disasm.prototype.replaceScrollPosition = function(offset) {
+	//console.log(offset.toString(16));
+	if (typeof offset === 'undefined') {
+		return;
+	}
+
+	// We select the chunk where the offset belongs
+	var position = this.nav.getChunkPositionFor(offset);
+	if (position === -1) {
+		console.log('Chunk position from offset not found');
+		return;
+	}
+
+	var chunk = this.container.getBody().children[position];
+	var blockOffset = this.extractOffset_(chunk.children[0].id);
+	var startFromTop = chunk.offsetTop;
+	var chunkHeight = chunk.getBoundingClientRect().height;
+
+	var progression = (offset - blockOffset) / this.nav.getSize(blockOffset);
+	var adjustment = Math.floor(progression * chunkHeight);
+	var requiredScroll = startFromTop + adjustment;
+
+	this.container.getBody().scrollTop = requiredScroll;
+};
+
+Disasm.prototype.drawContextualMenu = function(enableAoj) {
+	var _this = this;
+
+	var displayRes = function(offset, cmd) {
+		var output;
+		var fullCmd = cmd + ' @' + offset;
+		r2.cmdj(fullCmd, function(d) {
+			output = d;
+		});
+
+		if (output === null || output.constructor !== Array) {
+			alert('No available ouput!');
+			return;
+		}
+
+		_this.addLongListDialog(output);
+	};
+
+	var applyOp = function(offset, cmd, prompting) {
+		var arg = '';
+		if (typeof prompting !== 'undefined') {
+			arg = prompt(prompting + '?');
+			if (arg == '') {
+				return;
+			}
+		}
+
+		if (arg != '') {
+			cmd += ' ' + arg;
+		}
+
+		r2.cmd(cmd + ' @' + offset);
+		_this.nav.cleanOldData();
+		_this.draw();
+	};
+
+	/**
+	 * Take a r2 cmd in parameter, will format output into a dialog to validate stuff
+	 */
+	var presentResults = function(offset, cmd, drawingFct, validationCallback) {
+		var output;
+		r2.cmd(cmd + ' @' + offset, function(d) {
+			output = d;
+		});
+		drawingFct(this.resultDialog, output, validationCallback);
+	};
+
+	var items = [// can add: 'expand' property for expandable menu
+		// { name: 'define flag size', shortcut: '$', fct: function(evt, offset) { return applyOp(offset, '$'); } },
+		// { name: 'edit bits', shortcut: '1', fct: function(evt, offset) { return applyOp(offset, '1'); } },
+		// { name: 'set as byte', shortcut: 'b', fct: function(evt, offset) { return applyOp(offset, 'b'); } },
+		// { name: 'set as short word (2 bytes)', shortcut: 'B', fct: function(evt, offset) { return applyOp(offset, 'B'); } },
+		// { name: 'set as code', shortcut: 'c', fct: function(evt, offset) { return applyOp(offset, 'c'); } },
+		// { name: 'define flag color (fc)', shortcut: 'C', fct: function(evt, offset) { return applyOp(offset, 'C'); } },
+		// { name: 'set as data', shortcut: 'd', fct: function(evt, offset) { return applyOp(offset, 'd'); } },
+		// { name: 'end of function', shortcut: 'e', fct: function(evt, offset) { return applyOp(offset, 'e'); } },
+		{ aoj: true, name: 'analyze function', shortcut: 'f', fct: function(evt, offset) { return applyOp(offset, 'af'); } },
+		// { name: 'format', shortcut: 'F', fct: function(evt, offset) { return applyOp(offset, 'F'); } },
+		{ aoj: true, name: 'immediate base...', shortcut: 'i', expand: [
+			{
+				name: 'binary',
+				fct: function(evt, offset) { return applyOp(offset, 'ahi b'); }
+			},{
+				name: 'octal',
+				fct: function(evt, offset) { return applyOp(offset, 'ahi o'); }
+			},{
+				name: 'decimal',
+				fct: function(evt, offset) { return applyOp(offset, 'ahi d'); }
+			},{
+				name: 'hexadecimal',
+				fct: function(evt, offset) { return applyOp(offset, 'ahi h'); }
+			},{
+				name: 'string',
+				fct: function(evt, offset) { return applyOp(offset, 'ahi s'); }
+			}] },
+		// { name: 'merge down (join this and next functions)', shortcut: 'j', fct: function(evt, offset) { return applyOp(offset, 'j'); } },
+		// { name: 'merge up (join this and previous function)', shortcut: 'k', fct: function(evt, offset) { return applyOp(offset, 'k'); } },
+		// { name: 'highlight word', shortcut: 'h', fct: function(evt, offset) { return applyOp(offset, 'h'); } },
+		// { name: 'manpage for current call', shortcut: 'm', fct: function(evt, offset) { return applyOp(offset, 'm'); } },
+		{ aoj: true, name: 'rename flag', shortcut: 'n', fct: function(evt, offset) { return applyOp(offset, 'fr', 'Name'); } },
+		// { name: 'rename function', shortcut: 'r', fct: function(evt, offset) { return applyOp(offset, 'r'); } },
+		// { name: 'find references /r', shortcut: 'R', fct: function(evt, offset) { return applyOp(offset, 'R'); } },
+		{ aoj: true, name: 'set string', shortcut: 's', fct: function(evt, offset) { return applyOp(offset, 'Cs'); } },
+		// { name: 'set strings in current block', shortcut: 'S', fct: function(evt, offset) { return applyOp(offset, 'S'); } },
+		// { name: 'undefine metadata here', shortcut: 'u', fct: function(evt, offset) { return applyOp(offset, 'u'); } },
+		{ aoj: false, name: 'find xrefs', shortcut: 'x', fct: function(evt, offset) { return displayRes(offset, 'axtj'); } },
+		// { name: 'set as 32bit word', shortcut: 'w', fct: function(evt, offset) { return applyOp(offset, 'w'); } },
+		// { name: 'set as 64bit word', shortcut: 'W', fct: function(evt, offset) { return applyOp(offset, 'W'); } }
+	];
+
+	var menu = document.getElementById('contextmenuDisasm');
+	if (menu === null) {
+		var menu = document.createElement('nav');
+		menu.id = 'contextmenuDisasm';
+		menu.classList.add('context-menu');
+	} else {
+		menu.innerHTML = '';
+	}
+
+	var ul = document.createElement('ul');
+	menu.appendChild(ul);
+
+	var _this = this;
+	var bindAction = function(element, action) {
+		element.addEventListener('mousedown', (function(fct) {
+			return function(evt) {
+				fct(evt, _this.getCurrentOffset());
+			};
+		}(action)));
+	};
+
+	for (var i = 0 ; i < items.length ; i++) {
+		var li = document.createElement('li');
+		ul.appendChild(li);
+		li.appendChild(document.createTextNode(items[i].name));
+		li.isSubOpen = false;
+
+		li.addEventListener('mouseenter', function(evt) {
+			// Cleaning old "active"
+			var subactives = Array.prototype.slice.call(evt.target.parentNode.getElementsByClassName('subactive'));
+			for (var x = 0 ; x < subactives.length ; x++) {
+				subactives[x].classList.remove('subactive');
+				subactives[x].isSubOpen = false;
+			}
+		});
+
+		// expandable menu
+		if (typeof items[i].expand !== 'undefined' && (enableAoj && items[i].aoj || !items[i].aoj)) {
+			// Make submenu reachable
+			li.addEventListener('mouseenter', function(evt) {
+				if (evt.target.isSubOpen) {
+					return;
+				} else {
+					evt.target.isSubOpen = true;
+				}
+
+				var subMenu = evt.target.children[0];
+				if (typeof subMenu === 'undefined') {
+					return;
+				}
+
+				var dim = evt.target.getBoundingClientRect();
+				var indexOf = Array.prototype.slice.call(evt.target.parentNode.children).indexOf(evt.target);
+				evt.target.classList.add('subactive');
+				subMenu.style.left = dim.width + 'px';
+				subMenu.style.top = indexOf * dim.height + 'px';
+			});
+
+			// Creating sub menu
+			var subUl = document.createElement('ul');
+			li.appendChild(subUl);
+			for (var j = 0 ; j < items[i].expand.length ; j++) {
+				var subLi = document.createElement('li');
+				subUl.appendChild(subLi);
+				subLi.appendChild(document.createTextNode(items[i].expand[j].name));
+				bindAction(subLi, items[i].expand[j].fct);
+			}
+		} else {
+			if (enableAoj && items[i].aoj || !items[i].aoj) {
+				bindAction(li, items[i].fct);
+			} else {
+				li.classList.add('disabled');
+			}
+		}
+	}
+
+	document.body.appendChild(menu);
+	componentHandler.upgradeDom();
+
+	var _this = this;
+	this.contextMenuOpen = false;
+	var closeMenu = function() {
+		if (!_this.contextMenuOpen) {
+			return;
+		}
+		menu.classList.remove('active');
+		_this.contextMenuOpen = false;
+	};
+
+	window.onkeyup = function(e) {
+		if (e.keyCode === 27) {
+			closeMenu();
+		}
+	};
+
+	document.addEventListener('click', function() {
+		closeMenu();
+	});
+};
+
+/**
+ * Show a list of element in a specific dialog
+ */
+Disasm.prototype.addLongListDialog = function(list) {
+	var _this = this;
+	var dialog = document.createElement('dialog');
+	dialog.className = 'mdl-dialog';
+
+	if (!dialog.showModal) {
+		dialogPolyfill.registerDialog(dialog);
+	}
+
+	var content = document.createElement('div');
+	content.className = 'mdl-dialog__content';
+	dialog.appendChild(content);
+
+	var title = document.createElement('p');
+	title.appendChild(document.createTextNode('Results'));
+	title.className = 'mdl-typography--text-center';
+	content.appendChild(title);
+
+	var container = document.createElement('div');
+	container.className = 'mdl-card__supporting-text';
+	dialog.appendChild(container);
+
+	var table = document.createElement('table');
+	table.className = 'disasm-table-dialog';
+	table.style.width = '100%';
+	table.style.border = '1px dashed red';
+	container.appendChild(table);
+
+	var thead = document.createElement('thead');
+	table.appendChild(thead);
+
+	var keys = Object.keys(list[0]);
+	for (var i = 0 ; i < keys.length ; i++) {
+		var th = document.createElement('th');
+		th.appendChild(document.createTextNode(keys[i]));
+		thead.appendChild(th);
+	}
+
+	var tbody = document.createElement('tbody');
+	table.appendChild(tbody);
+
+	for (var i = 0 ; i < list.length ; i++) {
+		var tr = document.createElement('tr');
+		tbody.appendChild(tr);
+
+		for (var j = 0 ; j < keys.length ; j++) {
+			var td = document.createElement('td');
+			tr.appendChild(td);
+
+			var text;
+			if (keys[j] === 'opcode') {
+				text = clickableOffsets(list[i][keys[j]]);
+			} else if (keys[j] === 'from') {
+				var hex = '0x' + list[i][keys[j]].toString(16);
+				text = '<a href="javascript:seek(\'' + hex + '\');">0x' + hex + '</a>';
+			} else {
+				text = list[i][keys[j]];
+			}
+
+			td.innerHTML = text;
+		}
+	}
+
+	var actions = document.createElement('div');
+	actions.className = 'mdl-dialog__actions';
+	dialog.appendChild(actions);
+
+	var closeButton = document.createElement('button');
+	closeButton.className = 'mdl-button';
+	closeButton.innerHTML = 'Close';
+	closeButton.addEventListener('click', function() {
+		dialog.close();
+		document.body.removeChild(dialog);
+	});
+	actions.appendChild(closeButton);
+
+	document.body.appendChild(dialog);
+	componentHandler.upgradeDom();
+
+	dialog.showModal();
+};
+
+// Should refactor with HexPairNav and go/get methods
+/**
+ * DisasmNavigator
+ * Based on non-fixed size of "chunk"
+ * will use:
+ *	this.navigationData, as dictionnary [offset => {size, callback, data}]
+ *	this.navigationOffsets, for all ordered [offset]
+ * 	this.currentlyShown, as currently shown [offset]
+ */
+DisasmNavigator.prototype = new BlockNavigator();
+DisasmNavigator.prototype.constructor = DisasmNavigator;
+function DisasmNavigator(howManyLines, startOffset) {
+	this.currentOffset = startOffset;
+	this.howManyLines = howManyLines;
+	this.gap = this.howManyLines * 2;
+
+	this.providerWorker = new Worker('disasmProvider.js');
+
+	this.optimalLines = this.howManyLines * 3;
+	this.MINFILL = this.optimalLines * 0.8;
+
+	this.items = [];
+
+	this.init();
+}
+
+DisasmNavigator.prototype.init = function() {
+	BlockNavigator.prototype.init.apply(this);
+	this.currentlyShown = [];
+	this.populateFirst();
+};
+
+DisasmNavigator.prototype.line2offset = function(line) {
+	return line * 2;
+};
+
+DisasmNavigator.prototype.offset2line = function(offset) {
+	return offset / 2;
+};
+
+DisasmNavigator.prototype.configureWorker_ = function() {
+	var _this = this;
+	this.providerWorker.onmessage = function(e) {
+		var item;
+		for (var i = 0 ; i < _this.items.length ; i++) {
+			if (_this.items[i].offset === e.data.offset &&
+				_this.items[i].size === e.data.size) {
+				item = _this.items[i];
+			}
+		}
+
+		if (typeof item === 'undefined') {
+			console.log('Unable to find origin item');
+			return;
+		}
+
+		item.data = e.data.data;
+		item.status = _this.Status.COMPLETED;
+		for (var i = 0 ; i < item.callback.length ; i++) {
+			item.callback[i](item);
+		}
+		item.callback = [];
+	};
+};
+
+DisasmNavigator.prototype.cleanOldData = function() {
+	for (var i = 0 ; i < this.items.length ; i++) {
+		delete this.items[i].data;
+		delete this.items[i].status;
+	}
+};
+
+DisasmNavigator.prototype.crunchingData = function(onReadyCallback) {
+	var initWorker = new Worker('disasmNavProvider.js');
+	var _this = this;
+
+	initWorker.onmessage = function(e) {
+		_this.navigationData = e.data;
+		_this.navigationOffsets = Object.keys(e.data);
+		_this.navigationOffsets.sort();
+		initWorker.terminate();
+		onReadyCallback();
+	};
+
+	initWorker.postMessage(true);
+};
+
+DisasmNavigator.prototype.getOverlappingIntervals = function(start, end) {
+	var intervals = [];
+	for (var offset in this.navigationData) {
+		var startInterval = offset;
+		var endInterval = offset + this.navigationData[offset].size;
+		if ((startInterval <= start && endInterval >= end) || // all-incl
+			(startInterval <= start && endInterval >= start) || // before-overlap
+			(startInterval <= end && endInterval >= end) || // after-overlap
+			(startInterval >= start && endInterval <= end)) { // included
+			intervals.push(offset);
+		}
+	}
+	return intervals;
+};
+
+DisasmNavigator.prototype.populateFirst = function() {
+	return this.populateFrom(this.currentOffset);
+};
+
+/**
+ * Create block between [start;end[
+ */
+DisasmNavigator.prototype.fillGap = function(start, end, artifical) {
+	var curSize = end - start;
+	// FIX, can't cut everywhere: byte alignment (invalid lines)
+	return [{offset: start, size: curSize, artifical: artifical}];
+	if (curSize > this.howManyLines) {
+		var half = Math.round(end / 2);
+		return [{
+			offset: start,
+			size: Math.round(curSize / 2),
+			artifical: artifical
+		}].concat(this.fillGap(start + Math.round(curSize / 2), end));
+	} else {
+		return [{
+			offset: start,
+			size: curSize,
+			artifical: artifical
+		}];
+	}
+};
+
+DisasmNavigator.prototype.populateFrom = function(offset) {
+	// From currentOffset
+	// I want at least 80% of 3 screens
+
+	// go up of 1 screen, take first in order
+
+	var fromOffset = offset - this.line2offset(this.howManyLines);
+	var endOffset = fromOffset + (3 * this.line2offset(this.howManyLines));
+
+	var existingIntervals = this.getOverlappingIntervals(fromOffset, endOffset);
+
+	var requestedIntervals = []; // {offset, size}
+
+	// If they overlap between them, we merge
+	for (var i = 0 ; i < existingIntervals.length - 1 ; i++) {
+		var endCurrent = existingIntervals[i];
+		var startNext = existingIntervals[i + 1];
+		if (startNext < endCurrent) {
+			if (endNext <= endCurrent) { // inclusive
+				requestedIntervals.push({
+					offset: existingIntervals[i],
+					size: this.navigationData[existingIntervals[i]].size
+				});
+			} else {
+				var endNext = startNext + this.navigationData[startNext].size;
+				requestedIntervals.push({
+					offset: existingIntervals[i],
+					size: endNext - existingIntervals[i]
+				});
+			}
+		}
+	}
+
+	if (requestedIntervals.length > 0) {
+		// If there is gap before
+		if (requestedIntervals[0].offset !== fromOffset) {
+			requestedIntervals = requestedIntervals.concat(this.fillGap(fromOffset, requestedIntervals[0].offset));
+		}
+
+		// If there is a gap after
+		var lastInterval = requestedIntervals[requestedIntervals.length - 1];
+		var lastOffsetInterval = (lastInterval.offset + lastInterval.size);
+		if (lastOffsetInterval !== endOffset) {
+			requestedIntervals = requestedIntervals.concat(this.fillGap(lastOffsetInterval + 1, endOffset));
+		}
+
+		// If there is a gap between
+		for (var i = 0 ; i < requestedIntervals.length - 1 ; i++) {
+			var endCurrent = existingIntervals[i];
+			var startNext = existingIntervals[i + 1];
+
+			if (startNext - endCurrent > 1) {
+				requestedIntervals = requestedIntervals.concat(this.fillGap(endCurrent + 1, startNext));
+			}
+		}
+	} else {
+		requestedIntervals = this.fillGap(fromOffset, endOffset, true);
+	}
+
+	this.currentlyShown = requestedIntervals;
+
+	/****
+	TODO: check if existing (data field), if not, ask provider
+	don't care about total length, but need to find approx. the line requested:
+		which interval, starting at? +lineHeight*diff
+	*****/
+};
+
+/**
+ * Returns the current chunks to display
+ * Will be conciliated with offset (key)
+ */
+DisasmNavigator.prototype.getShownOffset = function() {
+	return this.currentlyShown;
+};
+
+DisasmNavigator.prototype.getSize = function(offset) {
+	for (var i = 0 ; i < this.currentlyShown.length ; i++) {
+		if (this.currentlyShown[i].offset === offset) {
+			return this.currentlyShown[i].size;
+		}
+	}
+	return -1;
+};
+
+DisasmNavigator.prototype.getChunkPositionFor = function(offset) {
+	for (var i = 0 ; i < this.currentlyShown.length ; i++) {
+		if (offset >= this.currentlyShown[i].offset &&
+			offset < this.currentlyShown[i].offset + this.currentlyShown[i].size) {
+			return i;
+		}
+	}
+
+	return -1;
+};
+
+DisasmNavigator.prototype.get = function(offset, size, callback) {
+	// TODO: retrieve data (async) and call
+	var item;
+	for (var i = 0 ; i < this.items.length ; i++) {
+		if (this.items[i].offset === offset &&
+			this.items[i].size === size) {
+			item = this.items[i];
+		}
+	}
+
+	if (typeof item === 'undefined') {
+		item = {
+			offset: offset,
+			size: size
+		};
+		this.items.push(item);
+	}
+
+	if (typeof item.data !== 'undefined') {
+		return callback(item);
+	} else { // Not currently here
+		if (typeof item.callback === 'undefined') {
+			item.callback = [];
+		}
+		// Store in callback, could be retrieving or we will start it
+		item.callback.push(callback);
+		if (item.status !== this.Status.LAUNCHED) { // Need to be retrieved
+			item.status = this.Status.LAUNCHED;
+			this.providerWorker.postMessage({
+				offset: item.offset,
+				size: item.size
+			});
+		}
+	}
+};
+
+DisasmNavigator.prototype.go = function(dir) {
+	this.currentOffset += dir * (this.howManyLines * 2);
+	this.populateFrom(this.currentOffset);
+};
+
+DisasmNavigator.prototype.refreshCurrentOffset = function() {
+	var _this = this;
+	r2.cmd('s', function(offset) {
+		_this.currentOffset = parseInt(offset, 16);
+	});
+};
+
+DisasmNavigator.prototype.getSeekOffset = function() {
+	return this.currentOffset;
+};
+
 /**
  * Define a container in absolute position
  * Create two area: control + body
@@ -5084,18 +5025,172 @@ InfiniteScrolling.prototype.scrollEvent_ = function(e) {
 	this.prevScroll = p;
 };
 
+function panelComments() {
+	var widget = widgetContainer.getWidget('Comments');
+	var c = widgetContainer.getWidgetDOMWrapper(widget);
+
+	updates.registerMethod(widget.getOffset(), panelComments);
+
+	c.style.backgroundColor = '#f0f0f0';
+	c.innerHTML = '<br />';
+	c.innerHTML += uiButton('javascript:notes()', 'Notes');
+	c.innerHTML += '<br /><br />';
+	r2.cmd('CC', function(d) {
+		var table = new Table(
+			['+Offset', '~Comment'],
+			[true, false],
+			'commentsTable',
+			function(row, newVal) {
+				var offset = row[0];
+
+				// remove
+				r2.cmd('CC- @ ' + offset);
+
+				// add new
+				r2.cmd('CCu base64:' + window.btoa(newVal) + ' @ ' + offset);
+
+				update();
+			});
+
+		var lines = d.split(/\n/); //clickableOffsets (d).split (/\n/);
+		for (var i in lines) {
+			var line = lines[i].split(/ (.+)?/);
+			if (line.length >= 2) {
+				table.addRow([line[0], line[1]]);
+			}
+		}
+		table.insertInto(c);
+	});
+}
+
+var disasm;
+
+function panelDisasm() {
+	var widget = widgetContainer.getWidget('Disassembly');
+	var c = widgetContainer.getWidgetDOMWrapper(widget);
+	c.classList.add('disasmPanel');
+
+	if (typeof disasm === 'undefined') {
+		disasm = new Disasm(c, 24);
+	} else {
+		disasm.resetContainer(c);
+	}
+
+	disasm.draw();
+	widget.setDark();
+
+	var recall = function() {
+		disasm.refreshInitialOffset();
+		disasm.resetContainer(c);
+		disasm.draw();
+		widget.setDark();
+	};
+
+	// Disasm is "seekable", we need to define behavior before and after drawing
+	updates.registerMethod(widget.getOffset(), function() {});
+	lastViews.registerMethod(widget.getOffset(), recall);
+}
+
+var hexdump;
+
+function panelHexdump() {
+	var widget = widgetContainer.getWidget('Hexdump');
+	var c = widgetContainer.getWidgetDOMWrapper(widget);
+	c.classList.add('hexdump');
+
+	if (typeof hexdump === 'undefined') {
+		var isBigEndian;
+		r2.cmd('e cfg.bigendian', function(b) {
+			isBigEndian = (b == 'true');
+		});
+
+		hexdump = new Hexdump(c, 24, isBigEndian);
+		hexdump.setOnChangeCallback(function(offset, before, after) {
+			console.log('changed');
+		});
+	} else {
+		hexdump.resetContainer(c);
+	}
+
+	hexdump.draw();
+	widget.setDark();
+
+	var recall = function() {
+		hexdump.refreshInitialOffset();
+		hexdump.resetContainer(c);
+		hexdump.draw();
+		widget.setDark();
+	};
+
+	// Hexdump is "seekable", we need to define behavior before and after drawing
+	updates.registerMethod(widget.getOffset(), function() {});
+	lastViews.registerMethod(widget.getOffset(), recall);
+};
+
+var headersCmd = {
+	symbols: {
+		cmd: 'isq',
+		grep: '!imp',
+		ready: false
+	},
+	imports: {
+		cmd: 'isq',
+		grep: 'imp.',
+		ready: false
+	},
+	relocs: {
+		cmd: 'ir',
+		grep: null,
+		ready: false
+	},
+	sections: {
+		cmd: 'iSq',
+		grep: null,
+		ready: false
+	},
+	strings: {
+		cmd: 'izq',
+		grep: null,
+		ready: false
+	},
+	sdb: {
+		cmd: 'k bin/cur/***',
+		grep: null,
+		ready: false
+	}
+};
+
+var infoCellHeight = -1;
+
 function panelOverview() {
 	var widget = widgetContainer.getWidget('Overview');
 	var c = widgetContainer.getWidgetDOMWrapper(widget);
-	updates.registerMethod(widget.getOffset(), panelSettings);
+	lastViews.registerMethod(widget.getOffset(), panelOverview);
+	updates.registerMethod(widget.getOffset(), panelOverview);
 
 	var out = '<div class="mdl-grid demo-content">';
-	out += '<div class="demo-graphs mdl-shadow--2dp mdl-color--white mdl-cell mdl-cell--8-col">';
-	out += '	<div id="info"> </div>';
-	out += '	<br />';
-	out += '	<a id="info_headers" class="mdl-buton mdl-js-buttom mdl-js-ripple-effect" style="cursor:pointer">read more...</a>';
-	out += '	<h3>Entropy</h3>';
-	out += '		<svg fill="currentColor" viewBox="0 0 500 80" id="entropy-graph"></svg>';
+	out += '<div class="demo-graphs mdl-shadow--2dp mdl-color--white mdl-cell mdl-cell--8-col" id="info-cell">';
+	out += '	<div class="mdl-tabs mdl-js-tabs">';
+	out += '		<div class="mdl-tabs__tab-bar" id="overview-tabs">';
+	out += '			<a href="#tab-info" class="mdl-tabs__tab is-active">Headers</a>';
+	out += '			<a href="#tab-symbols" class="mdl-tabs__tab" onclick="overviewLoad(this, headersCmd.symbols)">Symbols</a>';
+	out += '			<a href="#tab-imports" class="mdl-tabs__tab" onclick="overviewLoad(this, headersCmd.imports)">Imports</a>';
+	out += '			<a href="#tab-relocs" class="mdl-tabs__tab" onclick="overviewLoad(this, headersCmd.relocs)">Relocs</a>';
+	out += '			<a href="#tab-sections" class="mdl-tabs__tab" onclick="overviewLoad(this, headersCmd.sections)">Sections</a>';
+	out += '			<a href="#tab-strings" class="mdl-tabs__tab" onclick="overviewLoad(this, headersCmd.strings)">Strings</a>';
+	out += '			<a href="#tab-sdb" class="mdl-tabs__tab" onclick="overviewLoad(this, headersCmd.sdb)">SDB</a>';
+	out += '		</div>';
+	out += '		<div id="overview-content">';
+	out += '			<div class="mdl-tabs__panel is-active" id="tab-info"></div>';
+	out += '			<div class="mdl-tabs__panel" id="tab-symbols"></div>';
+	out += '			<div class="mdl-tabs__panel" id="tab-infos"></div>';
+	out += '			<div class="mdl-tabs__panel" id="tab-imports"></div>';
+	out += '			<div class="mdl-tabs__panel" id="tab-relocs"></div>';
+	out += '			<div class="mdl-tabs__panel" id="tab-sections"></div>';
+	out += '			<div class="mdl-tabs__panel" id="tab-strings"></div>';
+	out += '			<div class="mdl-tabs__panel" id="tab-sdb"></div>';
+	out += '		</div>';
+	out += '	</div>';
 	out += '</div>';
 
 	out += '<div class="demo-cards mdl-cell mdl-cell--4-col mdl-cell--8-col-tablet mdl-grid mdl-grid--no-spacing">';
@@ -5155,6 +5250,11 @@ function panelOverview() {
 	out += '	</div>';
 	out += '</div>';
 	out += '<div class="demo-charts mdl-color--white mdl-shadow--2dp mdl-cell mdl-cell--12-col mdl-grid">';
+	out += '	<h3>Entropy</h3>';
+	out += '	<svg fill="currentColor" viewBox="0 0 500 80" id="entropy-graph"></svg>';
+	out += '</div>';
+
+	out += '<div class="demo-charts mdl-color--white mdl-shadow--2dp mdl-cell mdl-cell--12-col mdl-grid">';
 	out += '	<svg fill="currentColor" width="200px" height="200px" viewBox="0 0 1 1" class="demo-chart mdl-cell mdl-cell--4-col mdl-cell--3-col-desktop clickable" onclick="panelDisasm();seek(\'entry0\');" title="Go to disassembly">';
 	out += '		<use xlink:href="#piechart" mask="url(#piemask)" />';
 	out += '		<text x="0.3" y="0.2" font-family="Roboto" font-size="0.1" fill="#888" text-anchor="top" dy="0.1">code</text>';
@@ -5183,64 +5283,388 @@ function panelOverview() {
 	updateFortune();
 	updateInfo();
 	updateEntropy();
+	
+	componentHandler.upgradeDom();
+
+	// Set max height with MDL behavior
+	var infoCellHeight = document.getElementById('info-cell').getBoundingClientRect().height;
+	var content = document.getElementById('overview-content');
+	content.style.height = infoCellHeight - document.getElementById('overview-tabs').getBoundingClientRect().height + 'px';
+	content.style.overflow = 'auto';
 }
 
-var disasm;
-
-function panelDisasm() {
-	var widget = widgetContainer.getWidget('Disassembly');
-	var c = widgetContainer.getWidgetDOMWrapper(widget);
-	c.classList.add('disasmPanel');
-
-	if (typeof disasm === 'undefined') {
-		disasm = new Disasm(c, 24);
-	} else {
-		disasm.resetContainer(c);
-	}
-
-	disasm.draw();
-
-	var recall = function() {
-		disasm.refreshInitialOffset();
-		disasm.resetContainer(c);
-		disasm.draw();
-	};
-
-	// Disasm is "seekable", we need to define behavior before and after drawing
-	updates.registerMethod(widget.getOffset(), function() {});
-	lastViews.registerMethod(widget.getOffset(), recall);
+function updateFortune() {
+	r2.cmd('fo', function(d) {
+		document.getElementById('fortune').innerHTML = d;
+		readFortune();
+	});
 }
 
-var hexdump;
-
-function panelHexdump() {
-	var widget = widgetContainer.getWidget('Hexdump');
-	var c = widgetContainer.getWidgetDOMWrapper(widget);
-	c.classList.add('hexdump');
-
-	if (typeof hexdump === 'undefined') {
-		var isBigEndian;
-		r2.cmd('e cfg.bigendian', function(b) {
-			isBigEndian = (b == 'true');
-		});
-
-		hexdump = new Hexdump(c, 24, isBigEndian);
-		hexdump.setOnChangeCallback(function(offset, before, after) {
-			console.log('changed');
-		});
-	} else {
-		hexdump.resetContainer(c);
+// say a message
+function speak(text, callback) {
+	if (typeof SpeechSynthesisUtterance === 'undefined') {
+		return;
 	}
+	var u = new SpeechSynthesisUtterance();
+	u.text = text;
+	u.lang = 'en-US';
 
-	hexdump.draw();
-
-	var recall = function() {
-		hexdump.refreshInitialOffset();
-		hexdump.resetContainer(c);
-		hexdump.draw();
+	u.onend = function() {
+		if (callback) {
+			callback();
+		}
 	};
 
-	// Hexdump is "seekable", we need to define behavior before and after drawing
-	updates.registerMethod(widget.getOffset(), function() {});
-	lastViews.registerMethod(widget.getOffset(), recall);
+	u.onerror = function(e) {
+		if (callback) {
+			callback(e);
+		}
+	};
+
+	speechSynthesis.speak(u);
+}
+
+function readFortune() {
+	var f = document.getElementById('fortune').innerHTML;
+	speak(f);
+}
+
+function updateInfo() {
+	r2.cmd('i', function(d) {
+		var lines = d.split(/\n/g);
+		var lines1 = lines.slice(0,lines.length / 2);
+		var lines2 = lines.slice(lines.length / 2);
+		var body = '';
+
+		body += '<table style=\'width:100%\'><tr><td>';
+		for (var i in lines1) {
+			var line = lines1[i].split(/ (.+)?/);
+			if (line.length >= 2) {
+				body += '<b>' + line[0] + '</b> ' + line[1] + '<br/>';
+			}
+		}
+		body += '</td><td>';
+		for (var i in lines2) {
+			var line = lines2[i].split(/ (.+)?/);
+			if (line.length >= 2) {
+				body += '<b>' + line[0] + '</b> ' + line[1] + '<br/>';
+			}
+		}
+		body += '</td></tr></table>';
+		document.getElementById('tab-info').innerHTML = body;
+	});
+}
+
+function updateEntropy() {
+	var eg = document.getElementById('entropy-graph');
+	var boxHeight = eg.viewBox.baseVal.height;
+	var height = (0 | boxHeight) - 19;
+	r2.cmd('p=ej 50 $s @ $M', function(d) {
+		var body = '';
+		var res = JSON.parse(d);
+		var values = new Array();
+
+		for (var i in res.entropy) {
+			values.push(res.entropy[i].value);
+		}
+
+		var nbvals = values.length;
+		var min = Math.min.apply(null, values);
+		var max = Math.max.apply(null, values);
+		var inc = 500.0 / nbvals;
+
+		// Minimum entropy has 0.1 transparency. Max has 1.
+		for (var i in values) {
+			var y = 0.1 + (1 - 0.1) * ((values[i] - min) / (max - min));
+			var addr = '0x' + res.entropy[i].addr.toString(16);
+			body += '<rect x="' + (inc * i).toString();
+			body += '" y="0" width="' + inc.toString();
+			body += '" height="' + height + '" style="fill:black;fill-opacity:';
+			body += y.toString() + ';"><title>';
+			body += addr + ' </title></rect>' ;
+
+			if (i % 8 == 0) {
+				body += '<text transform="matrix(1 0 0 1 ';
+				body += (i * inc).toString();
+				body += ' ' + (height + 15) + ')" fill="ff8888" font-family="\'Roboto\'" font-size="9">';
+				body += addr + '</text>';
+			}
+		}
+
+		eg.innerHTML = body;
+		eg.onclick = function(e) {
+			var box = eg.getBoundingClientRect();
+			var pos = e.clientX - box.left;
+			var i = 0 | (pos / (box.width / nbvals));
+			var addr = '0x' + res.entropy[i].addr.toString(16);
+			seek(addr);
+		};
+	});
+}
+
+function overviewLoad(evt, args) {
+	if (args.ready) {
+		return;
+	}
+
+	var cmd = args[0];
+	var grep = args[1];
+
+	var cmd = args.cmd;
+	if (args.grep) {
+		cmd += '~' + args.grep;
+	}
+
+	r2.cmd(cmd, function(d) {
+		var dest = document.getElementById(evt.href.split('#')[1]);
+		dest.innerHTML = '<pre style=\'margin:1.2em;\'>' + clickableOffsets(d) + '<pre>';
+	});
+
+	args.ready = true;
+}
+
+
+function getConf(confKey) {
+	var local = localStorage.getItem(confKey.name);
+	if (local !== null) {
+		if (local === 'false') {
+			local = false;
+		} else if (local === 'true') {
+			local = true;
+		}
+		return local;
+	} else {
+		return confKey.defVal;
+	}
+}
+
+function saveConf(confKey, val) {
+	localStorage.setItem(confKey.name, val);
+	confKey.apply(val);
+}
+
+function applyConf(force) {
+	force = (typeof force === 'undefined') ? false : force;
+	for (var item in R2Conf) {
+		var cnf = R2Conf[item];
+		if ((!force && getConf(cnf) !== cnf.defVal) || force) {
+			cnf.apply(getConf(cnf));
+		}
+	}
+}
+
+function resetConf() {
+	for (var item in R2Conf) {
+		var cnf = R2Conf[item];
+		localStorage.removeItem(cnf.name);
+	}
+	applyConf(true);
+}
+
+var R2Conf = {
+	platform: { name: 'platform', defVal: 'x86', apply: function(p) { r2.cmd('e asm.arch=' + p); } },
+	bits: { name: 'bits', defVal: '32', apply: function(p) { r2.cmd('e asm.bits=' + p); } },
+	os: { name: 'os', defVal: 'Linux', apply: function(p) { console.log('OS is now: ' + p); } }, // missing
+	size: { name: 'size', defVal: 'S', apply: function(p) {
+			switch (p) {
+				case 'S':
+					r2.cmd('e asm.bytes=false');
+					r2.cmd('e asm.lines=false');
+					r2.cmd('e asm.cmtright=false');
+					break;
+				case 'M':
+					r2.cmd('e asm.bytes=false');
+					r2.cmd('e asm.lines=true');
+					r2.cmd('e asm.lineswidth=8');
+					r2.cmd('e asm.cmtright=false');
+					break;
+				case 'L':
+					r2.cmd('e asm.bytes=true');
+					r2.cmd('e asm.lines=true');
+					r2.cmd('e asm.lineswidth=12');
+					r2.cmd('e asm.cmtright=true');
+					break;
+			};
+		}
+	},
+	decoding: { name: 'decoding', defVal: 'Pseudo', apply: function(p) {
+			switch (p) {
+				case 'Pseudo':
+					r2.cmd('e asm.pseudo=1');
+					r2.cmd('e asm.syntax=intel');
+					break;
+				case 'Opcodes':
+					r2.cmd('e asm.pseudo=0');
+					r2.cmd('e asm.syntax=intel');
+					break;
+				case 'ATT':
+					r2.cmd('e asm.pseudo=0');
+					r2.cmd('e asm.syntax=att');
+					break;
+			};
+		}
+	},
+	mode: { name: 'mode', defVal: 'PA', apply: function(p) {
+			switch (p) {
+				case 'PA':
+					r2.cmd('e io.va=false');
+					break;
+				case 'VA':
+					r2.cmd('e io.va=true');
+					break;
+				case 'Debug':
+					r2.cmd('e io.va=true');
+					r2.cmd('e io.debug=true');
+					break;
+			};
+		}
+	},
+	analHasNext: { name: 'analHasNext', defVal: true, apply: function(p) { console.log('analHasNext is ' + p); } },
+	analSkipNops: { name: 'analSkipNops', defVal: true, apply: function(p) { console.log('analSkipNops is ' + p); } },
+	analNonCode: { name: 'analNonCode', defVal: false, apply: function(p) { console.log('analNonCode is ' + p); } },
+	colors: { name: 'colors', defVal: true, apply: function(p) { inColor = p; } },
+	theme: { name: 'theme', defVal: 'none', apply: function(p) { r2.cmd('eco ' + p); } } // TODO
 };
+
+function panelSettings() {
+	var widget = widgetContainer.getWidget('Settings');
+	var c = widgetContainer.getWidgetDOMWrapper(widget);
+	c.innerHTML = '';
+	updates.registerMethod(widget.getOffset(), panelSettings);
+
+	var grid = document.createElement('div');
+	grid.className = 'mdl-grid';
+	c.appendChild(grid);
+
+	var platform = createGrid(grid, 'Platform');
+	drawPlatform(platform);
+
+	var disassembly = createGrid(grid, 'Disassembly');
+	drawDisassembly(disassembly);
+
+	var coreio = createGrid(grid, 'Core/IO');
+	drawCoreIO(coreio);
+
+	var analysis = createGrid(grid, 'Analysis');
+	drawAnalysis(analysis);
+
+	var colors = createGrid(grid, 'Colors');
+	drawColors(colors);
+
+	var reset = createGrid(grid, 'Reset configuration');
+	uiActionButton(reset, function() {
+		resetConf();
+		update();
+	}, 'RESET');
+
+	componentHandler.upgradeDom();
+}
+
+function savedFromList(list, name, defaultOffset) {
+	var value = defaultOffset;
+	var saved = localStorage.getItem(name);
+	if (saved !== null) {
+		value = list.indexOf(saved);
+	}
+	return value;
+}
+
+function drawPlatform(dom) {
+	var archs = ['x86', 'arm', 'mips', 'java', 'dalvik', '6502', '8051', 'h8300', 'hppa', 'i4004', 'i8008', 'lh5801',
+		'lm32', 'm68k', 'malbolge', 'mcs96', 'msp430', 'nios2', 'ppc', 'rar', 'sh', 'snes', 'sparc', 'spc700', 'sysz',
+		'tms320', 'v810', 'v850', 'ws', 'xcore', 'prospeller', 'gb', 'z80', 'arc', 'avr', 'bf', 'cr16', 'cris', 'csr',
+		'dcpu16', 'ebc'];
+	uiSelect(dom, 'Platform', archs, archs.indexOf(getConf(R2Conf.platform)), function(item) {
+		saveConf(R2Conf.platform, item);
+	});
+
+	var bits = ['64', '32', '16', '8'];
+	uiSelect(dom, 'Bits', bits, bits.indexOf(getConf(R2Conf.bits)), function(item) {
+		saveConf(R2Conf.bits, item);
+	});
+
+	var os = ['Linux', 'Windows', 'OSX'];
+	uiSelect(dom, 'OS', os, os.indexOf(getConf(R2Conf.os)), function(item) {
+		saveConf(R2Conf.os, item);
+	});
+}
+
+function drawDisassembly(dom) {
+	var sizes = ['S', 'M', 'L'];
+	uiSelect(dom, 'Size', sizes, sizes.indexOf(getConf(R2Conf.size)), function(item) {
+		saveConf(R2Conf.size, item);
+	});
+	var decoding = ['Pseudo', 'Opcodes', 'ATT'];
+	uiSelect(dom, 'Decoding', decoding, decoding.indexOf(getConf(R2Conf.decoding)), function(item) {
+		saveConf(R2Conf.decoding, item);
+	});
+}
+
+function drawCoreIO(dom) {
+	var mode = ['PA', 'VA', 'Debug'];
+	uiSelect(dom, 'Mode', mode, mode.indexOf(getConf(R2Conf.mode)), function(item) {
+		saveConf(R2Conf.mode, item);
+	});
+}
+
+function drawAnalysis(dom) {
+	var configAnal = function(param, state, conf) {
+		saveConf(conf, state);
+	};
+
+	uiSwitch(dom, 'HasNext', getConf(R2Conf.analHasNext), function(param, state) {
+		return configAnal(param, state, R2Conf.analHasNext);
+	});
+	uiSwitch(dom, 'Skip Nops', getConf(R2Conf.analSkipNops), function(param, state) {
+		return configAnal(param, state, R2Conf.analSkipNops);
+	});
+	uiSwitch(dom, 'NonCode', getConf(R2Conf.analNonCode), function(param, state) {
+		return configAnal(param, state, R2Conf.analNonCode);
+	});
+}
+
+function drawColors(dom) {
+	var colors;
+	r2.cmdj('ecoj', function(data) {
+		colors = data;
+	});
+
+	uiSwitch(dom, 'Colors', getConf(R2Conf.colors), function(param, state) {
+		saveConf(R2Conf.colors, state);
+	});
+
+	// Randomize
+	uiActionButton(dom, function() {
+		r2.cmd('ecr', function() {
+			update();
+		});
+	}, 'Randomize');
+
+	// Set default
+	uiActionButton(dom, function() {
+		r2.cmd('ecd', function() {
+			update();
+		});
+	}, 'Reset colors');
+
+	uiSelect(dom, 'Theme', colors, colors.indexOf(getConf(R2Conf.theme)), function(theme) {
+		saveConf(R2Conf.theme, theme);
+	});
+}
+
+function createGrid(dom, name) {
+	var div = document.createElement('div');
+	div.className = 'mdl-cell mdl-color--white mdl-shadow--2dp mdl-cell--4-col';
+	div.style.padding = '10px';
+	dom.appendChild(div);
+
+	var title = document.createElement('span');
+	title.className = 'mdl-layout-title';
+	title.innerHTML = name;
+	div.appendChild(title);
+
+	var content = document.createElement('div');
+	div.appendChild(content);
+
+	return content;
+}

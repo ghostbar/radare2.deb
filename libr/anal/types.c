@@ -43,6 +43,9 @@ R_API void r_anal_type_del(RAnal *anal, const char *name) {
 R_API int r_anal_type_get_size(RAnal *anal, const char *type) {
 	char *query;
 	const char *t = sdb_const_get (anal->sdb_types, type, 0);
+	if (!t) {
+		return 0;
+	}
 	if (!strcmp (t, "type")){
 		query = sdb_fmt (-1, "type.%s.size", type);
 		return sdb_num_get (anal->sdb_types, query, 0);
@@ -197,6 +200,7 @@ R_API char *r_anal_type_format(RAnal *anal, const char *t) {
 		for (n = 0; (p = sdb_array_get (DB, var, n, NULL)); n++) {
 			const char *tfmt;
 			char *type, *type2;
+			int elements;
 			//int off;
 			//int size;
 			snprintf (var2, sizeof (var2), "%s.%s", var, p);
@@ -219,20 +223,50 @@ R_API char *r_anal_type_format(RAnal *anal, const char *t) {
 								fmt = r_str_concat (fmt, tfmt);
 								vars = r_str_concat (vars, q);
 								vars = r_str_concat (vars, " ");
-							} else eprintf ("Cannot resolve type '%s'\n", var3);
+							} else eprintf ("Cannot resolve3 type '%s'\n", var3);
 						} else eprintf ("Cannot resolve type '%s'\n", var2);
 						free (type2);
 						free (q);
 					}
 				} else {
-					snprintf (var3, sizeof (var3), "type.%s", type);
-					tfmt = sdb_const_get (DB, var3, NULL);
+					bool isStruct = false;
+					bool isEnum = false;
+					elements = sdb_array_get_num (DB, var2, 2, NULL);
+					// special case for char[]. Use char* format type without *
+					if (!strncmp (type, "char", 5) && elements > 0) {
+						tfmt = sdb_const_get (DB, "type.char *", NULL);
+						if (tfmt && *tfmt == '*')
+							tfmt++;
+					} else {
+						if (!strncmp (type, "enum ", 5)) {
+							snprintf (var3, sizeof (var3), "%s", type + 5);
+							isEnum = true;
+						} else {
+							snprintf (var3, sizeof (var3), "type.%s", type);
+						}
+						tfmt = sdb_const_get (DB, var3, NULL);
+					}
 					if (tfmt) {
 						filter_type (type);
-						fmt = r_str_concat (fmt, tfmt);
-						vars = r_str_concat (vars, p);
-						vars = r_str_concat (vars, " ");
-					} else eprintf ("Cannot resolve type '%s'\n", var3);
+						if (elements > 0) {
+							fmt = r_str_concatf (fmt, "[%d]", elements);
+						}
+						if (isStruct) {
+							fmt = r_str_concat (fmt, "?");
+							vars = r_str_concatf (vars, "(%s)%s", p, p);
+							vars = r_str_concat (vars, " ");
+						} else if (isEnum) {
+							fmt = r_str_concat (fmt, "E");
+							vars = r_str_concatf (vars, "(%s)%s", type + 5, p);
+							vars = r_str_concat (vars, " ");
+						} else {
+							fmt = r_str_concat (fmt, tfmt);
+							vars = r_str_concat (vars, p);
+							vars = r_str_concat (vars, " ");
+						}
+					} else {
+						eprintf ("Cannot resolve type '%s'\n", var3);
+					}
 				}
 			}
 			free (type);
@@ -251,18 +285,23 @@ R_API int r_anal_type_func_exist(RAnal *anal, const char *func_name) {
 	return fcn && !strcmp (fcn, "func");
 }
 
+R_API const char *r_anal_type_func_ret(RAnal *anal, const char *func_name){
+	const char *query = sdb_fmt (-1, "func.%s.ret", func_name);
+	return sdb_const_get (anal->sdb_types, query, 0);
+}
+
 R_API const char *r_anal_type_func_cc(RAnal *anal, const char *func_name) {
-	char *query = sdb_fmt (-1, "func.%s.cc", func_name);
+	const char *query = sdb_fmt (-1, "func.%s.cc", func_name);
 	return sdb_const_get (anal->sdb_types, query, 0);
 }
 
 R_API int r_anal_type_func_args_count(RAnal *anal, const char *func_name) {
-	char *query = sdb_fmt (-1, "func.%s.args", func_name);
+	const char *query = sdb_fmt (-1, "func.%s.args", func_name);
 	return sdb_num_get (anal->sdb_types, query, 0);
 }
 
 R_API char *r_anal_type_func_args_type(RAnal *anal, const char *func_name, int i) {
-	char *query = sdb_fmt (-1, "func.%s.arg.%d", func_name, i);
+	const char *query = sdb_fmt (-1, "func.%s.arg.%d", func_name, i);
 	char *ret = sdb_get (anal->sdb_types, query, 0);
 	char *comma = strchr (ret, ',');
 	if (comma) {
@@ -274,7 +313,7 @@ R_API char *r_anal_type_func_args_type(RAnal *anal, const char *func_name, int i
 }
 
 R_API char *r_anal_type_func_args_name(RAnal *anal, const char *func_name, int i) {
-	char *query = sdb_fmt (-1, "func.%s.arg.%d", func_name, i);
+	const char *query = sdb_fmt (-1, "func.%s.arg.%d", func_name, i);
 	const char *get = sdb_const_get (anal->sdb_types, query, 0);
 	char *ret = strchr (get, ',');
 	return ret == 0 ? ret : ret + 1;

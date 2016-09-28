@@ -56,7 +56,7 @@ static RBinObject *r_bin_object_new(RBinFile *binfile, RBinPlugin *plugin, ut64 
 static RBinFile *r_bin_file_new(RBin *bin, const char *file, const ut8 *bytes, ut64 sz, ut64 file_sz, int rawstr, int fd, const char *xtrname, Sdb *sdb);
 static RBinFile *r_bin_file_new_from_bytes(RBin *bin, const char *file, const ut8 *bytes, ut64 sz, ut64 file_sz, int rawstr, ut64 baseaddr, ut64 loadaddr, int fd, const char *pluginname, const char *xtrname, ut64 offset);
 static int getoffset(RBin *bin, int type, int idx);
-static const char *getname(RBin *bin, int off);
+static const char *getname(RBin *bin, int type, int idx);
 static int r_bin_file_object_add(RBinFile *binfile, RBinObject *o);
 static void binobj_set_baddr(RBinObject *o, ut64 baddr);
 static ut64 binobj_a2b(RBinObject *o, ut64 addr);
@@ -109,8 +109,9 @@ R_API RBinObject *r_bin_file_object_get_cur(RBinFile *binfile) {
 }
 
 R_API RBinObject *r_bin_object_get_cur(RBin *bin) {
-	if (!bin) return NULL;
-	return r_bin_file_object_get_cur (r_bin_cur (bin));
+	return bin
+		? r_bin_file_object_get_cur (r_bin_cur (bin))
+		: NULL;
 }
 
 R_API RBinPlugin *r_bin_file_cur_plugin(RBinFile *binfile) {
@@ -138,12 +139,14 @@ static int string_scan_range(RList *list, const ut8 *buf, int min, const ut64 fr
 	ut8 tmp[R_STRING_SCAN_BUFFER_SIZE];
 	ut64 needle = from, str_start;
 	int count = 0, i, rc, runes, str_type = R_STRING_TYPE_DETECT;
-	if (type == -1)
+
+	if (type == -1) {
 		type = R_STRING_TYPE_DETECT;
+	}
 
-	if (!buf || !min)
+	if (!buf || !min) {
 		return -1;
-
+	}
 	while (needle < to) {
 		rc = r_utf8_decode (buf + needle, to - needle, NULL);
 		if (!rc) {
@@ -155,8 +158,12 @@ static int string_scan_range(RList *list, const ut8 *buf, int min, const ut64 fr
 
 		if (str_type == R_STRING_TYPE_DETECT) {
 			char *w = (char *)buf + needle + rc;
-			bool is_wide = needle + rc + 2 < to && !w[0] && w[1] && !w[2];
-			str_type = is_wide? R_STRING_TYPE_WIDE: R_STRING_TYPE_ASCII;
+			if ((to - needle) > 2) {
+				bool is_wide = needle + rc + 2 < to && !w[0] && w[1] && !w[2];
+				str_type = is_wide? R_STRING_TYPE_WIDE: R_STRING_TYPE_ASCII;
+			} else {
+				str_type = R_STRING_TYPE_ASCII;
+			}
 		}
 
 		runes = 0;
@@ -189,9 +196,8 @@ static int string_scan_range(RList *list, const ut8 *buf, int min, const ut64 fr
 			if (r_isprint (r)) {
 				rc = r_utf8_encode (&tmp[i], r);
 				runes++;
-			}
-			/* Print the escape code */
-			else if (r && r < 0x100 && strchr ("\b\v\f\n\r\t\a\e", (char)r)) {
+				/* Print the escape code */
+			} else if (r && r < 0x100 && strchr ("\b\v\f\n\r\t\a\e", (char)r)) {
 				if ((i + 32) < sizeof (tmp) && r < 28) {
 					tmp[i + 0] = '\\';
 					tmp[i + 1] = "       abtnvfr             e"[r];
@@ -201,9 +207,10 @@ static int string_scan_range(RList *list, const ut8 *buf, int min, const ut64 fr
 				}
 				rc = 2;
 				runes++;
+			} else {
+				/* \0 marks the end of C-strings */
+				break;
 			}
-			/* \0 marks the end of C-strings */
-			else break;
 		}
 
 		tmp[i++] = '\0';
@@ -224,7 +231,6 @@ static int string_scan_range(RList *list, const ut8 *buf, int min, const ut64 fr
 			}
 		}
 	}
-
 	return count;
 }
 
@@ -233,27 +239,31 @@ static void get_strings_range(RBinFile *arch, RList *list, int min, ut64 from, u
 	RBinString *ptr;
 	RListIter *it;
 
-	if (!arch || !arch->buf || !arch->buf->buf)
+	if (!arch || !arch->buf || !arch->buf->buf) {
 		return;
-
-	if (!arch->rawstr)
-		if (!plugin || !plugin->info)
+	}
+	if (!arch->rawstr) {
+		if (!plugin || !plugin->info) {
 			return;
-	if (min == 0)
+		}
+	}
+	if (min == 0) {
 		min = plugin? plugin->minstrlen: 4;
+	}
 #if 0
 	if (arch->rawstr == true)
 		min = 1;
 #endif
 	/* Some plugins return zero, fix it up */
-	if (min == 0)
+	if (min == 0) {
 		min = 4;
-	if (min < 0)
+	}
+	if (min < 0) {
 		return;
-
-	if (!to || to > arch->buf->length)
+	}
+	if (!to || to > arch->buf->length) {
 		to = arch->buf->length;
-
+	}
 	if (arch->rawstr != 2) {
 		ut64 size = to - from;
 		// in case of dump ignore here
@@ -263,40 +273,47 @@ static void get_strings_range(RBinFile *arch, RList *list, int min, ut64 from, u
 		}
 	}
 
-	if (string_scan_range (list, arch->buf->buf, min, from, to, -1) < 0)
+	if (string_scan_range (list, arch->buf->buf, min, from, to, -1) < 0) {
 		return;
-
+	}
 	r_list_foreach (list, it, ptr) {
 		RBinSection *s = r_bin_get_section_at (arch->o, ptr->paddr, false);
 		if (s) ptr->vaddr = s->vaddr + (ptr->paddr - s->paddr);
 	}
 }
 
+//TODO add this info into RBinSection since can get out of control 
 static int is_data_section(RBinFile *a, RBinSection *s) {
 	RBinObject *o = a->o;
 	if (s->has_strings) {
 		return true;
 	}
 	if (o && o->info && o->info->bclass && *o->info->bclass) {
-		if (strstr (o->info->bclass, "MACH0") && strstr (s->name, "_cstring")) // OSX
+		if (strstr (o->info->bclass, "MACH0") && strstr (s->name, "_cstring")) { // OSX
 			return true;
-		if (strstr (o->info->bclass, "ELF") && strstr (s->name, "data") && !strstr (s->name, "rel")) // LINUX
+		}
+		if (strstr (o->info->bclass, "ELF") && strstr (s->name, "data") && !strstr (s->name, "rel")) { // LINUX
 			return true;
+		}
+		if (strstr (o->info->bclass, "coff") && strstr (s->name, "data")) {
+			return true;
+		}
 #define X 1
 #define ROW (4 | 2)
 		/* probably too much false positives in here, or thats fine? */
 		if (strstr (o->info->bclass, "PE") && s->srwx & ROW && !(s->srwx & X) && s->size > 0) {
-			if (!strcmp (s->name, ".rsrc"))
+			if (!strcmp (s->name, ".rsrc")) {
 				return true;
-			if (!strcmp (s->name, ".data"))
+			}
+			if (!strcmp (s->name, ".data")) {
 				return true;
-			if (!strcmp (s->name, ".rdata"))
+			}
+			if (!strcmp (s->name, ".rdata")) {
 				return true;
+			}
 		}
 	}
-	if (strstr (s->name, "_const")) // Rust
-		return true;
-	return false;
+	return (strstr (s->name, "_const") != NULL); // Rust
 }
 
 static RList *get_strings(RBinFile *a, int min, int dump) {
@@ -304,7 +321,10 @@ static RList *get_strings(RBinFile *a, int min, int dump) {
 	RBinSection *section;
 	RBinObject *o = a? a->o: NULL;
 	RList *ret;
-	if (!o) return NULL;
+
+	if (!o) {
+		return NULL;
+	}
 	if (dump) {
 		/* dump to stdout, not stored in list */
 		ret = NULL;
@@ -320,6 +340,50 @@ static RList *get_strings(RBinFile *a, int min, int dump) {
 						section->paddr,
 						section->paddr + section->size);
 			}
+		}
+		r_list_foreach (o->sections, iter, section) {
+			RBinString *s;
+			RListIter *iter2;
+			/* load objc/swift strings */
+			const int bits = (a->o && a->o->info) ? a->o->info->bits : 32;
+			const int cfstr_size = (bits == 64) ? 32 : 16;
+			const int cfstr_offs = (bits == 64) ? 16 :  8;
+			if (strstr (section->name, "__cfstring")) {
+				int i;
+				ut8 *p;
+				for (i = 0; i < section->size; i += cfstr_size) {
+					p = a->buf->buf + section->paddr + i;
+					p += cfstr_offs;
+					ut64 cfstr_vaddr = section->vaddr + i;
+					ut64 cstr_vaddr = (bits == 64)
+						? r_read_le64 (p)
+						: r_read_le32 (p);
+					r_list_foreach (ret, iter2, s) {
+						if (s->vaddr == cstr_vaddr) {
+#if 0
+							s->vaddr = cstr_vaddr;
+#else
+							RBinString *new = R_NEW0 (RBinString);
+							new->type = s->type;
+							new->length = s->length;
+							new->size = s->size;
+							new->ordinal = s->ordinal;
+							new->paddr = new->vaddr = cfstr_vaddr;
+							new->string = r_str_newf ("cstr.%s", s->string);
+							r_list_append (ret, new);
+#endif
+							break;
+						}
+					}
+				}
+			}
+/*
+			if (is_data_section (a, section)) {
+				get_strings_range (a, ret, min,
+						section->paddr,
+						section->paddr + section->size);
+			}
+*/
 		}
 	} else {
 		get_strings_range (a, ret, min, 0, a->size);
@@ -455,8 +519,9 @@ static int r_bin_object_set_items(RBinFile *binfile, RBinObject *o) {
 	int i, minlen;
 	RBin *bin;
 
-	if (!binfile || !o || !o->plugin)
+	if (!binfile || !o || !o->plugin) {
 		return false;
+	}
 
 	bin = binfile->rbin;
 	old_o = binfile->o;
@@ -473,11 +538,14 @@ static int r_bin_object_set_items(RBinFile *binfile, RBinObject *o) {
 		o->baddr = cp->baddr (binfile);
 		binobj_set_baddr (o, old_baddr);
 	}
-	if (cp->boffset) o->boffset = cp->boffset (binfile);
+	if (cp->boffset) {
+		o->boffset = cp->boffset (binfile);
+	}
 	// XXX: no way to get info from xtr pluginz?
 	// Note, object size can not be set from here due to potential inconsistencies
-	if (cp->size)
+	if (cp->size) {
 		o->size = cp->size (binfile);
+	}
 	if (cp->binsym) {
 		for (i = 0; i < R_BIN_SYM_LAST; i++) {
 			o->binsym[i] = cp->binsym (binfile, i);
@@ -516,7 +584,9 @@ static int r_bin_object_set_items(RBinFile *binfile, RBinObject *o) {
 		}
 	//}
 	o->info = cp->info? cp->info (binfile): NULL;
-	if (cp->libs) o->libs = cp->libs (binfile);
+	if (cp->libs) {
+		o->libs = cp->libs (binfile);
+	}
 	if (cp->sections) {
 		// XXX sections are populated by call to size
 		if (!o->sections) o->sections = cp->sections (binfile);
@@ -580,13 +650,15 @@ R_API int r_bin_load_as(RBin *bin, const char *file, ut64 baseaddr, ut64 loadadd
 	RIOBind *iob = &(bin->iob);
 	RIO *io = iob? iob->get_io (iob): NULL;
 	RIODesc *desc = NULL;
-	if (!io) return false;
-
+	if (!io) {
+		return false;
+	}
 	desc = fd == -1 ?
 		iob->desc_open (io, file, O_RDONLY, 0644) :
 		iob->desc_get_by_fd (io, fd);
-	if (!desc) return false;
-	return r_bin_load_io_at_offset_as (bin, desc, baseaddr, loadaddr, xtr_idx, fileoffset, name);
+	return desc
+		? r_bin_load_io_at_offset_as (bin, desc, baseaddr, loadaddr, xtr_idx, fileoffset, name)
+		: false;
 }
 
 R_API int r_bin_reload(RBin *bin, RIODesc *desc, ut64 baseaddr) {
@@ -674,18 +746,24 @@ R_API int r_bin_load_io_at_offset_as_sz(RBin *bin, RIODesc *desc, ut64 baseaddr,
 	RBinFile *binfile = NULL;
 	ut8 is_debugger = desc && desc->plugin && desc->plugin->isdbg;
 
-	if (!io || !desc) return false;
-	if (loadaddr == UT64_MAX) loadaddr = 0;
-
+	if (!io || !desc) {
+		return false;
+	}
+	if (loadaddr == UT64_MAX) {
+		loadaddr = 0;
+	}
 	file_sz = iob->desc_size (io, desc);
 #if __APPLE__
 	/* Fix OSX/iOS debugger -- needs review for proper fix */
-	if (!file_sz || file_sz == UT64_MAX)
-		file_sz = 2 * 1024 * 1024; // 2MB
+	if (!file_sz || file_sz == UT64_MAX) {
+		file_sz = 1 * 1024 * 1024; // 1MB
+	}
 #endif
 	if (sz == 0) {
 		sz = file_sz;
 	}
+
+	bin->file = desc->name;
 
 	if (r_list_length (bin->binfiles) == 0) {
 		if ((file_sz == 0 || file_sz == UT64_MAX) && is_debugger) {
@@ -710,7 +788,9 @@ R_API int r_bin_load_io_at_offset_as_sz(RBin *bin, RIODesc *desc, ut64 baseaddr,
 				}
 				iob->desc_close (io, tdesc);
 			}
-			if (fail) return false;
+			if (fail) {
+				return false;
+			}
 		}
 	} else if (sz == UT64_MAX) {
 		return false;
@@ -718,16 +798,60 @@ R_API int r_bin_load_io_at_offset_as_sz(RBin *bin, RIODesc *desc, ut64 baseaddr,
 	sz = R_MIN (file_sz, sz);
 	if (!buf_bytes) {
 		ut64 seekaddr = is_debugger? baseaddr: loadaddr;
-		if (seekaddr == UT64_MAX) seekaddr = 0;
+
 		iob->desc_seek (io, desc, seekaddr);
 		buf_bytes = iob->desc_read (io, desc, &sz);
+		if (!buf_bytes) {
+			if (!seekaddr) {
+				seekaddr = baseaddr;
+			}
+			if (seekaddr == UT64_MAX) {
+				seekaddr = 0;
+			}
+			int totalsz = 0;
+			ut8 *buf;
+			const int blksz = 4096;
+			buf_bytes = malloc (blksz);
+			ut64 maxsz = 2 * 1024 * 1024;
+			while (totalsz < maxsz) {
+				sz = 4096;
+				iob->desc_seek (io, desc, seekaddr + totalsz);
+				buf = iob->desc_read (io, desc, &sz);
+				if (buf) {
+					ut8 *out = realloc (buf_bytes, totalsz + blksz);
+					if (!out) {
+						eprintf ("out of memory\n");
+						break;
+					}
+					buf_bytes = out;
+					memcpy (buf_bytes + totalsz, buf, blksz);
+					free (buf);
+				}
+				if (!buf || sz != blksz) {
+					// sz = 0;
+					break;
+				}
+				totalsz += sz;
+			}
+			sz = totalsz;
+		} else {
+			free (buf_bytes);
+			iob->desc_seek (io, desc, seekaddr);
+			buf_bytes = iob->desc_read (io, desc, &sz);
+		}
+#if 0
+	} else {
+		ut64 seekaddr = baseaddr;
+		iob->desc_seek (io, desc, seekaddr);
+		buf_bytes = iob->desc_read (io, desc, &sz);
+#endif
 	}
 
 	if (!name) {
 		// XXX - for the time being this is fine, but we may want to change the name to something like
 		// <xtr_name>:<bin_type_name>
 		r_list_foreach (bin->binxtrs, it, xtr) {
-			if (xtr->check && xtr->check_bytes (buf_bytes, sz)) {
+			if (xtr && xtr->check (bin) && xtr->check_bytes (buf_bytes, sz)) {
 				if (xtr && (xtr->extract_from_bytes || xtr->extractall_from_bytes)) {
 					if (is_debugger && sz != file_sz) {
 						free (buf_bytes);
@@ -1409,7 +1533,7 @@ R_API int r_bin_is_string(RBin *bin, ut64 va) {
 	RBinString *string;
 	RListIter *iter;
 	RList *list;
-	if ((list = r_bin_get_strings (bin)) == NULL) return false;
+	if (!(list = r_bin_get_strings (bin))) return false;
 	r_list_foreach (list, iter, string) {
 		if (string->vaddr == va)
 			return true;
@@ -1847,8 +1971,12 @@ static int getoffset(RBin *bin, int type, int idx) {
 	return -1;
 }
 
-static const char *getname(RBin *bin, int off) {
-	// walk symbols, find index, return name, ignore offset wtf
+static const char *getname(RBin *bin, int type, int idx) {
+	RBinFile *a = r_bin_cur (bin);
+	RBinPlugin *plugin = r_bin_file_cur_plugin (a);
+	if (plugin && plugin->get_name) {
+		return plugin->get_name (a, type, idx);
+	}
 	return NULL;
 }
 
@@ -1865,14 +1993,100 @@ R_API RBuffer *r_bin_create(RBin *bin, const ut8 *code, int codelen, const ut8 *
 	RBinPlugin *plugin = r_bin_file_cur_plugin (a);
 	if (codelen < 0) codelen = 0;
 	if (datalen < 0) datalen = 0;
-	if (plugin && plugin->create)
+	if (plugin && plugin->create) {
 		return plugin->create (bin, code, codelen, data, datalen);
+	}
+	return NULL;
+}
+
+R_API RBuffer *r_bin_package(RBin *bin, const char *type, const char *file, RList *files) {
+	if (!strcmp (type, "zip")) {
+#if 0
+		int zep = 0;
+		struct zip * z = zip_open (file, 8 | 1, &zep);
+		if (z) {
+			RListIter *iter;
+			const char *f;
+			eprintf ("zip file created\n");
+			r_list_foreach (files, iter, f) {
+				struct zip_source *zs = NULL;
+				zs = zip_source_file (z, f, 0, 1024);
+				if (zs) {
+					eprintf ("ADD %s\n", f);
+					zip_add (z, f, zs);
+					zip_source_free (zs);
+				} else {
+					eprintf ("Cannot find file %s\n", f);
+				}
+				eprintf ("zS %p\n", zs);
+			}
+			zip_close (z);
+		} else {
+			eprintf ("Cannot create zip file\n");
+		}
+#endif
+	} else if (!strcmp (type, "fat")) {
+		const char *f;
+		RListIter *iter;
+		ut32 num;
+		ut8 *num8 = (ut8*)&num;
+		RBuffer *buf = r_buf_new_file (file, true);
+		r_buf_write_at (buf, 0, (const ut8*)"\xca\xfe\xba\xbe", 4);
+		int count = r_list_length (files);
+
+		num = r_read_be32 (&count);
+		ut64 from = 0x1000;
+		r_buf_write_at (buf, 4, num8, 4);
+		int off = 12;
+		int item = 0;
+		r_list_foreach (files, iter, f) {
+			int f_len = 0;
+			ut8 *f_buf = (ut8 *)r_file_slurp (f, &f_len);
+			if (f_buf && f_len >= 0) {
+				eprintf ("ADD %s %d\n", f, f_len);
+			} else {
+				eprintf ("Cannot open %s\n", f);
+				free (f_buf);
+				continue;
+			}
+			item++;
+			/* CPU */
+			num8[0] = f_buf[7];
+			num8[1] = f_buf[6];
+			num8[2] = f_buf[5];
+			num8[3] = f_buf[4];
+			r_buf_write_at (buf, off - 4, num8, 4);
+			/* SUBTYPE */
+			num8[0] = f_buf[11];
+			num8[1] = f_buf[10];
+			num8[2] = f_buf[9];
+			num8[3] = f_buf[8];
+			r_buf_write_at (buf, off, num8, 4);
+			ut32 from32 = from;
+			/* FROM */
+			num = r_read_be32 (&from32);
+			r_buf_write_at (buf, off + 4, num8, 4);
+			r_buf_write_at (buf, from, f_buf, f_len);
+			/* SIZE */
+			num = r_read_be32 (&f_len);
+			r_buf_write_at (buf, off + 8, num8, 4);
+			off += 20;
+			from += f_len + (f_len % 0x1000);
+			free (f_buf);
+		}
+		r_buf_free (buf);
+		return NULL;
+	} else {
+		eprintf ("Usage: rabin2 -X [fat|zip] [filename] [files ...]\n");
+	}
 	return NULL;
 }
 
 R_API RBinObject *r_bin_get_object(RBin *bin) {
 	RBinObject *o = r_bin_cur_object (bin);
-	if (o) o->referenced++;
+	if (o) {
+		o->referenced++;
+	}
 	return o;
 }
 

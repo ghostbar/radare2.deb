@@ -250,6 +250,10 @@ static char* rop_classify_constant (RCore *core, RList *ropList) {
 			reg_write = parse_list (strstr (out, "reg.write"));
 			mem_read = parse_list (strstr (out, "mem.read"));
 			mem_write = parse_list (strstr (out, "mem.write"));
+		} else {
+			R_FREE (esil_flg);
+			R_FREE (esil_main);
+			continue;
 		}
 
 		if (!r_list_find (ops_list, "=", (RListComparator)strcmp)) {
@@ -291,6 +295,13 @@ static char* rop_classify_constant (RCore *core, RList *ropList) {
 		free (out);
 		R_FREE (esil_flg);
 		R_FREE (esil_main);
+		r_list_free (ops_list);
+		r_list_free (flg_read);
+		r_list_free (flg_write);
+		r_list_free (reg_read);
+		r_list_free (reg_write);
+		r_list_free (mem_read);
+		r_list_free (mem_write);
 	}
 
 	return ct;
@@ -340,6 +351,10 @@ static char* rop_classify_mov (RCore *core, RList *ropList) {
 			reg_write = parse_list (strstr (out, "reg.write"));
 			mem_read = parse_list (strstr (out, "mem.read"));
 			mem_write = parse_list (strstr (out, "mem.write"));
+		} else {
+			R_FREE (esil_flg);
+			R_FREE (esil_main);
+			continue;
 		}
 
 		if (!r_list_find (ops_list, "=", (RListComparator)strcmp)) {
@@ -400,13 +415,21 @@ static char* rop_classify_mov (RCore *core, RList *ropList) {
 				// r_cons_printf ("Checking mov %s = %s\n", item_dst->name, item_src->name);
 				// r_cons_printf ("Current values %llu, %llu\n", value_dst, value_src);
 				if (value_dst == value_src && value_dst != diff_dst) {
-					mov = r_str_concatf (mov, "%s <-- %s;", item_dst->name, item_src->name);
+					mov = r_str_concatf (mov, "%s <-- %s;",
+						item_dst->name, item_src->name);
 				}
 			}
 		}
 		free (out);
 		R_FREE (esil_flg);
 		R_FREE (esil_main);
+		r_list_free (ops_list);
+		r_list_free (flg_read);
+		r_list_free (flg_write);
+		r_list_free (reg_read);
+		r_list_free (reg_write);
+		r_list_free (mem_read);
+		r_list_free (mem_write);
 	}
 
 	return mov;
@@ -427,6 +450,8 @@ static char* rop_classify_arithmetic (RCore *core, RList *ropList) {
 
 	if (!romem || !stats) {
 		// eprintf ("Error: esil.romem and esil.stats must be set TRUE");
+		free (op_result);
+		free (op_result_r);
 		return NULL;
 	}
 
@@ -460,16 +485,10 @@ static char* rop_classify_arithmetic (RCore *core, RList *ropList) {
 			reg_write = parse_list (strstr (out, "reg.write"));
 			mem_read = parse_list (strstr (out, "mem.read"));
 			mem_write = parse_list (strstr (out, "mem.write"));
-		}
-
-		if (!ops_list) {
-			free (out);
-			free (op_result);
-			free (op_result_r);
-			free (arithmetic);
+		} else {
 			R_FREE (esil_flg);
 			R_FREE (esil_main);
-			return NULL;
+			continue;
 		}
 
 		r_list_foreach (ops_list, iter_ops, op) {
@@ -551,6 +570,13 @@ static char* rop_classify_arithmetic (RCore *core, RList *ropList) {
 		free (out);
 		R_FREE (esil_flg);
 		R_FREE (esil_main);
+		r_list_free (ops_list);
+		r_list_free (flg_read);
+		r_list_free (flg_write);
+		r_list_free (reg_read);
+		r_list_free (reg_write);
+		r_list_free (mem_read);
+		r_list_free (mem_write);
 	}
 	free (op_result);
 	free (op_result_r);
@@ -573,6 +599,8 @@ static char* rop_classify_arithmetic_const (RCore *core, RList *ropList) {
 
 	if (!romem || !stats) {
 		// eprintf ("Error: esil.romem and esil.stats must be set TRUE");
+		free (op_result);
+		free (op_result_r);
 		return NULL;
 	}
 
@@ -610,13 +638,12 @@ static char* rop_classify_arithmetic_const (RCore *core, RList *ropList) {
 			reg_write = parse_list (strstr (out, "reg.write"));
 			mem_read = parse_list (strstr (out, "mem.read"));
 			mem_write = parse_list (strstr (out, "mem.write"));
-		}
-
-		if (!ops_list) {
-			free (out);
+		} else {
+			free (op_result);
+			free (op_result_r);
 			R_FREE (esil_flg);
 			R_FREE (esil_main);
-			return NULL;
+			continue;
 		}
 
 		r_list_foreach (ops_list, iter_ops, op) {
@@ -644,7 +671,6 @@ static char* rop_classify_arithmetic_const (RCore *core, RList *ropList) {
 					if (!r_list_find (reg_write, item_dst->name, (RListComparator)strcmp)) {
 						continue;
 					}
-
 					// dont check flags for arithmetic
 					if (isFlag (item_dst)) {
 						continue;
@@ -653,14 +679,9 @@ static char* rop_classify_arithmetic_const (RCore *core, RList *ropList) {
 					if (value_dst != diff_dst) {
 						r_list_foreach (constants, iter_const, constant) {
 							ut64 value_ct = r_num_get (NULL, constant);
-
-							// r_cons_printf ("Checking %s = %s %s %s\n", item_dst->name, item_src1->name, op, constant);
-							// r_cons_printf ("Current values: %s = %llu; %s = %llu; ct = %s, old_%s = %llu\n", item_dst->name, value_dst, item_src1->name, value_src1, constant, item_src1->name, diff_src1);
 							simulate = simulate_op (op, value_src1, value_ct, diff_src1, value_ct, op_result, item_dst->size);
 							simulate_r = simulate_op (op, value_ct, value_src1, value_ct, diff_src1, op_result_r, item_dst->size);
-							// r_cons_printf ("Simulate = %llu, reversed = %llu\n", *op_result, *op_result_r);
-							if (/*value_src1 != 0 &&*/ simulate && value_dst == *op_result) {
-								// r_cons_println ("Debug: FOUND ONE !");
+							if (simulate && value_dst == *op_result) {
 								char *tmp = r_str_newf ("%s <-- %s %s %s;", item_dst->name, item_src1->name, op, constant);
 								if (arithmetic && !strstr (arithmetic, tmp)) {
 									arithmetic = r_str_concat (arithmetic, tmp);
@@ -669,8 +690,7 @@ static char* rop_classify_arithmetic_const (RCore *core, RList *ropList) {
 								}
 								free (tmp);
 								redundant = true;
-							} else if (!redundant /*&& value_src1 != 0*/ && simulate_r && value_dst == *op_result_r) {
-								// r_cons_println ("Debug: FOUND ONE reversed!");
+							} else if (!redundant && simulate_r && value_dst == *op_result_r) {
 								char *tmp = r_str_newf ("%s <-- %s %s %s;", item_dst->name, constant, op, item_src1->name);
 								if (arithmetic && !strstr (arithmetic, tmp)) {
 									arithmetic = r_str_concat (arithmetic, tmp);
@@ -687,6 +707,13 @@ static char* rop_classify_arithmetic_const (RCore *core, RList *ropList) {
 		free (out);
 		R_FREE (esil_flg);
 		R_FREE (esil_main);
+		r_list_free (flg_read);
+		r_list_free (flg_write);
+		r_list_free (reg_read);
+		r_list_free (reg_write);
+		r_list_free (mem_read);
+		r_list_free (mem_write);
+		r_list_free (ops_list);
 	}
 	free (op_result);
 	free (op_result_r);
@@ -694,7 +721,7 @@ static char* rop_classify_arithmetic_const (RCore *core, RList *ropList) {
 	return arithmetic;
 }
 
-static int rop_classify_nops (RCore *core, RList *ropList) {
+static int rop_classify_nops(RCore *core, RList *ropList) {
 	char *esil_str;
 	int changes = 1;
 	RListIter *iter_r;
@@ -714,48 +741,69 @@ static int rop_classify_nops (RCore *core, RList *ropList) {
 		char *out = sdb_querys (core->anal->esil->stats, NULL, 0, "*");
 		// r_cons_println (out);
 		if (out) {
+			free (out);
 			return 0;
 		}
 		else {
 			// directly say NOP
 			continue;
 		}
-		free (out);
 	}
 
 	return changes;
 }
 
 static void rop_classify (RCore *core, Sdb *db, RList *ropList, const char *key, unsigned int size) {
-	int nop = rop_classify_nops (core, ropList);
-	char *mov  = rop_classify_mov (core, ropList);
-	char *ct  = rop_classify_constant (core, ropList);
-	char *arithm  = rop_classify_arithmetic (core, ropList);
-	char *arithm_ct  = rop_classify_arithmetic_const (core, ropList);
-	char *str = r_str_newf ("0x%"PFMT64x, size);
+	Sdb *db_nop = NULL, *db_mov = NULL, *db_ct = NULL, *db_aritm = NULL, *db_aritm_ct = NULL;
+	int nop = 0;  rop_classify_nops (core, ropList);
+	char *mov, *ct, *arithm, *arithm_ct, *str;
+	db_nop = sdb_ns (db, "nop", true);
+	db_mov = sdb_ns (db, "mov", true);
+	db_ct = sdb_ns (db, "const", true);
+	db_aritm = sdb_ns (db, "arithm", true);
+	db_aritm_ct = sdb_ns (db, "arithm_ct", true);
+
+	if (!db_nop || !db_mov || !db_ct || !db_aritm || !db_aritm_ct) {
+		eprintf ("Error: Could not create SDB 'rop' sub-namespaces\n");
+		return;
+	}
+	nop = rop_classify_nops (core, ropList);
+	mov = rop_classify_mov (core, ropList);
+	ct = rop_classify_constant (core, ropList);
+	arithm = rop_classify_arithmetic (core, ropList);
+	arithm_ct = rop_classify_arithmetic_const (core, ropList);
+	str = r_str_newf ("0x%"PFMT64x, size);
 
 	if (nop == 1) {
-		str = r_str_concat (str, " NOP");
-		sdb_set (db, key, str, 0);
+		char *str_nop = r_str_newf ("%s NOP", str);
+		sdb_set (db_nop, key, str_nop, 0);
+		free (str_nop);
 	} else {
 		if (mov) {
-			str = r_str_concatf (str, " MOV { %s }", mov);
+			char *str_mov = r_str_newf ("%s MOV { %s }", str, mov);
+			sdb_set (db_mov, key, str_mov, 0);
+			free (str_mov);
 			free (mov);
 		}
 		if (ct) {
-			str = r_str_concatf (str, " LOAD CONST { %s }", ct);
+			char *str_ct = r_str_newf ("%s LOAD_CONST { %s }", str, ct);
+			sdb_set (db_ct, key, str_ct, 0);
+			free (str_ct);
 			free (ct);
 		}
 		if (arithm) {
-			str = r_str_concatf (str, " ARITHMETIC { %s }", arithm);
+			char *str_arithm = r_str_newf ("%s ARITHMETIC { %s }", str, arithm);
+			sdb_set (db_aritm, key, str_arithm, 0);
+			free (str_arithm);
 			free (arithm);
 		}
 		if (arithm_ct) {
-			str = r_str_concatf (str, " ARITHMETIC_CONST { %s }", arithm_ct);
+			char *str_arithm_ct = r_str_newf ("%s ARITHMETIC_CONST { %s }", str, arithm_ct);
+			sdb_set (db_aritm_ct, key, str_arithm_ct, 0);
+			free (str_arithm_ct);
 			free (arithm_ct);
 		}
 	}
 
-	sdb_set (db, key, str, 0);
 	free (str);
 }

@@ -167,7 +167,15 @@ R_API char *r_file_path(const char *bin) {
 	char *path_env;
 	char *path = NULL;
 	char *str, *ptr;
-	if (!bin) return NULL;
+	if (!bin) {
+		return NULL;
+	}
+	if (!strncmp (bin, "./", 2)) {
+		if (r_file_exists (bin)) {
+			return r_file_abspath (bin);
+		}
+		return NULL;
+	}
 	path_env = (char *)r_sys_getenv ("PATH");
 	if (path_env) {
 		str = path = strdup (path_env);
@@ -329,7 +337,7 @@ R_API char *r_file_slurp_range(const char *str, ut64 off, int sz, int *osz) {
 	char *ret;
 	size_t read_items;
 	FILE *fd = r_sandbox_fopen (str, "rb");
-	if (fd == NULL)
+	if (!fd)
 		return NULL;
 	// XXX handle out of bound reads (eof)
 	if (fseek (fd, off, SEEK_SET) < 0) {
@@ -452,7 +460,7 @@ R_API bool r_file_dump(const char *file, const ut8 *buf, int len, int append) {
 		r_sys_truncate (file, 0);
 		fd = r_sandbox_fopen (file, "wb");
 	}
-	if (fd == NULL) {
+	if (!fd) {
 		eprintf ("Cannot open '%s' for writing\n", file);
 		return false;
 	}
@@ -523,7 +531,7 @@ R_API int r_file_mmap_write(const char *file, ut64 addr, const ut8 *buf, int len
 	HANDLE fm;
 	fm = CreateFileMapping (fh, NULL,
 		PAGE_READWRITE, 0, 0, NULL);
-	if (fm == NULL) {
+	if (!fm) {
 		r_sys_perror ("r_file_mmap_write: CreateFileMapping");
 		CloseHandle (fh);
 		return -1;
