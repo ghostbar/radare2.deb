@@ -62,6 +62,7 @@ R_LIB_VERSION_HEADER (r_bin);
 #define R_BIN_REQ_DLOPEN    0x200000
 #define R_BIN_REQ_EXPORTS   0x400000
 #define R_BIN_REQ_VERSIONINFO 0x800000
+#define R_BIN_REQ_PACKAGE     0x1000000
 
 enum {
 	R_BIN_SYM_ENTRY,
@@ -296,24 +297,25 @@ typedef struct r_bin_plugin_t {
 	ut64 (*baddr)(RBinFile *arch);
 	ut64 (*boffset)(RBinFile *arch);
 	RBinAddr* (*binsym)(RBinFile *arch, int num);
-	RList* (*entries)(RBinFile *arch);
-	RList* (*sections)(RBinFile *arch);
-	RList* (*lines)(RBinFile *arch);
-	RList* (*symbols)(RBinFile *arch);
-	RList* (*imports)(RBinFile *arch);
-	RList* (*strings)(RBinFile *arch);
-	RBinInfo* (*info)(RBinFile *arch);
-	RList* (*fields)(RBinFile *arch);
-	RList* (*libs)(RBinFile *arch);
-	RList* (*relocs)(RBinFile *arch);
-	RList* (*classes)(RBinFile *arch);
-	RList* (*mem)(RBinFile *arch);
-	RList* (*patch_relocs)(RBin *bin);
-	char* (*signature)(RBinFile *arch); 
+	RList/*<RBinAddr>*/* (*entries)(RBinFile *arch);
+	RList/*<RBinSection>*/* (*sections)(RBinFile *arch);
+	RList/*<RBinDwarfRow>*/* (*lines)(RBinFile *arch);
+	RList/*<RBinSymbol>*/* (*symbols)(RBinFile *arch);
+	RList/*<RBinImport>*/* (*imports)(RBinFile *arch);
+	RList/*<RBinString>*/* (*strings)(RBinFile *arch);
+	RBinInfo/*<RBinInfo>*/* (*info)(RBinFile *arch);
+	RList/*<RBinField>*/* (*fields)(RBinFile *arch);
+	RList/*<char *>*/* (*libs)(RBinFile *arch);
+	RList/*<RBinReloc>*/* (*relocs)(RBinFile *arch);
+	RList/*<RBinClass>*/* (*classes)(RBinFile *arch);
+	RList/*<RBinMem>*/* (*mem)(RBinFile *arch);
+	RList/*<RBinReloc>*/* (*patch_relocs)(RBin *bin);
+	char* (*signature)(RBinFile *arch);
 	int (*demangle_type)(const char *str);
 	struct r_bin_dbginfo_t *dbginfo;
 	struct r_bin_write_t *write;
 	int (*get_offset)(RBinFile *arch, int type, int idx);
+	char* (*get_name)(RBinFile *arch, int type, int idx);
 	ut64 (*get_vaddr)(RBinFile *arch, ut64 baddr, ut64 paddr, ut64 vaddr);
 	RBuffer* (*create)(RBin *bin, const ut8 *code, int codelen, const ut8 *data, int datalen);
 	char* (*demangle)(const char *str);
@@ -324,7 +326,7 @@ typedef struct r_bin_plugin_t {
 } RBinPlugin;
 
 typedef struct r_bin_section_t {
-	char name[R_BIN_SIZEOF_STRINGS+1]; // TODO: must be char*
+	char name[R_BIN_SIZEOF_STRINGS + 1]; // TODO: must be char*
 	ut64 size;
 	ut64 vsize;
 	ut64 vaddr;
@@ -445,7 +447,7 @@ typedef struct r_bin_write_t {
 // TODO: has_dbg_syms... maybe flags?
 
 typedef int (*RBinGetOffset)(RBin *bin, int type, int idx);
-typedef const char *(*RBinGetName)(RBin *bin, int off);
+typedef const char *(*RBinGetName)(RBin *bin, int type, int idx);
 
 typedef struct r_bin_bind_t {
 	RBin *bin;
@@ -552,6 +554,7 @@ R_API RBinObject * r_bin_object_find_by_arch_bits (RBinFile *binfile, const char
 R_API void r_bin_list_archs(RBin *bin, int mode);
 R_API void r_bin_set_user_ptr(RBin *bin, void *user);
 R_API RBuffer *r_bin_create (RBin *bin, const ut8 *code, int codelen, const ut8 *data, int datalen);
+R_API RBuffer *r_bin_package (RBin *bin, const char *type, const char *file, RList *files);
 R_API ut64 r_bin_get_vaddr (RBin *bin, ut64 paddr, ut64 vaddr);
 R_API ut64 r_bin_a2b (RBin *bin, ut64 addr);
 R_API int r_bin_file_delete(RBin *bin, ut32 bin_fd);

@@ -524,20 +524,25 @@ R_API int r_print_string(RPrint *p, ut64 seek, const ut8 *buf, int len, int opti
 	//if (p->flags & R_PRINT_FLAGS_OFFSET)
 		// r_print_addr(p, seek);
 	p->interrupt = 0;
-	for (i=0; !p->interrupt && i<len; i++) {
-		if (zeroend && buf[i]=='\0')
+	for (i = 0; !p->interrupt && i < len; i++) {
+		if (zeroend && buf[i] == '\0') {
 			break;
+		}
 		r_print_cursor (p, i, 1);
 		if (urlencode) {
 			// TODO: some ascii can be bypassed here
 			p->cb_printf ("%%%02x", buf[i]);
 		} else {
-			if (buf[i]=='\n' || IS_PRINTABLE (buf[i]))
+			if (buf[i]=='\n' || IS_PRINTABLE (buf[i])) {
 				p->cb_printf ("%c", buf[i]);
-			else p->cb_printf ("\\x%02x", buf[i]);
+			} else {
+				p->cb_printf ("\\x%02x", buf[i]);
+			}
 		}
 		r_print_cursor (p, i, 0);
-		if (wide) i++;
+		if (wide) {
+			i++;
+		}
 	}
 	p->cb_printf ("\n");
 	return i;
@@ -719,6 +724,9 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 	//for (i=j=0; (p&&!p->interrupt) && i<len; i+=(stride?stride:inc), j+=(stride?stride:0)) {
 	for (i=j=0; i<len; i+=(stride?stride:inc), j+=(stride?stride:0)) {
 		r_print_set_screenbounds (p, addr + i);
+		if (p && p->cons && p->cons->breaked) {
+			break;
+		}
 		if (use_sparse) {
 			if (check_sparse (buf+i, inc, sparse_char)) {
 				if (i+inc>=len || check_sparse (buf+i+inc, inc, sparse_char)) {
@@ -1038,9 +1046,9 @@ R_API void r_print_zoom (RPrint *p, void *user, RPrintZoomCallback cb, ut64 from
 	} else {
 		mode = p->zoom->mode;
 		bufz = (ut8 *) malloc (len);
-		if (bufz == NULL) return;
+		if (!bufz) return;
 		bufz2 = (ut8 *) malloc (size);
-		if (bufz2 == NULL) {
+		if (!bufz2) {
 			free (bufz);
 			return;
 		}
@@ -1188,25 +1196,25 @@ R_API void r_print_fill(RPrint *p, const ut8 *arr, int size, ut64 addr, int step
 	}
 }
 
-R_API void r_print_2bpp_row(RPrint *p, ut8 *buf)
-{
+R_API void r_print_2bpp_row(RPrint *p, ut8 *buf) {
 	int i, c = 0;
 	char *color;
-	for (i=0; i<8; i++) {
+	for (i = 0; i < 8; i++) {
 		if (buf[1] & ((1<<7)>>i) ) c = 2;
 		if (buf[0] & ((1<<7)>>i) ) c++;
 		switch (c) {
-			case 0:
-				color = Color_BGWHITE;
+		case 0:
+			color = Color_BGWHITE;
 			break;
-			case 1:
-				color = Color_BGRED;
+		case 1:
+			color = Color_BGRED;
 			break;
-			case 2:
-				color = Color_BGBLUE;
+		case 2:
+			color = Color_BGBLUE;
 			break;
-			case 3:
-				color = Color_BGBLACK;
+		case 3:
+			color = Color_BGBLACK;
+			break;
 		}
 		p->cb_printf("%s  ", color);
 		c = 0;
@@ -1224,7 +1232,7 @@ R_API void r_print_2bpp_tiles(RPrint *p, ut8 *buf, ut32 tiles)
 }
 
 R_API const char * r_print_color_op_type ( RPrint *p, ut64 anal_type) {
-	switch (anal_type) {
+	switch (anal_type & R_ANAL_OP_TYPE_MASK) {
 	case R_ANAL_OP_TYPE_NOP:
 		return p->cons->pal.nop;
 	case R_ANAL_OP_TYPE_ADD:
@@ -1250,6 +1258,9 @@ R_API const char * r_print_color_op_type ( RPrint *p, ut64 anal_type) {
 		return p->cons->pal.swi;
 	case R_ANAL_OP_TYPE_JMP:
 	case R_ANAL_OP_TYPE_UJMP:
+	case R_ANAL_OP_TYPE_IJMP:
+	case R_ANAL_OP_TYPE_RJMP:
+	case R_ANAL_OP_TYPE_IRJMP:
 	case R_ANAL_OP_TYPE_MJMP:
 		return p->cons->pal.jmp;
 	case R_ANAL_OP_TYPE_CJMP:
@@ -1260,6 +1271,9 @@ R_API const char * r_print_color_op_type ( RPrint *p, ut64 anal_type) {
 	case R_ANAL_OP_TYPE_ACMP:
 		return p->cons->pal.cmp;
 	case R_ANAL_OP_TYPE_UCALL:
+	case R_ANAL_OP_TYPE_ICALL:
+	case R_ANAL_OP_TYPE_RCALL:
+	case R_ANAL_OP_TYPE_IRCALL:
 	case R_ANAL_OP_TYPE_UCCALL:
 	case R_ANAL_OP_TYPE_CALL:
 	case R_ANAL_OP_TYPE_CCALL:

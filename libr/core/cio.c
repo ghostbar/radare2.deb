@@ -1,10 +1,10 @@
-/* radare2 - LGPL - Copyright 2009-2015 - pancake */
+/* radare2 - LGPL - Copyright 2009-2016 - pancake */
 
 #include "r_core.h"
 
 R_API int r_core_setup_debugger (RCore *r, const char *debugbackend, bool attach) {
 	int pid, *p = NULL;
-	ut8 is_gdb = (strcmp (debugbackend, "gdb") == 0);
+	bool is_gdb = !strcmp (debugbackend, "gdb");
 	RIODesc * fd = r->file ? r->file->desc : NULL;
 	const char *prompt = NULL;
 
@@ -15,17 +15,17 @@ R_API int r_core_setup_debugger (RCore *r, const char *debugbackend, bool attach
 		return false;
 	}
 
-	pid = *p; // 1st element in debugger's struct must be int
 	r_config_set (r->config, "io.ff", "true");
-	if (is_gdb)
-		r_core_cmd (r, "dh gdb", 0);
-	else
-		r_core_cmdf (r, "dh %s", debugbackend);
+	r_core_cmdf (r, "dh %s", debugbackend);
+	if (!is_gdb) {
+		pid = *p; // 1st element in debugger's struct must be int
+		r_core_cmdf (r, "dp=%d", pid);
+		if (attach) {
+			r_core_cmdf (r, "dpa %d", pid);
+		}
+	}
 	//this makes to attach twice showing warnings in the output
 	//we get "resource busy" so it seems isn't an issue
-	if (attach)
-		r_core_cmdf (r, "dpa %d", pid);
-	r_core_cmdf (r, "dp=%d", pid);
 	r_core_cmd (r, ".dr*", 0);
 	/* honor dbg.bep */
 	{
@@ -45,10 +45,11 @@ R_API int r_core_setup_debugger (RCore *r, const char *debugbackend, bool attach
 	/* set the prompt if it's not been set already by the callbacks */
 	prompt = r_config_get (r->config, "cmd.prompt");
 	if (prompt && !strcmp (prompt, "")) {
-		if (r_config_get_i (r->config, "dbg.status"))
+		if (r_config_get_i (r->config, "dbg.status")) {
 			r_config_set (r->config, "cmd.prompt", ".dr*;drd;sr PC;pi 1;s-");
-		else
+		} else {
 			r_config_set (r->config, "cmd.prompt", ".dr*");
+		}
 	}
 	r_config_set (r->config, "cmd.vprompt", ".dr*");
 	return true;
@@ -459,7 +460,7 @@ static RCoreFile * r_core_file_set_first_valid(RCore *core) {
 }
 
 R_API int r_core_block_read(RCore *core) {
-	if (core->file == NULL && r_core_file_set_first_valid(core) == NULL) {
+	if (!core->file && !r_core_file_set_first_valid (core)) {
 		memset (core->block, core->io->Oxff, core->blocksize);
 		return -1;
 	}
