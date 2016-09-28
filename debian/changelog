@@ -1,3 +1,9 @@
+radare2 (0.10.6-rndunstable1) unstable; urgency=medium
+
+  * new upstream release.
+
+ -- Jose Luis Rivas <ghostbar@debian.org>  Wed, 28 Sep 2016 01:07:03 -0400
+
 radare2 (0.10.5-rndunstable1) unstable; urgency=medium
 
   * new upstream release 
