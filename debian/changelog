@@ -1,3 +1,9 @@
+radare2 (0.10.6-rnuxenial1) xenial; urgency=medium
+
+  * new upstream release. 
+
+ -- Jose Luis Rivas <ghostbar@debian.org>  Wed, 28 Sep 2016 01:04:33 -0400
+
 radare2 (0.10.5-rnuxenial1) xenial; urgency=medium
 
   * new upstream release.
