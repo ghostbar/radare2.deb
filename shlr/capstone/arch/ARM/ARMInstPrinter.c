@@ -609,6 +609,14 @@ void ARM_printInst(MCInst *MI, SStream *O, void *Info)
 							if (Opcode == ARM_t2STMDB_UPD)
 								SStream_concat0(O, ".w");
 							SStream_concat0(O, "\t");
+
+							if (MI->csh->detail) {
+								MI->flat_insn->detail->regs_read[MI->flat_insn->detail->regs_read_count] = ARM_REG_SP;
+								MI->flat_insn->detail->regs_read_count++;
+								MI->flat_insn->detail->regs_write[MI->flat_insn->detail->regs_write_count] = ARM_REG_SP;
+								MI->flat_insn->detail->regs_write_count++;
+							}
+
 							printRegisterList(MI, 4, O);
 							return;
 						}
@@ -652,6 +660,8 @@ void ARM_printInst(MCInst *MI, SStream *O, void *Info)
 							if (Opcode == ARM_t2LDMIA_UPD)
 								SStream_concat0(O, ".w");
 							SStream_concat0(O, "\t");
+							// unlike LDM, POP only write to registers, so skip the 1st access code
+							MI->ac_idx = 1;
 							if (MI->csh->detail) {
 								MI->flat_insn->detail->regs_read[MI->flat_insn->detail->regs_read_count] = ARM_REG_SP;
 								MI->flat_insn->detail->regs_read_count++;
@@ -731,7 +741,7 @@ void ARM_printInst(MCInst *MI, SStream *O, void *Info)
 							 if (MI->csh->detail) {
 								 MI->flat_insn->detail->arm.operands[MI->flat_insn->detail->arm.op_count].type = ARM_OP_REG;
 								 MI->flat_insn->detail->arm.operands[MI->flat_insn->detail->arm.op_count].reg = BaseReg;
-								 MI->flat_insn->detail->arm.operands[MI->flat_insn->detail->arm.op_count].access = CS_AC_READ;
+								 MI->flat_insn->detail->arm.operands[MI->flat_insn->detail->arm.op_count].access = CS_AC_READ | CS_AC_WRITE;
 								 MI->flat_insn->detail->arm.op_count++;
 							 }
 							 if (Writeback) {
@@ -840,17 +850,20 @@ static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 		// add 8 in ARM mode, or 4 in Thumb mode
 		// printf(">> opcode: %u\n", MCInst_getOpcode(MI));
 		if (ARM_rel_branch(MI->csh, opc)) {
+			uint32_t address;
+
 			// only do this for relative branch
 			if (MI->csh->mode & CS_MODE_THUMB) {
-				imm += (int32_t)MI->address + 4;
+				address = (uint32_t)MI->address + 4;
 				if (ARM_blx_to_arm_mode(MI->csh, opc)) {
 					// here need to align down to the nearest 4-byte address
-					imm &= ~3;
+					address &= ~3;
 				}
 			} else {
-				imm += (int32_t)MI->address + 8;
+				address = (uint32_t)MI->address + 8;
 			}
 
+			imm = address + imm;
 			printUInt32Bang(O, imm);
 		} else {
 			switch(MI->flat_insn->id) {

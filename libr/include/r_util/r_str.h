@@ -62,6 +62,7 @@ R_API int r_str_word_count(const char *string);
 R_API int r_str_char_count(const char *string, char ch);
 R_API char *r_str_word_get0set(char *stra, int stralen, int idx, const char *newstr, int *newlen);
 R_API int r_str_word_set0(char *str);
+R_API int r_str_word_set0_stack(char *str);
 R_API const char *r_str_word_get0(const char *str, int idx);
 R_API char *r_str_word_get_first(const char *string);
 R_API char *r_str_chop(char *str);
@@ -82,6 +83,7 @@ R_API int r_str_ccmp(const char *dst, const char *orig, int ch);
 R_API int r_str_cmp(const char *dst, const char *orig, int len);
 R_API int r_str_ccpy(char *dst, char *orig, int ch);
 R_API const char *r_str_get(const char *str);
+R_API const char *r_str_get2(const char *str);
 R_API char *r_str_ndup(const char *ptr, int len);
 R_API char *r_str_dup(char *ptr, const char *string);
 R_API void *r_str_free(void *ptr);
@@ -125,5 +127,7 @@ R_API char *r_hex_from_c(const char *code);
 R_API bool r_str_glob(const char *str, const char *glob);
 R_API int r_str_binstr2bin(const char *str, ut8 *out, int outlen);
 R_API char *r_str_between(const char *str, const char *prefix, const char *suffix);
+R_API bool r_str_startswith(const char *str, const char *needle);
+R_API bool r_str_endswith(const char *str, const char *needle);
 
 #endif //  R_STR_H
