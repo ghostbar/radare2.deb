@@ -6,25 +6,24 @@
 #include <capstone/arm.h>
 #include "esil.h"
 /* arm64 */
-#define IMM64(x) insn->detail->arm64.operands[x].imm
+#define IMM64(x) (ut64)(insn->detail->arm64.operands[x].imm)
 
 /* arm32 */
-#define REG(x) cs_reg_name (*handle, insn->detail->arm.operands[x].reg)
-#define REG64(x) cs_reg_name (*handle, insn->detail->arm64.operands[x].reg)
+#define REG(x) r_str_get (cs_reg_name (*handle, insn->detail->arm.operands[x].reg))
+#define REG64(x) r_str_get (cs_reg_name (*handle, insn->detail->arm64.operands[x].reg))
 #define REGID64(x) insn->detail->arm64.operands[x].reg
 #define REGID(x) insn->detail->arm.operands[x].reg
 #define IMM(x) (ut32)(insn->detail->arm.operands[x].imm)
-#define IMM64(x) insn->detail->arm64.operands[x].imm
-#define MEMBASE(x) cs_reg_name(*handle, insn->detail->arm.operands[x].mem.base)
-#define MEMBASE64(x) cs_reg_name(*handle, insn->detail->arm64.operands[x].mem.base)
+#define MEMBASE(x) r_str_get (cs_reg_name(*handle, insn->detail->arm.operands[x].mem.base))
+#define MEMBASE64(x) r_str_get (cs_reg_name(*handle, insn->detail->arm64.operands[x].mem.base))
 #define REGBASE(x) insn->detail->arm.operands[x].mem.base
 #define REGBASE64(x) insn->detail->arm64.operands[x].mem.base
 // s/index/base|reg/
-#define MEMINDEX(x) cs_reg_name(*handle, insn->detail->arm.operands[x].mem.index)
-#define MEMINDEX64(x) cs_reg_name(*handle, insn->detail->arm64.operands[x].mem.index)
+#define MEMINDEX(x) r_str_get (cs_reg_name(*handle, insn->detail->arm.operands[x].mem.index))
+#define MEMINDEX64(x) r_str_get (cs_reg_name(*handle, insn->detail->arm64.operands[x].mem.index))
 #define HASMEMINDEX64(x) insn->detail->arm64.operands[x].mem.index != ARM64_REG_INVALID
 #define MEMDISP(x) insn->detail->arm.operands[x].mem.disp
-#define MEMDISP64(x) insn->detail->arm64.operands[x].mem.disp
+#define MEMDISP64(x) (ut64)insn->detail->arm64.operands[x].mem.disp
 #define ISIMM(x) insn->detail->arm.operands[x].type == ARM_OP_IMM
 #define ISIMM64(x) insn->detail->arm64.operands[x].type == ARM64_OP_IMM
 #define ISREG(x) insn->detail->arm.operands[x].type == ARM_OP_REG
@@ -145,13 +144,13 @@ static const char *arg(RAnal *a, csh *handle, cs_insn *insn, char *buf, int n) {
 		if (ISSHIFTED (n)) {
 			sprintf (buf, "%u,%s,%s",
 			LSHIFT2 (n),
-			cs_reg_name (*handle,
-				insn->detail->arm.operands[n].reg),
+			r_str_get (cs_reg_name (*handle,
+				insn->detail->arm.operands[n].reg)),
 			DECODE_SHIFT (n));
 		} else {
 			sprintf (buf, "%s",
-			cs_reg_name (*handle,
-				insn->detail->arm.operands[n].reg));
+			r_str_get (cs_reg_name (*handle,
+				insn->detail->arm.operands[n].reg)));
 		}
 		break;
 	case ARM_OP_IMM:
@@ -192,7 +191,7 @@ static void shifted_reg64_append(RStrBuf *sb, csh *handle, cs_insn *insn, int n)
 		}
 		ut64 missing_ones = bitmask_by_width[index] << (REGSIZE64(n)*8 - LSHIFT2_64(n));
 		r_strbuf_appendf (sb, "%d,%s,%s,1,%s,<<<,1,&,?{,%"PFMT64u",}{,0,},|", 
-			LSHIFT2_64(n), REG64(n), DECODE_SHIFT64(n), REG64(n), missing_ones);
+			LSHIFT2_64(n), REG64(n), DECODE_SHIFT64(n), REG64(n), (ut64)missing_ones);
 	}
 }
 
@@ -266,7 +265,7 @@ static int analop64_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int l
 	case ARM64_INS_ADR:
 		// TODO: must be 21bit signed
 		r_strbuf_setf (&op->esil,
-			"%"PFMT64d",%s,=",IMM64(1), REG64(0));
+			"%"PFMT64d",%s,=", IMM64(1), REG64(0));
 		break;
 	case ARM64_INS_MADD:
 		r_strbuf_setf (&op->esil,
@@ -447,10 +446,10 @@ static int analop64_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int l
 	case ARM64_INS_STXRB:
 		if ((int)MEMDISP64(1) < 0) {
 			r_strbuf_setf (&op->esil, "%s,0x%"PFMT64x",%s,-,=[]",
-				REG64(0), -(int)MEMDISP64(1), MEMBASE64(1));
+				REG64(0), (ut64)-(int)MEMDISP64(1), MEMBASE64(1));
 		} else {
 			r_strbuf_setf (&op->esil, "%s,0x%"PFMT64x",%s,+,=[]",
-				REG64(0), MEMDISP64(1), MEMBASE64(1));
+				REG64(0), (ut64)MEMDISP64(1), MEMBASE64(1));
 		}
 		break;
 	case ARM64_INS_CBZ:
@@ -791,7 +790,7 @@ r4,r5,r6,3,sp,[*],12,sp,+=
 				op->refptr = 4;
 				op->ptr = addr + pcdelta + MEMDISP(1);
 				r_strbuf_appendf (&op->esil, "0x%"PFMT64x",2,2,%s,>>,<<,+,[4],%s,=",
-					MEMDISP(1), pc, REG(0));
+					(ut64)MEMDISP(1), pc, REG(0));
 			} else {
 				int disp = MEMDISP(1);
 				// not refptr, because we cant grab the reg value statically op->refptr = 4;
@@ -865,7 +864,7 @@ r4,r5,r6,3,sp,[*],12,sp,+=
 	case ARM_INS_UBFX:
 		if (IMM (3)>0 && IMM (3)<=32-IMM (2)) {
 			r_strbuf_appendf (&op->esil, "%d,%s,%d,%"PFMT64u",<<,&,>>,%s,=",
-				IMM (2),REG (1),IMM (2),bitmask_by_width[IMM (3)-1],REG (0));
+				IMM (2),REG (1),IMM (2),(ut64)bitmask_by_width[IMM (3)-1],REG (0));
 		}
 		break;
 	case ARM_INS_UXTB:
@@ -918,6 +917,7 @@ static void anop64 (csh handle, RAnalOp *op, cs_insn *insn) {
 	case ARM64_INS_ADRP:
 	case ARM64_INS_ADR:
 		op->type = R_ANAL_OP_TYPE_LEA;
+		op->ptr = IMM64(1);
 		break;
 	case ARM64_INS_NOP:
 		op->type = R_ANAL_OP_TYPE_NOP;
@@ -936,8 +936,8 @@ static void anop64 (csh handle, RAnalOp *op, cs_insn *insn) {
 			}
 			op->val = op->stackptr;
 		} else {
-				op->stackop = R_ANAL_STACK_RESET;
-				op->stackptr = 0;
+			op->stackop = R_ANAL_STACK_RESET;
+			op->stackptr = 0;
 		}
 		break;
 	case ARM64_INS_FDIV:
@@ -1048,9 +1048,15 @@ static void anop64 (csh handle, RAnalOp *op, cs_insn *insn) {
 			op->stackop = R_ANAL_STACK_GET;
 			op->stackptr = MEMDISP64(1);
 		} else {
-			int d = (int)MEMDISP64(1);
-			op->ptr = (d < 0)? -d: d;
-			op->refptr = 4;
+			if (ISIMM64(1)) {
+				op->type = R_ANAL_OP_TYPE_LEA;
+				op->ptr = IMM64(1);
+				op->refptr = 8;
+			} else {
+				int d = (int)MEMDISP64(1);
+				op->ptr = (d < 0)? -d: d;
+				op->refptr = 4;
+			}
 		}
 		break;
 	case ARM64_INS_RET:
@@ -1450,6 +1456,72 @@ static char *get_reg_profile(RAnal *anal) {
 		"=OF	vf\n"
 		"=CF	cf\n"
 		"=SN	x0\n"
+
+		/* 8bit sub-registers */
+		"gpr	b0	.8	0	0\n"
+		"gpr	b1	.8	8	0\n"
+		"gpr	b2	.8	16	0\n"
+		"gpr	b3	.8	24	0\n"
+		"gpr	b4	.8	32	0\n"
+		"gpr	b5	.8	40	0\n"
+		"gpr	b6	.8	48	0\n"
+		"gpr	b7	.8	56	0\n"
+		"gpr	b8	.8	64	0\n"
+		"gpr	b9	.8	72	0\n"
+		"gpr	b10	.8	80	0\n"
+		"gpr	b11	.8	88	0\n"
+		"gpr	b12	.8	96	0\n"
+		"gpr	b13	.8	104	0\n"
+		"gpr	b14	.8	112	0\n"
+		"gpr	b15	.8	120	0\n"
+		"gpr	b16	.8	128	0\n"
+		"gpr	b17	.8	136	0\n"
+		"gpr	b18	.8	144	0\n"
+		"gpr	b19	.8	152	0\n"
+		"gpr	b20	.8	160	0\n"
+		"gpr	b21	.8	168	0\n"
+		"gpr	b22	.8	176	0\n"
+		"gpr	b23	.8	184	0\n"
+		"gpr	b24	.8	192	0\n"
+		"gpr	b25	.8	200	0\n"
+		"gpr	b26	.8	208	0\n"
+		"gpr	b27	.8	216	0\n"
+		"gpr	b28	.8	224	0\n"
+		"gpr	b29	.8	232	0\n"
+		"gpr	b30	.8	240	0\n"
+
+		/* 16bit sub-registers */
+		"gpr	h0	.16	0	0\n"
+		"gpr	h1	.16	8	0\n"
+		"gpr	h2	.16	16	0\n"
+		"gpr	h3	.16	24	0\n"
+		"gpr	h4	.16	32	0\n"
+		"gpr	h5	.16	40	0\n"
+		"gpr	h6	.16	48	0\n"
+		"gpr	h7	.16	56	0\n"
+		"gpr	h8	.16	64	0\n"
+		"gpr	h9	.16	72	0\n"
+		"gpr	h10	.16	80	0\n"
+		"gpr	h11	.16	88	0\n"
+		"gpr	h12	.16	96	0\n"
+		"gpr	h13	.16	104	0\n"
+		"gpr	h14	.16	112	0\n"
+		"gpr	h15	.16	120	0\n"
+		"gpr	h16	.16	128	0\n"
+		"gpr	h17	.16	136	0\n"
+		"gpr	h18	.16	144	0\n"
+		"gpr	h19	.16	152	0\n"
+		"gpr	h20	.16	160	0\n"
+		"gpr	h21	.16	168	0\n"
+		"gpr	h22	.16	176	0\n"
+		"gpr	h23	.16	184	0\n"
+		"gpr	h24	.16	192	0\n"
+		"gpr	h25	.16	200	0\n"
+		"gpr	h26	.16	208	0\n"
+		"gpr	h27	.16	216	0\n"
+		"gpr	h28	.16	224	0\n"
+		"gpr	h29	.16	232	0\n"
+		"gpr	h30	.16	240	0\n"
 
 		/* 32bit sub-registers */
 		"gpr	w0	.32	0	0\n"

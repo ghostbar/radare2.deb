@@ -13,6 +13,8 @@ static void r_bp_item_free (RBreakpointItem *b) {
 	free (b->bbytes);
 	free (b->obytes);
 	free (b->module_name);
+	free (b->data);
+	free (b->cond);
 	free (b);
 }
 
@@ -59,7 +61,7 @@ repeat:
 				if (bp->bits != bp->cur->bps[i].bits)
 					continue;
 			}
-			if (bp->cur->bps[i].length == len) {
+			if (bp->cur->bps[i].length == len && bp->cur->bps[i].endian == endian) {
 				memcpy (buf, b->bytes, b->length);
 				return b->length;
 			}
@@ -163,7 +165,7 @@ static RBreakpointItem *r_bp_add(RBreakpoint *bp, const ut8 *obytes, ut64 addr, 
 			b->obytes = NULL;
 		}
 		/* XXX: endian .. use bp->endian */
-		ret = r_bp_get_bytes (bp, b->bbytes, size, 0, 0);
+		ret = r_bp_get_bytes (bp, b->bbytes, size, bp->endian, 0);
 		if (ret != size) {
 			eprintf ("Cannot get breakpoint bytes. No architecture selected?\n");
 			r_bp_item_free (b);
@@ -252,7 +254,7 @@ R_API int r_bp_list(RBreakpoint *bp, int rad) {
 		switch (rad) {
 		case 0:
 			bp->cb_printf ("0x%08"PFMT64x" - 0x%08"PFMT64x \
-				" %d %c%c%c %s %s %s cmd=\"%s\" " \
+				" %d %c%c%c %s %s %s cmd=\"%s\" cond=\"%s\" " \
 				"name=\"%s\" module=\"%s\"\n",
 				b->addr, b->addr + b->size, b->size,
 				(b->rwx & R_BP_PROT_READ) ? 'r' : '-',
@@ -261,9 +263,10 @@ R_API int r_bp_list(RBreakpoint *bp, int rad) {
 				b->hw ? "hw": "sw",
 				b->trace ? "trace" : "break",
 				b->enabled ? "enabled" : "disabled",
-				b->data ? b->data : "",
-				b->name ? b->name : "",
-				b->module_name ? b->module_name : "");
+				r_str_get2 (b->data),
+				r_str_get2 (b->cond),
+				r_str_get2 (b->name),
+				r_str_get2 (b->module_name));
 			break;
 		case 1:
 		case 'r':
@@ -282,7 +285,8 @@ R_API int r_bp_list(RBreakpoint *bp, int rad) {
 			bp->cb_printf ("%s{\"addr\":%"PFMT64d",\"size\":%d,"
 				"\"prot\":\"%c%c%c\",\"hw\":%s,"
 				"\"trace\":%s,\"enabled\":%s,"
-				"\"data\":\"%s\"}",
+				"\"data\":\"%s\","
+				"\"cond\":\"%s\"}",
 				iter->p ? "," : "",
 				b->addr, b->size,
 				(b->rwx & R_BP_PROT_READ) ? 'r' : '-',
@@ -291,7 +295,8 @@ R_API int r_bp_list(RBreakpoint *bp, int rad) {
 				b->hw ? "true" : "false",
 				b->trace ? "true" : "false",
 				b->enabled ? "true" : "false",
-				b->data ? b->data : "");
+				r_str_get2 (b->data),
+				r_str_get2 (b->cond));
 			break;
 		}
 		/* TODO: Show list of pids and trace points, conditionals */

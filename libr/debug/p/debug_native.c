@@ -75,7 +75,7 @@ static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int 
 #   define WIFCONTINUED(s) ((s) == 0xffff)
 #  endif
 # endif
-#if __x86_64__
+#if __x86_64__ && !defined(__ANDROID__)
 #include "native/linux/linux_coredump.h"
 #endif
 #else // OS
@@ -121,20 +121,21 @@ static const char *r_debug_native_reg_profile (RDebug *dbg) {
 #include "native/reg.c" // x86 specific
 
 #endif
-
-static int r_debug_native_step (RDebug *dbg) {
 #if __WINDOWS__ && !__CYGWIN__
+static int windows_step (RDebug *dbg) {
 	/* set TRAP flag */
 	CONTEXT regs __attribute__ ((aligned (16)));
-	r_debug_native_reg_read (dbg, R_REG_TYPE_GPR,
-				(ut8 *)&regs, sizeof (regs));
+	r_debug_native_reg_read (dbg, R_REG_TYPE_GPR, (ut8 *)&regs, sizeof (regs));
 	regs.EFlags |= 0x100;
-	r_debug_native_reg_write (dbg, R_REG_TYPE_GPR,
-				(ut8 *)&regs, sizeof (regs));
-	r_debug_native_continue (dbg, dbg->pid,
-				dbg->tid, dbg->reason.signum);
+	r_debug_native_reg_write (dbg, R_REG_TYPE_GPR, (ut8 *)&regs, sizeof (regs));
+	r_debug_native_continue (dbg, dbg->pid, dbg->tid, dbg->reason.signum);
 	r_debug_handle_signals (dbg);
 	return true;
+}
+#endif
+static int r_debug_native_step (RDebug *dbg) {
+#if __WINDOWS__ && !__CYGWIN__
+	return windows_step (dbg);
 #elif __APPLE__
 	return xnu_step (dbg);
 #elif __BSD__
@@ -446,7 +447,7 @@ static RList *r_debug_native_pids (int pid) {
 
 		/* list parents */
 		dh = opendir ("/proc");
-		if (dh == NULL) {
+		if (!dh) {
 			r_sys_perror ("opendir /proc");
 			r_list_free (list);
 			return NULL;
@@ -570,7 +571,7 @@ static RList *r_debug_native_pids (int pid) {
 
 static RList *r_debug_native_threads (RDebug *dbg, int pid) {
 	RList *list = r_list_new ();
-	if (list == NULL) {
+	if (!list) {
 		eprintf ("No list?\n");
 		return NULL;
 	}
@@ -635,11 +636,26 @@ static int windows_reg_read (RDebug *dbg, int type, ut8 *buf, int size) {
 	}
 	if (sizeof(CONTEXT) < size)
 		size = sizeof(CONTEXT);
-
 	memcpy (buf, &ctx, size);
 	return size;
 // XXX this must be defined somewhere else
 
+}
+static int windows_reg_write (RDebug *dbg, int type, const ut8* buf, int size) {
+	BOOL ret = false;
+	HANDLE thread;
+	CONTEXT ctx __attribute__((aligned (16)));
+	thread = w32_open_thread (dbg->pid, dbg->tid);
+	ctx.ContextFlags = CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS;
+	GetThreadContext (thread, &ctx);
+	if (type == R_REG_TYPE_DRX || type == R_REG_TYPE_GPR || type == R_REG_TYPE_SEG) {
+		if (sizeof(CONTEXT) < size)
+			size = sizeof(CONTEXT);
+		memcpy (&ctx, buf, size);
+		ret = SetThreadContext (thread, &ctx)? true: false;
+	}
+	CloseHandle (thread);
+	return ret;
 }
 #endif
 
@@ -741,19 +757,9 @@ static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int 
 		return xnu_reg_write (dbg, type, buf, size);
 #else
 		//eprintf ("TODO: No support for write DRX registers\n");
-		#if __WINDOWS__
-		int tid = dbg->tid;
-		int pid = dbg->pid;
-		BOOL ret;
-		HANDLE thread;
-		CONTEXT ctx __attribute__((aligned (16)));
-		memcpy (&ctx, buf, sizeof (CONTEXT));
-		ctx.ContextFlags = CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS;
-		thread = w32_open_thread (pid, tid);
-		ret=SetThreadContext (thread, &ctx)? true: false;
-		CloseHandle(thread);
-		return ret;
-		#endif
+#if __WINDOWS__ && !__CYGWIN__
+		return windows_reg_write (dbg, type, buf, size);
+#endif
 		return false;
 #endif
 #else // i386/x86-64
@@ -762,15 +768,7 @@ static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int 
 	} else
 	if (type == R_REG_TYPE_GPR) {
 #if __WINDOWS__ && !__CYGWIN__
-		BOOL ret;
-		CONTEXT ctx __attribute__((aligned (16)));
-		memcpy (&ctx, buf, sizeof (CONTEXT));
-		ctx.ContextFlags = CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS;
-	//	eprintf ("EFLAGS =%x\n", ctx.EFlags);
-		HANDLE thread = w32_open_thread (dbg->pid, dbg->tid);
-		ret = SetThreadContext (thread, &ctx)? true: false;
-		CloseHandle (thread);
-		return ret;
+		return windows_reg_write(dbg, type, buf, size);
 #elif __linux__
 		return linux_reg_write (dbg, type, buf, size);
 #elif __sun || __NetBSD__ || __KFBSD__ || __OpenBSD__
@@ -806,8 +804,8 @@ static RList *r_debug_native_sysctl_map (RDebug *dbg) {
 	if (sysctl (mib, 4, NULL, &len, NULL, 0) != 0) return NULL;
 	len = len * 4 / 3;
 	buf = malloc(len);
-	if (buf == NULL) return (NULL);
-	if (sysctl(mib, 4, buf, &len, NULL, 0) != 0) {
+	if (!buf) {return NULL};
+	if (sysctl (mib, 4, buf, &len, NULL, 0) != 0) {
 		free (buf);
 		return NULL;
 	}
@@ -822,7 +820,7 @@ static RList *r_debug_native_sysctl_map (RDebug *dbg) {
 		kve = (struct kinfo_vmentry *)(uintptr_t)bp;
 		map = r_debug_map_new (kve->kve_path, kve->kve_start,
 					kve->kve_end, kve->kve_protection, 0);
-		if (map == NULL) break;
+		if (!map) break;
 		r_list_append (list, map);
 		bp += kve->kve_structsize;
 	}
@@ -1427,7 +1425,7 @@ static RList *r_debug_desc_native_list (int pid) {
 	if (sysctl (mib, 4, NULL, &len, NULL, 0) != 0) return NULL;
 	len = len * 4 / 3;
 	buf = malloc(len);
-	if (buf == NULL) return (NULL);
+	if (!buf) {return NULL};
 	if (sysctl (mib, 4, buf, &len, NULL, 0) != 0) {
 		free (buf);
 		return NULL;
@@ -1480,7 +1478,7 @@ static RList *r_debug_desc_native_list (int pid) {
 		perm |= (kve->kf_flags & KF_FLAG_WRITE)?R_IO_WRITE:0;
 		desc = r_debug_desc_new (kve->kf_fd, str, perm, type,
 					kve->kf_offset);
-		if (desc == NULL) break;
+		if (!desc) break;
 		r_list_append (ret, desc);
 	}
 
@@ -1535,8 +1533,12 @@ static int r_debug_setup_ownership (int fd, RDebug *dbg) {
 static bool r_debug_gcore (RDebug *dbg, RBuffer *dest) {
 #if __APPLE__
 	return xnu_generate_corefile (dbg, dest);
-#elif __linux__ && (__x86_64__ || __i386__) && !__ANDROID__
+#elif __linux__ && (__x86_64__ || __i386__ || __arm__ || __arm64__)
+#  if __ANDROID__
+	return false;
+#  else
 	return linux_generate_corefile (dbg, dest);
+#  endif
 #else
 	return false;
 #endif
@@ -1623,5 +1625,6 @@ struct r_lib_struct_t radare_plugin = {
 struct r_debug_plugin_t r_debug_plugin_native = {
 	NULL // .name = "native",
 };
+
 
 #endif // DEBUGGER

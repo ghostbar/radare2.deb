@@ -30,10 +30,11 @@ R_API RBuffer *r_buf_new(void);
 R_API RBuffer *r_buf_new_with_bytes(const ut8* bytes, ut64 len);
 R_API RBuffer *r_buf_new_with_pointers(const ut8 *bytes, ut64 len);
 R_API RBuffer *r_buf_new_with_buf(RBuffer *b);
-R_API RBuffer *r_buf_new_file(const char *file);
+R_API RBuffer *r_buf_new_file(const char *file, bool newFile);
 R_API RBuffer *r_buf_new_slurp(const char *file);
 R_API RBuffer *r_buf_mmap(const char *file, int flags);
 R_API RBuffer *r_buf_new_sparse();
+R_API bool r_buf_dump (RBuffer *buf, const char *file);
 /* methods */
 R_API int r_buf_set_bits(RBuffer *b, int bitoff, int bitsize, ut64 value);
 R_API int r_buf_set_bytes(RBuffer *b, const ut8 *buf, ut64 length);
@@ -58,4 +59,5 @@ R_API void r_buf_free(RBuffer *b);
 R_API char *r_buf_free_to_string(RBuffer *b);
 R_API const ut8 *r_buf_buffer(RBuffer *b);
 R_API ut64 r_buf_size(RBuffer *b);
+R_API bool r_buf_resize(RBuffer *b, ut64 newsize);
 #endif //  R_BUF_H

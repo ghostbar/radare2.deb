@@ -2735,7 +2735,7 @@ R_API int r_core_visual_graph(RCore *core, RAGraph *g, RAnalFunction *_fcn, int 
 					" '            - toggle asm.comments\n"
 					" \"            - toggle graph.refs\n"
 					" /            - highlight text\n"
-					" |            - set cmd.gprompt"
+					" |            - set cmd.gprompt\n"
 					" >            - show function callgraph (see graph.refs)\n"
 					" <            - show program callgraph (see graph.refs)\n"
 					" Home/End     - go to the top/bottom of the canvas\n"
@@ -2805,7 +2805,11 @@ R_API int r_core_visual_graph(RCore *core, RAGraph *g, RAnalFunction *_fcn, int 
 		}
 		case 'R':
 			if (!fcn) break;
-			r_core_cmd0 (core, "ecr");
+			if (r_config_get_i (core->config, "scr.randpal")) {
+				r_core_cmd0 (core, "ecr");
+			} else {
+				r_core_cmd0 (core, "ecn");
+			}
 			g->color_box = core->cons->pal.graph_box;
 			g->color_box2 = core->cons->pal.graph_box2;
 			g->color_box3 = core->cons->pal.graph_box3;
@@ -2896,6 +2900,9 @@ R_API int r_core_visual_graph(RCore *core, RAGraph *g, RAnalFunction *_fcn, int 
 			} else {
 				get_anode (g->curnode)->x -= movspeed;
 			}
+			break;
+		case 'v':
+			r_core_visual_anal (core);
 			break;
 		case 'L': get_anode (g->curnode)->x += movspeed; break;
 		case 'j': can->sy -= movspeed * (invscroll ? -1 : 1); break;
