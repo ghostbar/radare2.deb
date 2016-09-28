@@ -120,7 +120,7 @@ R_API void r_cons_color (int fg, int r, int g, int b) {
 
 R_API void r_cons_println(const char* str) {
 	r_cons_print (str);
-	r_cons_print ("\n");
+	r_cons_newline ();
 }
 
 R_API void r_cons_strcat_justify (const char *str, int j, char c) {
@@ -297,7 +297,7 @@ static void palloc(int moar) {
 	if (moar <= 0) {
 		return;
 	}
-	if (I.buffer == NULL) {
+	if (!I.buffer) {
 		int new_sz;
 		if ((INT_MAX - MOAR) < moar) {
 			return;
@@ -467,7 +467,7 @@ R_API void r_cons_flush() {
 		return;
 	}
 	r_cons_filter ();
-	if (I.is_interactive) {
+	if (I.is_interactive && I.fdout == 1) {
 		/* Use a pager if the output doesn't fit on the terminal window. */
 		if (I.pager && *I.pager && I.buffer_len > 0
 				&& r_str_char_count (I.buffer, '\n') >= I.rows) {
@@ -664,6 +664,9 @@ R_API void r_cons_memcat(const char *str, int len) {
 		I.buffer_len += len;
 		I.buffer[I.buffer_len] = 0;
 	}
+	if (I.flush) {
+		r_cons_flush ();
+	}
 }
 
 R_API void r_cons_memset(char ch, int len) {
@@ -723,6 +726,34 @@ R_API int r_cons_get_cursor(int *rows) {
 	return col;
 }
 
+R_API bool r_cons_isatty() {
+#if __UNIX__ || __CYGWIN__
+	struct winsize win = { 0 };
+	const char *tty;
+	struct stat sb;
+
+	if (!isatty (1)) {
+		return false;
+	}
+	if (ioctl (1, TIOCGWINSZ, &win)) {
+		return false;
+	}
+	if ((win.ws_col == 0) || (win.ws_row == 0)) {
+		return false;
+	}
+	tty = ttyname (1);
+	if (!tty) {
+		return false;
+	}
+	if (stat (tty, &sb) || !S_ISCHR (sb.st_mode)) {
+		return false;
+	}
+	return true;
+#endif
+	/* non-UNIX do not have ttys */
+	return false;
+}
+
 // XXX: if this function returns <0 in rows or cols expect MAYHEM
 R_API int r_cons_get_size(int *rows) {
 #if __WINDOWS__ && !__CYGWIN__
@@ -738,8 +769,8 @@ R_API int r_cons_get_size(int *rows) {
 	struct winsize win = { 0 };
 	if (isatty (0) && ioctl (0, TIOCGWINSZ, &win) == 0) {
 		if ((win.ws_col == 0) || (win.ws_row == 0)) {
-			// TODO: use ttyname() ?
-			int fd = open ("/dev/tty", O_RDONLY);
+			const char *tty = ttyname (1);
+			int fd = open (tty? tty: "/dev/tty", O_RDONLY);
 			if (fd != -1) {
 				int ret = ioctl (fd, TIOCGWINSZ, &win);
 				if ((ret != 0) || (win.ws_col == 0) || (win.ws_row == 0)) {
@@ -775,10 +806,12 @@ R_API int r_cons_get_size(int *rows) {
 	I.rows = -1;
 	I.columns = -1;
 #endif
-	if (I.rows<0)
+	if (I.rows < 0) {
 		I.rows = 0;
-	if (I.columns<0)
+	}
+	if (I.columns < 0) {
 		I.columns = 0;
+	}
 	if (I.force_columns) I.columns = I.force_columns;
 	if (I.force_rows) I.rows = I.force_rows;
 	if (I.fix_columns) I.columns += I.fix_columns;
@@ -793,8 +826,11 @@ R_API void r_cons_show_cursor (int cursor) {
 #if __WINDOWS__ && !__CYGWIN__
 	// TODO
 #else
-	if (cursor) write (1, "\x1b[?25h", 6);
-	else write (1, "\x1b[?25l", 6);
+	if (cursor) {
+		write (1, "\x1b[?25h", 6);
+	} else {
+		write (1, "\x1b[?25l", 6);
+	}
 #endif
 }
 
@@ -812,19 +848,27 @@ R_API void r_cons_show_cursor (int cursor) {
  */
 static int oldraw = -1;
 R_API void r_cons_set_raw(int is_raw) {
-	if (oldraw != -1)
-		if (is_raw == oldraw)
+	if (oldraw != -1) {
+		if (is_raw == oldraw) {
 			return;
+		}
+	}
 #if EMSCRIPTEN
 	/* do nothing here */
 #elif __UNIX__ || __CYGWIN__
 	// enforce echo off
 	I.term_raw.c_lflag &= ~(ECHO|ECHONL|ICANON|ISIG|IEXTEN);
-	if (is_raw) tcsetattr (0, TCSANOW, &I.term_raw);
-	else tcsetattr (0, TCSANOW, &I.term_buf);
+	if (is_raw) {
+		tcsetattr (0, TCSANOW, &I.term_raw);
+	} else {
+		tcsetattr (0, TCSANOW, &I.term_buf);
+	}
 #elif __WINDOWS__
-	if (is_raw) SetConsoleMode (h, (DWORD)I.term_raw);
-	else SetConsoleMode (h, (DWORD)I.term_buf);
+	if (is_raw) {
+		SetConsoleMode (h, (DWORD)I.term_raw);
+	} else {
+		SetConsoleMode (h, (DWORD)I.term_buf);
+	}
 #else
 #warning No raw console supported for this platform
 #endif
@@ -903,16 +947,23 @@ R_API void r_cons_set_title(const char *str) {
 }
 
 R_API void r_cons_zero() {
-	if (I.line) I.line->zerosep = true;
+	if (I.line) {
+		I.line->zerosep = true;
+	}
 	write (1, "", 1);
 }
 
 R_API void r_cons_highlight (const char *word) {
-	char *rword, *res, *clean;
-	char *inv[2] = {R_CONS_INVERT (true, true),
-			R_CONS_INVERT (false, true)};
-	int linv[2] = { strlen (inv[0]), strlen (inv[1]) };
 	int l, *cpos;
+	char *rword, *res, *clean;
+	char *inv[2] = {
+		R_CONS_INVERT (true, true),
+		R_CONS_INVERT (false, true)
+	};
+	int linv[2] = {
+		strlen (inv[0]),
+		strlen (inv[1])
+	};
 
 	if (word && *word && I.buffer) {
 		int word_len = strlen (word);

@@ -146,7 +146,7 @@ static int fork_and_ptraceme(RIO *io, int bits, const char *cmd) {
         if (!CreateProcess (argv[0], cmdline, NULL, NULL, FALSE,
 			CREATE_NEW_CONSOLE | DEBUG_ONLY_THIS_PROCESS,
 			NULL, NULL, &si, &pi)) {
-			r_sys_perror ("CreateProcess");
+		r_sys_perror ("CreateProcess");
 		return -1;
         }
 	free (cmdline);
@@ -168,7 +168,9 @@ static int fork_and_ptraceme(RIO *io, int bits, const char *cmd) {
 
 	eprintf ("Spawned new process with pid %d, tid = %d\n", pid, tid);
 	io->winbase = de.u.CreateProcessInfo.lpBaseOfImage;
-        return pid;
+	io->wintid = tid;
+	io->winpid = pid;
+	return pid;
 
 err_fork:
 	eprintf ("ERRFORK\n");
@@ -213,9 +215,9 @@ static int fork_and_ptraceme(RIO *io, int bits, const char *cmd) {
 		cpu_type_t cpu;
 		pid_t p = -1;
 		int ret, useASLR = io->aslr;
-		char *_cmd = io->args ?
-				r_str_concatf (strdup (cmd), " %s", io->args) :
-				strdup (cmd);
+		char *_cmd = io->args
+			? r_str_concatf (strdup (cmd), " %s", io->args)
+			: strdup (cmd);
 		argv = r_str_argv (_cmd, NULL);
 		if (!argv) {
 			free (_cmd);
@@ -229,7 +231,9 @@ static int fork_and_ptraceme(RIO *io, int bits, const char *cmd) {
 		}
 		posix_spawnattr_init (&attr);
 		if (useASLR != -1) {
-			if (!useASLR) ps_flags |= _POSIX_SPAWN_DISABLE_ASLR;
+			if (!useASLR) {
+				ps_flags |= _POSIX_SPAWN_DISABLE_ASLR;
+			}
 		}
 
 		posix_spawn_file_actions_init (&fileActions);
@@ -239,15 +243,16 @@ static int fork_and_ptraceme(RIO *io, int bits, const char *cmd) {
 		ps_flags |= POSIX_SPAWN_CLOEXEC_DEFAULT;
 		ps_flags |= POSIX_SPAWN_START_SUSPENDED;
 
-   		posix_spawnattr_setsigmask(&attr, &no_signals);
-    		posix_spawnattr_setsigdefault(&attr, &all_signals);
+   		posix_spawnattr_setsigmask (&attr, &no_signals);
+    		posix_spawnattr_setsigdefault (&attr, &all_signals);
 
 		(void)posix_spawnattr_setflags (&attr, ps_flags);
-#if __i386__ || __x86_64__
-		cpu = CPU_TYPE_I386;
-		if (bits == 64) cpu |= CPU_ARCH_ABI64;
-#else
 		cpu = CPU_TYPE_ANY;
+#if __x86_64__
+		if (bits == 32) {
+			cpu = CPU_TYPE_I386;
+			// cpu |= CPU_ARCH_ABI64;
+		}
 #endif
 		posix_spawnattr_setbinpref_np (&attr, 1, &cpu, &copied);
 		{
@@ -265,7 +270,7 @@ static int fork_and_ptraceme(RIO *io, int bits, const char *cmd) {
 			eprintf ("posix_spawnp: Invalid argument\n");
 			break;
 		case 86:
-			eprintf ("Unsupported architecture\n");
+			eprintf ("Unsupported architecture. Please specify -b 32\n");
 			break;
 		default:
 			eprintf ("posix_spawnp: unknown error %d\n", ret);
@@ -414,22 +419,22 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 	} else if (!strncmp (file, "pidof://", 8)) {
 		const char *procname = file + 8;
 		int target_pid = get_pid_of (io, procname);
-		if (target_pid != -1) {
-			snprintf (uri, sizeof (uri), "dbg://%d", target_pid);
-			file = uri;
-		} else {
+		if (target_pid == -1) {
 			eprintf ("Cannot find matching process for %s\n", file);
 			return NULL;
 		}
+		snprintf (uri, sizeof (uri), "dbg://%d", target_pid);
+		file = uri;
 	}
 	if (__plugin_open (io, file,  0)) {
 		const char *pidfile = file + 6;
 		char *endptr;
 		int pid = (int)strtol (pidfile, &endptr, 10);
-		if (endptr == pidfile || pid < 0) pid = -1;
-
+		if (endptr == pidfile || pid < 0) {
+			pid = -1;
+		}
 		if (pid == -1) {
-			pid = fork_and_ptraceme (io, io->bits, file+6);
+			pid = fork_and_ptraceme (io, io->bits, file + 6);
 			if (pid == -1) {
 				return NULL;
 			}

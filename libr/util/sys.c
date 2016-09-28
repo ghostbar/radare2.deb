@@ -102,11 +102,13 @@ R_API ut64 r_sys_now(void) {
 R_API int r_sys_truncate(const char *file, int sz) {
 #if __WINDOWS__ && !__CYGWIN__
 	int fd = r_sandbox_open (file, O_RDWR, 0644);
-	if (!fd) return false;
+	if (fd != -1) return false;
 	ftruncate (fd, sz);
 	close (fd);
 	return true;
 #else
+	if (r_sandbox_enable (0))
+		return false;
 	return truncate (file, sz)? false: true;
 #endif
 }
@@ -166,7 +168,7 @@ R_API void r_sys_backtrace(void) {
 	while (fp != NULL) {
 		saved_fp = *fp;
 		fp = saved_fp;
-		if (*fp == NULL)
+		if (!*fp)
 			break;
 		saved_pc = *(fp + 2);
 		printf ("[%d] pc == %p fp == %p\n", depth++, saved_pc, saved_fp);
@@ -202,7 +204,7 @@ R_API int r_sys_clearenv(void) {
 #if __APPLE__ && __POWERPC__
 	/* do nothing */
 #else
-	if (environ == NULL) {
+	if (!environ) {
 		return 0;
 	}
 	while (*environ != NULL) {
@@ -219,7 +221,7 @@ R_API int r_sys_clearenv(void) {
 R_API int r_sys_setenv(const char *key, const char *value) {
 #if __UNIX__ || __CYGWIN__ && !defined(MINGW32)
 	if (!key) return 0;
-	if (value == NULL) {
+	if (!value) {
 		unsetenv (key);
 		return 0;
 	}
@@ -518,6 +520,17 @@ R_API char *r_sys_cmd_str(const char *cmd, const char *input, int *len) {
 	if (r_sys_cmd_str_full (cmd, input, &output, len, NULL))
 		return output;
 	return NULL;
+}
+
+R_API bool r_sys_mkdir(const char *dir) {
+	if (r_sandbox_enable (0))
+		return false;
+
+#if __WINDOWS__ && !defined(__CYGWIN__)
+	return CreateDirectory (dir, NULL) != 0;
+#else
+	return mkdir (dir, 0755) != -1;
+#endif
 }
 
 R_API bool r_sys_mkdirp(const char *dir) {
