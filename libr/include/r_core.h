@@ -167,6 +167,7 @@ typedef struct r_core_t {
 	char *lastsearch;
 	bool fixedblock;
 	char *cmdfilter;
+	bool break_loop;
 } RCore;
 
 R_API int r_core_bind(RCore *core, RCoreBind *bnd);
@@ -553,7 +554,7 @@ typedef struct {
 R_API char *r_core_anal_hasrefs(RCore *core, ut64 value);
 R_API RCoreAnalStats* r_core_anal_get_stats (RCore *a, ut64 from, ut64 to, ut64 step);
 R_API void r_core_anal_stats_free (RCoreAnalStats *s);
-R_API void r_core_anal_list_vtables(void *core);
+R_API void r_core_anal_list_vtables(void *core, bool printJson);
 
 R_API void r_core_syscmd_ls(const char *input);
 R_API void r_core_syscmd_cat(const char *file);

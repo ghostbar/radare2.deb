@@ -4,20 +4,48 @@
 #include <r_anal.h>
 #include <r_util.h>
 #include <r_core.h>
+#define LOOP_MAX 10
 
-static bool r_anal_emul_init (RCore *core) {
+enum {
+	ROMEM=0,
+	ASM_TRACE,
+	ANAL_TRACE,
+	DBG_TRACE,
+	NONULL,
+	STATES_SIZE
+};
+
+static bool r_anal_emul_init(RCore *core, bool *state) {
+	state[ROMEM] = r_config_get_i (core->config, "esil.romem");
 	r_config_set (core->config, "esil.romem", "true");
+	state[ASM_TRACE] = r_config_get_i (core->config, "asm.trace");
 	r_config_set (core->config, "asm.trace", "true");
+	state[ANAL_TRACE] = r_config_get_i (core->config, "anal.trace");
 	r_config_set (core->config, "anal.trace", "true");
+	state[DBG_TRACE] = r_config_get_i (core->config, "dbg.trace");
 	r_config_set (core->config, "dbg.trace", "true");
+	state[NONULL] = r_config_get_i (core->config, "esil.nonull");
 	r_config_set (core->config, "esil.nonull", "true");
-	if (!core->anal->esil) {
+	const char *bp = r_reg_get_name (core->anal->reg, R_REG_NAME_BP);
+	const char *sp = r_reg_get_name (core->anal->reg, R_REG_NAME_SP);
+	if ((bp && !r_reg_getv (core->anal->reg, bp)) || (sp && !r_reg_getv (core->anal->reg, sp))) {
+		eprintf ("Stack isn't initiatized.\n");
+		eprintf ("Try running aei and aeim commands before aftm for default stack initialization\n");
 		return false;
 	}
-	return true;
+	return (core->anal->esil != NULL);
 }
 
-static void type_match (RCore *core, ut64 addr, char *name) {
+static void r_anal_emul_restore(RCore *core, bool *state) {
+	sdb_reset (core->anal->esil->db_trace);
+	r_config_set_i (core->config, "esil.romem", state[ROMEM]);
+	r_config_set_i (core->config, "asm.trace", state[ASM_TRACE]);
+	r_config_set_i (core->config, "anal.trace", state[ANAL_TRACE]);
+	r_config_set_i (core->config, "dbg.trace", state[DBG_TRACE]);
+	r_config_set_i (core->config, "esil.nonull", state[NONULL]);
+}
+
+static void type_match(RCore *core, ut64 addr, char *name) {
 	Sdb *trace = core->anal->esil->db_trace;
 	RAnal *anal = core->anal;
 	RAnalVar *v;
@@ -30,23 +58,21 @@ static void type_match (RCore *core, ut64 addr, char *name) {
 	}
 	const char* cc = r_anal_type_func_cc (anal, fcn_name);
 	if (!cc || !r_anal_cc_exist (anal, cc)) {
-		eprintf("cant find %s calling covnention %s\n", fcn_name, cc);
+		eprintf ("can't find %s calling convention %s\n", fcn_name, cc);
+		return;
 	}
 	int i, j, max = r_anal_type_func_args_count (anal, fcn_name);
 	int size = 0, idx = sdb_num_get (trace, "idx", 0);
 	const char *sp_name = r_reg_get_name (anal->reg, R_REG_NAME_SP);
 	const char *bp_name = r_reg_get_name (anal->reg, R_REG_NAME_BP);
-	RRegItem *r = r_reg_get (anal->reg, sp_name, -1);
-	ut64 bp, sp = r_reg_get_value (anal->reg, r);
-	if (bp_name) {
-		r = r_reg_get (anal->reg, bp_name, -1);
-		bp = r_reg_get_value (anal->reg, r);
-	}
+	ut64 sp = r_reg_getv (anal->reg, sp_name);
+	ut64 bp = r_reg_getv (anal->reg, bp_name);
 	for (i = 0; i < max; i++) {
 		char *type = r_anal_type_func_args_type (anal, fcn_name, i);
 		const char *name =r_anal_type_func_args_name (anal, fcn_name, i);
 		const char *place = r_anal_cc_arg (anal, cc, i + 1);
 		if (!strcmp (place, "stack")) {
+			// type_match_stack ();
 			for (j = idx; j >= 0; j--) {
 				ut64 write_addr = sdb_num_get (trace, sdb_fmt (-1, "%d.mem.write", j), 0);
 				if (write_addr == sp + size) {
@@ -64,7 +90,7 @@ static void type_match (RCore *core, ut64 addr, char *name) {
 							}
 						}
 						int sp_idx = sdb_array_get_num (trace, tmp, i2, 0) - sp;
-						if ((v =r_anal_var_get (anal, addr, R_ANAL_VAR_KIND_SPV, 1, sp_idx))) {
+						if ((v = r_anal_var_get (anal, addr, R_ANAL_VAR_KIND_SPV, 1, sp_idx))) {
 							r_anal_var_retype (anal, addr, 1, sp_idx, R_ANAL_VAR_KIND_SPV, type, -1, v->name);
 							r_anal_var_free (v);
 						}
@@ -74,6 +100,7 @@ static void type_match (RCore *core, ut64 addr, char *name) {
 			}
 			size += r_anal_type_get_size (anal, type) / 8;
 		} else if (!strcmp (place , "stack_rev")) {
+			// type_match_stack_rev ();
 			free (type);
 			int k;
 			for ( k = max -1; k >=i; k--) {
@@ -109,10 +136,11 @@ static void type_match (RCore *core, ut64 addr, char *name) {
 					}
 
 				}
-				size +=r_anal_type_get_size (anal, type) / 8;
+				size += r_anal_type_get_size (anal, type) / 8;
 			}
 			break;
 		} else {
+			// type_match_reg ();
 			for (j = idx; j >= 0; j--) {
 				if (sdb_array_contains (trace, sdb_fmt (-1, "%d.reg.write", j), place, 0)) {
 					ut64 instr_addr = sdb_num_get (trace, sdb_fmt (-1, "%d.addr", j), 0);
@@ -179,18 +207,31 @@ static int stack_clean (RCore *core, ut64 addr, RAnalFunction *fcn) {
 }
 
 R_API void r_anal_type_match(RCore *core, RAnalFunction *fcn) {
-	const char *pc = r_reg_get_name (core->anal->reg, R_REG_NAME_PC);
-	ut64 addr = fcn->addr;
-	if (!core || !r_anal_emul_init (core) || !fcn ) {
+	bool esil_var[STATES_SIZE] = {false};
+	if (!core ) {
 		return;
 	}
-	RRegItem *pc_reg = r_reg_get (core->anal->reg, pc, -1);
-	r_reg_set_value (core->dbg->reg, pc_reg, fcn->addr);
+	if (!r_anal_emul_init (core, esil_var) || !fcn ) {
+		r_anal_emul_restore (core, esil_var);
+		return;
+	}
+	const char *pc = r_reg_get_name (core->anal->reg, R_REG_NAME_PC);
+	ut64 addr = fcn->addr;
+	r_reg_setv (core->dbg->reg, pc, fcn->addr);
 	r_debug_reg_sync (core->dbg, -1, true);
 	r_cons_break (NULL, NULL);
 	while (!r_cons_is_breaked ()) {
 		RAnalOp *op = r_core_anal_op (core, addr);
+		int loop_count = sdb_num_get ( core->anal->esil->db_trace, sdb_fmt (-1, "0x%"PFMT64x".count", addr), 0);
+		if (loop_count > LOOP_MAX) {
+			eprintf ("Unfortunately your evilly engineered %s function trapped my most innocent `aftm` in an infinite loop.\n", fcn->name);
+			eprintf ("I kept trace log for you to review and find out how bad things were going to happen by yourself.\n");
+			eprintf ("You can view this log by `ate`. Meanwhile, I will train on how to behave with such behaviour without bothering you.\n");
+			return;
+		}
+		sdb_num_set (core->anal->esil->db_trace, sdb_fmt (-1, "0x%"PFMT64x".count", addr), loop_count + 1, 0);
 		if (!op || op->type == R_ANAL_OP_TYPE_RET) {
+			r_anal_emul_restore (core, esil_var);
 			return;
 		}
 		if (op->type == R_ANAL_OP_TYPE_CALL) {
@@ -198,26 +239,27 @@ R_API void r_anal_type_match(RCore *core, RAnalFunction *fcn) {
 			//eprintf ("in the middle of %s\n", fcn_call->name);
 			if (fcn_call) {
 				type_match (core, addr, fcn_call->name);
-				addr += op->size;
-				r_anal_op_free (op);
-				r_reg_set_value (core->dbg->reg, pc_reg, addr);
-				r_debug_reg_sync (core->dbg, -1, true);
-				r_anal_esil_set_pc (core->anal->esil, addr);
-				addr += stack_clean (core, addr, fcn);
-				r_reg_set_value (core->dbg->reg, pc_reg, addr);
-				r_debug_reg_sync (core->dbg, -1, true);
-				r_anal_esil_set_pc (core->anal->esil, addr);
 			} else {
 				eprintf ("Cannot find function at 0x%08"PFMT64x"\n", op->jump);
-				break;
 			}
+			addr += op->size;
+			r_anal_op_free (op);
+			r_reg_setv (core->dbg->reg, pc, addr);
+			r_debug_reg_sync (core->dbg, -1, true);
+			r_anal_esil_set_pc (core->anal->esil, addr);
+			addr += stack_clean (core, addr, fcn);
+			r_reg_setv (core->dbg->reg, pc, addr);
+			r_debug_reg_sync (core->dbg, -1, true);
+			r_anal_esil_set_pc (core->anal->esil, addr);
 			continue;
 		} else {
 			r_core_esil_step (core, UT64_MAX, NULL);
 			r_anal_op_free (op);
 		}
 		r_core_cmd0 (core, ".ar*");
-		addr = r_num_get (core->num, pc);
+		addr = r_reg_getv (core->anal->reg, pc);
 	}
 	r_cons_break_end ();
+	r_anal_emul_restore (core, esil_var);
+
 }

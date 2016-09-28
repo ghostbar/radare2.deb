@@ -33,7 +33,7 @@ static void memory_error_func(int status, bfd_vma memaddr, struct disassemble_in
 
 static void print_address(bfd_vma address, struct disassemble_info *info) {
 	char tmp[32];
-	if (buf_global == NULL)
+	if (!buf_global)
 		return;
 	sprintf (tmp, "0x%08"PFMT64x, (ut64)address);
 	strcat (buf_global, tmp);
@@ -42,11 +42,11 @@ static void print_address(bfd_vma address, struct disassemble_info *info) {
 static int buf_fprintf(void *stream, const char *format, ...) {
 	va_list ap;
 	char *tmp;
-	if (buf_global == NULL || format == NULL)
+	if (!buf_global || !format)
 		return false;
 	va_start (ap, format);
  	tmp = malloc (strlen (format)+strlen (buf_global)+2);
-	if (tmp == NULL) {
+	if (!tmp) {
 		va_end (ap);
 		return false;
 	}
@@ -80,10 +80,11 @@ static int disassemble(struct r_asm_t *a, struct r_asm_op_t *op, const ut8 *buf,
 	disasm_obj.stream = stdout;
 
 	op->buf_asm[0] = '\0';
-	if (disasm_obj.endian == BFD_ENDIAN_LITTLE)
+	if (disasm_obj.endian == BFD_ENDIAN_LITTLE) {
 		op->size = print_insn_little_mips ((bfd_vma)Offset, &disasm_obj);
-	else
+	} else {
 		op->size = print_insn_big_mips ((bfd_vma)Offset, &disasm_obj);
+	}
 	if (op->size == -1)
 		strncpy (op->buf_asm, " (data)", R_ASM_BUFSIZE);
 	return op->size;
@@ -91,8 +92,14 @@ static int disassemble(struct r_asm_t *a, struct r_asm_op_t *op, const ut8 *buf,
 
 static int assemble(RAsm *a, RAsmOp *op, const char *str) {
 	int ret = mips_assemble (str, a->pc, op->buf);
-	if (!a->big_endian)
-		r_mem_swapendian (op->buf, op->buf, op->size);
+	if (a->big_endian) {
+		ut8 tmp = op->buf[0];
+		op->buf[0] = op->buf[3];
+		op->buf[3] = tmp;
+		tmp = op->buf[1];
+		op->buf[1] = op->buf[2];
+		op->buf[2] = tmp;
+	}
 	return ret;
 }
 
