@@ -251,6 +251,26 @@ static RFlagItem *evalFlag(RFlag *f, RFlagItem *item) {
 	return item;
 }
 
+/* return true if flag.* exist at offset. Otherwise, false is returned.
+ * For example (f, "sym", 3, 0x1000)*/
+R_API bool r_flag_exist_at(RFlag *f, const char *flag_prefix, ut16 fp_size, ut64 off) {
+	RListIter *iter = NULL;
+	RFlagItem *item = NULL;
+	if (!f) {
+		return false;
+	}
+	RList *list = r_hashtable64_lookup (f->ht_off, XOROFF (off));
+	if (!list) {
+		return false;
+	}
+	r_list_foreach (list, iter, item) {
+		if (item->name && !strncmp (item->name, flag_prefix, fp_size)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 /* return the flag item with name "name" in the RFlag "f", if it exists.
  * Otherwise, NULL is returned. */
 R_API RFlagItem *r_flag_get(RFlag *f, const char *name) {
@@ -305,8 +325,9 @@ R_API RFlagItem *r_flag_get_at(RFlag *f, ut64 off) {
 	RListIter *iter;
 
 	r_list_foreach (f->flags, iter, item) {
-		if (f->space_strict && IS_IN_SPACE (f, item))
+		if (f->space_strict && IS_IN_SPACE (f, item)) {
 			continue;
+		}
 		if (item->offset == off) {
 			return evalFlag (f, item);
 		}
@@ -372,7 +393,7 @@ R_API RFlagItem *r_flag_set(RFlag *f, const char *name, ut64 off, ut32 size) {
 	item->size = size;
 
 	list = r_hashtable64_lookup (f->ht_off, XOROFF(off));
-	if (list == NULL) {
+	if (!list) {
 		list = r_list_new ();
 		r_hashtable64_insert (f->ht_off, XOROFF(off), list);
 	}
@@ -412,11 +433,17 @@ R_API int r_flag_rename(RFlag *f, RFlagItem *item, const char *name) {
 	RFlagItem *p;
 	ut64 hash;
 
-	if (!f || !item || !name || !*name) return false;
+	if (!f || !item || !name || !*name) {
+		return false;
+	}
 	hash = r_str_hash64 (name);
 	p = r_hashtable64_lookup (f->ht_name, hash);
-	if (p) return false;
-	if (!set_name (item, name)) return false;
+	if (p) {
+		return false;
+	}
+	if (!set_name (item, name)) {
+		return false;
+	}
 	r_hashtable64_remove (f->ht_name, hash);
 	r_hashtable64_insert (f->ht_name, item->namehash, item);
 	return true;
@@ -562,6 +589,7 @@ R_API const char *r_flag_color(RFlag *f, RFlagItem *it, const char *color) {
 // BIND
 R_API int r_flag_bind(RFlag *f, RFlagBind *fb) {
 	fb->f = f;
+	fb->exist_at = r_flag_exist_at;
 	fb->get = r_flag_get;
 	fb->get_at = r_flag_get_at;
 	fb->set = r_flag_set;

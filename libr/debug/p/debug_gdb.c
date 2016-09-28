@@ -18,7 +18,15 @@ static int buf_size = 0;
 static int support_sw_bp = UNKNOWN;
 static int support_hw_bp = UNKNOWN;
 
+static int r_debug_gdb_attach(RDebug *dbg, int pid);
+static void check_connection (RDebug *dbg) {
+	if (!desc) {
+		r_debug_gdb_attach (dbg, -1);
+	}
+}
+
 static int r_debug_gdb_step(RDebug *dbg) {
+	check_connection (dbg);
 	gdbr_step (desc, -1); // TODO handle thread specific step?
 	return true;
 }
@@ -26,6 +34,7 @@ static int r_debug_gdb_step(RDebug *dbg) {
 static int r_debug_gdb_reg_read(RDebug *dbg, int type, ut8 *buf, int size) {
 	int copy_size;
 	int buflen = 0;
+	check_connection (dbg);
 	gdbr_read_registers (desc);
 	if (!desc) {
 		return -1;
@@ -40,22 +49,24 @@ static int r_debug_gdb_reg_read(RDebug *dbg, int type, ut8 *buf, int size) {
 	copy_size = R_MIN (desc->data_len, size);
 	buflen = R_MAX (desc->data_len, buflen);
 	if (reg_buf) {
-		if (buf_size < copy_size) { //desc->data_len) {
-			ut8* new_buf = realloc (reg_buf, copy_size);
-			if (!new_buf)
+		// if (buf_size < copy_size) { //desc->data_len) {
+		if (buflen > buf_size) { //copy_size) {
+			ut8* new_buf = realloc (reg_buf, buflen);
+			if (!new_buf) {
 				return -1;
+			}
 			reg_buf = new_buf;
-			buflen = copy_size;
-			buf_size = desc->data_len;
+			buf_size = buflen;
 		}
 	} else {
 		reg_buf = calloc (buflen, 1);
-		if (!reg_buf)
+		if (!reg_buf) {
 			return -1;
+		}
 		buf_size = buflen;
 	}
 	memset ((void*)(volatile void*)buf, 0, size);
-	memcpy ((void*)(volatile void*)buf, desc->data, copy_size);
+	memcpy ((void*)(volatile void*)buf, desc->data, R_MIN (copy_size, size));
 	memset ((void*)(volatile void*)reg_buf, 0, buflen);
 	memcpy ((void*)(volatile void*)reg_buf, desc->data, copy_size);
 #if 0
@@ -71,11 +82,13 @@ static int r_debug_gdb_reg_read(RDebug *dbg, int type, ut8 *buf, int size) {
 }
 
 static RList *r_debug_gdb_map_get(RDebug* dbg) { //TODO
+	check_connection (dbg);
 	//TODO
 	return NULL;
 }
 
 static int r_debug_gdb_reg_write(RDebug *dbg, int type, const ut8 *buf, int size) {
+	check_connection (dbg);
 	if (!reg_buf) {
 		// we cannot write registers before we once read them
 		return -1;
@@ -116,11 +129,13 @@ static int r_debug_gdb_reg_write(RDebug *dbg, int type, const ut8 *buf, int size
 }
 
 static int r_debug_gdb_continue(RDebug *dbg, int pid, int tid, int sig) {
+	check_connection (dbg);
 	gdbr_continue (desc, -1);
 	return true;
 }
 
 static int r_debug_gdb_wait(RDebug *dbg, int pid) {
+	check_connection (dbg);
 	/* do nothing */
 	return true;
 }
@@ -182,8 +197,9 @@ static int r_debug_gdb_attach(RDebug *dbg, int pid) {
 				if (bits == 16) {
 					gdbr_set_architecture (&g->desc, AVR);
 				} else {
-					eprintf ("Not supported register profile\n");
-					return false;
+					gdbr_set_architecture (&g->desc, AVR);
+					//eprintf ("Not supported register profile\n");
+					//return false;
 				}
 				break;
 			}
@@ -203,6 +219,7 @@ static int r_debug_gdb_detach(RDebug *dbg, int pid) {
 static const char *r_debug_gdb_reg_profile(RDebug *dbg) {
 	int arch = r_sys_arch_id (dbg->arch);
 	int bits = dbg->anal->bits;
+	check_connection (dbg);
 	switch (arch) {
 	case R_SYS_ARCH_X86:
 		if (bits == 16 || bits == 32) {
@@ -692,6 +709,7 @@ static const char *r_debug_gdb_reg_profile(RDebug *dbg) {
 			"gpr	r31	.8	31	0\n"
 			"gpr	sreg	.8	32	0\n"
 			"gpr	sp	.16	33	0\n"
+			"gpr	pc2	.32	34	0\n"
 			"gpr	pc	.32	35	0\n"
 	/*		"gpr	pc	.32	39	0\n" */
 	);

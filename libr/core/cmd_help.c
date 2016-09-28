@@ -318,8 +318,14 @@ static int cmd_help(void *data, const char *input) {
 		break;
 	case '!': // "?!"
 		if (input[1]) {
-			if (!core->num->value)
-				return core->num->value = r_core_cmd (core, input+1, 0);
+			if (!core->num->value) {
+				if (input[1] == '?') {
+					r_core_sysenv_help (core);
+					return 0;
+				} else {
+					return core->num->value = r_core_cmd (core, input+1, 0);
+				}
+			}
 		} else r_cons_printf ("0x%"PFMT64x"\n", core->num->value);
 		break;
 	case '@':
@@ -344,8 +350,8 @@ static int cmd_help(void *data, const char *input) {
 			"~", "word", "grep for lines matching word",
 			"~", "!word", "grep for lines NOT matching word",
 			"~", "word[2]", "grep 3rd column of lines matching word",
-			"~", "word:3[0]", "grep 1st column from the 4th line matching mov",
-			"@", " 0x1024", "temporary seek to this address (sym.main+3",
+			"~", "word:3[0]", "grep 1st column from the 4th line matching word",
+			"@", " 0x1024", "temporary seek to this address (sym.main+3)",
 			"@", " addr[!blocksize]", "temporary set a new blocksize",
 			"@a:", "arch[:bits]", "temporary set arch and bits",
 			"@b:", "bits", "temporary set asm.bits",
@@ -358,6 +364,7 @@ static int cmd_help(void *data, const char *input) {
 			"@..", "from to", "temporary set from and to for commands supporting ranges",
 			"@@=", "1 2 3", "run the previous command at offsets 1, 2 and 3",
 			"@@", " hit*", "run the command on every flag matching 'hit*'",
+			"@@?", "[ktfb..]", "show help for the iterator operator",
 			"@@@", " [type]", "run a command on every [type] (see @@@? for help)",
 			">", "file", "pipe output of command to file",
 			">>", "file", "append to file",
@@ -367,8 +374,9 @@ static int cmd_help(void *data, const char *input) {
 		r_core_cmd_help (core, help_msg);
 		return 0;
 		}
-	case '$':{
-		const char* help_msg[] = {
+	case '$':
+		if (input[1] == '?') {
+			const char* help_msg[] = {
 			"Usage: ?v [$.]","","",
 			"$$", "", "here (current virtual seek)",
 			"$?", "", "last comparison value",
@@ -407,7 +415,19 @@ static int cmd_help(void *data, const char *input) {
 			"$k{kv}", "", "get value of an sdb query value",
 			"RNum", "", "$variables usable in math expressions",
 			NULL};
-		r_core_cmd_help (core, help_msg);
+			r_core_cmd_help (core, help_msg);
+		} else {
+			int i = 0;
+			const char *vars[] = {
+				"$$", "$?", "$b", "$B", "$F", "$FB", "$Fb", "$Fs", "$FE", "$FS", "$FI",
+				"$c", "$r", "$D", "$DD", "$e", "$f", "$j", "$Ja", "$l", "$m", "$M", "$o",
+				"$p", "$P", "$s", "$S", "$SS", "$v", "$w", NULL
+			};
+			while (vars[i]) {
+				const char *pad = r_str_pad (' ', 6 - strlen (vars[i]));
+				eprintf ("%s %s 0x%08"PFMT64x"\n", vars[i], pad, r_num_math (core->num, vars[i]));
+				i++;
+			}
 		}
 		return true;
 	case 'V':
@@ -473,12 +493,21 @@ static int cmd_help(void *data, const char *input) {
 		break;
 	case 'e': // echo
 		{
-		const char *msg = r_str_chop_ro (input+1);
-		// TODO: replace all ${flagname} by its value in hexa
-		char *newmsg = filter_flags (core, msg);
-		r_str_unescape (newmsg);
-		r_cons_println (newmsg);
-		free (newmsg);
+		if (input[1] == 'n') { // mimic echo -n
+			const char *msg = r_str_chop_ro (input+2);
+			// TODO: replace all ${flagname} by its value in hexa
+			char *newmsg = filter_flags (core, msg);
+			r_str_unescape (newmsg);
+			r_cons_print (newmsg);
+			free (newmsg);
+		} else {
+			const char *msg = r_str_chop_ro (input+1);
+			// TODO: replace all ${flagname} by its value in hexa
+			char *newmsg = filter_flags (core, msg);
+			r_str_unescape (newmsg);
+			r_cons_println (newmsg);
+			free (newmsg);
+		}
 		}
 		break;
 	case 's': // sequence from to step
@@ -579,6 +608,13 @@ static int cmd_help(void *data, const char *input) {
 		}
 		r_cons_set_raw (0);
 		break;
+	case 'w':
+		{
+			ut64 addr = r_num_math (core->num, input + 1);
+			const char *rstr = core->print->hasrefs (core->print->user, addr);
+			r_cons_println (rstr);
+		}
+		break;
 	case 't': {
 		struct r_prof_t prof;
 		r_prof_start (&prof);
@@ -606,6 +642,7 @@ static int cmd_help(void *data, const char *input) {
 			"?+", " [cmd]", "? > 0",
 			"?-", " [cmd]", "? < 0",
 			"?=", " eip-0x804800", "hex and dec result for this math expr",
+			"?$", "", "show value all the variables ($)",
 			"??", "", "show value of operation",
 			"??", " [cmd]", "? == 0 run command when math matches",
 			"?B", " [elem]", "show range boundaries like 'e?search.in",
@@ -618,7 +655,7 @@ static int cmd_help(void *data, const char *input) {
 			"?b", " [num]", "show binary value of number",
 			"?b64[-]", " [str]", "encode/decode in base64",
 			"?d[.]", " opcode", "describe opcode for asm.arch",
-			"?e", " string", "echo string",
+			"?e[n]", " string", "echo string, optionally without trailing newline",
 			"?f", " [num] [str]", "map each bit of the number as flag string index",
 			"?h", " [str]", "calculate hash for given string",
 			"?i", "[ynmkp] arg", "prompt for number or Yes,No,Msg,Key,Path and store in $$?",
@@ -635,6 +672,7 @@ static int cmd_help(void *data, const char *input) {
 			"?u", " num", "get value in human units (KB, MB, GB, TB)",
 			"?v", " eip-0x804800", "show hex value of math expr",
 			"?vi", " rsp-rbp", "show decimal value of math expr",
+			"?w", " addr", "show what's in this address (like pxr/pxq does)",
 			"?x", " num|str|-hexst", "returns the hexpair of number or string",
 			"?y", " [str]", "show contents of yank buffer, or set with string",
 			NULL};

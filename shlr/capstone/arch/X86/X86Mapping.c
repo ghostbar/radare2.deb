@@ -944,7 +944,7 @@ static name_map insn_name_maps[] = {
 	{ X86_INS_COMISD, "comisd" },
 	{ X86_INS_COMISS, "comiss" },
 	{ X86_INS_FCOMP, "fcomp" },
-	{ X86_INS_FCOMPI, "fcompi" },
+	{ X86_INS_FCOMIP, "fcomip" },
 	{ X86_INS_FCOMI, "fcomi" },
 	{ X86_INS_FCOM, "fcom" },
 	{ X86_INS_FCOS, "fcos" },
@@ -1544,7 +1544,7 @@ static name_map insn_name_maps[] = {
 	{ X86_INS_FTST, "ftst" },
 	{ X86_INS_TZCNT, "tzcnt" },
 	{ X86_INS_TZMSK, "tzmsk" },
-	{ X86_INS_FUCOMPI, "fucompi" },
+	{ X86_INS_FUCOMIP, "fucomip" },
 	{ X86_INS_FUCOMI, "fucomi" },
 	{ X86_INS_FUCOMPP, "fucompp" },
 	{ X86_INS_FUCOMP, "fucomp" },
@@ -2930,26 +2930,32 @@ static int regs_cmp(const void *a, const void *b)
 	return (l - r);
 }
 
-static bool intel_regs_sorted = false;
 // return register of given instruction id
 // return 0 if not found
 // this is to handle instructions embedding accumulate registers into AsmStrs[]
 x86_reg X86_insn_reg_intel(unsigned int id, enum cs_ac_type *access)
 {
-	int first = 0;
-	int last = ARR_SIZE(insn_regs_intel) - 1;
-	int mid = ARR_SIZE(insn_regs_intel) / 2;
+	static bool intel_regs_sorted = false;
+	unsigned int first = 0;
+	unsigned int last = ARR_SIZE(insn_regs_intel) - 1;
+	unsigned int mid;
 
 	if (!intel_regs_sorted) {
-		memcpy (insn_regs_intel_sorted, insn_regs_intel,
+		memcpy(insn_regs_intel_sorted, insn_regs_intel,
 				sizeof(insn_regs_intel_sorted));
-		qsort (insn_regs_intel_sorted,
+		qsort(insn_regs_intel_sorted,
 				ARR_SIZE(insn_regs_intel_sorted),
 				sizeof(struct insn_reg), regs_cmp);
 		intel_regs_sorted = true;
 	}
 
+	if (insn_regs_intel_sorted[0].insn > id ||
+			insn_regs_intel_sorted[last].insn < id) {
+		return 0;
+	}
+
 	while (first <= last) {
+		mid = (first + last) / 2;
 		if (insn_regs_intel_sorted[mid].insn < id) {
 			first = mid + 1;
 		} else if (insn_regs_intel_sorted[mid].insn == id) {
@@ -2958,9 +2964,10 @@ x86_reg X86_insn_reg_intel(unsigned int id, enum cs_ac_type *access)
 			}
 			return insn_regs_intel_sorted[mid].reg;
 		} else {
+			if (mid == 0)
+				break;
 			last = mid - 1;
 		}
-		mid = (first + last) / 2;
 	}
 
 	// not found

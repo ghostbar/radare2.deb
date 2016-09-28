@@ -1,6 +1,7 @@
 /* radare - LGPL - Copyright 2009-2016 - pancake */
 
 #define USE_THREADS 1
+#define UNCOLORIZE_NONTTY 0
 
 #include <sdb.h>
 #include <r_core.h>
@@ -49,7 +50,9 @@ static int verify_version(int show) {
 		{NULL,NULL}
 	};
 
-	if (show) printf ("%s  r2\n", base);
+	if (show) {
+		printf ("%s  r2\n", base);
+	}
 	for (i = ret = 0; vcs[i].name; i++) {
 		struct vcs_t *v = &vcs[i];
 		const char *name = v->callback ();
@@ -61,8 +64,11 @@ static int verify_version(int show) {
 		}
 	}
 	if (ret) {
-		if (show) eprintf ("WARNING: r2 library versions mismatch!\n");
-		else eprintf ("WARNING: r2 library versions mismatch! See r2 -V\n");
+		if (show) {
+			eprintf ("WARNING: r2 library versions mismatch!\n");
+		} else {
+			eprintf ("WARNING: r2 library versions mismatch! See r2 -V\n");
+		}
 	}
 	return ret;
 }
@@ -71,11 +77,11 @@ static int verify_version(int show) {
 // r_debug_get_baddr
 static ut64 getBaddrFromDebugger(RCore *r, const char *file) {
 	char *abspath;
-	int ret;
 	RListIter *iter;
 	RDebugMap *map;
-	if (!r || !r->io || !r->io->desc)
+	if (!r || !r->io || !r->io->desc) {
 		return 0LL;
+	}
 #if __WINDOWS__
 	typedef struct {
 		int pid;
@@ -90,9 +96,9 @@ static ut64 getBaddrFromDebugger(RCore *r, const char *file) {
 	}
 	return r->io->winbase;
 #else
-	ret = r_debug_attach (r->dbg, r->io->desc->fd);
-	if (ret == -1)
+	if (r_debug_attach (r->dbg, r->io->desc->fd) == -1) {
 		return 0LL;
+	}
 #endif
 	r_debug_map_sync (r->dbg);
 	abspath = r_file_abspath (file);
@@ -119,7 +125,8 @@ static int main_help(int line) {
 		printf ("Usage: r2 [-ACdfLMnNqStuvwz] [-P patch] [-p prj] [-a arch] [-b bits] [-i file]\n"
 			"          [-s addr] [-B baddr] [-M maddr] [-c cmd] [-e k=v] file|pid|-|--|=\n");
 	}
-	if (line != 1) printf (
+	if (line != 1) {
+		printf (
 		" --           open radare2 on an empty file\n"
 		" -            equivalent of 'r2 malloc://512'\n"
 		" =            read file from stdin (use -i and -c to run cmds)\n"
@@ -137,6 +144,7 @@ static int main_help(int line) {
 		" -f           block size = file size\n"
 		" -F [binplug] force to use that rbin plugin\n"
 		" -h, -hh      show help message, -hh for long\n"
+		" -H ([var])   display variable\n"
 		" -i [file]    run script file\n"
 		" -I [file]    run script file before the file is opened\n"
 		" -k [k=v]     perform sdb query into core->sdb\n"
@@ -160,6 +168,7 @@ static int main_help(int line) {
 		" -v, -V       show radare2 version (-V show lib versions)\n"
 		" -w           open file in write mode\n"
 		" -z, -zz      do not load strings or load them even in raw\n");
+	}
 	if (line == 2) {
 		char *homedir = r_str_home (R2_HOMEDIR);
 		printf (
@@ -189,6 +198,40 @@ static int main_help(int line) {
 	return 0;
 }
 
+static int main_print_var(const char *var_name) {
+	int i = 0;
+	struct radare2_var_t {
+		const char *name;
+		const char *value;
+	} r2_vars[] = {
+		{ "R2_PREFIX", R2_PREFIX },
+		{ "LIBR_PLUGINS", R2_PREFIX"/lib/radare2/"R2_VERSION },
+		{ "MAGICPATH", R_MAGIC_PATH },
+		{ "PREFIX", R2_PREFIX },
+		{ "INCDIR", R2_INCDIR },
+		{ "LIBDIR", R2_LIBDIR },
+		{ "LIBEXT", R_LIB_EXT },
+		{ "RHOMEDIR", R2_HOMEDIR },
+		{ NULL, NULL }
+	};
+
+	if (var_name) {
+		while (r2_vars[i].name) {
+			if (!strcmp (r2_vars[i].name, var_name)) {
+				printf ("%s\n", r2_vars[i].value);
+				break;
+			}
+			i++;
+		}
+	} else {
+		while (r2_vars[i].name) {
+			printf ("%s=%s\n", r2_vars[i].name, r2_vars[i].value);
+			i++;
+		}
+	}
+	return 0;
+}
+
 // Load the binary information from rabin2
 // TODO: use thread to load this, split contents line, per line and use global lock
 #if USE_THREADS
@@ -198,12 +241,20 @@ static int rabin_delegate(RThread *th) {
 		ptr = cmd;
 		if (ptr)
 			do {
-				if (th) r_th_lock_enter (th->user);
+				if (th) {
+					r_th_lock_enter (th->user);
+				}
 				nptr = strchr (ptr, '\n');
-				if (nptr) *nptr = 0;
+				if (nptr) {
+					*nptr = 0;
+				}
 				r_core_cmd (&r, ptr, 0);
-				if (nptr) ptr = nptr + 1;
-				if (th) r_th_lock_leave(th->user);
+				if (nptr) {
+					ptr = nptr + 1;
+				}
+				if (th) {
+					r_th_lock_leave(th->user);
+				}
 			} while (nptr);
 		//r_core_cmd (&r, cmd, 0);
 		r_str_free (rabin_cmd);
@@ -358,14 +409,22 @@ int main(int argc, char **argv, char **envp) {
 	r_core_init (&r);
 
 	// HACK TO PERMIT '#!/usr/bin/r2 - -i' hashbangs
-	if (argc>1 && !strcmp (argv[1], "-")) {
+	if (argc > 1 && !strcmp (argv[1], "-")) {
 		argv[1] = argv[0];
 		prefile = 1;
 		argc--;
 		argv++;
-	} else prefile = 0;
+	} else {
+		prefile = 0;
+	}
 
-	while ((c = getopt (argc, argv, "=0AMCwfF:hm:e:nk:o:Ndqs:p:b:B:a:Lui:I:l:P:R:c:D:vVSzu"
+	// -H option without argument
+	if (argc == 2 && !strcmp (argv[1], "-H")) {
+		main_print_var (NULL);
+		return 0;
+	}
+
+	while ((c = getopt (argc, argv, "=0AMCwfF:hH::m:e:nk:o:Ndqs:p:b:B:a:Lui:I:l:P:R:c:D:vVSzu"
 #if USE_THREADS
 "t"
 #endif
@@ -417,6 +476,7 @@ int main(int argc, char **argv, char **envp) {
 		case 'f': fullfile = 1; break;
 		case 'F': forcebin = optarg; break;
 		case 'h': help++; break;
+		case 'H': main_print_var (optarg); return 0; break;
 		case 'i':
 			r_list_append (files, optarg);
 			break;
@@ -691,10 +751,12 @@ int main(int argc, char **argv, char **envp) {
 						eprintf ("bin.baddr 0x%08"PFMT64x"\n", baddr);
 						va = 2;
 					}
-					if (r_core_bin_load (&r, diskfile, baddr)) {
-						RBinObject *obj = r_bin_get_object (r.bin);
-						if (obj && obj->info)
-							eprintf ("asm.bits %d\n", obj->info->bits);
+					if (run_anal > 0) {
+						if (r_core_bin_load (&r, diskfile, baddr)) {
+							RBinObject *obj = r_bin_get_object (r.bin);
+							if (obj && obj->info)
+								eprintf ("asm.bits %d\n", obj->info->bits);
+						}
 					}
 					r_core_cmd0 (&r, ".dm*");
 					// Set Thumb Mode if necessary
@@ -757,18 +819,25 @@ int main(int argc, char **argv, char **envp) {
 				}
 			}
 		}
-		if (!pfile) pfile = file;
-		if (fh == NULL) {
+		if (!pfile) {
+			pfile = file;
+		}
+		if (!fh) {
 			if (pfile && *pfile) {
 				r_cons_flush ();
-				if (perms & R_IO_WRITE)
+				if (perms & R_IO_WRITE) {
 					eprintf ("Cannot open '%s' for writing.\n", pfile);
-				else eprintf ("Cannot open '%s'\n", pfile);
-			} else eprintf ("Missing file to open\n");
+				} else {
+					eprintf ("Cannot open '%s'\n", pfile);
+				}
+			} else {
+				eprintf ("Missing file to open\n");
+			}
 			return 1;
 		}
-		if (r.file == NULL) // no given file
+		if (!r.file) { // no given file
 			return 1;
+		}
 #if USE_THREADS
 		if (run_anal > 0 && threaded) {
 			// XXX: if no rabin2 in path that may fail
@@ -788,7 +857,6 @@ int main(int argc, char **argv, char **envp) {
 			r_config_eval (r.config, cmdn);
 			r_cons_flush ();
 		}
-
 #if 0
 // Do not autodetect utf8 terminals to avoid problems on initial
 // stdin buffer and some terminals that just hang (android/ios)
@@ -805,20 +873,25 @@ int main(int argc, char **argv, char **envp) {
 		debug = r.file && r.file->desc && r.file->desc->plugin && \
 			r.file->desc->plugin->isdbg;
 		if (debug) {
-			if (baddr != UT64_MAX)
+			if (baddr != UT64_MAX) {
 				//setup without attach again because there is dpa call
 				//producing two attach and it's annoying
 				r_core_setup_debugger (&r, debugbackend, false);
-			else
+			} else {
 				r_core_setup_debugger (&r, debugbackend, true);
+			}
 		}
 
-		if (!debug && r_flag_get (r.flags, "entry0"))
+		if (!debug && r_flag_get (r.flags, "entry0")) {
 			r_core_cmd0 (&r, "s entry0");
-		if (seek != UT64_MAX)
+		}
+		if (seek != UT64_MAX) {
 			r_core_seek (&r, seek, 1);
+		}
 
-		if (fullfile) r_core_block_size (&r, r_io_desc_size (r.io, r.file->desc));
+		if (fullfile) {
+			r_core_block_size (&r, r_io_desc_size (r.io, r.file->desc));
+		}
 
 		r_core_seek (&r, r.offset, 1); // read current block
 
@@ -892,7 +965,13 @@ int main(int argc, char **argv, char **envp) {
 		}
 		r_cons_flush ();
 	}
-
+#if UNCOLORIZE_NONTTY
+#if __UNIX__
+	if (!r_cons_isatty ()) {
+		r_config_set_i (r.config, "scr.color", 0);
+	}
+#endif
+#endif
 	ret = run_commands (cmds, files, quiet);
 	r_list_free (cmds);
 	r_list_free (files);
@@ -914,7 +993,6 @@ int main(int argc, char **argv, char **envp) {
 		r_config_set (r.config, "scr.interactive", "false");
 		r_config_set (r.config, "scr.prompt", "false");
 	}
-
 	r.num->value = 0;
 	if (patchfile) {
 		char *data = r_file_slurp (patchfile, NULL);
@@ -970,7 +1048,7 @@ int main(int argc, char **argv, char **envp) {
 					if (no_question_debug) {
 						if (r_config_get_i (r.config, "dbg.exitkills") && y_kill_debug){
 							r_debug_kill (r.dbg, 0, false, 9); // KILL
-						} 
+						}
 					} else {
 						if (r_cons_yesno ('y', "Do you want to quit? (Y/n)")) {
 							if (r_config_get_i (r.config, "dbg.exitkills") &&
@@ -985,36 +1063,29 @@ int main(int argc, char **argv, char **envp) {
 				if (no_question_save) {
 					if (prj && *prj && y_save_project){
 						r_core_project_save (&r, prj);
-					} 
-				}
-				else {
+					}
+				} else {
 					question = r_str_newf ("Do you want to save the '%s' project? (Y/n)", prj);
-					if (prj && *prj && r_cons_yesno ('y', question)) {
+					if (prj && *prj && r_cons_yesno ('y', "%s", question)) {
 						r_core_project_save (&r, prj);
 					}
 					free (question);
 				}
-				
 			} else {
 				// r_core_project_save (&r, prj);
 				if (debug && r_config_get_i (r.config, "dbg.exitkills")) {
 					r_debug_kill (r.dbg, 0, false, 9); // KILL
 				}
-				
+
 			}
 			break;
 		}
 	}
-#if __UNIX__
-	if (isatty (0)) {
-#endif
-		 if (r_config_get_i (r.config, "scr.histsave") &&
-				r_config_get_i (r.config, "scr.interactive") &&
-				!r_sandbox_enable (0))
-			r_line_hist_save (R2_HOMEDIR"/history");
-#if __UNIX__
+	if (r_config_get_i (r.config, "scr.histsave") &&
+			r_config_get_i (r.config, "scr.interactive") &&
+			!r_sandbox_enable (0)) {
+		r_line_hist_save (R2_HOMEDIR"/history");
 	}
-#endif
 	// TODO: kill thread
 
 	/* capture return value */
