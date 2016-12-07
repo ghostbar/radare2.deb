@@ -338,6 +338,7 @@ typedef struct r_bin_section_t {
 	int bits;
 	bool has_strings;
 	bool add; // indicates when you want to add the section to io `S` command
+	bool is_data;	
 } RBinSection;
 
 typedef struct r_bin_class_t {
@@ -474,6 +475,7 @@ R_API int r_bin_xtr_add(RBin *bin, RBinXtrPlugin *foo);
 R_API void* r_bin_free(RBin *bin);
 R_API int r_bin_load_languages(RBinFile *binfile);
 R_API int r_bin_dump_strings(RBinFile *a, int min);
+R_API RList* r_bin_raw_strings(RBinFile *a, int min);
 //io-wrappers
 R_API int r_bin_read_at (RBin *bin, ut64 addr, ut8 *buf, int size);
 R_API int r_bin_write_at (RBin *bin, ut64 addr, const ut8 *buf, int size);
@@ -639,6 +641,7 @@ extern RBinPlugin r_bin_plugin_spc700;
 extern RBinPlugin r_bin_plugin_vsf;
 extern RBinPlugin r_bin_plugin_dyldcache;
 extern RBinPlugin r_bin_plugin_avr;
+extern RBinPlugin r_bin_plugin_menuet;
 
 #ifdef __cplusplus
 }

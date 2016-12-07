@@ -294,11 +294,10 @@ R_API int r_core_seek_archbits(RCore *core, ut64 addr) {
 		return 1;
 	}
 	if (oldarch) {
-		if (!(flag && !strcmp (oldarch, arch))) {
+		if (!(flag && arch && oldarch && !strcmp (oldarch, arch))) {
 			r_config_set (core->config, "asm.arch", oldarch);
 		}
-		free (oldarch);
-		oldarch = NULL;
+		R_FREE (oldarch);
 	}
 	if (oldbits) {
 		r_config_set_i (core->config, "asm.bits", oldbits);
@@ -368,15 +367,17 @@ R_API int r_core_seek_delta(RCore *core, st64 addr) {
 
 R_API int r_core_write_at(RCore *core, ut64 addr, const ut8 *buf, int size) {
 	int ret;
-	if (!core->io || !core->file || size<1)
+	if (!core->io || !core->file || size < 1) {
 		return false;
+	}
 	ret = r_io_use_desc (core->io, core->file->desc);
 	if (ret != -1) {
 		ret = r_io_write_at (core->io, addr, buf, size);
-		if (addr >= core->offset && addr <= core->offset+core->blocksize)
+		if (addr >= core->offset && addr <= core->offset+core->blocksize) {
 			r_core_block_read (core);
+		}
 	}
-	return (ret==-1)? false: true;
+	return (ret == -1)? false: true;
 }
 
 R_API int r_core_extend_at(RCore *core, ut64 addr, int size) {
@@ -475,9 +476,10 @@ R_API int r_core_block_read(RCore *core) {
 }
 
 R_API int r_core_read_at(RCore *core, ut64 addr, ut8 *buf, int size) {
-	if (!core->io || !core->file || !core->file->desc || size<1) {
-		if (size > 0)
+	if (!core || !core->io || !core->file || !core->file->desc || size < 1) {
+		if (core && core->io && size > 0) {
 			memset (buf, core->io->Oxff, size);
+		}
 		return false;
 	}
 	r_io_use_desc (core->io, core->file->desc);

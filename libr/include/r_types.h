@@ -219,6 +219,8 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #define IS_PRINTABLE(x) (x>=' '&&x<='~')
 #define IS_NUMBER(x) (x>='0'&&x<='9')
 #define IS_WHITESPACE(x) (x==' '||x=='\t')
+#define IS_UPPER(c) ((c) >= 'A' && (c) <= 'Z')
+#define IS_LOWER(c) ((c) >= 'a' && (c) <= 'z')
 #define R_MEM_ALIGN(x) ((void *)(size_t)(((ut64)(size_t)x) & 0xfffffffffffff000LL))
 #define R_ARRAY_SIZE(x) (sizeof (x) / sizeof (x[0]))
 
@@ -239,6 +241,9 @@ typedef void (*PrintfCallback)(const char *str, ...);
 #define __func__ __FUNCTION__
 #endif
 
+#define PERROR_WITH_FILELINE 0
+
+#if PERROR_WITH_FILELINE
 /* make error messages useful by prepending file, line, and function name */
 #define _perror(str,file,line,func) \
   { \
@@ -248,6 +253,11 @@ typedef void (*PrintfCallback)(const char *str, ...);
   }
 #define perror(x) _perror(x,__FILE__,__LINE__,__func__)
 #define r_sys_perror(x) _perror(x,__FILE__,__LINE__,__func__)
+#else
+
+#define r_sys_perror(x) perror(x);
+
+#endif
 
 #if __UNIX__
 #include <sys/types.h>

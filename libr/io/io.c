@@ -21,7 +21,9 @@ static RIO *r_io_bind_get_io(RIOBind *bnd);
 
 R_API RIO *r_io_new() {
 	RIO *io = R_NEW0 (RIO);
-	if (!io) return NULL;
+	if (!io) {
+		return NULL;
+	}
 	io->buffer = r_cache_new (); // RCache is a list of ranged buffers. maybe rename?
 	io->write_mask_fd = -1;
 	io->cb_printf = (void *)printf;
@@ -29,6 +31,7 @@ R_API RIO *r_io_new() {
 	io->ff = true;
 	io->Oxff = 0xff;
 	io->aslr = 0;
+	io->pava = false;
 	io->raised = -1;
 	io->autofd = true;
 	r_io_map_init (io);
@@ -52,8 +55,9 @@ R_API void r_io_raise(RIO *io, int fd) {
 }
 
 R_API int r_io_is_listener(RIO *io) {
-	if (io && io->plugin && io->plugin->listener)
+	if (io && io->plugin && io->plugin->listener) {
 		return io->plugin->listener (io->desc);
+	}
 	return false;
 }
 
@@ -375,8 +379,12 @@ R_API int r_io_read_at(RIO *io, ut64 addr, ut8 *buf, int len) {
 	ut64 paddr, last, last2;
 	int ms, ret, l = 0, olen = len, w = 0;
 
-	if (!io || !buf || len < 0) return 0;
-	if (io->vio) return r_io_read_cr (io, addr, buf, len);
+	if (!io || !buf || len < 0) {
+		return 0;
+	}
+	if (io->vio) {
+		return r_io_read_cr (io, addr, buf, len);
+	}
 	if (io->sectonly && !r_list_empty (io->sections)) {
 		if (!r_io_section_exists_for_vaddr (io, addr, 0)) {
 			// find next sec
@@ -390,7 +398,9 @@ R_API int r_io_read_at(RIO *io, ut64 addr, ut8 *buf, int len) {
 			} else {
 				next = 0;
 			}
-			if (!next) return 0;
+			if (!next) {
+				return 0;
+			}
 		}
 	}
 
@@ -850,8 +860,9 @@ R_API ut64 r_io_size(RIO *io) {
 
 R_API int r_io_system(RIO *io, const char *cmd) {
 	int ret = -1;
-	if (io->plugin && io->plugin->system)
+	if (io->plugin && io->plugin->system) {
 		ret = io->plugin->system (io, io->desc, cmd);
+	}
 	return ret;
 }
 
@@ -920,6 +931,7 @@ R_API int r_io_bind(RIO *io, RIOBind *bnd) {
 	bnd->write_at = r_io_write_at;
 	bnd->size = r_io_size;
 	bnd->seek = r_io_seek;
+	bnd->system = r_io_system;
 	bnd->is_valid_offset = r_io_is_valid_offset;
 
 	bnd->desc_open = r_io_open_nomap;
@@ -963,13 +975,17 @@ R_API int r_io_shift(RIO *io, ut64 start, ut64 end, st64 move) {
 		src = start + shiftsize;
 	}
 	while (rest > 0) {
-		if (chunksize > rest) chunksize = rest;
-		if (move > 0) src -= chunksize;
-
+		if (chunksize > rest) {
+			chunksize = rest;
+		}
+		if (move > 0) {
+			src -= chunksize;
+		}
 		r_io_read_at (io, src, buf, chunksize);
 		r_io_write_at (io, src + move, buf, chunksize);
-
-		if (move < 0) src += chunksize;
+		if (move < 0) {
+			src += chunksize;
+		}
 		rest -= chunksize;
 	}
 	free (buf);
@@ -995,8 +1011,11 @@ static ut8 *r_io_desc_read(RIO *io, RIODesc *desc, ut64 *out_sz) {
 	ut8 *buf = NULL;
 	ut64 off = 0;
 
-	if (!io || !desc || !out_sz) {
+	if (!io || !out_sz) {
 		return NULL;
+	}
+	if (!desc) {
+		desc = io->desc;
 	}
 	if (*out_sz == UT64_MAX) {
 		*out_sz = r_io_desc_size (io, desc);
@@ -1005,7 +1024,6 @@ static ut8 *r_io_desc_read(RIO *io, RIODesc *desc, ut64 *out_sz) {
 		*out_sz = 1024 * 1024 * 1; // 2MB
 	}
 	off = io->off;
-
 	if (*out_sz == UT64_MAX) {
 		return NULL;
 	}
@@ -1014,13 +1032,13 @@ static ut8 *r_io_desc_read(RIO *io, RIODesc *desc, ut64 *out_sz) {
 				"Allocating R_IO_MAX_ALLOC set as the environment variable.\n", io->maxalloc);
 		*out_sz = io->maxalloc;
 	}
-
 	buf = malloc (*out_sz);
 	if (!buf) {
 		if (*out_sz > R_IO_MAX_ALLOC) {
 			char *num_unit = r_num_units (NULL, *out_sz);
 			eprintf ("Failed to allocate %s bytes.\n"
-					"Allocating %"PFMT64u" bytes.\n", num_unit, (ut64)R_IO_MAX_ALLOC);
+				"Allocating %"PFMT64u" bytes.\n",
+				num_unit, (ut64)R_IO_MAX_ALLOC);
 			free (num_unit);
 			*out_sz = R_IO_MAX_ALLOC;
 			buf = malloc (*out_sz);
@@ -1053,15 +1071,13 @@ R_API void r_io_set_raw(RIO *io, int raw) {
 
 // check if reading at offset or writting to offset is reasonable
 R_API int r_io_is_valid_offset(RIO *io, ut64 offset, int hasperm) {
-	bool io_sectonly = io->sectonly;
-	bool io_va = io->va;
-//io_va=true;
-//	io_sectonly = true;
 	if (!io) {
 		eprintf ("r_io_is_valid_offset: io is NULL\n");
 		r_sys_backtrace ();
 		return R_FAIL;
 	}
+	bool io_sectonly = io->sectonly;
+	bool io_va = io->va;
 	if (!io->files) {
 		eprintf ("r_io_is_valid_offset: io->files is NULL\n");
 		r_sys_backtrace ();
@@ -1089,7 +1105,7 @@ if (hasperm) {
 	}
 	if (io->debug) {
 		// TODO check debug maps here
-		return 1;
+		return true;
 	} else {
 		if (io_sectonly) {
 			if (r_list_empty (io->sections)) {

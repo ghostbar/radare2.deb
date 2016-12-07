@@ -1,4 +1,5 @@
-/* radare - LGPL - Copyright 2009-2015 - pancake */
+/* radare - LGPL - Copyright 2009-2016 - pancake */
+
 #include "r_cons.h"
 #include "r_core.h"
 #include "r_types.h"
@@ -33,8 +34,9 @@ static int __dump_section_to_disk(RCore *core, char *file) {
 	RListIter *iter;
 	RIOSection *s;
 	int len = 128;
-	if (core->io->va || core->io->debug)
+	if (core->io->va || core->io->debug) {
 		o = r_io_section_vaddr_to_maddr_try (core->io, o);
+	}
 	r_list_foreach (core->io->sections, iter, s) {
 		if (o >= s->offset && o < s->offset + s->size) {
 			ut8 *buf = malloc (s->size);
@@ -47,7 +49,7 @@ static int __dump_section_to_disk(RCore *core, char *file) {
 				file = heapfile;
 				snprintf (file, len,
 					"0x%08"PFMT64x"-0x%08"PFMT64x"-%s.dmp",
-					s->vaddr, s->vaddr+s->size,
+					s->vaddr, s->vaddr + s->size,
 					r_str_rwx_i (s->rwx));
 			}
 			if (!r_file_dump (file, buf, s->size, 0)) {
@@ -116,10 +118,13 @@ static int cmd_section(void *data, const char *input) {
 		"Sa","[-] [A] [B] [[off]]","Specify arch and bits for given section",
 		"Sd[a]"," [file]","dump current (all) section to a file (see dmd)",
 		"Sl"," [file]","load contents of file into current section (see dml)",
+		"Sf"," [baddr]","Alias for S 0 0 $s $s foo mrwx",
 		"Sj","","list sections in JSON (alias for iSj)",
 		"Sr"," [name]","rename section on current seek",
 		"S"," off va sz vsz name mrwx","add new section (if(!vsz)vsz=sz)",
-		"S-","[id|0xoff|*]","remove this section definition",
+		"S-[id]","","remove section identified by id",
+		"S-.","","remove section at core->offset (can be changed with @)",
+		"S.-*","","remove all sections in current offset",
 		NULL
 	};
 	switch (*input) {
@@ -127,7 +132,15 @@ static int cmd_section(void *data, const char *input) {
 		r_core_cmd_help (core, help_msg);
 // TODO: add command to resize current section
 		break;
-	case 'j':
+	case 'f': // "Sf"
+		if (input[1] == ' ') {
+			ut64 n = r_num_math (core->num, input + 1);
+			r_core_cmdf (core, "S 0x%"PFMT64x" 0x%"PFMT64x" $s $s foo mrwx", n, n);
+		} else {
+			r_core_cmd0 (core, "S 0 0 $s $s foo mrwx");
+		}
+		break;
+	case 'j': // "Sj"
 		r_core_cmd0 (core, "iSj");
 		break;
 	case 'a':
@@ -235,8 +248,9 @@ static int cmd_section(void *data, const char *input) {
 			eprintf ("Usage: Sl [file]\n");
 			return false;
 		}
-		if (core->io->va || core->io->debug)
+		if (core->io->va || core->io->debug) {
 			o = r_io_section_vaddr_to_maddr_try (core->io, o);
+		}
 		r_list_foreach (core->io->sections, iter, s) {
 			if (o >= s->offset && o < s->offset + s->size) {
 				int sz;
@@ -260,15 +274,19 @@ static int cmd_section(void *data, const char *input) {
 		break;
 	case '-':
 		// remove all sections
-		if (input[1] == '*') r_io_section_init (core->io);
-		if (input[1] == '0' && input[2]=='x') {
-			RIOSection *s = r_io_section_vget (core->io,
-							r_num_get (NULL, input + 1));
-			if (!s) return 0;
+		if (input[1] == '*') {
+			r_io_section_init (core->io);
+		}
+		if (input[1] == '.') {
+			RIOSection *s = r_io_section_vget (core->io, core->offset);
+			if (!s) {
+				return 0;
+			}
 			// use offset
 			r_io_section_rm (core->io, s->id);
-		} else {
-			r_io_section_rm (core->io, atoi (input+1));
+		}
+		if (input[1]) {
+			r_io_section_rm (core->io, atoi (input + 1));
 		}
 		break;
 	case ' ':
@@ -299,31 +317,31 @@ static int cmd_section(void *data, const char *input) {
 			case 5: // get name
 				name = r_str_word_get0 (ptr, 4);
 			case 4: // get vsize
-				vsize = r_num_math (core->num,
-						r_str_word_get0 (ptr, 3));
-				if (!vsize) vsize = size;
+				vsize = r_num_math (core->num, r_str_word_get0 (ptr, 3));
+				if (!vsize) {
+					vsize = size;
+				}
 			case 3: // get size
-				size = r_num_math (core->num,
-						r_str_word_get0 (ptr, 2));
+				size = r_num_math (core->num, r_str_word_get0 (ptr, 2));
 			case 2: // get vaddr
-				vaddr = r_num_math (core->num,
-						r_str_word_get0 (ptr, 1));
+				vaddr = r_num_math (core->num, r_str_word_get0 (ptr, 1));
 			case 1: // get offset
-				offset = r_num_math (core->num,
-						r_str_word_get0 (ptr, 0));
+				offset = r_num_math (core->num, r_str_word_get0 (ptr, 0));
 			}
-			if (vsize == 0) {
+			if (!vsize) {
 				vsize = size;
-				if (i > 3) name = r_str_word_get0 (ptr, 3);
-				if (i > 4) rwx = r_str_rwx (r_str_word_get0 (ptr, 4));
+				if (i > 3) {
+					name = r_str_word_get0 (ptr, 3);
+				}
+				if (i > 4) {
+					rwx = r_str_rwx (r_str_word_get0 (ptr, 4));
+				}
 			}
 			if (!name || !*name) {
-				sprintf (vname, "area%d",
-					r_list_length (core->io->sections));
+				sprintf (vname, "area%d", r_list_length (core->io->sections));
 				name = vname;
 			}
-			r_io_section_add (core->io, offset, vaddr, size,
-					vsize, rwx, name, 0, fd);
+			r_io_section_add (core->io, offset, vaddr, size, vsize, rwx, name, 0, fd);
 			free (ptr);
 			}
 			break;
@@ -335,21 +353,37 @@ static int cmd_section(void *data, const char *input) {
 					r_cons_get_size (NULL));
 		break;
 	case '.':
-		{
-		ut64 o = core->offset;
-		RListIter *iter;
-		RIOSection *s;
-		if (core->io->va || core->io->debug)
-			o = r_io_section_vaddr_to_maddr_try (core->io, o);
-		r_list_foreach (core->io->sections, iter, s) {
-			if (o >= s->offset && o < s->offset + s->size) {
-				r_cons_printf ("0x%08"PFMT64x" 0x%08"PFMT64x" %s\n",
-					s->offset + s->vaddr,
-					s->offset + s->vaddr + s->size,
-					s->name);
-				break;
+		if (input[1] == '-') {
+			ut64 o = core->offset;
+			RListIter *iter, *iter2;
+			RIOSection *s;
+			if (core->io->va || core->io->debug) {
+				o = r_io_section_vaddr_to_maddr_try (core->io, o);
 			}
-		}
+			r_list_foreach_safe (core->io->sections, iter, iter2, s) {
+				if (o >= s->offset && o < s->offset + s->size) {
+					r_io_section_rm (core->io, s->id);
+					if (input[2] != '*') {
+						break;
+					}
+				}
+			}
+		} else {
+			ut64 o = core->offset;
+			RListIter *iter;
+			RIOSection *s;
+			if (core->io->va || core->io->debug) {
+				o = r_io_section_vaddr_to_maddr_try (core->io, o);
+			}
+			r_list_foreach (core->io->sections, iter, s) {
+				if (o >= s->offset && o < s->offset + s->size) {
+					r_cons_printf ("0x%08"PFMT64x" 0x%08"PFMT64x" %s\n",
+						s->offset + s->vaddr,
+						s->offset + s->vaddr + s->size,
+						s->name);
+					break;
+				}
+			}
 		}
 		break;
 	case '\0':

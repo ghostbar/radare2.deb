@@ -3,6 +3,7 @@
 
 #include <ctype.h>
 
+#define cut8 const unsigned char
 #define ut64 unsigned long long
 #define st64 long long
 #define ut32 unsigned int
@@ -10,7 +11,7 @@
 #define ut16 unsigned short
 #define st16 short
 #define ut8 unsigned char
-#define st8 char
+#define st8 signed char
 #define boolt int
 
 #include <stdbool.h>
@@ -91,7 +92,5 @@
 #if !defined(NAN)
 #define NAN (0.0f/0.0f)
 #endif
-
-
 
 #endif
