@@ -11,6 +11,35 @@
 /* stable code */
 static const char *nullstr = "";
 static const char *nullstr_c = "(null)";
+static const char *rwxstr[] = {
+	[0] = "----",
+	[1] = "---x",
+	[2] = "--w-",
+	[3] = "--wx",
+	[4] = "-r--",
+	[5] = "-r-x",
+	[6] = "-rw-",
+	[7] = "-rwx",
+
+	[8] = "----",
+	[9] = "---x",
+	[10] = "--w-",
+	[11] = "--wx",
+	[12] = "-r--",
+	[13] = "-r-x",
+	[14] = "-rw-",
+	[15] = "-rwx",
+
+	[16] = "m---",
+	[17] = "m--x",
+	[18] = "m-w-",
+	[19] = "m-wx",
+	[20] = "mr--",
+	[21] = "mr-x",
+	[22] = "mrw-",
+	[23] = "mrwx",
+};
+
 
 // TODO: simplify this horrible loop
 R_API void r_str_chop_path(char *s) {
@@ -21,13 +50,13 @@ R_API void r_str_chop_path(char *s) {
 	}
 	dst = src = s + 1;
 	while (*src) {
-		if (*(src-1) == '/' && *src == '.' && *(src+1) == '.') {
-			if (*(src+2) == '/' || *(src+2) == '\0') {
-				p = dst-1;
+		if (*(src - 1) == '/' && *src == '.' && *(src + 1) == '.') {
+			if (*(src + 2) == '/' || *(src + 2) == '\0') {
+				p = dst - 1;
 				while (s != p) {
 					if (*p == '/') {
 						if (i) {
-							dst = p+1;
+							dst = p + 1;
 							i = 0;
 							break;
 						}
@@ -36,14 +65,14 @@ R_API void r_str_chop_path(char *s) {
 					p--;
 				}
 				if (s == p && *p == '/') {
-					dst = p+1;
+					dst = p + 1;
 				}
-				src = src+2;
+				src = src + 2;
 			} else {
 				*dst = *src;
 				dst++;
 			}
-		} else if (*src == '/' && *(src+1) == '.' && (*(src+2) == '/' || *(src+2) == '\0')) {
+		} else if (*src == '/' && *(src + 1) == '.' && (*(src + 2) == '/' || *(src + 2) == '\0')) {
 			src++;
 		} else if (*src != '/' || *(src-1) != '/') {
 			*dst = *src;
@@ -222,41 +251,17 @@ R_API int r_str_rwx(const char *str) {
 		ret |= strchr (str, 'r') ? 4 : 0;
 		ret |= strchr (str, 'w') ? 2 : 0;
 		ret |= strchr (str, 'x') ? 1 : 0;
+	} else if (ret < 0 || ret >= R_ARRAY_SIZE (rwxstr)) {
+		ret = 0;
 	}
 	return ret;
 }
 
 // Returns the string representation of the permission of the inputted integer.
 R_API const char *r_str_rwx_i(int rwx) {
-	static const char *rwxstr[24] = {
-		[0] = "----",
-		[1] = "---x",
-		[2] = "--w-",
-		[3] = "--wx",
-		[4] = "-r--",
-		[5] = "-r-x",
-		[6] = "-rw-",
-		[7] = "-rwx",
-
-		[8] = "----",
-		[9] = "---x",
-		[10] = "--w-",
-		[11] = "--wx",
-		[12] = "-r--",
-		[13] = "-r-x",
-		[14] = "-rw-",
-		[15] = "-rwx",
-
-		[16] = "m---",
-		[17] = "m--x",
-		[18] = "m-w-",
-		[19] = "m-wx",
-		[20] = "mr--",
-		[21] = "mr-x",
-		[22] = "mrw-",
-		[23] = "mrwx",
-		/* ... */
-	};
+	if (rwx < 0 || rwx >= R_ARRAY_SIZE (rwxstr)) {
+		rwx = 0;
+	}
 	return rwxstr[rwx % 24]; // 15 for srwx
 }
 
@@ -357,9 +362,9 @@ R_API int r_str_word_set0(char *str) {
 	if (!str || !*str) {
 		return 0;
 	}
-	for (i = 0; str[i] && str[i+1]; i++) {
+	for (i = 0; str[i] && str[i + 1]; i++) {
 		if (i > 0 && str[i-1] == ' ' && str[i] == ' ') {
-			int len = strlen (str + i) + 1;
+			int len = strlen (str + i);
 			memmove (str + i, str + i + 1, len);
 			i--;
 		}
@@ -523,8 +528,8 @@ R_API char *r_str_word_get0set(char *stra, int stralen, int idx, const char *new
 }
 
 // Get the idx'th entry of a tokenized string.
-// XXX: Warning! this function is UNSAFE, check that the string has idx or fewer
-// tokens.
+// XXX: Warning! this function is UNSAFE, check that the string has, at least,
+// idx+1 tokens.
 R_API const char *r_str_word_get0(const char *str, int idx) {
 	int i;
 	const char *ptr = str;
@@ -629,7 +634,9 @@ R_API int r_str_nstr(char *from, char *to, int size) {
 
 // TODO: rewrite in macro?
 R_API const char *r_str_chop_ro(const char *str) {
-	if (str) while (*str && iswhitechar (*str)) str++;
+	if (str) {
+		while (*str && iswhitechar (*str)) str++;
+	}
 	return str;
 }
 
@@ -939,7 +946,7 @@ R_API char *r_str_concatf(char *ptr, const char *fmt, ...) {
 	va_start (ap, fmt);
 	ret = vsnprintf (string, sizeof (string), fmt, ap);
 	if (ret >= sizeof (string)) {
-		char *p = malloc (ret+2);
+		char *p = malloc (ret + 2);
 		if (!p) {
 			va_end (ap);
 			return NULL;
@@ -1137,8 +1144,8 @@ R_API int r_str_unescape(char *buf) {
 				eprintf ("Unexpected end of string.\n");
 				return 0;
 			}
-			err |= r_hex_to_byte (&ch,  buf[i+2]);
-			err |= r_hex_to_byte (&ch2, buf[i+3]);
+			err |= r_hex_to_byte (&ch,  buf[i + 2]);
+			err |= r_hex_to_byte (&ch2, buf[i + 3]);
 			if (err) {
 				eprintf ("Error: Non-hexadecimal chars in input.\n");
 				return 0; // -1?
@@ -1186,7 +1193,6 @@ static char *r_str_escape_(const char *buf, const int dot_nl) {
 	if (!buf) {
 		return NULL;
 	}
-
 	/* Worst case scenario, we convert every byte */
 	new_buf = malloc (1 + (strlen (buf) * 4));
 	if (!new_buf) {
@@ -1252,7 +1258,6 @@ static char *r_str_escape_(const char *buf, const int dot_nl) {
 		}
 		p++;
 	}
-
 out:
 	*q = '\0';
 	return new_buf;
@@ -1276,7 +1281,7 @@ R_API int r_str_ansi_len(const char *str) {
 			if (ch2 == '\\') {
 				i++;
 			} else if (ch2 == ']') {
-				if (!strncmp (str+2+5, "rgb:", 4)) {
+				if (!strncmp (str + 2 + 5, "rgb:", 4)) {
 					i += 18;
 				}
 			} else if (ch2 == '[') {
@@ -1341,15 +1346,36 @@ R_API int r_str_ansi_chop(char *str, int str_len, int n) {
 	return back;
 }
 
-
-// TODO: support wide char strings
 R_API int r_str_nlen(const char *str, int n) {
 	int len = 0;
 	if (str) {
-		//while (IS_PRINTABLE (*str) && n>0) {
 		while (*str && n > 0) {
 			len++;
 			str++;
+			n--;
+		}
+	}
+	return len;
+}
+
+//to handle wide string as well
+//XXX can be error prone
+R_API int r_str_nlen_w(const char *str, int n) {
+	int len = 0;
+	if (str) {
+		while (*str && n > 0) {
+			len++;
+			str++;
+			if (!*str) {
+				//handle wide strings
+			 	//xx00yy00bb00
+				if (n - 2 > 0) {
+					if (str[2]) {
+						break;
+					}
+				}
+				str++;
+			}
 			n--;
 		}
 	}
@@ -1450,9 +1476,9 @@ R_API int r_str_ansi_filter(char *str, char **out, int **cposs, int len) {
 
 R_API char *r_str_ansi_crop(const char *str, unsigned int x, unsigned int y,
 		unsigned int x2, unsigned int y2) {
-	char *r, *ret;
+	char *r, *r_end, *ret;
 	const char *s;
-	size_t str_len = 0, nr_of_lines = 0;
+	size_t r_len, str_len = 0, nr_of_lines = 0;
 	unsigned int ch = 0, cw = 0;
 	if (x2 < 1 || y2 < 1 || !str) {
 		return strdup ("");
@@ -1465,7 +1491,9 @@ R_API char *r_str_ansi_crop(const char *str, unsigned int x, unsigned int y,
 		}
 		s++;
 	}
-	r = ret = malloc (str_len + nr_of_lines * strlen (Color_RESET) + 1);
+	r_len = str_len + nr_of_lines * strlen (Color_RESET) + 1;
+	r = ret = malloc (r_len);
+	r_end = r + r_len;
 	while (*str) {
 		/* crop height */
 		if (ch >= y2) {
@@ -1475,8 +1503,11 @@ R_API char *r_str_ansi_crop(const char *str, unsigned int x, unsigned int y,
 
 		if (*str == '\n') {
 			if (ch >= y && ch < y2) {
-				strcpy (r, Color_RESET "\n");
-				r += strlen (Color_RESET "\n");
+				const char *reset = Color_RESET "\n";
+				if (strlen (reset) < (r_end - r)) {
+					memcpy (r, reset, strlen (reset) + 1);
+					r += strlen (reset);
+				}
 			}
 			str++;
 			ch++;

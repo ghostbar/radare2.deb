@@ -117,29 +117,30 @@ static char *getstr(const char *src) {
 		}
 		return NULL;
 	case '"':
-		ret = strdup (src+1);
+		ret = strdup (src + 1);
 		if (ret) {
 			len = strlen (ret);
-			if (len>0) {
+			if (len > 0) {
 				len--;
-				if (ret[len]=='"') {
+				if (ret[len] == '"') {
 					ret[len] = 0;
 					r_str_unescape (ret);
 					return ret;
-				} else eprintf ("Missing \"\n");
+				}
+				eprintf ("Missing \"\n");
 			}
 			free (ret);
 		}
 		return NULL;
 	case '@':
 		{
-			char *pat = strchr (src+1, '@');
+			char *pat = strchr (src + 1, '@');
 			if (pat) {
 				int i, len, rep;
 				*pat++ = 0;
 				rep = atoi (src + 1);
 				len = strlen (pat);
-				if (rep>0) {
+				if (rep > 0) {
 					char *buf = malloc (rep);
 					if (buf) {
 						for (i = 0; i < rep; i++) {
@@ -155,20 +156,19 @@ static char *getstr(const char *src) {
 	case '!':
 		return r_str_trim_tail (r_sys_cmd_str (src + 1, NULL, NULL));
 	case ':':
-		if (src[1]=='!') {
+		if (src[1] == '!') {
 			ret = r_str_trim_tail (r_sys_cmd_str (src + 1, NULL, NULL));
 		} else {
 			ret = strdup (src);
 		}
-		len = r_hex_str2bin (src+1, (ut8*)ret);
+		len = r_hex_str2bin (src + 1, (ut8*)ret);
 		if (len > 0) {
 			ret[len] = 0;
 			return ret;
-		} else {
-			eprintf ("Invalid hexpair string\n");
-			free (ret);
-			return NULL;
 		}
+		eprintf ("Invalid hexpair string\n");
+		free (ret);
+		return NULL;
 	}
 	r_str_unescape ((ret = strdup (src)));
 	return ret;
@@ -181,20 +181,30 @@ static int parseBool (const char *e) {
 		0: 1): 1): 1);
 }
 
+#if __linux__
+#define RVAS "/proc/sys/kernel/randomize_va_space"
+static void setRVA(const char *v) {
+	int fd = open (RVAS, O_WRONLY);
+	if (fd != -1) {
+		write (fd, v, 2);
+		close (fd);
+	}
+}
+#endif
+
 // TODO: move into r_util? r_run_... ? with the rest of funcs?
 static void setASLR(int enabled) {
 #if __linux__
-#define RVAS "/proc/sys/kernel/randomize_va_space"
 	if (enabled) {
-		system ("echo 2 > "RVAS);
+		setRVA ("2\n");
 	} else {
 #if __ANDROID__
-		system ("echo 0 > "RVAS);
+		setRVA ("0\n");
 #else
 #ifdef ADDR_NO_RANDOMIZE
 		if (personality (ADDR_NO_RANDOMIZE) == -1)
 #endif
-			system ("echo 0 > "RVAS);
+			setRVA ("0\n");
 #endif
 	}
 #elif __APPLE__
@@ -233,9 +243,15 @@ static int handle_redirection_proc (const char *cmd, bool in, bool out, bool err
 		if (!in) dup2 (saved_stdin, STDIN_FILENO);
 		if (!out) dup2 (saved_stdout, STDOUT_FILENO);
 		if (!err) dup2 (saved_stderr, STDERR_FILENO);
-		close (saved_stdin);
-		close (saved_stdout);
-		close (saved_stderr);
+		if (saved_stdin != -1) {
+			close (saved_stdin);
+		}
+		if (saved_stdout != -1) {
+			close (saved_stdout);
+		}
+		if (saved_stderr != -1) {
+			close (saved_stderr);
+		}
 		saved_stdin = -1;
 		saved_stdout = -1;
 		saved_stderr = -1;
@@ -587,7 +603,7 @@ R_API int r_run_config_env(RRunProfile *p) {
 			return 1;
 		}
 	}
-#endif
+#else
 	if (p->_chgdir) {
 		ret = chdir (p->_chgdir);
 		if (ret < 0) {
@@ -600,33 +616,29 @@ R_API int r_run_config_env(RRunProfile *p) {
 			return 1;
 		}
 	}
+#endif
 #if __UNIX__
-	if (p->_chroot) {
-		if (chroot (p->_chroot) == 0) {
-			chdir ("/");
-		} else {
-			eprintf ("rarun2: cannot chroot\n");
-			r_sys_perror ("chroot");
+	if (p->_setuid) {
+		ret = setgroups (0, NULL);
+		if (ret < 0) {
+			return 1;
+		}
+		ret = setuid (atoi (p->_setuid));
+		if (ret < 0) {
 			return 1;
 		}
 	}
-	if (p->_setuid) {
-		ret = setgroups (0, NULL);
-		if (ret < 0)
-			return 1;
-		ret = setuid (atoi (p->_setuid));
-		if (ret < 0)
-			return 1;
-	}
 	if (p->_seteuid) {
 		ret = seteuid (atoi (p->_seteuid));
-		if (ret < 0)
+		if (ret < 0) {
 			return 1;
+		}
 	}
 	if (p->_setgid) {
 		ret = setgid (atoi (p->_setgid));
-		if (ret < 0)
+		if (ret < 0) {
 			return 1;
+		}
 	}
 	if (p->_input) {
 		char *inp;

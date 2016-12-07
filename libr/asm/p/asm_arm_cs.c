@@ -9,6 +9,8 @@ bool arm64ass(const char *str, ut64 addr, ut32 *op);
 static int check_features(RAsm *a, cs_insn *insn);
 static csh cd = 0;
 
+#include "cs_mnemonics.c"
+
 static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	static int omode = -1;
 	static int obits = 32;
@@ -28,8 +30,10 @@ static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 		mode |= CS_MODE_MCLASS;
 	if (a->features && strstr (a->features, "v8"))
 		mode |= CS_MODE_V8;
-	op->size = 4;
-	op->buf_asm[0] = 0;
+	if (op) {
+		op->size = 4;
+		op->buf_asm[0] = 0;
+	}
 	if (cd == 0) {
 		ret = (a->bits == 64)?
 			cs_open (CS_ARCH_ARM64, mode, &cd):
@@ -47,23 +51,28 @@ static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	} else {
 		cs_option (cd, CS_OPT_DETAIL, CS_OPT_OFF);
 	}
+	if (!buf) {
+		goto beach;
+	}
 	n = cs_disasm (cd, buf, R_MIN (4, len), a->pc, 1, &insn);
 	if (n < 1) {
 		ret = -1;
 		goto beach;
 	}
-	op->size = 0;
-	if (insn->size<1) {
+	if (op) {
+		op->size = 0;
+	}
+	if (insn->size < 1) {
 		ret = -1;
 		goto beach;
 	}
 	if (a->features && *a->features) {
-		if (!check_features (a, insn)) {
+		if (!check_features (a, insn) && op) {
 			op->size = insn->size;
 			strcpy (op->buf_asm, "illegal");
 		}
 	}
-	if (!op->size) {
+	if (op && !op->size) {
 		op->size = insn->size;
 		snprintf (op->buf_asm, R_ASM_BUFSIZE, "%s%s%s",
 			insn->mnemonic,
@@ -74,9 +83,13 @@ static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	cs_free (insn, n);
 	beach:
 	//cs_close (&cd);
-	if (!op->buf_asm[0])
-		strcpy (op->buf_asm, "invalid");
-	return op->size;
+	if (op) {
+		if (!op->buf_asm[0]) {
+			strcpy (op->buf_asm, "invalid");
+		}
+		return op->size;
+	}
+	return 0;
 }
 
 static int assemble(RAsm *a, RAsmOp *op, const char *buf) {
@@ -130,6 +143,7 @@ RAsmPlugin r_asm_plugin_arm_cs = {
 	.bits = 16 | 32 | 64,
 	.endian = R_SYS_ENDIAN_LITTLE | R_SYS_ENDIAN_BIG,
 	.disassemble = &disassemble,
+	.mnemonics = mnemonics,
 	.assemble = &assemble,
 	.features = "no-mclass,v8"
 #if 0

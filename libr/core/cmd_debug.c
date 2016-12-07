@@ -7,7 +7,6 @@
 #define TN_KEY_LEN 32
 #define TN_KEY_FMT "%"PFMT64u
 
-
 #if __linux__ && __GNU_LIBRARY__ && __GLIBC__ && __GLIBC_MINOR__
 #include "r_heap_glibc.h"
 #endif
@@ -16,6 +15,13 @@ struct dot_trace_ght {
 	RGraph *graph;
 	Sdb *graphnodes;
 };
+
+/*
+struct RCoreCommand {
+	const char *name;
+	const char *help[];
+};
+*/
 
 struct trace_node {
 	ut64 addr;
@@ -27,8 +33,9 @@ static ut64 r_debug_get_baddr(RCore *r, const char *file) {
 	char *abspath;
 	RListIter *iter;
 	RDebugMap *map;
-	if (!r || !r->io || !r->io->desc)
+	if (!r || !r->io || !r->io->desc) {
 		return 0LL;
+	}
 	r_debug_attach (r->dbg, r->io->desc->fd);
 	r_debug_map_sync (r->dbg);
 	abspath = r_file_abspath (file);
@@ -323,10 +330,8 @@ static int step_until_eof(RCore *core) {
 	ut64 off, now = r_debug_reg_get (core->dbg, "SP");
 	r_cons_break (NULL, NULL);
 	do {
-		if (r_cons_singleton ()->breaked)
-			break;
-		if (!r_debug_step (core->dbg, 1))
-			break;
+		// XXX (HACK!)
+		r_debug_step_over (core->dbg, 1);
 		off = r_debug_reg_get (core->dbg, "SP");
 		// check breakpoint here
 	} while (off <= now);
@@ -769,69 +774,69 @@ show_help:
 		return;
 	}
 	if (mode == 'j') {
-		r_cons_printf ("[");
+		r_cons_print ("[");
 	}
 	// TODO: honor mode
 	list = r_debug_modules_list (core->dbg);
 	r_list_foreach (list, iter, map) {
 		switch (mode) {
-			case 0:
-				r_cons_printf ("0x%08"PFMT64x" %s\n", map->addr, map->file);
-				break;
-			case ':':
-				if (addr >= map->addr && addr < map->addr_end) {
-					char *fn = strdup (map->file);
-					r_name_filter (fn, 0);
-					//r_cons_printf ("fs+module_%s\n", fn);
-					r_cons_printf ("f mod.%s = 0x%08"PFMT64x"\n",
-							fn, map->addr);
-					r_cons_printf (".!rabin2 -rsB 0x%08"PFMT64x" '%s'\n",
-							map->addr, map->file);
-					//r_cons_printf ("fs-\n");
-					free (fn);
-				}
-				break;
-			case '.':
-				if (addr >= map->addr && addr < map->addr_end) {
-					r_cons_printf ("0x%08"PFMT64x" %s\n",
-							map->addr, map->file);
-					goto beach;
-				}
-				break;
-			case 'j':
-				r_cons_printf ("{\"address\":%"PFMT64d",\"name\":\"%s\",\"file\":\"%s\"}%s",
-						map->addr, map->name, map->file, iter->n?",":"");
-				break;
-			case '*':
-				{
-					char *fn = strdup (map->file);
-					r_name_filter (fn, 0);
-					//r_cons_printf ("fs+module_%s\n", fn);
-					r_cons_printf ("f mod.%s = 0x%08"PFMT64x"\n",
-							fn, map->addr);
-					r_cons_printf (".!rabin2 -rsB 0x%08"PFMT64x" '%s'\n",
-							map->addr, map->file);
-					//r_cons_printf ("fs-\n");
-					free (fn);
-				}
-				break;
-			default:
-				r_list_free (list);
-				goto show_help;
-				/* not reached */
+		case 0:
+			r_cons_printf ("0x%08"PFMT64x" %s\n", map->addr, map->file);
+			break;
+		case ':':
+			if (addr >= map->addr && addr < map->addr_end) {
+				char *fn = strdup (map->file);
+				r_name_filter (fn, 0);
+				//r_cons_printf ("fs+module_%s\n", fn);
+				r_cons_printf ("f mod.%s = 0x%08"PFMT64x"\n",
+						fn, map->addr);
+				r_cons_printf (".!rabin2 -rsB 0x%08"PFMT64x" '%s'\n",
+						map->addr, map->file);
+				//r_cons_printf ("fs-\n");
+				free (fn);
+			}
+			break;
+		case '.':
+			if (addr >= map->addr && addr < map->addr_end) {
+				r_cons_printf ("0x%08"PFMT64x" %s\n",
+						map->addr, map->file);
+				goto beach;
+			}
+			break;
+		case 'j':
+			r_cons_printf ("{\"address\":%"PFMT64d",\"name\":\"%s\",\"file\":\"%s\"}%s",
+					map->addr, map->name, map->file, iter->n?",":"");
+			break;
+		case '*':
+			{
+				char *fn = strdup (map->file);
+				r_name_filter (fn, 0);
+				//r_cons_printf ("fs+module_%s\n", fn);
+				r_cons_printf ("f mod.%s = 0x%08"PFMT64x"\n",
+						fn, map->addr);
+				r_cons_printf (".!rabin2 -rsB 0x%08"PFMT64x" '%s'\n",
+						map->addr, map->file);
+				//r_cons_printf ("fs-\n");
+				free (fn);
+			}
+			break;
+		default:
+			r_list_free (list);
+			goto show_help;
+			/* not reached */
 		}
 	}
 beach:
 	if (mode == 'j') {
-		r_cons_printf ("]\n");
+		r_cons_print ("]\n");
 	}
 	r_list_free (list);
 }
 
 #if __linux__ && __GNU_LIBRARY__ && __GLIBC__ && __GLIBC_MINOR__
 
-static int cmd_dbg_map_heap_glibc_32(RCore *core, const char *input);
-static int cmd_dbg_map_heap_glibc_64(RCore *core, const char *input);
+static int cmd_dbg_map_heap_glibc_32 (RCore *core, const char *input);
+static int cmd_dbg_map_heap_glibc_64 (RCore *core, const char *input);
 
 static void get_hash_debug_file(const char *path, char *hash, int hash_len) {
 	RListIter *iter;
@@ -892,9 +897,9 @@ static int cmd_debug_map(RCore *core, const char *input) {
 		"dmi*", " [addr|libname] [symname]", "List symbols of target lib in radare commands",
 		"dmj", "", "List memmaps in JSON format",
 		"dml", " <file>", "Load contents of file into the current map region (see Sl)",
-		"dmm", "[j*]", "List modules (libraries, binaries loaded in memory)",
-		"dmp", " <address> <size> <perms>", "Change page at <address> with <size>, protection <perms> (rwx)",
-		"dms", " <id> <mapaddr>", "take memory snapshot",
+		"dmm", "[?][j*]", "List modules (libraries, binaries loaded in memory)",
+		"dmp", "[?] <address> <size> <perms>", "Change page at <address> with <size>, protection <perms> (rwx)",
+		"dms", "[?] <id> <mapaddr>", "take memory snapshot",
 		"dms-", " <id> <mapaddr>", "restore memory snapshot",
 		"dmh", "", "Show map of heap",
 		//"dm, " rw- esp 9K", "set 9KB of the stack as read+write (no exec)",
@@ -1019,12 +1024,19 @@ static int cmd_debug_map(RCore *core, const char *input) {
 			}
 			i = r_str_word_set0 (ptr);
 			switch (i) {
-				case 2: // get symname
-					symname = r_str_word_get0 (ptr, 1);
-				case 1: // get addr|libname
-					addr = r_num_math (core->num, r_str_word_get0 (ptr, 0));
-					if (!addr) libname = r_str_word_get0 (ptr, 0);
-					break;
+			case 2: // get symname
+				symname = r_str_word_get0 (ptr, 1);
+			case 1: // get addr|libname
+				if (IS_NUMBER (*ptr)) {
+					const char *a0 = r_str_word_get0 (ptr, 0);
+					addr = r_num_math (core->num, a0);
+				} else {
+					addr = UT64_MAX;
+				}
+				if (!addr || addr == UT64_MAX) {
+					libname = r_str_word_get0 (ptr, 0);
+				}
+				break;
 			}
 			r_debug_map_sync (core->dbg); // update process memory maps
 			r_list_foreach (core->dbg->maps, iter, map) {
@@ -1033,7 +1045,7 @@ static int cmd_debug_map(RCore *core, const char *input) {
 						 (libname != NULL && (strstr (map->name, libname))))) {
 					filter.offset = 0LL;
 					filter.name = (char *)symname;
-					baddr = r_bin_get_baddr (core->bin);
+					baddr = map->addr;
 					if (libname) {
 						char *cmd, *res;
 						const char *file = map->file? map->file: map->name;
@@ -1091,6 +1103,7 @@ static int cmd_debug_map(RCore *core, const char *input) {
 	case '\0':
 	case '*':
 	case 'j':
+	case 'q':
 		r_debug_map_sync (core->dbg); // update process memory maps
 		r_debug_map_list (core->dbg, core->offset, input[0]);
 		break;
@@ -1103,10 +1116,8 @@ static int cmd_debug_map(RCore *core, const char *input) {
 	case 'h': // "dmh"
 #if __linux__ && __GNU_LIBRARY__ && __GLIBC__ && __GLIBC_MINOR__
 		if (SZ == 4) {
-#define GLIBC_BITS_32 1
 			cmd_dbg_map_heap_glibc_32 (core, input + 1);
 		} else {
-#define GLIBC_BITS_64 1
 			cmd_dbg_map_heap_glibc_64 (core, input + 1);
 		}
 #else
@@ -1117,11 +1128,8 @@ static int cmd_debug_map(RCore *core, const char *input) {
 	return true;
 }
 
-#if __linux__ && __GNU_LIBRARY__ && __GLIBC__ && __GLIBC_MINOR__ && GLIBC_BITS_32 == 1
-#include "linux_heap_glibc_32.c"
-#endif
-#if __linux__ && __GNU_LIBRARY__ && __GLIBC__ && __GLIBC_MINOR__ && GLIBC_BITS_64 == 1
-#include "linux_heap_glibc_64.c"
+#if __linux__ && __GNU_LIBRARY__ && __GLIBC__ && __GLIBC_MINOR__
+#include "linux_heap_glibc.c"
 #endif
 
 R_API void r_core_debug_rr(RCore *core, RReg *reg) {
@@ -1133,13 +1141,23 @@ R_API void r_core_debug_rr(RCore *core, RReg *reg) {
 	r_debug_map_sync (core->dbg);
 	r_list_foreach (list, iter, r) {
 		char *rrstr;
-		if (r->size != bits) continue;
+		if (r->size != bits) {
+			continue;
+		}
 		value = r_reg_get_value (core->dbg->reg, r);
 		rrstr = r_core_anal_hasrefs (core, value);
 		if (bits == 64) {
-			r_cons_printf ("%6s 0x%016"PFMT64x, r->name, value);
+			if (r->flags) {
+				r_cons_printf ("%6s %018s", r->name, r_reg_get_bvalue (reg, r));
+			} else {
+				r_cons_printf ("%6s 0x%016"PFMT64x, r->name, value);
+			}
 		} else {
-			r_cons_printf ("%6s 0x%08"PFMT64x, r->name, value);
+			if (r->flags) {
+				r_cons_printf ("%6s %010s", r->name, r_reg_get_bvalue (reg, r));
+			} else {
+				r_cons_printf ("%6s 0x%08"PFMT64x, r->name, value);
+			}
 		}
 		if (rrstr) {
 			r_cons_printf (" %s\n", rrstr);
@@ -1275,6 +1293,9 @@ static void cmd_debug_reg(RCore *core, const char *str) {
 	} else {
 		use_color = NULL;
 	}
+	if (!str) {
+		str = "";
+	}
 	switch (str[0]) {
 	case 'C': // "drC"
 		if (core->dbg->reg->reg_profile_cmt) {
@@ -1305,6 +1326,7 @@ static void cmd_debug_reg(RCore *core, const char *str) {
 				"dr", " <register>=<val>", "Set register value",
 				"dr=", "", "Show registers in columns",
 				"dr?", "<register>", "Show value of given register",
+				"dr8", "[1|2|4|8] [type]", "Display hexdump of gpr arena (WIP)",
 				"drb", "[1|2|4|8] [type]", "Display hexdump of gpr arena (WIP)",
 				"drC", "", "Show register profile comments",
 				"drc", " [name]", "Related to conditional flag registers",
@@ -1351,12 +1373,16 @@ static void cmd_debug_reg(RCore *core, const char *str) {
 			}
 		}
 		break;
+	case '8': // "dr8"
 	case 'b': // "drb"
 		{
 			int len;
 			ut8 *buf = r_reg_get_bytes (core->dbg->reg, R_REG_TYPE_GPR, &len);
 			/* TODO : parse [type] parameter here instead of hardcoded GPR */
-			switch (str[1]) {
+			if (str[0] == '8') {
+				r_print_bytes (core->print, buf, len, "%02x");
+			} else {
+				switch (str[1]) {
 				case '1':
 					r_print_hexdump (core->print, 0LL, buf, len, 8, 1);
 					break;
@@ -1376,6 +1402,7 @@ static void cmd_debug_reg(RCore *core, const char *str) {
 						r_print_hexdump (core->print, 0LL, buf, len, 32, 4);
 					}
 					break;
+				}
 			}
 			free (buf);
 		}
@@ -3207,12 +3234,16 @@ static int cmd_debug(void *data, const char *input) {
 			cmd_debug_pid (core, input);
 			break;
 		case 'h': // "dh"
-			if (input[1]==' ') {
+			if (input[1]=='q') {
+				r_debug_plugin_list (core->dbg, 'q');
+			} else if (input[1]==' ') {
 				char *str = r_str_chop (strdup (input + 2));
 				r_config_set (core->config, "dbg.backend", str);
 				// implicit by config.set r_debug_use (core->dbg, str);
 				free (str);
-			} else r_debug_plugin_list (core->dbg);
+			} else {
+				r_debug_plugin_list (core->dbg, 0);
+			}
 			break;
 		case 'i':
 			{

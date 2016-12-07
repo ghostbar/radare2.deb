@@ -38,7 +38,7 @@ static char *prompt(const char *str, const char *txt) {
 	}
 	*cmd = '\0';
 	r_line_set_prompt (str);
-	if (r_cons_fgets (cmd, sizeof (cmd)-1, 0, NULL) < 0) {
+	if (r_cons_fgets (cmd, sizeof (cmd) - 1, 0, NULL) < 0) {
 		*cmd = '\0';
 	}
 	//line[strlen(line)-1]='\0';
@@ -56,8 +56,9 @@ static inline char *getformat (RCoreVisualTypes *vt, const char *k) {
 	return sdb_get (vt->core->anal->sdb_types,
 		sdb_fmt (0, "type.%s", k), 0);
 }
+
 static char *colorize_asm_string(RCore *core, const char *buf_asm, int optype) {
-	char *spacer = NULL;
+	char *tmp, *spacer = NULL;
 	char *source = (char*)buf_asm;
 	bool use_color = core->print->flags & R_PRINT_FLAGS_COLOR;
 	const char *color_num = core->cons->pal.num;
@@ -66,14 +67,11 @@ static char *colorize_asm_string(RCore *core, const char *buf_asm, int optype) {
 	if (!use_color) {
 		return strdup (source);
 	}
-
 	// workaround dummy colorizer in case of paired commands (tms320 & friends)
-
 	spacer = strstr (source, "||");
 	if (spacer) {
 		char *scol1, *s1 = r_str_ndup (source, spacer - source);
 		char *scol2, *s2 = strdup (spacer + 2);
-
 		scol1 = r_print_colorize_opcode (s1, color_reg, color_num);
 		free (s1);
 		scol2 = r_print_colorize_opcode (s2, color_reg, color_num);
@@ -92,7 +90,9 @@ static char *colorize_asm_string(RCore *core, const char *buf_asm, int optype) {
 	}
 	char *res = strdup("");
 	res = r_str_concat (res, r_print_color_op_type (core->print, optype));
-	res = r_str_concat (res, r_print_colorize_opcode (source, color_reg, color_num));
+	tmp = r_print_colorize_opcode (source, color_reg, color_num);
+	res = r_str_concat (res, tmp);
+	free (tmp);
 	return res;
 }
 
@@ -441,16 +441,18 @@ R_API int r_core_visual_types(RCore *core) {
 		switch (ch) {
 		case 'h':
 			h_opt--;
-			if (h_opt<0)
+			if (h_opt < 0) {
 				h_opt = 0;
+			}
 			option = 0;
 			R_FREE (optword);
 			break;
 		case 'l':
 			h_opt++;
 			option = 0;
-			if (!opts[h_opt])
+			if (!opts[h_opt]) {
 				h_opt--;
+			}
 			R_FREE (optword);
 			break;
 		case 'o':
@@ -541,7 +543,11 @@ R_API int r_core_visual_types(RCore *core) {
 				case 1: // enum
 				case 2: // struct
 					free (optword);
-					optword = strdup (vt.curname);
+					if (vt.curname) {
+						optword = strdup (vt.curname);
+					} else {
+						optword = NULL;
+					}
 					break;
 				default:
 					break;
@@ -568,9 +574,9 @@ R_API int r_core_visual_types(RCore *core) {
 		case ':':
 			r_cons_show_cursor (true);
 			r_cons_set_raw (0);
-			cmd[0]='\0';
+			cmd[0] = '\0';
 			r_line_set_prompt (":> ");
-			if (r_cons_fgets (cmd, sizeof (cmd)-1, 0, NULL) < 0) {
+			if (r_cons_fgets (cmd, sizeof (cmd) - 1, 0, NULL) < 0) {
 				cmd[0]='\0';
 			}
 			r_core_cmd (core, cmd, 1);
@@ -2141,9 +2147,12 @@ R_API void r_core_visual_anal(RCore *core) {
 			r_cons_show_cursor (true);
 			r_cons_set_raw (false);
 			r_line_set_prompt ("New name: ");
-			if (!r_cons_fgets (old, sizeof (old), 0, NULL)) break;
-			//old[strlen (old)-1] = 0;
-			function_rename (core, addr, old);
+			if (r_cons_fgets (old, sizeof (old), 0, NULL)) {
+				if (*old) {
+					//old[strlen (old)-1] = 0;
+					function_rename (core, addr, old);
+				}
+			}
 			r_cons_set_raw (true);
 			r_cons_show_cursor (false);
 			break;
@@ -2364,6 +2373,7 @@ R_API void r_core_visual_define (RCore *core) {
 		," w    set as 32bit word"
 		," W    set as 64bit word"
 		," q    quit menu"
+		," z    zone flag"
 		, NULL};
 	for (i = 0; lines[i]; i++) {
 		r_cons_fill_line ();
@@ -2580,44 +2590,100 @@ repeat:
 	case 'r': // "Vdr"
 		r_core_cmdf (core, "?i new function name;afn `?y` @ 0x%08"PFMT64x, off);
 		break;
+	case 'z': // "Vdz"
+		r_core_cmdf (core, "?i zone name;fz `?y` @ 0x%08"PFMT64x, off);
+		break;
 	case 'R': // "VdR"
 		eprintf ("Finding references to 0x%08"PFMT64x" ...\n", off);
 		r_core_cmdf (core, "./r 0x%08"PFMT64x" @ $S", off);
 		break;
 	case 'S':
+		{
+		int i, j;
+		bool is_wide = false;
 		do {
-			n = r_str_nlen ((const char*)p+ntotal, plen-ntotal)+1;
-			if (n<2) break;
-			if (p[ntotal + n - 1])
-				break; // Not a \0 terminated string
-			name = malloc (n+10);
+			n = r_str_nlen_w ((const char *)p + ntotal,
+					plen - ntotal) + 1;
+			if (n < 2) break;
+			name = malloc (n + 10);
 			strcpy (name, "str.");
-			memcpy (name+4, (const char *)p+ntotal, n);
-			name[4+n] = '\0';
-			r_meta_add (core->anal, R_META_TYPE_STRING,
-				off+ntotal, off+n+ntotal, (const char *)name+4);
-			r_name_filter (name, n+10);
+			for (i = 0, j = 0; i < n; i++, j++) {
+				name[4 + i] = p[j + ntotal];
+				if (!p[j + ntotal]) {
+					break;
+				}
+				if (!p[j + 1 + ntotal])  {
+					//check if is still wide
+					if (j + 3 + ntotal < n) {
+						if (p[j + 3]) {
+							break;
+						}
+					}
+					is_wide = true;
+					j++;
+				}
+			}
+			name[4 + n] = '\0';
+			if (is_wide) {
+				r_meta_add (core->anal, R_META_TYPE_STRING,
+				  off + ntotal, off + (n * 2) + ntotal,
+						   (const char *)name + 4);
+			} else {
+				r_meta_add (core->anal, R_META_TYPE_STRING,
+				  off + ntotal, off + n + ntotal,
+						   (const char *)name + 4);
+			}
+			r_name_filter (name, n + 10);
 			r_flag_set (core->flags, name, off+ntotal, n);
 			free (name);
-			ntotal += n;
-		} while (ntotal<plen);
+			if (is_wide) {
+				ntotal += n * 2 - 1;
+			} else {
+				ntotal += n;
+			}
+		} while (ntotal < plen);
+		}
 		break;
 	case 's':
 		{
-		int i;
-		// TODO: r_core_cmd0 (core, "Cz");
-		if (core->print->ocur != -1)
+		int i, j;
+		bool is_wide = false;
+		if (core->print->ocur != -1) {
 			n = plen;
-		else n = r_str_nlen ((const char*)p, plen)+1;
-		name = malloc (n+10);
+		} else {
+			n = r_str_nlen_w ((const char*)p, plen) + 1;
+		}
+		name = malloc (n + 10);
+		if (!name) {
+			break;
+		}
 		strcpy (name, "str.");
-		memcpy (name+4, (const char *)p, n);
-		name[4+n] = '\0';
-		for (i = 0; i < n; i++)
-			if (!name[4+i])
-				name[4+i]='_';
-		r_meta_add (core->anal, R_META_TYPE_STRING, off, off+n, (const char *)name+4);
-		r_name_filter (name, n+10);
+		for (i = 0, j = 0; i < n; i++, j++) {
+			name[4 + i] = p[j];
+			if (!p[j + 1]) {
+				break;
+			}
+			if (!p[j + 1]) {
+				if (j + 3 < n) {
+					if (p[j + 3]) {
+						break;
+					}
+				}
+				is_wide = true;
+				j++;
+			} 
+		}
+		name[4 + n] = '\0';
+		//handle wide strings
+		//memcpy (name + 4, (const char *)p, n);
+		if (is_wide) {
+			r_meta_add (core->anal, R_META_TYPE_STRING, off,
+				    off + (n * 2), (const char *)name + 4);
+		} else {
+			r_meta_add (core->anal, R_META_TYPE_STRING, off,
+				    off + n, (const char *)name + 4);
+		}
+		r_name_filter (name, n + 10);
 		r_flag_set (core->flags, name, off, n);
 		free (name);
 		}

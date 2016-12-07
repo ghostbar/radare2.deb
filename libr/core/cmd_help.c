@@ -7,8 +7,9 @@
 
 static const char* findBreakChar(const char *s) {
 	while (*s) {
-		if (!r_name_validate_char (*s))
+		if (!r_name_validate_char (*s)) {
 			break;
+		}
 		s++;
 	}
 	return s;
@@ -19,8 +20,9 @@ static char *filter_flags(RCore *core, const char *msg) {
 	char *word, *buf = NULL;
 	for (;;) {
 		dollar = strchr (msg, '$');
-		if (!dollar)
+		if (!dollar) {
 			break;
+		}
 		buf = r_str_concatlen (buf, msg, dollar-msg);
 		if (dollar[1]=='{') {
 			// find }
@@ -35,18 +37,20 @@ static char *filter_flags(RCore *core, const char *msg) {
 			}
 		} else {
 			end = findBreakChar (dollar+1);
-			if (!end)
-				end = dollar+strlen (dollar);
+			if (!end) {
+				end = dollar + strlen (dollar);
+			}
 			word = r_str_newlen (dollar+1, end-dollar-1);
 		}
 		if (end && word) {
 			ut64 val = r_num_math (core->num, word);
 			char num[32];
-			snprintf (num, sizeof (num),
-				"0x%"PFMT64x, val); //item->offset);
+			snprintf (num, sizeof (num), "0x%"PFMT64x, val);
 			buf = r_str_concat (buf, num);
 			msg = end;
-		} else break;
+		} else {
+			break;
+		}
 		free (word);
 	}
 	buf = r_str_concat (buf, msg);
@@ -82,8 +86,9 @@ static int cmd_help(void *data, const char *input) {
 		core->curtab = 0;
 		break;
 	case '1':
-		if (core->curtab < 0)
+		if (core->curtab < 0) {
 			core->curtab = 0;
+		}
 		core->curtab ++;
 		break;
 	case ':':
@@ -99,8 +104,9 @@ static int cmd_help(void *data, const char *input) {
 			r_core_cmd_help (core, help_msg);
 			return 0;
 		}
-		if (input[1])
-			return r_core_cmd0 (core, input+1);
+		if (input[1]) {
+			return r_core_cmd0 (core, input + 1);
+		}
 		r_list_foreach (core->rcmd->plist, iter, cp) {
 			r_cons_printf ("%s: %s\n", cp->name, cp->desc);
 		}
@@ -117,10 +123,15 @@ static int cmd_help(void *data, const char *input) {
 				*p = 0;
 				b = (ut32)r_num_math (core->num, out);
 				r = (ut32)r_num_math (core->num, p+1)-b;
-			} else r = (ut32)r_num_math (core->num, out);
-		} else r = 0LL;
-		if (r == 0)
-			r = UT32_MAX>>1;
+			} else {
+				r = (ut32)r_num_math (core->num, out);
+			}
+		} else {
+			r = 0LL;
+		}
+		if (!r) {
+			r = UT32_MAX >> 1;
+		}
 		core->num->value = (ut64) (b + r_num_rand (r));
 		r_cons_printf ("0x%"PFMT64x"\n", core->num->value);
 		}
@@ -130,10 +141,14 @@ static int cmd_help(void *data, const char *input) {
 			//b64 decoding takes at most strlen(str) * 4
 			const int buflen = (strlen (input+3) * 4) + 1;
 			char* buf = calloc (buflen, sizeof(char));
-			if (!buf) return false;
-			if (input[3] == '-')
-				r_base64_decode ((ut8*)buf, input+5, strlen (input+5));
-			else r_base64_encode (buf, (const ut8*)input+4, strlen (input+4));
+			if (!buf) {
+				return false;
+			}
+			if (input[3] == '-') {
+				r_base64_decode ((ut8*)buf, input + 5, strlen (input + 5));
+			} else {
+				r_base64_encode (buf, (const ut8*)input + 4, strlen (input + 4));
+			}
 			r_cons_println (buf);
 			free (buf);
 		} else {
@@ -149,7 +164,7 @@ static int cmd_help(void *data, const char *input) {
 		r_list_free (tmp);
 		break;
 	case 'd':
-		if (input[1]=='.'){
+		if (input[1]=='.') {
 			int cur = R_MAX(core->print->cur, 0);
 			// XXX: we need cmd_xxx.h (cmd_anal.h)
 			core_anal_bytes(core, core->block + cur, core->blocksize, 1, 'd');
@@ -158,13 +173,19 @@ static int cmd_help(void *data, const char *input) {
 			if (d && *d) {
 				r_cons_println (d);
 				free (d);
-			} else eprintf ("Unknown opcode\n");
-		} else eprintf ("Use: ?d[.] [opcode]    to get the description of the opcode\n");
+			} else {
+				eprintf ("Unknown opcode\n");
+			}
+		} else {
+			eprintf ("Use: ?d[.] [opcode]    to get the description of the opcode\n");
+		}
 		break;
 	case 'h':
 		if (input[1]==' ') {
 			r_cons_printf ("0x%08x\n", (ut32)r_str_hash (input+2));
-		} else eprintf ("Usage: ?h [string-to-hash]\n");
+		} else {
+			eprintf ("Usage: ?h [string-to-hash]\n");
+		}
 		break;
 	case 'y':
 		for (input++; input[0]==' '; input++);
@@ -178,8 +199,8 @@ static int cmd_help(void *data, const char *input) {
 		r_cons_flush ();
 		break;
 	case 'f':
-		if (input[1]==' ') {
-			char *q, *p = strdup (input+2);
+		if (input[1] == ' ') {
+			char *q, *p = strdup (input + 2);
 			if (!p) {
 				eprintf ("Cannot strdup\n");
 				return 0;
@@ -188,15 +209,60 @@ static int cmd_help(void *data, const char *input) {
 			if (q) {
 				*q = 0;
 				n = r_num_get (core->num, p);
-				r_str_bits (out, (const ut8*)&n, sizeof (n) * 8, q+1);
+				r_str_bits (out, (const ut8*)&n, sizeof (n) * 8, q + 1);
 				r_cons_println (out);
-			} else eprintf ("Usage: \"?b value bitstring\"\n");
+			} else {
+				eprintf ("Usage: \"?b value bitstring\"\n");
+			}
 			free (p);
-		} else eprintf ("Whitespace expected after '?f'\n");
+		} else {
+			eprintf ("Whitespace expected after '?f'\n");
+		}
 		break;
 	case 'o':
 		n = r_num_math (core->num, input+1);
 		r_cons_printf ("0%"PFMT64o"\n", n);
+		break;
+	case 'O':
+		if (input[1] == '?') {
+			r_cons_printf ("Usage: ?O[jd] [arg] .. list all mnemonics for asm.arch (d = describe, j=json)\n");
+		} else if (input[1] == 'd') {
+			const int id = (input[2]==' ')
+				?(int)r_num_math (core->num, input + 2): -1;
+			char *ops = r_asm_mnemonics (core->assembler, id, false);
+			if (ops) {
+				char *ptr = ops;
+				char *nl = strchr (ptr, '\n');
+				while (nl) {
+					*nl = 0;
+					char *desc = r_asm_describe (core->assembler, ptr);
+					if (desc) {
+						const char *pad = r_str_pad (' ', 16 - strlen (ptr));
+						r_cons_printf ("%s%s%s\n", ptr, pad, desc);
+						free (desc);
+					} else {
+						r_cons_printf ("%s\n", ptr);
+					}
+					ptr = nl + 1;
+					nl = strchr (ptr, '\n');
+				}
+				free (ops);
+			}
+		} else if (input[1] && !IS_NUMBER (input[2])) {
+			r_cons_printf ("%d\n", r_asm_mnemonics_byname (core->assembler, input + 2));
+		} else {
+			bool json = false;
+			if (input[1] == 'j') {
+				json = true;
+			}
+			const int id = (input[2]== ' ')
+				?(int)r_num_math (core->num, input + 2): -1;
+			char *ops = r_asm_mnemonics (core->assembler, id, json);
+			if (ops) {
+				r_cons_print (ops);
+				free (ops);
+			}
+		}
 		break;
 	case 'T':
 		r_cons_printf("plug.init = %"PFMT64d"\n"
@@ -225,10 +291,10 @@ static int cmd_help(void *data, const char *input) {
 			if (core->num->dbz) {
 				eprintf ("RNum ERROR: Division by Zero\n");
 			}
-			asnum  = r_num_as_string (NULL, n);
+			asnum  = r_num_as_string (NULL, n, false);
 
 			/* decimal, hexa, octal */
-			s = n>>16<<12;
+			s = n >> 16 << 12;
 			a = n & 0x0fff;
 			r_num_units (unit, n);
 			r_cons_printf ("%"PFMT64d" 0x%"PFMT64x" 0%"PFMT64o
@@ -302,19 +368,29 @@ static int cmd_help(void *data, const char *input) {
 	case '=': // set num->value
 		if (input[1]) {
 			r_num_math (core->num, input+1);
-		} else r_cons_printf ("0x%"PFMT64x"\n", core->num->value);
+		} else {
+			r_cons_printf ("0x%"PFMT64x"\n", core->num->value);
+		}
 		break;
 	case '+':
 		if (input[1]) {
 			st64 n = (st64)core->num->value;
-			if (n>0) r_core_cmd (core, input+1, 0);
-		} else r_cons_printf ("0x%"PFMT64x"\n", core->num->value);
+			if (n > 0) {
+				r_core_cmd (core, input + 1, 0);
+			}
+		} else {
+			r_cons_printf ("0x%"PFMT64x"\n", core->num->value);
+		}
 		break;
 	case '-':
 		if (input[1]) {
 			st64 n = (st64)core->num->value;
-			if (n<0) r_core_cmd (core, input+1, 0);
-		} else r_cons_printf ("0x%"PFMT64x"\n", core->num->value);
+			if (n < 0) {
+				r_core_cmd (core, input + 1, 0);
+			}
+		} else {
+			r_cons_printf ("0x%"PFMT64x"\n", core->num->value);
+		}
 		break;
 	case '!': // "?!"
 		if (input[1]) {
@@ -326,7 +402,9 @@ static int cmd_help(void *data, const char *input) {
 					return core->num->value = r_core_cmd (core, input+1, 0);
 				}
 			}
-		} else r_cons_printf ("0x%"PFMT64x"\n", core->num->value);
+		} else {
+			r_cons_printf ("0x%"PFMT64x"\n", core->num->value);
+		}
 		break;
 	case '@':
 		{
@@ -357,6 +435,7 @@ static int cmd_help(void *data, const char *input) {
 			"@b:", "bits", "temporary set asm.bits",
 			"@e:", "k=v,k=v", "temporary change eval vars",
 			"@r:", "reg", "tmp seek to reg value (f.ex pd@r:PC)",
+			"@i:", "nth.op", "temporary seek to the Nth relative instruction",
 			"@f:", "file", "temporary replace block with file contents",
 			"@o:", "fd", "temporary switch to another fd",
 			"@s:", "string", "same as above but from a string",
@@ -460,17 +539,17 @@ static int cmd_help(void *data, const char *input) {
 		}
 		break;
 	case 'l':
-		for (input++; input[0]==' '; input++);
+		for (input++; input[0] == ' '; input++);
 		core->num->value = strlen (input);
 		break;
 	case 'X':
-		for (input++; input[0]==' '; input++);
+		for (input++; input[0] == ' '; input++);
 		n = r_num_math (core->num, input);
 		r_cons_printf ("%"PFMT64x"\n", n);
 		break;
 	case 'x':
-		for (input++; input[0]==' '; input++);
-		if (*input=='-') {
+		for (input++; input[0] == ' '; input++);
+		if (*input == '-') {
 			ut8 *out = malloc (strlen (input)+1);
 			int len = r_hex_str2bin (input+1, out);
 			out[len] = 0;
@@ -479,12 +558,14 @@ static int cmd_help(void *data, const char *input) {
 		} else if (!strncmp (input, "0x", 2) || (*input>='0' && *input<='9')) {
 			ut64 n = r_num_math (core->num, input);
 			int bits = r_num_to_bits (NULL, n) / 8;
-			for (i=0; i<bits; i++)
-				r_cons_printf ("%02x", (ut8)((n>>(i*8)) &0xff));
+			for (i = 0; i < bits; i++) {
+				r_cons_printf ("%02x", (ut8)((n >> (i * 8)) &0xff));
+			}
 			r_cons_newline ();
 		} else {
-			for (i=0; input[i]; i++)
+			for (i = 0; input[i]; i++) {
 				r_cons_printf ("%02x", input[i]);
+			}
 			r_cons_newline ();
 		}
 		break;
@@ -522,10 +603,12 @@ static int cmd_help(void *data, const char *input) {
 			p2 = strchr (p+1, ' ');
 			if (p2) {
 				*p2 = '\0';
-				step = r_num_math (core->num, p2+1);
-			} else step = 1;
-			to = r_num_math (core->num, p+1);
-			for (;from<=to; from+=step)
+				step = r_num_math (core->num, p2 + 1);
+			} else {
+				step = 1;
+			}
+			to = r_num_math (core->num, p + 1);
+			for (;from <= to; from += step)
 				r_cons_printf ("%"PFMT64d" ", from);
 			r_cons_newline ();
 		}
@@ -537,16 +620,20 @@ static int cmd_help(void *data, const char *input) {
 				r_num_math (core->num, input+2): core->offset;
 			o = r_io_section_maddr_to_vaddr (core->io, n);
 			r_cons_printf ("0x%08"PFMT64x"\n", o);
-		} else eprintf ("io.va is false\n");
+		} else {
+			eprintf ("io.va is false\n");
+		}
 		break;
 	case 'p':
 		if (core->io->va) {
 			// physical address
 			ut64 o, n = (input[0] && input[1])?
-				r_num_math (core->num, input+2): core->offset;
+				r_num_math (core->num, input + 2): core->offset;
 			o = r_io_section_vaddr_to_maddr (core->io, n);
 			r_cons_printf ("0x%08"PFMT64x"\n", o);
-		} else eprintf ("Virtual addresses not enabled!\n");
+		} else {
+			eprintf ("Virtual addresses not enabled!\n");
+		}
 		break;
 	case 'S': {
 		// section name
@@ -567,63 +654,63 @@ static int cmd_help(void *data, const char *input) {
 		r_cons_set_raw(0);
 		if (!r_config_get_i (core->config, "scr.interactive")) {
 			eprintf ("Not running in interactive mode\n");
-		} else
-		switch (input[1]) {
-		case 'f': // "?if"
-			core->num->value = !r_num_conditional (core->num, input+2);
-			eprintf ("%s\n", r_str_bool (!core->num->value));
-			break;
-		case 'm':
-			r_cons_message (input+2);
-			break;
-		case 'p': {
-			core->num->value = r_core_yank_hud_path (core, input+2, 0) == true;
-			} break;
-		case 'k': // "?ik"
-			r_cons_any_key (NULL);
-			break;
-		case 'y': // "?iy"
-			for (input+=2; *input==' '; input++);
-			core->num->value =
-			r_cons_yesno (1, "%s? (Y/n)", input);
-			break;
-		case 'n': // "?in"
-			for (input+=2; *input==' '; input++);
-			core->num->value =
-			r_cons_yesno (0, "%s? (y/N)", input);
-			break;
-		default: {
-			char foo[1024];
-			r_cons_flush ();
-			for (input++; *input==' '; input++);
-			// TODO: r_cons_input()
-			snprintf (foo, sizeof (foo) - 1, "%s: ", input);
-			r_line_set_prompt (foo);
-			r_cons_fgets (foo, sizeof (foo)-1, 0, NULL);
-			foo[strlen (foo)] = 0;
-			r_core_yank_set_str (core, R_CORE_FOREIGN_ADDR, foo, strlen (foo) + 1);
-			core->num->value = r_num_math (core->num, foo);
+		} else {
+			switch (input[1]) {
+			case 'f': // "?if"
+				core->num->value = !r_num_conditional (core->num, input + 2);
+				eprintf ("%s\n", r_str_bool (!core->num->value));
+				break;
+			case 'm':
+				r_cons_message (input+2);
+				break;
+			case 'p': 
+				core->num->value = r_core_yank_hud_path (core, input + 2, 0) == true;
+				break;
+			case 'k': // "?ik"
+				 r_cons_any_key (NULL);
+				 break;
+			case 'y': // "?iy"
+				 for (input += 2; *input==' '; input++);
+				 core->num->value = r_cons_yesno (1, "%s? (Y/n)", input);
+				 break;
+			case 'n': // "?in"
+				 for (input += 2; *input==' '; input++);
+				 core->num->value = r_cons_yesno (0, "%s? (y/N)", input);
+				 break;
+			default: 
+				{
+				char foo[1024];
+				r_cons_flush ();
+				for (input++; *input == ' '; input++);
+				// TODO: r_cons_input()
+				snprintf (foo, sizeof (foo) - 1, "%s: ", input);
+				r_line_set_prompt (foo);
+				r_cons_fgets (foo, sizeof (foo)-1, 0, NULL);
+				foo[strlen (foo)] = 0;
+				r_core_yank_set_str (core, R_CORE_FOREIGN_ADDR, foo, strlen (foo) + 1);
+				core->num->value = r_num_math (core->num, foo);
+				}
+				break;
 			}
-			break;
 		}
 		r_cons_set_raw (0);
 		break;
 	case 'w':
 		{
-			ut64 addr = r_num_math (core->num, input + 1);
-			const char *rstr = core->print->hasrefs (core->print->user, addr);
-			r_cons_println (rstr);
+		ut64 addr = r_num_math (core->num, input + 1);
+		const char *rstr = core->print->hasrefs (core->print->user, addr);
+		r_cons_println (rstr);
 		}
 		break;
 	case 't': {
 		struct r_prof_t prof;
 		r_prof_start (&prof);
-		r_core_cmd (core, input+1, 0);
+		r_core_cmd (core, input + 1, 0);
 		r_prof_end (&prof);
 		core->num->value = (ut64)(int)prof.result;
 		eprintf ("%lf\n", prof.result);
 		} break;
-	case '?': // ???
+	case '?': // "??" "???"
 		if (input[1]=='?') {
 			if (input[2]=='?') {
 				clippy ("What are you doing?");
@@ -665,6 +752,7 @@ static int cmd_help(void *data, const char *input) {
 			"?iy", " prompt", "yesno input prompt",
 			"?l", " str", "returns the length of string",
 			"?o", " num", "get octal value",
+			"?O", " [id]", "List mnemonics for current asm.arch / asm.bits",
 			"?p", " vaddr", "get physical address for given virtual address",
 			"?r", " [from] [to]", "generate random number between from-to",
 			"?s", " from to step", "sequence of numbers from to by steps",
@@ -699,34 +787,33 @@ static int cmd_help(void *data, const char *input) {
 		"="," [cmd]", "Run this command via rap://",
 		"/","", "Search for bytes, regexps, patterns, ..",
 		"!"," [cmd]", "Run given command as in system(3)",
-		"#"," [algo] [len]", "Calculate hash checksum of current block",
 		"#","!lang [..]", "Hashbang to run an rlang script",
-		"a","", "Perform analysis of code",
-		"b","", "Get or change block size",
-		"c"," [arg]", "Compare block with given data",
-		"C","", "Code metadata management",
-		"d","", "Debugger commands",
+		"a","[?]", "Perform analysis of code",
+		"b","[?]", "Get or change block size",
+		"c","[?] [arg]", "Compare block with given data",
+		"C","[?]", "Code metadata management",
+		"d","[?]", "Debugger commands",
 		"e"," [a[=b]]", "List/get/set config evaluable vars",
 		"f"," [name][sz][at]", "Set flag at current address",
 		"g"," [arg]", "Go compile shellcodes with r_egg",
-		"i"," [file]", "Get info about opened file",
-		"k"," [sdb-query]", "Run sdb-query. see k? for help, 'k *', 'k **' ...",
+		"i","[?] [file]", "Get info about opened file",
+		"k","[?] [sdb-query]", "Run sdb-query. see k? for help, 'k *', 'k **' ...",
 		"m","", "Mountpoints commands",
-		"o"," [file] ([offset])", "Open file at optional address",
-		"p"," [len]", "Print current block with format and length",
-		"P","", "Project management utilities",
-		"q"," [ret]", "Quit program with a return value",
-		"r"," [len]", "Resize file",
-		"s"," [addr]", "Seek to address (also for '0x', '0x1' == 's 0x1')",
-		"S","", "Io section manipulation information",
-		"t","", "Cparse types management",
-		"T"," [-] [num|msg]", "Text log utility",
-		"u","", "uname/undo seek/write",
+		"o","[?] [file] ([offset])", "Open file at optional address",
+		"p","[?] [len]", "Print current block with format and length",
+		"P","[?]", "Project management utilities",
+		"q","[?] [ret]", "Quit program with a return value",
+		"r","[?] [len]", "Resize file",
+		"s","[?] [addr]", "Seek to address (also for '0x', '0x1' == 's 0x1')",
+		"S","[?]", "Io section manipulation information",
+		"t","[?]", "Cparse types management",
+		"T","[?] [-] [num|msg]", "Text log utility",
+		"u","[?]", "uname/undo seek/write",
 		"V","", "Enter visual mode (vcmds=visualvisual  keystrokes)",
-		"w"," [str]", "Multiple write operations",
-		"x"," [len]", "Alias for 'px' (print hexadecimal)",
-		"y"," [len] [[[@]addr", "Yank/paste bytes from/to memory",
-		"z", "", "Zignatures management",
+		"w","[?] [str]", "Multiple write operations",
+		"x","[?] [len]", "Alias for 'px' (print hexadecimal)",
+		"y","[?] [len] [[[@]addr", "Yank/paste bytes from/to memory",
+		"z", "[?]", "Zignatures management",
 		"?[??]","[expr]", "Help or evaluate math expression",
 		"?$?", "", "Show available '$' variables and aliases",
 		"?@?", "", "Misc help for '@' (seek), '~' (grep) (see ~?""?)",

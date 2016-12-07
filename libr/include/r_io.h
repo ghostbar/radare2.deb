@@ -124,6 +124,7 @@ typedef struct r_io_t {
 	int debug;
 	int raised;
 	int va;
+	bool pava;
 	int raw;
 	int vio; // remove that when vio replaces the old stuff
 	int sectonly;
@@ -210,6 +211,7 @@ typedef RIOSection* (*RIOSectionVGet)(RIO *io, ut64 addr);
 typedef RIOSection* (*RIOSectionAdd)(RIO *io, ut64 offset, ut64 vaddr, ut64 size, ut64 vsize, int rwx, const char *name, ut32 bin_id, int fd);
 typedef int (*RIOSectionSetArchBinID)(RIO *io, ut64 addr, const char *arch, int bits, ut32 bin_id);
 typedef int (*RIOSectionSetArchBin)(RIO *io, ut64 addr, const char *arch, int bits);
+typedef int (*RIOSystem)(RIO *io, const char *cmd);
 
 /* compile time dependency */
 typedef struct r_io_bind_t {
@@ -221,6 +223,7 @@ typedef struct r_io_bind_t {
 	RIOWriteAt write_at;
 	RIOSize size;
 	RIOSeek seek;
+	RIOSystem system;
 	RIOIsValidOffset is_valid_offset;
 
 	RIOSectionVGet section_vget;
@@ -441,6 +444,7 @@ R_API int r_io_wundo_set(RIO *io, int n, int set);
 R_API void r_io_desc_init(RIO *io);
 R_API void r_io_desc_fini(RIO *io);
 R_API RIODesc *r_io_desc_new(RIOPlugin *plugin, int fd, const char *name, int flags, int mode, void *data);
+R_API bool r_io_desc_detach (RIO *io, RIODesc *d);
 R_API void r_io_desc_free(RIODesc *desc);
 R_API int r_io_desc_del(RIO *io, int fd);
 R_API RIODesc *r_io_desc_get(RIO *io, int fd);
@@ -488,6 +492,8 @@ extern RIOPlugin r_io_plugin_r2pipe;
 extern RIOPlugin r_io_plugin_r2web;
 extern RIOPlugin r_io_plugin_bochs;
 extern RIOPlugin r_io_plugin_r2k;
+extern RIOPlugin r_io_plugin_tcp;
+
 #endif
 
 #ifdef __cplusplus

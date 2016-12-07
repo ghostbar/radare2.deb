@@ -3725,11 +3725,11 @@ R_API RBinJavaAttrInfo* r_bin_java_local_variable_table_attr_new (ut8* buffer, u
 }
 
 R_API ut64 r_bin_java_local_variable_type_table_attr_calc_size(RBinJavaAttrInfo *attr) {
-	RList * list = attr->info.local_variable_type_table_attr.local_variable_table;
 	RBinJavaLocalVariableTypeAttribute* lvattr;
 	RListIter *iter;
 	ut64 size = 0;
 	if (attr) {
+		RList *list  = attr->info.local_variable_type_table_attr.local_variable_table;
 		size += 6;
 		// attr->info.local_variable_type_table_attr.table_length = R_BIN_JAVA_USHORT (buffer, offset);
 		size += 2;
@@ -8145,11 +8145,16 @@ R_API ConstJavaValue * U(r_bin_java_resolve_to_const_value)(RBinJavaObj *BIN_OBJ
 		}
 		result->type = "str";
 		result->value._str = R_NEW0 (struct  java_const_value_str_t);
-		result->value._str->str = malloc (length);
 		result->value._str->len = length;
-		memcpy (result->value._str->str, string_str, length);
-		if (string_str != empty)
+		if (length > 0) {
+			result->value._str->str = malloc (length);
+			memcpy (result->value._str->str, string_str, length);
+		} else {
+			result->value._str->str = strdup ("");
+		}
+		if (string_str != empty) {
 			free (string_str);
+		}
 	} else if (strcmp (cp_name, "Utf8") == 0) {
 		result->type = "str";
 		result->value._str = R_NEW0 (struct java_const_value_str_t);
