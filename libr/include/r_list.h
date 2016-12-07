@@ -24,6 +24,8 @@ typedef struct r_list_t {
 	RListIter *head;
 	RListIter *tail;
 	RListFree free;
+	int length;
+	bool sorted;
 } RList;
 
 typedef struct r_list_range_t {
@@ -70,7 +72,6 @@ typedef struct r_oflist_t {
 #endif
 R_API RList *r_list_new(void);
 R_API RList *r_list_newf(RListFree f);
-//R_API void r_list_iter_free (RListIter *x);
 R_API RListIter *r_list_iter_get_next(RListIter *list);
 R_API int r_list_set_n(RList *list, int n, void *p);
 R_API void *r_list_iter_get_data(RListIter *list);
@@ -81,6 +82,8 @@ R_API int r_list_length(const RList *list);
 R_API void *r_list_first(const RList *list);
 R_API RListIter *r_list_add_sorted(RList *list, void *data, RListComparator cmp);
 R_API void r_list_sort(RList *list, RListComparator cmp);
+R_API void r_list_merge_sort(RList *list, RListComparator cmp);
+R_API void r_list_insertion_sort(RList *list, RListComparator cmp);
 
 R_API void r_list_init(RList *list);
 R_API void r_list_delete(RList *list, RListIter *iter);
@@ -102,9 +105,6 @@ R_API void r_list_reverse(RList *list);
 R_API RList *r_list_clone(RList *list);
 
 /* hashlike api */
-R_API void *r_list_get_by_int(const RList *list, int off, int n);
-R_API void *r_list_get_by_int64(const RList *list, int off, ut64 n);
-R_API void *r_list_get_by_string(const RList *list, int off, const char *str);
 R_API RListIter *r_list_contains(const RList *list, const void *p);
 R_API RListIter *r_list_find(const RList *list, const void *p, RListComparator cmp);
 

@@ -5,7 +5,6 @@
 
 #include <r_types.h>
 #include <r_bin.h> // only for binding, no hard dep required
-#include <list.h>
 #include <r_util.h>
 #include <r_parse.h>
 
@@ -130,6 +129,7 @@ typedef struct r_asm_plugin_t {
 	int (*assemble)(RAsm *a, RAsmOp *op, const char *buf);
 	RAsmModifyCallback modify;
 	int (*set_subarch)(RAsm *a, const char *buf);
+	char *(*mnemonics)(RAsm *a, int id, bool json);
 	const char *features;
 } RAsmPlugin;
 
@@ -139,6 +139,8 @@ R_API RAsm *r_asm_new(void);
 #define r_asm_op_free free
 R_API RAsm *r_asm_free(RAsm *a);
 R_API int r_asm_modify(RAsm *a, ut8 *buf, int field, ut64 val);
+R_API char *r_asm_mnemonics(RAsm *a, int id, bool json);
+R_API int r_asm_mnemonics_byname(RAsm *a, const char *name);
 R_API void r_asm_set_user_ptr(RAsm *a, void *user);
 R_API bool r_asm_add(RAsm *a, RAsmPlugin *foo);
 R_API int r_asm_setup(RAsm *a, const char *arch, int bits, int big_endian);
@@ -150,6 +152,7 @@ R_API int r_asm_set_bits(RAsm *a, int bits);
 R_API void r_asm_set_cpu(RAsm *a, const char *cpu);
 R_API bool r_asm_set_big_endian(RAsm *a, bool big_endian);
 R_API int r_asm_set_syntax(RAsm *a, int syntax);
+R_API int r_asm_syntax_from_string(const char *name);
 R_API int r_asm_set_pc(RAsm *a, ut64 pc);
 R_API int r_asm_disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len);
 R_API int r_asm_assemble(RAsm *a, RAsmOp *op, const char *buf);
@@ -225,7 +228,6 @@ extern RAsmPlugin r_asm_plugin_propeller;
 extern RAsmPlugin r_asm_plugin_msp430;
 extern RAsmPlugin r_asm_plugin_i4004;
 extern RAsmPlugin r_asm_plugin_cris_gnu;
-extern RAsmPlugin r_asm_plugin_z80_cr;
 extern RAsmPlugin r_asm_plugin_lh5801;
 extern RAsmPlugin r_asm_plugin_hppa_gnu;
 extern RAsmPlugin r_asm_plugin_v810;

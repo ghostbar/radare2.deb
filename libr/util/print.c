@@ -19,11 +19,11 @@ R_API int r_util_lines_getline (ut64 *lines_cache, int lines_cache_sz, ut64 off)
 		imid = imin + ((imax - imin) / 2);
 		if (lines_cache[imid] == off) {
 			return imid + 1;
-		}
-		else if (lines_cache[imid] < off)
+		} else if (lines_cache[imid] < off) {
 			imin = imid + 1;
-		else
+		} else {
 			imax = imid - 1;
+		}
 	}
 	return imin;
 }
@@ -36,19 +36,20 @@ R_API void r_print_set_interrupted(int i) {
 	IsInterrupted = i;
 }
 
-R_API int r_print_mute(RPrint *p, int x) {
+R_API bool r_print_mute(RPrint *p, int x) {
 	if (x) {
-		if (p->cb_printf == &nullprinter)
-			return 0;
+		if (p->cb_printf == &nullprinter) {
+			return false;
+		}
 		p->oprintf = p->cb_printf;
 		p->cb_printf = nullprinter;
-		return 1;
+		return true;
 	}
 	if (p->cb_printf == nullprinter) {
 		p->cb_printf = p->oprintf;
-		return 1;
+		return true;
 	}
-	return 0;
+	return false;
 }
 
 static int r_print_stereogram_private(const char *bump, int w, int h, char *out, int size) {
@@ -59,8 +60,9 @@ static int r_print_stereogram_private(const char *bump, int w, int h, char *out,
 	int x, y, s, l = 0, l2 = 0, ch;
 	int skip = 7;
 	int bumpi = 0, outi = 0;
-	if (!bump || !out)
+	if (!bump || !out) {
 		return 0;
+	}
 	for (y = 0; bump[bumpi] && outi<size; y++) {
 		l = l2 = 0;
 		for (x = 0; bump[bumpi] && outi<size && x<w; x++) {
@@ -84,9 +86,10 @@ static int r_print_stereogram_private(const char *bump, int w, int h, char *out,
 				ch = data[s];
 			if (!ch) ch = *string;
 			data[x] = ch;
-			if (outi<size) {
-				out[outi++] = ch;
-			} else break;
+			if (outi >= size) {
+				break;
+			}
+			out[outi++] = ch;
 		}
 		out[outi++] = '\n';
 		s = 'a';
@@ -105,10 +108,11 @@ static int r_print_stereogram_private(const char *bump, int w, int h, char *out,
 R_API char *r_print_stereogram(const char *bump, int w, int h) {
 	ut64 size;
 	char *out;
-	if (w<1 || h<1)
+	if (w < 1 || h < 1) {
 		return NULL;
+	}
 	size = w * (ut64)h * 2;
-	if (size>UT32_MAX) {
+	if (size > UT32_MAX) {
 		return NULL;
 	}
 	out = calloc (1, size * 2);
@@ -126,20 +130,21 @@ R_API char *r_print_stereogram_bytes(const ut8 *buf, int len) {
 	char *ret, *bump;
 	int scr_width = 80;
 	int rows, cols, size;
-	if (!buf || len<1)
+	if (!buf || len < 1) {
 		return NULL;
-
+	}
 	//scr_width = r_cons_get_size (NULL) -10;
 	cols = scr_width;
 	rows = len / cols;
 
-	size = (2+cols) * rows;
-	bump = malloc (size+1); //(cols+2) * rows);
+	size = (2 + cols) * rows;
+	bump = malloc (size + 1); //(cols+2) * rows);
 	if (!bump) return NULL;
 	for (i = bumpi = 0; bumpi < size && i < len; i++) {
 		int v = buf[i] / 26;
-		if (i && !(i%scr_width))
+		if (i && !(i%scr_width)) {
 			bump[bumpi++] = '\n';
+		}
 		bump[bumpi++] = '0' + v;
 	}
 	bump[bumpi] = 0;
@@ -151,9 +156,11 @@ R_API char *r_print_stereogram_bytes(const ut8 *buf, int len) {
 R_API void r_print_stereogram_print(RPrint *p, const char *ret) {
 	int i;
 	const int use_color = p->flags & R_PRINT_FLAGS_COLOR;
-	if (!ret) return;
+	if (!ret) {
+		return;
+	}
 	if (use_color) {
-		for (i=0; ret[i]; i++) {
+		for (i = 0; ret[i]; i++) {
 			p->cb_printf ("\x1b[%dm%c", 30+(ret[i]%8), ret[i]);
 		}
 		p->cb_printf ("\x1b[0m\n");
@@ -164,7 +171,9 @@ R_API void r_print_stereogram_print(RPrint *p, const char *ret) {
 
 R_API RPrint *r_print_new() {
 	RPrint *p = R_NEW0 (RPrint);
-	if (!p) return NULL;
+	if (!p) {
+		return NULL;
+	}
 	strcpy (p->datefmt, "%Y-%m-%d %H:%M:%S %z");
 	r_io_bind_init (p->iob);
 	p->pairs = true;
@@ -202,7 +211,9 @@ R_API RPrint *r_print_new() {
 }
 
 R_API RPrint *r_print_free(RPrint *p) {
-	if (!p) return NULL;
+	if (!p) {
+		return NULL;
+	}
 	r_strht_free (p->formats);
 	p->formats = NULL;
 	if (p->zoom) {
@@ -226,49 +237,87 @@ R_API void r_print_unset_flags(RPrint *p, int flags) {
 }
 
 R_API void r_print_set_cursor(RPrint *p, int enable, int ocursor, int cursor) {
-	if (!p) return;
+	if (!p) {
+		return;
+	}
 	p->cur_enabled = enable;
 	p->ocur = ocursor;
-	if (cursor<0) cursor = 0;
+	if (cursor < 0) {
+		cursor = 0;
+	}
 	p->cur = cursor;
 }
 
 R_API void r_print_cursor(RPrint *p, int cur, int set) {
-	if (!p || !p->cur_enabled)
+	if (!p || !p->cur_enabled) {
 		return;
+	}
 	if (p->ocur != -1) {
 		int from = p->ocur;
 		int to = p->cur;
 		r_num_minmax_swap_i (&from, &to);
-		if (cur>=from && cur<=to)
+		if (cur >= from && cur <= to) {
 			p->cb_printf ("%s", R_CONS_INVERT (set, 1));
-	} else
-	if (cur==p->cur)
+		}
+	} else if (cur == p->cur) {
 		p->cb_printf ("%s", R_CONS_INVERT (set, 1));
+	}
 }
 
 R_API void r_print_addr(RPrint *p, ut64 addr) {
+	char space[32] = { 0 };
+	const char *white;
 #define PREOFF(x) (p && p->cons &&p->cons->pal.x)?p->cons->pal.x
         PrintfCallback printfmt = (PrintfCallback) (p? p->cb_printf: printf);
-	int mod = p? (p->flags & R_PRINT_FLAGS_ADDRMOD): 0;
-	char ch = p? ((p->addrmod&&mod)?((addr%p->addrmod)?' ':','):' '): ' ';
-	int use_color = p? (p->flags & R_PRINT_FLAGS_COLOR): 0;
-	int use_segoff = p? (p->flags & R_PRINT_FLAGS_SEGOFF): 0;
+	bool use_segoff = p? (p->flags & R_PRINT_FLAGS_SEGOFF): false;
+	bool use_color = p? (p->flags & R_PRINT_FLAGS_COLOR): false;
+	bool dec = p? (p->flags & R_PRINT_FLAGS_ADDRDEC): false;
+	bool mod = p? (p->flags & R_PRINT_FLAGS_ADDRMOD): false;
+	char ch = p? ((p->addrmod && mod)? ((addr % p->addrmod)? ' ': ','): ' '): ' ';
 	if (use_segoff) {
 		ut32 s, a;
 		a = addr & 0xffff;
-		s = (addr-a)>>4;
+		s = (addr - a) >> 4;
+		if (dec) {
+			snprintf (space, sizeof (space), "%d:%d", s & 0xffff, a & 0xffff);
+			white = r_str_pad (' ', 9 - strlen (space));
+		}
 		if (use_color) {
 			const char *pre = PREOFF(offset): Color_GREEN;
 			const char *fin = Color_RESET;
-			printfmt ("%s%04x:%04x%c%s", pre, s & 0xffff, a & 0xffff, ch, fin);
-		} else printfmt ("%04x:%04x%c", s & 0xffff, a & 0xffff, ch);
+			if (dec) {
+				printfmt ("%s%s%s%c%s", pre, white, space, ch, fin);
+			} else {
+				printfmt ("%s%04x:%04x%c%s", pre, s & 0xffff, a & 0xffff, ch, fin);
+			}
+		} else {
+			if (dec) {
+				printfmt ("%s%s%c", white, space, ch);
+			} else {
+				printfmt ("%04x:%04x%c", s & 0xffff, a & 0xffff, ch);
+			}
+		}
 	} else {
+		if (dec) {
+			snprintf (space, sizeof (space), "%"PFMT64d, addr);
+			int w = R_MAX (10 - strlen (space), 0);
+			white = r_str_pad (' ', w);
+		}
 		if (use_color) {
 			const char *pre = PREOFF(offset): Color_GREEN;
 			const char *fin = Color_RESET;
-			printfmt ("%s0x%08"PFMT64x"%c%s", pre, addr, ch, fin);
-		} else printfmt ("0x%08"PFMT64x"%c", addr, ch);
+			if (dec) {
+				printfmt ("%s%s%"PFMT64d"%c%s", pre, white, addr, ch, fin);
+			} else {
+				printfmt ("%s0x%08"PFMT64x"%c%s", pre, addr, ch, fin);
+			}
+		} else {
+			if (dec) {
+				printfmt ("%s%"PFMT64d"%c", white, addr, ch);
+			} else {
+				printfmt ("0x%08"PFMT64x"%c", addr, ch);
+			}
+		}
 	}
 }
 
@@ -294,7 +343,7 @@ R_API char *r_print_hexpair(RPrint *p, const char *str, int n) {
 		color_text = P(btext): Color_MAGENTA;
 		color_other = P(other): "";
 	}
-	if (p->cur_enabled && cur==-1)
+	if (p->cur_enabled && cur == -1)
 		cur = ocur;
 	ocur++;
 #if CURDBG
@@ -323,10 +372,14 @@ R_API char *r_print_hexpair(RPrint *p, const char *str, int n) {
 			else if (s[0]=='f' && s[1]=='f') lastcol = color_0xff;
 			else {
 				ch = r_hex_pair2bin (s);
-				if (ch==-1) break;
+				if (ch == -1) {
+					break;
+				}
 				if (IS_PRINTABLE (ch)) {
 					lastcol = color_text;
-				} else lastcol = color_other;
+				} else {
+					lastcol = color_other;
+				}
 			}
 			memcat (d, lastcol);
 		}
@@ -414,7 +467,10 @@ static void print_c_code(RPrint *p, ut64 addr, ut8 *buf, int len, int ws, int w)
 }
 
 R_API void r_print_code(RPrint *p, ut64 addr, ut8 *buf, int len, char lang) {
-	int i, w = p->cols*0.7;
+	int i, w = p->cols * 0.7;
+	if (w < 1) {
+		w = 1;
+	}
 	switch (lang) {
 	case '?':
 		eprintf ("Valid print code formats are: JSON, C, Python, Cstring (pcj, pc, pcp, pcs) \n"
@@ -440,7 +496,7 @@ R_API void r_print_code(RPrint *p, ut64 addr, ut8 *buf, int len, char lang) {
 		else p->cb_printf (";s+%d\n", (i%16));
 		p->cb_printf ("s-%d\n", len);
 		break;
-	case 'a':
+	case 'a': // "pca"
 		p->cb_printf ("shellcode:");
 		for (i=0; !p->interrupt && i<len; i++) {
 			if (!(i%8)) p->cb_printf ("\n.byte ");
@@ -449,14 +505,14 @@ R_API void r_print_code(RPrint *p, ut64 addr, ut8 *buf, int len, char lang) {
 		}
 		p->cb_printf ("\n.equ shellcode_len, %d\n", len);
 		break;
-	case 's':
+	case 's': // "pcs"
 		p->cb_printf ("\"");
 		for (i=0; !p->interrupt && i<len; i++) {
 			p->cb_printf ("\\x%02x", buf[i]);
 		}
 		p->cb_printf ("\"\n");
 		break;
-	case 'S':
+	case 'S': // "pcS"
 		{
 			const int trunksize = 16;
 			for (i=0; !p->interrupt && i<len; i++) {
@@ -491,7 +547,7 @@ R_API void r_print_code(RPrint *p, ut64 addr, ut8 *buf, int len, char lang) {
 		p->cb_printf ("]\n");
 		break;
 	case 'P':
-	case 'p':
+	case 'p': // pcp"
 		p->cb_printf ("import struct\nbuf = struct.pack (\"%dB\", *[", len);
 		for (i=0; !p->interrupt && i<len; i++) {
 			if (!(i%w)) p->cb_printf ("\n");
@@ -502,16 +558,16 @@ R_API void r_print_code(RPrint *p, ut64 addr, ut8 *buf, int len, char lang) {
 		p->cb_printf ("\n");
 		break;
 	case 'h':
-		print_c_code (p, addr, buf, len, 2, 9);
+		print_c_code (p, addr, buf, len, 2, p->cols / 2); // 9
 		break;
 	case 'w':
-		print_c_code (p, addr, buf, len, 4, 6);
+		print_c_code (p, addr, buf, len, 4, p->cols / 3); // 6);
 		break;
 	case 'd':
-		print_c_code (p, addr, buf, len, 8, 3);
+		print_c_code (p, addr, buf, len, 8, p->cols / 5); //3);
 		break;
 	default:
-		print_c_code (p, addr, buf, len, 1, 12);
+		print_c_code (p, addr, buf, len, 1, p->cols / 1.5); // 12);
 		break;
 	}
 }
@@ -775,7 +831,7 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 					sz_n = step == 2 ? sizeof (ut16) : sizeof (ut32);
 				}
 				sz_n = R_MIN (left, sz_n);
-				r_mem_swaporcopy ((ut8*)&n, buf + j, sz_n, p->big_endian);
+				r_mem_swaporcopy ((ut8*)&n, buf + j, sz_n, p && p->big_endian);
 				r_print_cursor (p, j, 1);
 				// stub for colors
 				if (p && p->colorfor) {
@@ -784,26 +840,28 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
 				} else {
 					a = b = "";
 				}
-				if (base == 64)
+				if (base == 64) {
 					printfmt ("%s0x%016"PFMT64x"%s  ", a, (ut64)n, b);
-				else if (step == 2)
+				} else if (step == 2) {
 					printfmt ("%s0x%04x%s ", a, (ut16)n, b);
-				else printfmt ("%s0x%08x%s ", a, (ut32)n, b);
+				} else {
+					printfmt ("%s0x%08x%s ", a, (ut32)n, b);
+				}
 				r_print_cursor (p, j, 0);
 				j += step - 1;
 			} else if (base == -8) {
-				long long w = r_read_ble64 (buf + j, p->big_endian);
+				long long w = r_read_ble64 (buf + j, p && p->big_endian);
 				printfmt ("%23"PFMT64d" ", w);
 				j += 7;
 			} else if (base == -1) {
 				st8 w = r_read_ble8 (buf + j);
 				printfmt ("%4d ", w);
 			} else if (base == -10) {
-				st16 w = r_read_ble16 (buf + j, p->big_endian);
+				st16 w = r_read_ble16 (buf + j, p && p->big_endian);
 				printfmt ("%7d ", w);
 				j += 1;
 			} else if (base == 10) {
-				int w = r_read_ble32 (buf + j, p->big_endian);
+				int w = r_read_ble32 (buf + j, p && p->big_endian);
 				printfmt ("%13d ", w);
 				j += 3;
 			} else {
@@ -1319,25 +1377,26 @@ R_API char * r_print_colorize_opcode (char *p, const char *reg, const char *num)
 	int is_jmp = p && (*p == 'j' || ((*p == 'c') && (p[1] == 'a')))? 1: 0;
 	ut32 opcode_sz = p && *p ? strlen (p)*10 + 1 : 0;
 
-	if (!p || !*p) return NULL;
-	if (is_jmp)
+	if (!p || !*p) {
+		return NULL;
+	}
+	if (is_jmp) {
 		return strdup (p);
-
+	}
 	if (opcode_sz > COLORIZE_BUFSIZE) {
 		/* return same string in case of error */
 		return strdup (p);
 	}
 
 	memset (o, 0, COLORIZE_BUFSIZE);
-
-	for (i=j=0; p[i]; i++,j++) {
+	for (i = j = 0; p[i]; i++,j++) {
 		/* colorize numbers */
 		/*
 		if (j+100 >= opcode_sz) {
 			o = realloc_color_buffer (o, &opcode_sz, 100);
 		}
 		*/
-		if (j+100 >= COLORIZE_BUFSIZE) {
+		if (j + 100 >= COLORIZE_BUFSIZE) {
 			eprintf ("r_print_colorize_opcode(): buffer overflow!\n");
 			return strdup (p);
 		}
@@ -1348,13 +1407,15 @@ R_API char * r_print_colorize_opcode (char *p, const char *reg, const char *num)
 #define STRIP_ANSI 1
 #if STRIP_ANSI
 			/* skip until 'm' */
-			for (++i;p[i] && p[i]!='m'; i++)
+			for (++i; p[i] && p[i] != 'm'; i++) {
 				o[j] = p[i];
+			}
 			continue;
 #else
 			/* copy until 'm' */
-			for (;p[i] && p[i]!='m'; i++)
+			for (; p[i] && p[i] != 'm'; i++) {
 				o[j++] = p[i];
+			}
 			o[j++] = p[i++];
 #endif
 		case '+':
@@ -1369,36 +1430,49 @@ R_API char * r_print_colorize_opcode (char *p, const char *reg, const char *num)
 		case ']':
 		case '[':
 		case ',':
+			/* ugly trick for dalvik */
+			if (p[i + 1] == ' ' && p[i + 2] == 'L') {
+				strcpy (o + j, num);
+				j += strlen (num);
+				if (j + p + i <= o + sizeof (o)) {
+					int len = strlen (p + i);
+					len = R_MIN (len, sizeof (o) - 1);
+					strncpy (o + j , p + i, len);
+					o[len] = 0;
+					return strdup (o);
+				}
+				return strdup (o);
+			}
 			if (is_float) {
 				/* do nothing, keep going until next */
 				is_float = 0;
 			} else if (is_arg) {
 				/* if (c_reset+j+10 >= opcode_sz) o = realloc_color_buffer (o, &opcode_sz, c_reset+100); */
-				if (c_reset+j+10 >= COLORIZE_BUFSIZE) {
+				if (c_reset + j + 10 >= COLORIZE_BUFSIZE) {
 					eprintf ("r_print_colorize_opcode(): buffer overflow!\n");
 					return strdup (p);
 				}
-				strcpy (o+j, Color_RESET);
+				strcpy (o + j, Color_RESET);
 				j += strlen (Color_RESET);
 				o[j++] = p[i];
-				if (p[i]=='$' || ((p[i] > '0') && (p[i] < '9'))) {
+				if (p[i] == '$' || ((p[i] > '0') && (p[i] < '9'))) {
 					ut32 num_len = strlen (num);
 					/* if (num_len+j+10 >= opcode_sz) o = realloc_color_buffer (o, &opcode_sz, num_len+100); */
-					if (num_len+j+10 >= COLORIZE_BUFSIZE) {
+					if (num_len + j + 10 >= COLORIZE_BUFSIZE) {
 						eprintf ("r_print_colorize_opcode(): buffer overflow!\n");
 						return strdup (p);
 					}
-					strcpy (o+j, num);
-					j += strlen (num)-1;
+					strcpy (o + j, num);
+					j += strlen (num) - 1;
 				} else {
 					ut32 reg_len = strlen (reg);
 					/* if (reg_len+j+10 >= opcode_sz) o = realloc_color_buffer (o, &opcode_sz, reg_len+100); */
-					if (reg_len+j+10 >= COLORIZE_BUFSIZE) {
+					if (reg_len + j + 10 >= COLORIZE_BUFSIZE) {
 						eprintf ("r_print_colorize_opcode(): buffer overflow!\n");
 						return strdup (p);
 					}
 					strcpy (o+j, reg);
-					j += strlen (reg)-1;
+					j += strlen (reg) - 1;
 				}
 				continue;
 			}
@@ -1409,44 +1483,47 @@ R_API char * r_print_colorize_opcode (char *p, const char *reg, const char *num)
 			// find if next ',' before ' ' is found
 			is_mod = 0;
 			is_float = 0;
-			for (k = i+1; p[k]; k++) {
-				if (p[k]=='e' && p[k+1]=='+') {
+			for (k = i + 1; p[k]; k++) {
+				if (p[k] == 'e' && p[k + 1] == '+') {
 					is_float = 1;
 					break;
 				}
-				if (p[k]==' ')
+				if (p[k] == ' ') {
 					break;
-				if (p[k]==',') {
+				}
+				if (p[k] == ',') {
 					is_mod = 1;
 					break;
 				}
 			}
 			if (is_float) {
-				strcpy (o+j, num);
+				strcpy (o + j, num);
 				j += strlen (num);
 			}
-			if (!p[k]) is_mod = 1;
+			if (!p[k]) {
+				is_mod = 1;
+			}
 			if (!is_jmp && is_mod) {
 				// COLOR FOR REGISTER
 				ut32 reg_len = strlen (reg);
 				/* if (reg_len+j+10 >= opcode_sz) o = realloc_color_buffer (o, &opcode_sz, reg_len+100); */
-				if (reg_len+j+10 >= COLORIZE_BUFSIZE) {
+				if (reg_len + j + 10 >= COLORIZE_BUFSIZE) {
 					eprintf ("r_print_colorize_opcode(): buffer overflow!\n");
 					return strdup (p);
 				}
-				strcpy (o+j, reg);
+				strcpy (o + j, reg);
 				j += strlen (reg);
 			}
 			break;
 		case '0': /* address */
-			if (!is_jmp && p[i+1]== 'x') {
+			if (!is_jmp && p[i + 1] == 'x') {
 				ut32 num_len = strlen (num);
 				/* if (num_len+j+10 >= opcode_sz) o = realloc_color_buffer (o, &opcode_sz, num_len+100); */
-				if (num_len+j+10 >= COLORIZE_BUFSIZE) {
+				if (num_len + j + 10 >= COLORIZE_BUFSIZE) {
 					eprintf ("r_print_colorize_opcode(): buffer overflow!\n");
 					return strdup (p);
 				}
-				strcpy (o+j, num);
+				strcpy (o + j, num);
 				j += strlen (num);
 			}
 			break;
@@ -1454,14 +1531,14 @@ R_API char * r_print_colorize_opcode (char *p, const char *reg, const char *num)
 		o[j] = p[i];
 	}
 	// decolorize at the end
-	if (j+20 >= opcode_sz) {
+	if (j + 20 >= opcode_sz) {
 		char *t_o = o;
 		/* o = malloc (opcode_sz+21); */
 		memmove (o, t_o, opcode_sz);
 		opcode_sz += 21;
 		/* free (t_o); */
 	}
-	strcpy (o+j, Color_RESET);
+	strcpy (o + j, Color_RESET);
 	//strcpy (p, o); // may overflow .. but shouldnt because asm.buf_asm is big enought
 	return strdup (o);
 }
@@ -1474,7 +1551,9 @@ R_API void r_print_init_rowoffsets (RPrint *p) {
 
 // set the offset, from the start of the printing, of the i-th row
 R_API void r_print_set_rowoff (RPrint *p, int i, ut32 offset) {
-	if (i < 0) return;
+	if (i < 0) {
+		return;
+	}
 	if (!p->row_offsets || !p->row_offsets_sz) {
 		p->row_offsets_sz = R_MAX(i + 1, DFLT_ROWS);
 		p->row_offsets = R_NEWS (ut32, p->row_offsets_sz);
@@ -1483,8 +1562,9 @@ R_API void r_print_set_rowoff (RPrint *p, int i, ut32 offset) {
 		size_t new_size;
 		p->row_offsets_sz *= 2;
 		//XXX dangerous
-		while (i >= p->row_offsets_sz)
+		while (i >= p->row_offsets_sz) {
 			p->row_offsets_sz *= 2;
+		}
 		new_size = sizeof (ut32) * p->row_offsets_sz;
 		p->row_offsets = realloc (p->row_offsets, new_size);
 	}
@@ -1494,7 +1574,9 @@ R_API void r_print_set_rowoff (RPrint *p, int i, ut32 offset) {
 // return the offset, from the start of the printing, of the i-th row.
 // if the line index is not valid, UT32_MAX is returned.
 R_API ut32 r_print_rowoff (RPrint *p, int i) {
-	if (i < 0 || i >= p->row_offsets_sz) return UT32_MAX;
+	if (i < 0 || i >= p->row_offsets_sz) {
+		return UT32_MAX;
+	}
 	return p->row_offsets[i];
 }
 

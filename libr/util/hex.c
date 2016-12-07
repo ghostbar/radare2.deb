@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2015 - pancake */
+/* radare - LGPL - Copyright 2007-2016 - pancake */
 
 #include "r_types.h"
 #include "r_util.h"
@@ -141,8 +141,9 @@ R_API int r_hex_pair2bin(const char *arg) {
 	ut32 j = 0;
 
 	for (ptr = (ut8*)arg; ;ptr = ptr + 1) {
-		if (!*ptr || *ptr==' ' || j==2)
+		if (!*ptr || *ptr==' ' || j==2) {
 			break;
+		}
 		d = c;
 		if (*ptr!='.' && r_hex_to_byte (&c, *ptr)) {
 			eprintf ("Invalid hexa string at char '%c' (%s).\n",
@@ -150,7 +151,9 @@ R_API int r_hex_pair2bin(const char *arg) {
 			return -1;
 		}
 		c |= d;
-		if (j++ == 0) c <<= 4;
+		if (j++ == 0) {
+			c <<= 4;
+		}
 	}
 	return (int)c;
 }
@@ -188,41 +191,41 @@ R_API int r_hex_str2bin(const char *in, ut8 *out) {
 
 	while (in && *in) {
 		ut8 tmp;
-
 		/* skip hex prefix */
 		if (*in == '0' && in[1] == 'x') {
 			in += 2;
 		}
-
 		/* read hex digits */
 		while (!r_hex_to_byte (out ? &out[nibbles/2] : &tmp, *in)) {
 			nibbles++;
 			in++;
 		}
-		if (*in == '\0') break;
-
+		if (*in == '\0') {
+			break;
+		}
 		/* comments */
 		if (*in == '#' || (*in == '/' && in[1] == '/')) {
 			if ((in = strchr (in, '\n')))
 				in++;
 			continue;
-		}
-		if (*in == '/' && in[1] == '*') {
+		} else if (*in == '/' && in[1] == '*') {
 			if ((in = strstr (in, "*/")))
 				in += 2;
 			continue;
+		} else if (!IS_WHITESPACE (*in) && *in != '\n') {
+			/* this is not a valid string */
+			return 0;
 		}
-
 		/* ignore character */
 		in++;
 	}
 
 	if (nibbles % 2) {
 		if (out) r_hex_to_byte (&out[nibbles/2], '0');
-		return -(nibbles+1)/2;
+		return -(nibbles+1) / 2;
 	}
 
-	return nibbles/2;
+	return nibbles / 2;
 }
 
 R_API int r_hex_str2binmask(const char *in, ut8 *out, ut8 *mask) {

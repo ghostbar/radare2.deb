@@ -22,7 +22,7 @@ R_API int r_num_rand(int max) {
 }
 
 R_API void r_num_minmax_swap(ut64 *a, ut64 *b) {
-	if (*a>*b) {
+	if (*a > *b) {
 		ut64 tmp = *a;
 		*a = *b;
 		*b = tmp;
@@ -37,11 +37,14 @@ R_API void r_num_minmax_swap_i(int *a, int *b) {
 	}
 }
 
-R_API RNum *r_num_new(RNumCallback cb, void *ptr) {
+R_API RNum *r_num_new(RNumCallback cb, RNumCallback2 cb2, void *ptr) {
 	RNum *num = R_NEW0 (RNum);
-	if (!num) return NULL;
+	if (!num) {
+		return NULL;
+	}
 	num->value = 0LL;
 	num->callback = cb;
+	num->cb_from_value = cb2;
 	num->userptr = ptr;
 	return num;
 }
@@ -72,6 +75,20 @@ R_API char *r_num_units(char *buf, ut64 num) {
 		snprintf (buf, 31, "%.0f%c", fnum, unit);
 	}
 	return buf;
+}
+
+R_API const char *r_num_get_name(RNum *num, ut64 n) {
+	if (num->cb_from_value) {
+		int ok = 0;
+		const char *msg = num->cb_from_value (num, n, &ok);
+		if (msg && *msg) {
+			return msg;
+		}
+		if (ok) {
+			return msg;
+		}
+	}
+	return NULL;
 }
 
 // TODO: try to avoid the use of sscanf
@@ -408,26 +425,50 @@ R_API ut64 r_num_get_input_value(RNum *num, const char *input_value) {
 	return value;
 }
 
-R_API char* r_num_as_string(RNum *___, ut64 n) {
-	char str[10];
-	int stri, ret = 0;
+#define NIBBLE_TO_HEX(n) (((n) & 0xf) > 9 ? 'a' + ((n) & 0xf) - 10 : '0' + ((n) & 0xf))
+static int escape_char(char* dst, char byte) {
+	const char escape_map[] = "abtnvfr";
+	if (byte >= 7 && byte <= 13) {
+		*(dst++) = '\\';
+		*(dst++) = escape_map [byte - 7];
+		*dst = 0;
+		return 2;
+	} else if (byte) {
+		*(dst++) = '\\';
+		*(dst++) = 'x';
+		*(dst++) = NIBBLE_TO_HEX (byte >> 4);
+		*(dst++) = NIBBLE_TO_HEX (byte);
+		*dst = 0;
+		return 4;
+	}
+	return 0;
+}
+
+R_API char* r_num_as_string(RNum *___, ut64 n, bool printable_only) {
+	char str[34]; // 8 byte * 4 chars in \x?? format
+	int stri, ret = 0, off = 0;
 	int len = sizeof (ut64);
 	ut64 num = n;
 	str[stri=0] = 0;
 	while (len--) {
 		char ch = (num & 0xff);
-		if (ch>=33 && ch <127) {
+		if (ch >= 32 && ch < 127) {
 			str[stri++] = ch;
 			str[stri] = 0;
+		} else if (!printable_only && (off = escape_char (str + stri, ch)) != 0) {
+			stri += off;
 		} else {
 			if (ch)
 				return NULL;
 		}
-		ret |= (num&0xff);
+		ret |= (num & 0xff);
 		num >>= 8;
 	}
-	if (ret)
+	if (ret) {
 		return strdup (str);
+	} else if (!printable_only) {
+		return strdup ("\\0");
+	}
 	return NULL;
 }
 

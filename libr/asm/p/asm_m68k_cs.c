@@ -15,6 +15,7 @@
 
 static bool check_features(RAsm *a, cs_insn *insn);
 static csh cd = 0;
+#include "cs_mnemonics.c"
 
 static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	static int omode = -1;
@@ -99,7 +100,7 @@ static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 }
 
 RAsmPlugin r_asm_plugin_m68k_cs = {
-	.name = "m68k.cs",
+	.name = "m68k",
 	.desc = "Capstone M68K disassembler",
 	.cpus = "68000,68010,68020,68030,68040,68060",
 	.license = "BSD",
@@ -107,6 +108,7 @@ RAsmPlugin r_asm_plugin_m68k_cs = {
 	.bits = 32,
 	.endian = R_SYS_ENDIAN_LITTLE | R_SYS_ENDIAN_BIG,
 	.disassemble = &disassemble,
+	.mnemonics = &mnemonics,
 };
 
 static bool check_features(RAsm *a, cs_insn *insn) {
@@ -131,9 +133,13 @@ RAsmPlugin r_asm_plugin_m68k_cs = {
 	.bits = 32,
 	.endian = R_SYS_ENDIAN_LITTLE | R_SYS_ENDIAN_BIG,
 };
-struct r_lib_struct_t radare_plugin = {
+
+#ifndef CORELIB
+RLibStruct radare_plugin = {
 	.type = R_LIB_TYPE_ASM,
 	.data = &r_asm_plugin_m68k_cs,
 	.version = R2_VERSION
 };
+#endif
+
 #endif

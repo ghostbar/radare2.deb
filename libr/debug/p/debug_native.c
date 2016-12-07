@@ -18,6 +18,7 @@
 static int r_debug_native_continue (RDebug *dbg, int pid, int tid, int sig);
 static int r_debug_native_reg_read (RDebug *dbg, int type, ut8 *buf, int size);
 static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int size);
+static void r_debug_native_stop(RDebug *dbg);
 
 #include "native/bt.c"
 
@@ -75,7 +76,7 @@ static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int 
 #   define WIFCONTINUED(s) ((s) == 0xffff)
 #  endif
 # endif
-#if __x86_64__ && !defined(__ANDROID__)
+#if (__x86_64__ || __i386__) && !defined(__ANDROID__)
 #include "native/linux/linux_coredump.h"
 #endif
 #else // OS
@@ -217,6 +218,12 @@ static int r_debug_native_continue_syscall (RDebug *dbg, int pid, int num) {
 #endif
 }
 
+/* Callback to trigger SIGINT signal */
+static void r_debug_native_stop(RDebug *dbg) {
+	r_debug_kill (dbg, dbg->pid, dbg->tid, SIGINT);
+	r_cons_break_end();
+}
+
 /* TODO: specify thread? */
 /* TODO: must return true/false */
 static int r_debug_native_continue (RDebug *dbg, int pid, int tid, int sig) {
@@ -247,6 +254,10 @@ static int r_debug_native_continue (RDebug *dbg, int pid, int tid, int sig) {
 		contsig = sig;
 	}
 	//eprintf ("continuing with signal %d ...\n", contsig);
+	/* SIGINT handler for attached processes: dbg.consbreak (disabled by default) */
+	if (dbg->consbreak) {
+		r_cons_break ((RConsBreak)r_debug_native_stop, dbg);
+	}
 	return ptrace (PTRACE_CONT, pid, NULL, contsig) == 0;
 #endif
 }
@@ -610,7 +621,30 @@ static int windows_reg_read (RDebug *dbg, int type, ut8 *buf, int size) {
 	CloseHandle(thread);
 	if (type==R_REG_TYPE_FPU || type==R_REG_TYPE_MMX || type==R_REG_TYPE_XMM) {
 	#if __MINGW64__
-		eprintf ("TODO: r_debug_native_reg_read fpu/mmx/xmm\n");
+		typedef struct _M128A {
+			unsigned long long Low;
+			long long High;
+		} *PM128A;
+		if (showfpu) {
+			eprintf ("cwd = 0x%08x  ; control   ", (ut32)ctx.FltSave.ControlWord);
+			eprintf ("swd = 0x%08x  ; status\n", (ut32)ctx.FltSave.StatusWord);
+			eprintf ("twd = 0x%08x ", (ut32)ctx.FltSave.TagWord);
+			eprintf ("eof = 0x%08x\n", (ut32)ctx.FltSave.ErrorOffset);
+			eprintf ("ese = 0x%08x\n", (ut32)ctx.FltSave.ErrorSelector);
+			eprintf ("dof = 0x%08x\n", (ut32)ctx.FltSave.DataOffset);
+			eprintf ("dse = 0x%08x\n", (ut32)ctx.FltSave.DataSelector);
+			eprintf ("mxcr = 0x%08x\n", (ut32)ctx.MxCsr);
+			PM128A a = {0};
+			int i;
+			for (i = 0; i < 8; i++) {
+				a = (PM128A)&ctx.FltSave.FloatRegisters[i];
+				eprintf("st%d = 0x%"PFMT64x" %"PFMT64x"\n", i, a->High, a->Low);
+			}
+			for (i = 0; i < 16; i++) {
+				a = (PM128A)&ctx.FltSave.XmmRegisters[i];
+				eprintf("mm%d = 0x%"PFMT64x" %"PFMT64x"\n", i, a->High, a->Low);
+			}
+		}
 	#else
 		int i;
 		if (showfpu) {
@@ -622,14 +656,14 @@ static int windows_reg_read (RDebug *dbg, int type, ut8 *buf, int size) {
 			eprintf ("dof = 0x%08x\n", (ut32)ctx.FloatSave.DataOffset);
 			eprintf ("dse = 0x%08x\n", (ut32)ctx.FloatSave.DataSelector);
 			eprintf ("mxcr = 0x%08x\n", (ut32)ctx.ExtendedRegisters[24]);
-			for (i=0; i<8; i++) {
-				ut32 *a = (ut32*) &(ctx.ExtendedRegisters[10*16]);
-				a = a + (i * 4);
-				eprintf ("xmm%d = %08x %08x %08x %08x  ",i
-						, (int)a[0], (int)a[1], (int)a[2], (int)a[3] );
+			for (i = 0; i < 8; i++) {
 				ut64 *b = (ut64 *)&ctx.FloatSave.RegisterArea[i*10];
 				eprintf ("st%d = %lg (0x%08"PFMT64x")\n", i,
 					(double)*((double*)&ctx.FloatSave.RegisterArea[i*10]), *b);
+				ut32 *a = (ut32*) &(ctx.ExtendedRegisters[10*16]);
+				a = a + (i * 4);
+				eprintf ("mm%d = %08x %08x %08x %08x  ",i
+						, (int)a[0], (int)a[1], (int)a[2], (int)a[3] );
 			}
 		}
 	#endif
@@ -804,7 +838,9 @@ static RList *r_debug_native_sysctl_map (RDebug *dbg) {
 	if (sysctl (mib, 4, NULL, &len, NULL, 0) != 0) return NULL;
 	len = len * 4 / 3;
 	buf = malloc(len);
-	if (!buf) {return NULL};
+	if (!buf) {
+		return NULL;
+	}
 	if (sysctl (mib, 4, buf, &len, NULL, 0) != 0) {
 		free (buf);
 		return NULL;
@@ -1425,7 +1461,9 @@ static RList *r_debug_desc_native_list (int pid) {
 	if (sysctl (mib, 4, NULL, &len, NULL, 0) != 0) return NULL;
 	len = len * 4 / 3;
 	buf = malloc(len);
-	if (!buf) {return NULL};
+	if (!buf) {
+		return NULL;
+	}
 	if (sysctl (mib, 4, buf, &len, NULL, 0) != 0) {
 		free (buf);
 		return NULL;
@@ -1549,7 +1587,7 @@ struct r_debug_desc_plugin_t r_debug_desc_plugin_native = {
 	.list = r_debug_desc_native_list,
 };
 
-struct r_debug_plugin_t r_debug_plugin_native = {
+RDebugPlugin r_debug_plugin_native = {
 	.name = "native",
 	.license = "LGPL3",
 #if __i386__
@@ -1564,10 +1602,10 @@ struct r_debug_plugin_t r_debug_plugin_native = {
 #else
 	.canstep = 1, // XXX it's 1 on some platforms...
 #endif
-#elif __aarch64__
+#elif __aarch64__ || __arm64__
 	.bits = R_SYS_BITS_16 | R_SYS_BITS_32 | R_SYS_BITS_64,
 	.arch = "arm",
-	.canstep = 0, // XXX it's 1 on some platforms...
+	.canstep = 1,
 #elif __arm__
 	.bits = R_SYS_BITS_16 | R_SYS_BITS_32 | R_SYS_BITS_64,
 	.arch = "arm",

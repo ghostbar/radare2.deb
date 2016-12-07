@@ -1,7 +1,10 @@
 /* radare - LGPL - Copyright 2016 - Oscar Salvador */
 
-#if __x86_64__ || __i386__ || __arm__ || __arm64__
 #include <r_debug.h>
+
+#if DEBUGGER
+
+#if __x86_64__ || __i386__ || __arm__ || __arm64__
 #include <sys/uio.h>
 #include <sys/ptrace.h>
 #include <asm/ptrace.h>
@@ -104,6 +107,7 @@ static prpsinfo_t *linux_get_prpsinfo(RDebug *dbg, proc_per_process_t *proc_data
 	}
 	basename = get_basename (pfname, strlen (pfname));
 	strncpy (p->pr_fname, basename, sizeof (p->pr_fname));
+	p->pr_fname[sizeof (p->pr_fname) - 1] = 0;
 	ppsargs = prpsinfo_get_psargs (buffer, pfname, sizeof (p->pr_psargs), len);
 	if (!ppsargs) {
 		goto error;
@@ -587,7 +591,11 @@ static linux_map_entry_t *linux_get_mapped_files(RDebug *dbg, ut8 filter_flags) 
 							pmentry->anonymous, pmentry->kernel_mapping,
 							pmentry->file_backed, pmentry->dumpeable);
 		if (pmentry->file_backed) {
-			mapping_file.size += SIZE_NT_FILE_DESCSZ + strlen (pmentry->name) + 1;
+			const const char *name = pmentry->name;
+			if (!name) {
+				name = "";
+			}
+			mapping_file.size += SIZE_NT_FILE_DESCSZ + strlen (name) + 1;
 			mapping_file.count++;
 		}
 		ADD_MAP_NODE (pmentry);
@@ -867,6 +875,11 @@ static proc_per_process_t *get_proc_process_content (RDebug *dbg) {
 			&no_lui, &no_lui, &no_lui, &no_li, &no_li,
 			&no_li, &p->nice, &p->num_threads);
 		free (buff);
+	}
+	if (!p->num_threads || p->num_threads < 1) {
+		free (p);
+		eprintf ("Warning: number of threads is < 1\n");
+		return NULL;
 	}
 	file = sdb_fmt (0, "/proc/%d/status", dbg->pid);
 	buff = r_file_slurp (file, &size);
@@ -1500,7 +1513,6 @@ bool linux_generate_corefile (RDebug *dbg, RBuffer *dest) {
 	bool error = false;
 	size_t note_section_size, maps_size = 0;
 	int n_segments;
-	int n_threads;
 	ut32 hdr_size;
 	elf_offset_t offset = 0;
 
@@ -1514,15 +1526,11 @@ bool linux_generate_corefile (RDebug *dbg, RBuffer *dest) {
 		return false;
 	}
 	proc_data->per_process = get_proc_process_content (dbg);
-	if (!proc_data) {
+	if (!proc_data->per_process) {
 		free (elf_proc_note);
+		free (proc_data);
 		return false;
 	}
-	if (!elf_proc_note->n_threads || elf_proc_note->n_threads < 1 ) {
-		eprintf ("problem in elf_proc_note\n");
-		return false;
-	}
-	elf_proc_note->n_threads = proc_data->per_process->num_threads;
 
 	/* Get NT_ process_wide: AUXV, MAPS, PRPSINFO */
 	/* NT_PRPSINFO */
@@ -1584,4 +1592,6 @@ cleanup:
 	free (note_data);
 	return !error;
 }
+#endif
+
 #endif
