@@ -10,7 +10,6 @@
 #include <r_db.h>
 #include <r_io.h>
 #include <r_syscall.h>
-#include "list.h"
 
 #include <r_config.h>
 #include "r_bind.h"
@@ -209,6 +208,7 @@ typedef struct r_debug_t {
 	int trace_clone; /* stop on new threads */
 	char *glob_libs; /* stop on lib load */
 	char *glob_unlibs; /* stop on lib unload */
+	bool consbreak; /* SIGINT handle for attached processes */
 
 	/* tracking debugger state */
 	int steps; /* counter of steps done */
@@ -230,7 +230,7 @@ typedef struct r_debug_t {
 	RIOBind iob;
 
 	struct r_debug_plugin_t *h;
-	struct list_head plugins;
+	RList *plugins;
 
 	RAnal *anal;
 	RList *maps; // <RDebugMap>
@@ -318,7 +318,6 @@ typedef struct r_debug_plugin_t {
 	int (*drx)(RDebug *dbg, int n, ut64 addr, int size, int rwx, int g);
 	RDebugDescPlugin desc;
 	// TODO: use RList here
-	struct list_head list;
 } RDebugPlugin;
 
 // TODO: rename to r_debug_process_t ? maybe a thread too ?
@@ -397,7 +396,7 @@ R_API int r_debug_kill_setup(RDebug *dbg, int sig, int action);
 /* handle.c */
 R_API void r_debug_plugin_init(RDebug *dbg);
 R_API int r_debug_plugin_set(RDebug *dbg, const char *str);
-R_API int r_debug_plugin_list(RDebug *dbg);
+R_API int r_debug_plugin_list(RDebug *dbg, int mode);
 R_API bool r_debug_plugin_add(RDebug *dbg, RDebugPlugin *foo);
 
 /* memory */
@@ -495,6 +494,7 @@ extern RDebugPlugin r_debug_plugin_esil;
 extern RDebugPlugin r_debug_plugin_rap;
 extern RDebugPlugin r_debug_plugin_gdb;
 extern RDebugPlugin r_debug_plugin_bf;
+extern RDebugPlugin r_debug_plugin_io;
 extern RDebugPlugin r_debug_plugin_wind;
 extern RDebugPlugin r_debug_plugin_bochs;
 extern RDebugPlugin r_debug_plugin_qnx;

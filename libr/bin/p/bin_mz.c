@@ -15,6 +15,17 @@ static Sdb * get_sdb(RBinObject *o) {
 	return NULL;
 }
 
+static bool checkEntrypoint(const ut8 *buf, ut64 length) {
+	ut16 cs = r_read_ble16 (buf + 0x16, false);
+	ut16 ip = r_read_ble16 (buf + 0x14, false);
+	ut32 pa = ((r_read_ble16 (buf + 8 , false) + cs) << 4) + ip;
+	pa &= 0xffff;
+	if (pa > 0x40 && pa + 1 < length) {
+		return true;
+	}
+	return false;
+}
+
 static int check_bytes(const ut8 *buf, ut64 length) {
 	unsigned int exth_offset;
 	int ret = false;
@@ -25,11 +36,27 @@ static int check_bytes(const ut8 *buf, ut64 length) {
 		ret = true;
 		exth_offset = (buf[0x3c] | (buf[0x3d]<<8));
 		if (length > exth_offset + 2) {
-			if (!memcmp (buf+exth_offset, "PE", 2) ||
-			    !memcmp (buf+exth_offset, "NE", 2) ||
-			    !memcmp (buf+exth_offset, "LE", 2) ||
-			    !memcmp (buf+exth_offset, "LX", 2) ) {
-				ret = false;
+			//check for PE
+			if (length > exth_offset + 0x20) {
+				if (!memcmp (buf, "MZ", 2) &&
+				    !memcmp (buf + exth_offset, "PE", 2) &&
+				    !memcmp (buf + exth_offset + 0x18,
+					     "\x0b\x01", 2)) {
+					return false;
+					}
+			}
+			if (!memcmp (buf + exth_offset, "NE", 2) ||
+			    !memcmp (buf + exth_offset, "LE", 2) ||
+			    !memcmp (buf + exth_offset, "LX", 2) ) {
+				if (!checkEntrypoint (buf, length)) {
+					ret = false;
+				}
+			} else {
+				if (checkEntrypoint (buf, length)) {
+					/* raw plain MZ executable (watcom) */
+				} else {
+					ret = false;
+				}
 			}
 		}
 	}
@@ -46,7 +73,9 @@ static void * load_bytes(RBinFile *arch, const ut8 *buf, ut64 sz,
 		ut64 loadaddr, Sdb *sdb) {
 	const struct r_bin_mz_obj_t *res = NULL;
 	RBuffer *tbuf = NULL;
-	if (!buf || sz == 0 || sz == UT64_MAX) return NULL;
+	if (!buf || !sz || sz == UT64_MAX) {
+		return NULL;
+	}
 	tbuf = r_buf_new ();
 	r_buf_set_bytes (tbuf, buf, sz);
 	res = r_bin_mz_new_buf (tbuf);

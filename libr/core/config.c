@@ -446,7 +446,7 @@ static int cb_asmfeatures(void *user, void *data) {
 static int cb_asmcpu(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	if (*node->value=='?') {
+	if (*node->value == '?') {
 		rasm2_list (core, r_config_get (core->config, "asm.arch"), node->value[1]);
 		return 0;
 	}
@@ -548,7 +548,8 @@ static int cb_midflags (void *user, void *data) {
 		eprintf ("Valid values for asm.midflags:\n");
 		eprintf ("0  do not show middle flags\n");
 		eprintf ("1  print the middfle flag without realign instruction\n");
-		eprintf ("2  realign the instruction at the middfle flag\n");
+		eprintf ("2  realign the instruction at the middle flag\n");
+		eprintf ("3  realign the instruction at the middle flag only if it's a sym.\n");
 		return false;
 	}
 	return true;
@@ -587,17 +588,13 @@ static int cb_asmsyntax(void *user, void *data) {
 	if (*node->value == '?') {
 		r_cons_printf ("att\nintel\nmasm\njz\nregnum\n");
 		return false;
-	} else if (!strcmp (node->value, "regnum")) {
-		r_asm_set_syntax (core->assembler, R_ASM_SYNTAX_REGNUM);
-	} else if (!strcmp (node->value, "jz")) {
-		r_asm_set_syntax (core->assembler, R_ASM_SYNTAX_JZ);
-	} else if (!strcmp (node->value, "intel")) {
-		r_asm_set_syntax (core->assembler, R_ASM_SYNTAX_INTEL);
-	} else if (!strcmp (node->value, "masm")) {
-		r_asm_set_syntax (core->assembler, R_ASM_SYNTAX_MASM);
-	} else if (!strcmp (node->value, "att")) {
-		r_asm_set_syntax (core->assembler, R_ASM_SYNTAX_ATT);
-	} else return false;
+	} else {
+		int syntax = r_asm_syntax_from_string (node->value);
+		if (syntax == -1) {
+			return false;
+		}
+		r_asm_set_syntax (core->assembler, syntax);
+	}
 	return true;
 }
 
@@ -715,6 +712,18 @@ static int cb_color(void *user, void *data) {
 	return true;
 }
 
+static int cb_decoff(void *user, void *data) {
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	if (node->i_value) {
+		core->print->flags |= R_PRINT_FLAGS_ADDRDEC;
+	} else {
+		core->print->flags &= (~R_PRINT_FLAGS_ADDRDEC);
+	}
+	r_print_set_flags (core->print, core->print->flags);
+	return true;
+}
+
 static int cb_dbgbep(void *user, void *data) {
 	RConfigNode *node = (RConfigNode*) data;
 	if (*node->value == '?') {
@@ -822,7 +831,10 @@ static int cb_dbgstatus(void *user, void *data) {
 static int cb_dbgbackend(void *user, void *data) {
 	RCore *core = (RCore*) user;
 	RConfigNode *node = (RConfigNode*) data;
-	// XXX: remove this spagetti
+	if (!strcmp (node->value, "?")) {
+		r_debug_plugin_list (core->dbg, 'q');
+		return false;
+	}
 	if (!strcmp (node->value, "bf")) {
 		r_config_set (core->config, "asm.arch", "bf");
 	}
@@ -1037,6 +1049,13 @@ static int cb_iova(void *user, void *data) {
 	return true;
 }
 
+static int cb_iopava(void *user, void *data) {
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	core->io->pava = node->i_value;
+	return true;
+}
+
 static int cb_ioraw(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
@@ -1143,6 +1162,18 @@ static int cb_screcho(void *user, void *data) {
 	return true;
 }
 
+static int cb_scrlinesleep(void *user, void *data) {
+	RConfigNode *node = (RConfigNode *) data;
+	r_cons_singleton()->linesleep = node->i_value;
+	return true;
+}
+
+static int cb_scrpagesize(void *user, void *data) {
+	RConfigNode *node = (RConfigNode *) data;
+	r_cons_singleton()->pagesize= node->i_value;
+	return true;
+}
+
 static int cb_scrflush(void *user, void *data) {
 	RConfigNode *node = (RConfigNode *) data;
 	r_cons_singleton()->flush = node->i_value;
@@ -1216,9 +1247,11 @@ static int cb_searchalign(void *user, void *data) {
 static int cb_segoff(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	if (node->i_value)
+	if (node->i_value) {
 		core->print->flags |= R_PRINT_FLAGS_SEGOFF;
-	else core->print->flags &= (((ut32)-1) & (~R_PRINT_FLAGS_SEGOFF));
+	} else {
+		core->print->flags &= (((ut32)-1) & (~R_PRINT_FLAGS_SEGOFF));
+	}
 	return true;
 }
 
@@ -1233,6 +1266,13 @@ static int cb_swstep(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
 	core->dbg->swstep = node->i_value;
+	return true;
+}
+
+static int cb_consbreak(void *user, void *data) {
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	core->dbg->consbreak = node->i_value;
 	return true;
 }
 
@@ -1278,7 +1318,7 @@ static int cb_truecolor(void *user, void *data) {
 static int cb_utf8(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	core->utf8 = node->i_value;
+	core->cons->use_utf8 = node->i_value;
 	return true;
 }
 
@@ -1304,25 +1344,40 @@ static int cb_rawstr(void *user, void *data) {
 	return true;
 }
 
+static int cb_binstrings(void *user, void *data) {
+	const ut32 req = R_BIN_REQ_STRINGS;
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	if (node->i_value) {
+		core->bin->filter_rules |= req;
+	} else {
+		core->bin->filter_rules &= ~req;
+	}
+	return true;
+}
+
 static int cb_binprefix(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	free (core->bin->prefix);
+	if (!core || !core->bin) {
+		return false;
+	}
+	R_FREE (core->bin->prefix);
 	if (node->value && *node->value) {
 		if (!strcmp (node->value, "auto")) {
-			if (!core->bin || !core->bin->file) {
-				//eprintf ("core->bin->file is null\n");
+			if (!core->bin->file) {
 				return false;
 			}
 			char *name = (char *)r_file_basename (core->bin->file);
-			r_name_filter (name, strlen (name));
-			r_str_filter (name, strlen (name));
-			core->bin->prefix = strdup (name);
+			if (name) {
+				r_name_filter (name, strlen (name));
+				r_str_filter (name, strlen (name));
+				core->bin->prefix = strdup (name);
+				free (name);
+			}
 		} else {
 			core->bin->prefix = node->value;
 		}
-	} else {
-		core->bin->prefix = NULL;
 	}
 	return true;
 }
@@ -1542,7 +1597,8 @@ static char *getViewerPath() {
 		"geeqie",
 		"gqview",
 		"eog",
-		"xdg-open"
+		"xdg-open",
+		NULL
 	};
 	for (i = 0; viewers[i]; i++) {
 		char *dotPath = r_file_path (viewers[i]);
@@ -1677,6 +1733,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF("asm.trace", "false", "Show execution traces for each opcode");
 	SETPREF("asm.tracespace", "false", "Indent disassembly with trace.count information");
 	SETPREF("asm.ucase", "false", "Use uppercase syntax at disassembly");
+	SETPREF("asm.capitalize", "false", "Use camelcase at disassembly");
 	SETPREF("asm.vars", "true", "Show local function variables in disassembly");
 	SETPREF("asm.varxs", "false", "Show accesses of local variables");
 	SETPREF("asm.varsub", "true", "Substitute variables in disassembly");
@@ -1686,11 +1743,13 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF("asm.symbol", "false", "Show symbol+delta instead of absolute offset");
 	SETI("asm.symbol.col", 40, "Columns width to show asm.section");
 	SETCB("asm.assembler", "", &cb_asmassembler, "Set the plugin name to use when assembling");
+	SETPREF("asm.minicols", "false", "Only show the instruction in the column disasm");
 	SETCB("asm.arch", R_SYS_ARCH, &cb_asmarch, "Set the arch to be used by asm");
 	SETCB("asm.features", "", &cb_asmfeatures, "Specify supported features by the target CPU (=? for help)");
 	SETCB("asm.cpu", R_SYS_ARCH, &cb_asmcpu, "Set the kind of asm.arch cpu");
 	SETCB("asm.parser", "x86.pseudo", &cb_asmparser, "Set the asm parser to use");
 	SETCB("asm.segoff", "false", &cb_segoff, "Show segmented address in prompt (x86-16)");
+	SETCB("asm.decoff", "false", &cb_decoff, "Show segmented address in prompt (x86-16)");
 	SETCB("asm.syntax", "intel", &cb_asmsyntax, "Select assembly syntax");
 	SETI("asm.nbytes", 6, "Number of bytes for each opcode at disassembly");
 	SETPREF("asm.bytespace", "false", "Separate hexadecimal bytes with a whitespace");
@@ -1725,8 +1784,16 @@ R_API int r_core_config_init(RCore *core) {
 	SETICB("bin.maxstrbuf", 1024*1024*10, & cb_binmaxstrbuf, "Maximum size of range to load strings from");
 	SETCB("bin.prefix", NULL, &cb_binprefix, "Prefix all symbols/sections/relocs with a specific string");
 	SETCB("bin.rawstr", "false", &cb_rawstr, "Load strings from raw binaries");
-	SETPREF("bin.strings", "true", "Load strings from rbin on startup");
+	SETCB("bin.strings", "true", &cb_binstrings, "Load strings from rbin on startup");
 	SETPREF("bin.classes", "true", "Load classes from rbin on startup");
+	SETPREF("bin.mergeflags", "true", "Merge symbols with the same name into the same flag");
+
+	/* prj */
+	SETPREF("prj.name", "", "Name of current project");
+	SETPREF("prj.files", "false", "Save the target binary inside the project directory");
+	SETPREF("prj.git", "false", "Every project is a git repo and saving is commiting");
+	SETPREF("prj.zip", "false", "Use ZIP format for project files");
+	SETPREF("prj.gpg", "false", "TODO: Encrypt project with GnuPGv2");
 
 	/* cfg */
 	SETPREF("cfg.plugins", "true", "Load plugins at startup");
@@ -1769,7 +1836,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB("dir.source", "", &cb_dirsrc, "Path to find source files");
 	SETPREF("dir.types", "/usr/include", "Default path to look for cparse type files");
 #if __ANDROID__
-	SETPREF("dir.projects", "/data/data/org.radare2.installer/radare2/projects", "Default path for projects");
+	SETPREF("dir.projects", "/data/data/org.radare.radare2installer/radare2/projects", "Default path for projects");
 #elif __WINDOWS__
 	SETPREF("dir.projects", "~\\"R2_HOMEDIR"\\projects", "Default path for projects");
 #else
@@ -1806,6 +1873,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB("dbg.swstep", "false", &cb_swstep, "Force use of software steps (code analysis+breakpoint)");
 	SETPREF("dbg.shallow_trace", "false", "While tracing, avoid following calls outside specified range");
 	SETPREF("dbg.exitkills", "true", "Kill process on exit");
+	SETCB("dbg.consbreak", "false", &cb_consbreak, "SIGINT handle for attached processes");
 
 	r_config_set_getter (cfg, "dbg.swstep", (RConfigCallback)__dbg_swstep_getter);
 
@@ -1876,6 +1944,8 @@ R_API int r_core_config_init(RCore *core) {
 	SETICB("hex.stride", 0, &cb_hexstride, "Line stride in hexdump (default is 0)");
 
 	/* http */
+	SETPREF("http.log", "true", "Show HTTP requests processed");
+	SETPREF("http.logfile", "", "Specify a log file instead of stderr for http requests");
 	SETPREF("http.cors", "false", "Enable CORS");
 	SETPREF("http.referer", "", "CSFR protection if set");
 	SETPREF("http.dirlist", "false", "Enable directory listing");
@@ -1901,7 +1971,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF("http.bind", "localhost", "Server address");
 	SETPREF("http.homeroot", "~/.config/radare2/www", "http home root directory");
 #if __ANDROID__
-	SETPREF("http.root", "/data/data/org.radare2.installer/www", "http root directory");
+	SETPREF("http.root", "/data/data/org.radare.radare2installer/www", "http root directory");
 #elif __WINDOWS__
 	SETPREF("http.root", "www", "http root directory");
 #else
@@ -1935,7 +2005,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF("graph.gv.edge", "", "Graphviz edge style. (arrowhead=\"vee\")");
 	SETPREF("graph.gv.graph", "", "Graphviz global style attributes. (bgcolor=white)");
 	SETPREF("graph.gv.current", "false", "Highlight the current node in graphviz graph.");
-	SETPREF("graph.nodejmps", "false", "Enables shortcuts for every node.");
+	SETPREF("graph.nodejmps", "true", "Enables shortcuts for every node.");
 	/* hud */
 	SETPREF("hud.path", "", "Set a custom path for the HUD file");
 
@@ -1953,8 +2023,11 @@ R_API int r_core_config_init(RCore *core) {
 #endif
 	r_config_desc (cfg, "scr.fgets", "Use fgets() instead of dietline for prompt input");
 	SETCB("scr.echo", "false", &cb_screcho, "Show rcons output in realtime to stderr and buffer");
+	SETICB("scr.linesleep", 0, &cb_scrlinesleep, "Flush sleeping some ms in every line");
+	SETICB("scr.pagesize", 1, &cb_scrpagesize, "Flush in pages when scr.linesleep is != 0");
 	SETCB("scr.flush", "false", &cb_scrflush, "Force flush to console in realtime (breaks scripting)");
 	/* TODO: rename to asm.color.ops ? */
+	SETPREF("scr.zoneflags", "true", "Show zoneflags in visual mode before the title (see fz?)");
 	SETPREF("scr.color.ops", "true", "Colorize numbers and registers in opcodes");
 	SETPREF("scr.color.bytes", "true", "Colorize bytes that represent the opcodes of the instruction");
 #if __WINDOWS__ && !__CYGWIN__
@@ -2040,6 +2113,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETICB("io.0xff", 0xff, &cb_io_oxff, "Use this value instead of 0xff to fill unallocated areas");
 	SETCB("io.aslr", "false", &cb_ioaslr, "Disable ASLR for spawn and such");
 	SETCB("io.va", "true", &cb_iova, "Use virtual address layout");
+	SETCB("io.pava", "false", &cb_iopava, "Use EXPERIMENTAL paddr -> vaddr address mode");
 	SETCB("io.autofd", "true", &cb_ioautofd, "Change fd when opening a new file");
 	SETCB("io.vio", "false", &cb_iovio, "Enable the new vio (reading only) (WIP)");
 
@@ -2047,7 +2121,6 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF("file.desc", "", "User defined file description (used by projects)");
 	SETPREF("file.md5", "", "MD5 sum of current file");
 	SETPREF("file.path", "", "Path of current file");
-	SETPREF("file.project", "", "Name of current project");
 	SETPREF("file.sha1", "", "SHA1 hash of current file");
 	SETPREF("file.type", "", "Type of current file");
 	SETCB("file.loadmethod", "fail", &cb_fileloadmethod, "What to do when load addresses overlap: fail, overwrite, or append (next available)");

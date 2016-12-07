@@ -69,7 +69,7 @@ ut32 get_ins_part(ut32 pos, ut32 len) {
 }
 
 // pseudo instructions array (used for replacement tokens)
-st8* ins_str[] = {
+char* ins_str[] = {
 (char *)0x0,
 "OOOOOOppHHHhhhhhkkkkkkkk"
 ,

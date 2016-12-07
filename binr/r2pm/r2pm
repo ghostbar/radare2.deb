@@ -2,6 +2,7 @@
 
 # Honor user environment
 [ -z "${SUDO}" ] && SUDO=sudo
+[ -z "${WGET}" ] && WGET=wget
 
 r2 -qv > /dev/null 2>&1
 if [ $? != 0 ]; then
@@ -15,6 +16,7 @@ gmake --help >/dev/null 2>&1
 [ $? = 0 ] && MAKE=gmake
 export MAKE
 export GLOBAL=0
+export R2PM_JOBS=4
 export R2VERSION="`r2 -qv`"
 PREFIX="`r2 -hh | grep PREFIX | awk '{print $2}' 2> /dev/null`"
 BINDIR="${PREFIX}/bin/"
@@ -42,6 +44,7 @@ export CFLAGS="-I${R2PM_HOMEPREFIX}/include/"
 export LDFLAGS="-L${R2PM_HOMEPREFIX}/lib/"
 
 export R2PM_PYPATH="${R2PM_PREFIX}/python"
+export R2PM_OLDPWD="${PWD}"
 
 # Global Vars
 TRAVIS_TYPE=XX
@@ -71,7 +74,7 @@ if [ -f "d/baleful" ]; then
 	R2PM_DBDIR="$(pwd)/d/"
 fi
 case "$1" in
-init|update)
+init|up|update)
 	R2PM_DBDIR="${HOME}/.config/radare2/r2pm/db"
 	mkdir -p "${R2PM_USRDIR}"/git
 	cd "${R2PM_USRDIR}"/git
@@ -95,7 +98,9 @@ init|update)
 	fi
 
 	ln -fs "${R2PM_USRDIR}"/git/radare2-pm/db "${R2PM_DBDIR}" || exit 1
-	echo "r2pm database initialized. Use 'r2pm update' to update"
+	if [ "$1" = "init" ]; then
+		echo "r2pm database initialized. Use 'r2pm update' to update"
+	fi
 	exit 0
 	;;
 esac
@@ -117,6 +122,14 @@ R2PM_SYSPKG() {
 
 R2PM_DESC() {
 	:
+}
+
+R2PM_SUDO() {
+	if [ "${GLOBAL}" = 1 ]; then
+		${SUDO} $*
+	else
+		$*
+	fi
 }
 
 R2PM_List() {
@@ -147,6 +160,40 @@ R2PM_ListUninstalled() {
 	done
 }
 
+R2PM_TGZ() {
+	URL="$1"
+	TARBALL="`basename $1`"
+	if [ -z "$2" ]; then
+		DIR="`echo ${TARBALL} | awk -F .t '{print $1}'`"
+	else
+		DIR="$2"
+	fi
+	if [ -n "$3" ]; then
+		TARBALL="$3"
+	fi
+	cd "${R2PM_GITDIR}"
+	if [ ${IS_LOCAL} = 0 ]; then
+		${WGET} -O ${TARBALL} -c "${URL}"
+		if [ -d "${DIR}" ]; then
+			echo "Already uncompressed."
+		else
+			if [ "`echo ${URL} | grep -e tgz -e tar.gz`" ]; then
+				tar xzvf "${TARBALL}"
+			elif [ "`echo ${URL} | grep -e .tbz2 -e tar.bz2`" ]; then
+				tar xjvf "${TARBALL}"
+			elif [ "`echo ${URL} | grep -e .txz -e tar.xz`" ]; then
+				tar xJvf "${TARBALL}"
+			elif [ "`echo ${URL} | grep -e .zip`" ]; then
+				unzip -o "${TARBALL}"
+			else
+				echo "Dunno"
+				exit 1
+			fi
+		fi
+		cd "${DIR}" || R2PM_FAIL "Oops"
+	fi
+}
+
 R2PM_GIT() {
 	URL="$1"
 	if [ -z "$2" ]; then
@@ -156,14 +203,14 @@ R2PM_GIT() {
 	fi
 	cd "${R2PM_GITDIR}"
 	if [ ${IS_LOCAL} = 0 ]; then
-	        if [ -d "${R2PM_GITDIR}/${DIR}" ]; then
-		        cd "${DIR}"
-		        git pull
-	        else
-		        git clone "${URL}" "${DIR}" || R2PM_FAIL "Oops"
-		        cd "${DIR}" || R2PM_FAIL "Oops"
-	        fi
-    	fi
+		if [ -d "${DIR}" ]; then
+			cd "${DIR}"
+			git pull
+		else
+			git clone "${URL}" "${DIR}" || R2PM_FAIL "Oops"
+			cd "${DIR}" || R2PM_FAIL "Oops"
+		fi
+	fi
 }
 
 R2PM_FAIL() {
@@ -326,14 +373,26 @@ case "$1" in
 	r2pm_uninstall $@
 	;;
 -c|clean)
-	R2PM_List radare2 | grep radare2
-	if [ $? != 0 ]; then
-		rm -rf "${R2PM_GITDIR}"
-		mkdir -p "${R2PM_GITDIR}"
+	if [ -n "$2" ]; then
+		if [ -d "${R2PM_GITDIR}/$2" ]; then
+			echo "Cleaning up ${R2PM_GITDIR}..."
+			rm -rf "${R2PM_GITDIR}/$2"
+		else
+			echo "Cannot find $2 in ${R2PM_GITDIR}"
+			exit 1
+		fi
 	else
-		echo "r2 is installed with r2pm, do not clean the cache to avoid autodestruction"
-		echo "do not disassemble do not disassemble do not disassemble do not disassemble"
-		exit 1
+		R2PM_List radare2 | grep radare2
+		if [ $? != 0 ]; then
+			echo "Press enter to remove the GITDIR or ^C to cancel operation"
+			read A
+			rm -rf "${R2PM_GITDIR}"
+			mkdir -p "${R2PM_GITDIR}"
+		else
+			echo "r2 is installed with r2pm, do not clean the cache to avoid autodestruction"
+			echo "do not disassemble do not disassemble do not disassemble do not disassemble"
+			exit 1
+		fi
 	fi
 	;;
 what|-w)
@@ -342,6 +401,27 @@ what|-w)
 	else
 		cd "${R2PM_USRDIR}/pkg/" 2> /dev/null
 		ls
+	fi
+	;;
+cd)
+	if [ -n "$2" ]; then
+		cd ${R2PM_GITDIR}/$2 || exit 1
+		export R2PM_LEVEL=$((${R2PM_LEVEL}+1))
+		echo "Entering into ${SHELL} level ${R2PM_LEVEL}."
+		PS1="r2pm:${R2PM_LEVEL}:\W\$ " ${SHELL}
+		echo "Exiting level ${R2PM_LEVEL}."
+		exit 0
+	else
+		echo "Missing argument. See r2pm ls"
+		exit 1
+	fi
+	;;
+ls)
+	if [ -d "${R2PM_GITDIR}" ]; then
+		ls ${R2PM_GITDIR}
+	else
+		echo "Cannot find ${R2PM_GITDIR}"
+		exit 1
 	fi
 	;;
 *|help|-h)
@@ -359,9 +439,11 @@ what|-w)
 	echo " -t,test FX,XX,BR BID        check in travis regressions"
 	echo " -v,version                  show version"
 	echo " -h,help                     show this message"
-	echo " -c,clean                    clear source cache"
+	echo " -c,clean ([git/dir])        clear source cache (GITDIR)"
 	echo " -w <pkgname>                what/where is installed"
 	echo " init | update ..            initialize/update database"
+	echo " cd [git/dir]                cd into given git (see 'r2pm ls')"
+	echo " ls                          ls all cloned git repos in GITDIR"
 	echo "Environment:"
 	echo "SUDO=sudo                    use this tool as sudo"
 	echo "R2PM_PLUGDIR=~/.config/radare2/plugins   # default value, home-install for plugins"

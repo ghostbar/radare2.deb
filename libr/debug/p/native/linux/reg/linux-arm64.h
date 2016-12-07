@@ -3,6 +3,7 @@ return strdup (
 "=PC	pc\n"
 "=BP	x29\n"
 "=SP	sp\n"
+"=SN	x8\n"
 "=A0	x0\n"
 "=A1	x1\n"
 "=A2	x2\n"
@@ -12,7 +13,7 @@ return strdup (
 "=SF	nf\n"
 "=OF	vf\n"
 "=CF	cf\n"
-"=SN	ox0\n"
+"=SN	ox8\n"
 #endif
 "gpr	x0	.64	0	0\n"
 "gpr	x1	.64	8	0\n"

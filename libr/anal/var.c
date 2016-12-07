@@ -38,7 +38,7 @@ R_API bool r_anal_var_display(RAnal *anal, int delta, char kind, const char *typ
 		break;
 	case R_ANAL_VAR_KIND_BPV:
 		if (delta > 0) {
-			anal->cb_printf ("pf %s @%s+0x%x\n", fmt,	anal->reg->name[R_REG_NAME_BP], delta);
+			anal->cb_printf ("pf %s @%s+0x%x\n", fmt, anal->reg->name[R_REG_NAME_BP], delta);
 		} else {
 			anal->cb_printf ("pf %s @%s-0x%x\n", fmt, anal->reg->name[R_REG_NAME_BP], -delta);
 		}
@@ -561,8 +561,8 @@ static RList *var_generate_list(RAnal *a, RAnalFunction *fcn, int kind, bool dyn
 					}
 					if (!vt.name || !vt.type) {
 						//This should be properly fixed
-						eprintf ("Warning null var in fcn.0x%"PFMT64x".%c.%s at %s-%d\n",
-								fcn->addr, kind, word, __FILE__, __LINE__);
+						eprintf ("Warning null var in fcn.0x%"PFMT64x".%c.%s\n",
+								fcn->addr, kind, word);
 						free (av);
 						continue;
 					}
@@ -637,13 +637,13 @@ R_API void r_anal_var_list_show(RAnal *anal, RAnalFunction *fcn, int kind, int m
 				if (var->delta > 0) {
 					anal->cb_printf ("{\"name\":\"%s\","
 						"\"kind\":\"arg\",\"type\":\"%s\",\"ref\":"
-						"{\"base\":\"%s\", \"offset\":0x%x}}",
+						"{\"base\":\"%s\", \"offset\":%"PFMT64d"}}",
 						var->name, var->type,anal->reg->name[R_REG_NAME_BP],
 						var->delta);
 				} else {
 					anal->cb_printf ("{\"name\":\"%s\","
 						"\"kind\":\"var\",\"type\":\"%s\",\"ref\":"
-						"{\"base\":\"%s\", \"offset\":-0x%x}}",
+						"{\"base\":\"%s\", \"offset\":-%"PFMT64d"}}",
 						var->name, var->type,anal->reg->name[R_REG_NAME_BP],
 						-var->delta);
 				}
@@ -663,13 +663,13 @@ R_API void r_anal_var_list_show(RAnal *anal, RAnalFunction *fcn, int kind, int m
 				if (var->delta < fcn->stack) {
 					anal->cb_printf ("{\"name\":\"%s\","
 						"\"kind\":\"arg\",\"type\":\"%s\",\"ref\":"
-						"{\"base\":\"%s\", \"offset\":0x%x}}",
+						"{\"base\":\"%s\", \"offset\":%"PFMT64d"}}",
 						var->name, var->type,anal->reg->name[R_REG_NAME_SP],
 						var->delta);
 				} else {
 					anal->cb_printf ("{\"name\":\"%s\","
 						"\"kind\":\"var\",\"type\":\"%s\",\"ref\":"
-						"{\"base\":\"%s\", \"offset\":-0x%x}}",
+						"{\"base\":\"%s\", \"offset\":-%"PFMT64d"}}",
 						var->name, var->type,anal->reg->name[R_REG_NAME_SP],
 						var->delta);
 				}
@@ -706,7 +706,7 @@ R_API void r_anal_var_list_show(RAnal *anal, RAnalFunction *fcn, int kind, int m
 				}
 				break;
 			case R_ANAL_VAR_KIND_SPV:
-				if ( var->delta < fcn->stack) {
+				if (var->delta < fcn->stack) {
 					anal->cb_printf ("var %s %s @ %s+0x%x\n",
 						var->type, var->name,
 						anal->reg->name[R_REG_NAME_SP],

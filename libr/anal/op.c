@@ -14,13 +14,14 @@ struct VarUsedType {
 
 R_API RAnalOp *r_anal_op_new () {
 	RAnalOp *op = R_NEW0 (RAnalOp);
-	if (!op) return NULL;
-	op->addr = UT64_MAX;
-	op->jump = UT64_MAX;
-	op->fail = UT64_MAX;
-	op->ptr = UT64_MAX;
-	op->val = UT64_MAX;
-	r_strbuf_init (&op->esil);
+	if (op) {
+		op->addr = UT64_MAX;
+		op->jump = UT64_MAX;
+		op->fail = UT64_MAX;
+		op->ptr = UT64_MAX;
+		op->val = UT64_MAX;
+		r_strbuf_init (&op->esil);
+	}
 	return op;
 }
 
@@ -37,17 +38,16 @@ R_API bool r_anal_op_fini(RAnalOp *op) {
 	if (!op) {
 		return false;
 	}
-	if (((ut64)(size_t)op) == UT64_MAX) {
-		return false;
-	}
-	if (((ut64)(size_t)op->mnemonic) == UT64_MAX) {
-		return false;
-	}
 	r_anal_var_free (op->var);
+	op->var = NULL;
 	r_anal_value_free (op->src[0]);
 	r_anal_value_free (op->src[1]);
 	r_anal_value_free (op->src[2]);
+	op->src[0] = NULL;
+	op->src[1] = NULL;
+	op->src[2] = NULL;
 	r_anal_value_free (op->dst);
+	op->dst = NULL;
 	r_strbuf_fini (&op->esil);
 	r_anal_switch_op_free (op->switch_op);
 	R_FREE (op->mnemonic);
@@ -95,7 +95,7 @@ R_API int r_anal_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int le
 		}
 	}
 	memset (op, 0, sizeof (RAnalOp));
-	if (len > 0 && anal->cur && anal->cur->op && strcmp (anal->cur->name, "null")) {
+	if (len > 0 && anal->cur && anal->cur->op) {
 		ret = anal->cur->op (anal, op, addr, data, len);
 		op->addr = addr;
 		//free the previous var in op->var
@@ -108,11 +108,12 @@ R_API int r_anal_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int le
 			op->type = R_ANAL_OP_TYPE_ILL;
 		}
 	} else {
-		if (!memcmp (data, "\xff\xff\xff\xff", R_MIN(4, len))) {
+		if (!memcmp (data, "\xff\xff\xff\xff", R_MIN (4, len))) {
 			op->type = R_ANAL_OP_TYPE_ILL;
-			ret = 2; // HACK
+			ret = R_MIN (2, len); // HACK
 		} else {
 			op->type = R_ANAL_OP_TYPE_MOV;
+			ret = R_MIN (2, len); // HACK
 		}
 	}
 	return ret;

@@ -629,7 +629,6 @@ static int arcompact_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, in
 			op->size = 8;
 			fields.limm = words[1];
 		}
-
 		/* TODO: fill in the extansion functions */
 		op->type = R_ANAL_OP_TYPE_UNK;
 		break;

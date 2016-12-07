@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2013 - pancake */
+/* radare - LGPL - Copyright 2013-2016 - pancake */
 
 #include "r_anal.h"
 
@@ -55,19 +55,24 @@ R_API int r_anal_type_get_size(RAnal *anal, const char *type) {
 		char *members = sdb_get (anal->sdb_types, query, 0);
 		char *next, *ptr = members;
 		int ret = 0;
-		do {
-			char *name = sdb_anext (ptr, &next);
-			query = sdb_fmt (-1, "struct.%s.%s", t, type, name);
-			char *subtype = sdb_get (anal->sdb_types, query, 0);
-			char *tmp = strchr (subtype, ',');
-			if (tmp) {
-				*tmp = 0;
-			}
-			ret += r_anal_type_get_size (anal, subtype);
-			free (subtype);
-			ptr = next;
-		} while (next);
-		free (members);
+		if (members) {
+			do {
+				char *name = sdb_anext (ptr, &next);
+				query = sdb_fmt (-1, "struct.%s.%s", t, type, name);
+				char *subtype = sdb_get (anal->sdb_types, query, 0);
+				if (!subtype) {
+					break;
+				}
+				char *tmp = strchr (subtype, ',');
+				if (tmp) {
+					*tmp = 0;
+				}
+				ret += r_anal_type_get_size (anal, subtype);
+				free (subtype);
+				ptr = next;
+			} while (next);
+			free (members);
+		}
 		return ret;
 	}
 	return 0;
@@ -292,7 +297,8 @@ R_API const char *r_anal_type_func_ret(RAnal *anal, const char *func_name){
 
 R_API const char *r_anal_type_func_cc(RAnal *anal, const char *func_name) {
 	const char *query = sdb_fmt (-1, "func.%s.cc", func_name);
-	return sdb_const_get (anal->sdb_types, query, 0);
+	const char *cc = sdb_const_get (anal->sdb_types, query, 0);
+	return cc ? cc : r_anal_cc_default (anal);
 }
 
 R_API int r_anal_type_func_args_count(RAnal *anal, const char *func_name) {
