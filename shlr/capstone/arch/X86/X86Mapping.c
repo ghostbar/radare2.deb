@@ -2616,6 +2616,25 @@ void X86_get_insn_id(cs_struct *h, cs_insn *insn, unsigned int id)
 							break;
 					}
 					break;
+
+				case X86_INS_RET:
+					switch(h->mode) {
+						case CS_MODE_16:
+							insn->detail->regs_write[0] = X86_REG_SP;
+							insn->detail->regs_read[0] = X86_REG_SP;
+							break;
+						case CS_MODE_32:
+							insn->detail->regs_write[0] = X86_REG_ESP;
+							insn->detail->regs_read[0] = X86_REG_ESP;
+							break;
+						default:	// 64-bit
+							insn->detail->regs_write[0] = X86_REG_RSP;
+							insn->detail->regs_read[0] = X86_REG_RSP;
+							break;
+					}
+					insn->detail->regs_write_count = 1;
+					insn->detail->regs_read_count = 1;
+					break;
 			}
 
 			memcpy(insn->detail->groups, insns[i].groups, sizeof(insns[i].groups));
@@ -2667,10 +2686,20 @@ static struct insn_reg insn_regs_att[] = {
 	{ X86_INSW, X86_REG_DX },
 	{ X86_INSL, X86_REG_DX },
 
-	{ X86_MOV64o64a, X86_REG_RAX },
-	{ X86_MOV32o32a, X86_REG_EAX },
-	{ X86_MOV64o32a, X86_REG_EAX },
+	{ X86_MOV8o16a, X86_REG_AL },
+	{ X86_MOV8o32a, X86_REG_AL },
+	{ X86_MOV8o64a, X86_REG_AL },
+
 	{ X86_MOV16o16a, X86_REG_AX },
+	{ X86_MOV16o32a, X86_REG_AX },
+	{ X86_MOV16o64a, X86_REG_AX },
+
+	{ X86_MOV32o16a, X86_REG_EAX },
+	{ X86_MOV32o32a, X86_REG_EAX },
+	{ X86_MOV32o64a, X86_REG_EAX },
+
+	{ X86_MOV64o32a, X86_REG_RAX },
+	{ X86_MOV64o64a, X86_REG_RAX },
 
 	{ X86_PUSHCS32, X86_REG_CS },
 	{ X86_PUSHDS32, X86_REG_DS },
@@ -2923,7 +2952,10 @@ static struct insn_reg2 insn_regs_intel2[] = {
 
 static struct insn_reg insn_regs_intel_sorted [ARR_SIZE(insn_regs_intel)];
 
-static int regs_cmp(const void *a, const void *b)
+// Explicitly specified calling convention with CAPSTONE_API so that it is always
+// compiled as __cdecl on MSVC and does not cause a compile error even when
+// default calling convention is __stdcall (eg. capstone_static_winkernel project)
+static int CAPSTONE_API regs_cmp(const void *a, const void *b)
 {
 	uint16_t l = ((struct insn_reg *)a)->insn;
 	uint16_t r = ((struct insn_reg *)b)->insn;

@@ -367,7 +367,7 @@ static int parse_symtab(struct MACH0_(obj_t)* bin, ut64 off) {
 				return false;
 			}
 			//XXX not very safe what if is n_un.n_name instead?
-			bin->symtab[i].n_un.n_strx = r_read_ble32 (&nlst[0], bin->big_endian);
+			bin->symtab[i].n_strx = r_read_ble32 (&nlst[0], bin->big_endian);
 			bin->symtab[i].n_type = r_read_ble8 (&nlst[4]);
 			bin->symtab[i].n_sect = r_read_ble8 (&nlst[5]);
 			bin->symtab[i].n_desc = r_read_ble16 (&nlst[6], bin->big_endian);
@@ -818,16 +818,16 @@ static int parse_dylib(struct MACH0_(obj_t)* bin, ut64 off) {
 	}
 	dl.cmd = r_read_ble32 (&sdl[0], bin->big_endian);
 	dl.cmdsize = r_read_ble32 (&sdl[4], bin->big_endian);
-	dl.dylib.name.offset = r_read_ble32 (&sdl[8], bin->big_endian);
+	dl.dylib.name = r_read_ble32 (&sdl[8], bin->big_endian);
 	dl.dylib.timestamp = r_read_ble32 (&sdl[12], bin->big_endian);
 	dl.dylib.current_version = r_read_ble32 (&sdl[16], bin->big_endian);
 	dl.dylib.compatibility_version = r_read_ble32 (&sdl[20], bin->big_endian);
 
-	if (off + dl.dylib.name.offset > bin->size ||\
-	  off + dl.dylib.name.offset + R_BIN_MACH0_STRING_LENGTH > bin->size)
+	if (off + dl.dylib.name > bin->size ||\
+	  off + dl.dylib.name + R_BIN_MACH0_STRING_LENGTH > bin->size)
 		return false;
 
-	len = r_buf_read_at (bin->b, off+dl.dylib.name.offset, (ut8*)bin->libs[lib], R_BIN_MACH0_STRING_LENGTH);
+	len = r_buf_read_at (bin->b, off+dl.dylib.name, (ut8*)bin->libs[lib], R_BIN_MACH0_STRING_LENGTH);
 	if (len < 1) {
 		eprintf ("Error: read (dylib str)");
 		return false;
@@ -993,7 +993,7 @@ static int init_items(struct MACH0_(obj_t)* bin) {
 				} else {
 					dy.cmd = r_read_ble32 (&sdy[0], bin->big_endian);
 					dy.cmdsize = r_read_ble32 (&sdy[4], bin->big_endian);
-					dy.name.offset = r_read_ble32 (&sdy[8], bin->big_endian);
+					dy.name = r_read_ble32 (&sdy[8], bin->big_endian);
 
 					int len = dy.cmdsize;
 					char *buf = malloc (len+1);
@@ -1052,6 +1052,7 @@ static int init_items(struct MACH0_(obj_t)* bin) {
 			is_first_thread = false;
 			break;
 		case LC_LOAD_DYLIB:
+		case LC_LOAD_WEAK_DYLIB:
 			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "load_dylib", 0);
 			bin->nlibs++;
 			if (!parse_dylib(bin, off)){
@@ -1318,7 +1319,7 @@ static int parse_import_stub(struct MACH0_(obj_t)* bin, struct symbol_t *symbol,
 				symbol->offset = bin->sects[i].offset + j * bin->sects[i].reserved2;
 				symbol->addr = bin->sects[i].addr + j * bin->sects[i].reserved2;
 				symbol->size = 0;
-				stridx = bin->symtab[idx].n_un.n_strx;
+				stridx = bin->symtab[idx].n_strx;
 				if (stridx >= 0 && stridx < bin->symstrlen) {
 					symstr = (char *)bin->symstr+stridx;
 				} else {
@@ -1439,7 +1440,7 @@ struct symbol_t* MACH0_(get_symbols)(struct MACH0_(obj_t)* bin) {
 			} else {
 				symbols[j].type = R_BIN_MACH0_SYMBOL_TYPE_LOCAL;
 			}
-			stridx = bin->symtab[i].n_un.n_strx;
+			stridx = bin->symtab[i].n_strx;
 			if (stridx >= 0 && stridx < bin->symstrlen) {
 				symstr = (char*)bin->symstr+stridx;
 			} else {
@@ -1481,7 +1482,7 @@ struct symbol_t* MACH0_(get_symbols)(struct MACH0_(obj_t)* bin) {
 	to = R_MIN (bin->nsymtab, bin->dysymtab.iundefsym + bin->dysymtab.nundefsym);
 	for (i = bin->dysymtab.iundefsym; i < to; i++) {
 		if (j > symbols_count) {
-			eprintf ("Error: %s at %d\n", __FILE__,__LINE__);
+			eprintf ("mach0-get-symbols: error\n");
 			break;
 		}
 		if (parse_import_stub(bin, &symbols[j], i))
@@ -1494,9 +1495,9 @@ struct symbol_t* MACH0_(get_symbols)(struct MACH0_(obj_t)* bin) {
 		struct MACH0_(nlist) *st = &bin->symtab[i];
 #if 0
 		eprintf ("stridx %d -> section %d type %d value = %d\n",
-			st->n_un.n_strx, st->n_sect, st->n_type, st->n_value);
+			st->n_strx, st->n_sect, st->n_type, st->n_value);
 #endif
-		stridx = st->n_un.n_strx;
+		stridx = st->n_strx;
 		if (stridx >= 0 && stridx < bin->symstrlen) {
 			symstr = (char*)bin->symstr + stridx;
 		} else {
@@ -1590,7 +1591,7 @@ struct import_t* MACH0_(get_imports)(struct MACH0_(obj_t)* bin) {
 			free (imports);
 			return NULL;
 		}
-		stridx = bin->symtab[idx].n_un.n_strx;
+		stridx = bin->symtab[idx].n_strx;
 		if (stridx >= 0 && stridx < bin->symstrlen) {
 			symstr = (char *)bin->symstr + stridx;
 		} else {
@@ -1735,7 +1736,7 @@ struct reloc_t* MACH0_(get_relocs)(struct MACH0_(obj_t)* bin) {
 						int sidx = iundefsym +j;
 						if (sidx<0 || sidx>= bin->nsymtab)
 							continue;
-						stridx = bin->symtab[sidx].n_un.n_strx;
+						stridx = bin->symtab[sidx].n_strx;
 						if (stridx < 0 || stridx >= bin->symstrlen)
 							continue;
 					}
@@ -2098,18 +2099,24 @@ char* MACH0_(get_cpusubtype_from_hdr)(struct MACH0_(mach_header) *hdr) {
 				return strdup ("all");
 			case CPU_SUBTYPE_ARM_V4T:
 				return strdup ("v4t");
+			case CPU_SUBTYPE_ARM_V5:
+				return strdup ("v5");
 			case CPU_SUBTYPE_ARM_V6:
 				return strdup ("v6");
-			case CPU_SUBTYPE_ARM_V5TEJ:
-				return strdup ("v5tej");
 			case CPU_SUBTYPE_ARM_XSCALE:
 				return strdup ("xscale");
 			case CPU_SUBTYPE_ARM_V7:
 				return strdup ("v7");
 			case CPU_SUBTYPE_ARM_V7F:
 				return strdup ("v7f");
+			case CPU_SUBTYPE_ARM_V7S:
+				return strdup ("v7s");
 			case CPU_SUBTYPE_ARM_V7K:
 				return strdup ("v7k");
+			case CPU_SUBTYPE_ARM_V7M:
+				return strdup ("v7m");
+			case CPU_SUBTYPE_ARM_V7EM:
+				return strdup ("v7em");
 			default:
 				return r_str_newf ("unknown ARM subtype %d", hdr->cpusubtype & 0xff);
 			}
@@ -2239,7 +2246,7 @@ struct MACH0_(mach_header) * MACH0_(get_hdr_from_bytes)(RBuffer *buf) {
 	ut8 machohdrbytes[sizeof (struct MACH0_(mach_header))] = {0};
 	int len;
 	struct MACH0_(mach_header) *macho_hdr = R_NEW0 (struct MACH0_(mach_header));
-	bool big_endian;
+	bool big_endian = false;
 	if (!macho_hdr) {
 		return NULL;
 	}

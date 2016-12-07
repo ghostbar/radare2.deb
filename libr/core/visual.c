@@ -1,7 +1,6 @@
 /* radare - LGPL - Copyright 2009-2016 - pancake */
 
 #include <r_core.h>
-
 #include <string.h>
 
 #define NPF 7
@@ -15,7 +14,7 @@ static void visual_refresh(RCore *core);
 static const char *printfmt[] = {
 	"x", "pd $r",
 	debugfmt_default,
-	"pxw", "pc", "pxA", "pxa"
+	"pCd $r-1", "pxw", "pc", "pxA", "pxa"
 };
 
 #undef USE_THREADS
@@ -195,6 +194,7 @@ static int visual_help() {
 	" >||<     seek aligned to block size\n"
 	" a/A      (a)ssemble code, visual (A)ssembler\n"
 	" b        toggle breakpoint\n"
+	" B        enumerate and inspect classes\n"
 	" c/C      toggle (c)ursor and (C)olors\n"
 	" d[f?]    define function, data, code, ..\n"
 	" D        enter visual diff mode (set diff.from/to)\n"
@@ -250,7 +250,7 @@ R_API void r_core_visual_prompt_input (RCore *core) {
 	ut64 bsze = core->blocksize;
 	int h;
 	(void)r_cons_get_size (&h);
-	r_cons_gotoxy (0, h-2);
+	r_cons_gotoxy (0, h - 2);
 	r_cons_reset_colors ();
 	r_cons_printf ("\nPress <enter> to return to Visual mode.\n");
 	r_cons_show_cursor (true);
@@ -811,13 +811,16 @@ R_API int r_core_visual_xrefs_X (RCore *core) {
 					refi->at,
 					      refi->type==R_ANAL_REF_TYPE_CODE?"CODE (JMP)":
 					      refi->type==R_ANAL_REF_TYPE_CALL?"CODE (CALL)":"DATA", refi->addr, fun->name, f?f->name:"");
-				if (++count > 9) break;
+				if (++count > 9) {
+					break;
+				}
 			}
 		}
 	}
 	r_cons_flush ();
-	if (!count)
+	if (!count) {
 		return 0;
+	}
 	ch = r_cons_readchar ();
 	if (fun && fun->refs) {
 		if (ch >= '0' && ch <= '9') {
@@ -856,7 +859,7 @@ void SetWindow(int Width, int Height) {
 char *getcommapath(RCore *core) {
 	char *cwd;
 	const char *dir = r_config_get (core->config, "dir.projects");
-	const char *prj = r_config_get (core->config, "file.project");
+	const char *prj = r_config_get (core->config, "prj.name");
 	if (dir && *dir && prj && *prj) {
 		char *abspath = r_file_abspath (dir);
 		/* use prjdir as base directory for comma-ent files */
@@ -1649,8 +1652,12 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		} else {
 			if (core->print->screen_bounds > 1 && core->print->screen_bounds >= core->offset) {
 				ut64 addr = core->print->screen_bounds;
-				if (core->print->screen_bounds == core->offset) {
-					addr += r_asm_disassemble (core->assembler, &op, core->block, 32);
+				if (core->io->pava) {
+					addr = core->offset + 32;
+				} else {
+					if (core->print->screen_bounds == core->offset) {
+						addr += r_asm_disassemble (core->assembler, &op, core->block, 32);
+					}
 				}
 				r_core_seek (core, addr, 1);
 			} else {
@@ -1690,10 +1697,15 @@ R_API int r_core_visual_cmd(RCore *core, int ch) {
 		} else {
 			if (core->print->screen_bounds > 1 && core->print->screen_bounds > core->offset) {
 				int delta = (core->print->screen_bounds - core->offset);
-				if (core->offset >= delta)
-					r_core_seek (core, core->offset - delta, 1);
-				else
-					r_core_seek (core, 0, 1);
+				if (core->io->pava) {
+					r_core_seek_delta (core, -32);
+				} else {
+					if (core->offset >= delta) {
+						r_core_seek (core, core->offset - delta, 1);
+					} else {
+						r_core_seek (core, 0, 1);
+					}
+				}
 			} else {
 				ut64 at = (core->offset>obs)?core->offset-obs:0;
 				if (core->offset >obs)
@@ -2065,7 +2077,9 @@ R_API void r_core_visual_title (RCore *core, int color) {
 		r_core_block_size (core, hexcols * core->cons->rows * 8);
 		break;
 	}
-
+	if (r_config_get_i (core->config, "scr.zoneflags")) {
+		r_core_cmd (core, "fz:", 0);
+	}
 	if (r_config_get_i (core->config, "cfg.debug")) {
 		ut64 curpc = r_debug_reg_get (core->dbg, "PC");
 		if (curpc && curpc != UT64_MAX && curpc != oldpc) {
@@ -2260,6 +2274,13 @@ R_API int r_core_visual(RCore *core, const char *input) {
 	//r_cons_set_cup (true);
 
 	core->vmode = false;
+	/* honor vim */
+	if (!strncmp (input, "im", 2)) {
+		char *cmd = r_str_newf ("!v%s", input);
+		int ret = r_core_cmd0 (core, cmd);
+		free (cmd);
+		return ret;
+	}
 	while (*input) {
 		if (!r_core_visual_cmd (core, input[0])) {
 			return 0;

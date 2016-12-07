@@ -44,10 +44,15 @@ static void de_bruijn_seq(int prenecklace_len_t, int lyndon_prefix_len_p, int or
 // The returned string is malloced, and it is the responsibility of the caller
 // to free the memory.
 static char* de_bruijn(const char* charset, int order, int maxlen) {
+	if (!charset) {
+		return NULL;
+	}
 	int size = strlen (charset);
-	int* prenecklace_a = calloc (size * order, sizeof(int));
-	if (!prenecklace_a) return NULL;
-	char* sequence = calloc (maxlen + 1, sizeof(char));
+	int* prenecklace_a = calloc (size * order, sizeof (int));
+	if (!prenecklace_a) {
+		return NULL;
+	}
+	char* sequence = calloc (maxlen + 1, sizeof (char));
 	if (!sequence) {
 		free (prenecklace_a);
 		return NULL;
@@ -100,9 +105,7 @@ R_API char* r_debruijn_pattern(int size, int start, const char* charset) {
 }
 
 // Finds the offset of a given value in a cyclic pattern of an integer.
-// Guest endian = 1 if little, 0 if big.
-// Host endian = 1 if little, 0 if big.
-R_API int r_debruijn_offset(ut64 value, int big_endian) {
+R_API int r_debruijn_offset(ut64 value, bool is_big_endian) {
 	char* needle, *pattern, buf[9];
 	int retval;
 	char* pch;
@@ -113,26 +116,11 @@ R_API int r_debruijn_offset(ut64 value, int big_endian) {
 	// 0x10000 should be long enough. This is how peda works, and nobody complains
 	pattern = r_debruijn_pattern (0x10000, 0, debruijn_charset);
 
-	if (big_endian) {
-		buf[7] = value & 0xff;
-		buf[6] = (value >> 8) & 0xff;
-		buf[5] = (value >> 16) & 0xff;
-		buf[4] = (value >> 24) & 0xff;
-		buf[3] = (value >> 32) & 0xff;
-		buf[2] = (value >> 40) & 0xff;
-		buf[1] = (value >> 48) & 0xff;
-		buf[0] = (value >> 56) & 0xff;
-		buf[8] = 0; // EOF
+	buf[8] = '\0';
+	if (is_big_endian) {
+		r_write_be64 (buf, value);
 	} else {
-		buf[0] = value & 0xff;
-		buf[1] = (value >> 8) & 0xff;
-		buf[2] = (value >> 16) & 0xff;
-		buf[3] = (value >> 24) & 0xff;
-		buf[4] = (value >> 32) & 0xff;
-		buf[5] = (value >> 40) & 0xff;
-		buf[6] = (value >> 48) & 0xff;
-		buf[7] = (value >> 56) & 0xff;
-		buf[8] = 0; // EOF
+		r_write_le64 (buf, value);
 	}
 	for (needle = buf; !*needle; needle++) {
 		/* do nothing here */

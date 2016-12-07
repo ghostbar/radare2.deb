@@ -82,8 +82,6 @@ RBinAddr *r_coff_get_entry(struct r_bin_coff_obj *obj) {
 				 r_coff_rebase_sym (obj, addr, &obj->symbols[i]))
 				return addr;
 		}
-	}
-	if (obj->symbols) {
 		for (i = 0; i < obj->hdr.f_nsyms; i++) {
 			if ((!strcmp (obj->symbols[i].n_name, "_main") || 
 				 !strcmp (obj->symbols[i].n_name, "main")) &&
@@ -94,7 +92,8 @@ RBinAddr *r_coff_get_entry(struct r_bin_coff_obj *obj) {
 	/* Still clueless ? Let's just use the address of .text */
 	if (obj->scn_hdrs) {
 		for (i = 0; i < obj->hdr.f_nscns; i++) {
-			if (!strcmp (obj->scn_hdrs[i].s_name, ".text")) {
+			//avoid doing string matching and use x bit from the section
+			if (obj->scn_hdrs[i].s_flags & COFF_SCN_MEM_EXECUTE) {
 				addr->paddr = obj->scn_hdrs[i].s_scnptr;
 				return addr;
 			}
@@ -143,7 +142,7 @@ static bool r_bin_coff_init_scn_hdr(struct r_bin_coff_obj *obj) {
 	if (offset > obj->size || offset + size > obj->size || size < 0) {
 		return false;
 	}
-	obj->scn_hdrs = calloc (1, size + 1); 
+	obj->scn_hdrs = calloc (1, size + sizeof (struct coff_scn_hdr)); 
 	if (!obj->scn_hdrs) {
 		return false;
 	}
@@ -168,7 +167,7 @@ static bool r_bin_coff_init_symtable(struct r_bin_coff_obj *obj) {
 		offset + size > obj->size) {
 		return false;
 	} 
-	obj->symbols = calloc (1, size + 1);
+	obj->symbols = calloc (1, size + sizeof (struct coff_symbol));
 	if (!obj->symbols) {
 		return false;
 	}

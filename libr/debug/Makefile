@@ -1,7 +1,7 @@
 include ../config.mk
 
 NAME=r_debug
-DEPS=r_reg r_anal r_bp r_io r_parse r_cons r_syscall r_hash r_flags r_util 
+DEPS=r_reg r_anal r_bp r_io r_parse r_cons r_syscall r_hash r_flag r_util 
 DEPS+=r_socket
 CFLAGS+=-DCORELIB
 
@@ -28,7 +28,7 @@ CFLAGS+=-DXNU_USE_PTRACE=$(XNU_USE_PTRACE)
 STATIC_OBJS=$(subst ..,p/..,$(subst debug_,p/debug_,$(STATIC_OBJ)))
 
 OBJS=signal.o map.o trace.o arg.o debug.o plugin.o snap.o
-OBJS+=pid.o reg.o desc.o esil.o ${STATIC_OBJS} 
+OBJS+=pid.o dreg.o ddesc.o esil.o ${STATIC_OBJS} 
 
 ifeq (${OSTYPE},darwin)
 OBJS+= p/${NATIVE_OBJS}
