@@ -1,2 +1,2 @@
-usr/lib/*/*.so.0.*
-usr/lib/*/radare2/0.*
+usr/lib/*/*.so.1.*
+usr/lib/*/radare2/1.*
